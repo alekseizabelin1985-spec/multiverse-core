@@ -1,0 +1,15 @@
+scope_type: "region"
+focus_entities: []
+time_window: "1h"
+context_depth:
+  canon: 3
+  history: 5
+  entities: 0
+include:
+  world_facts: true
+  entity_emotions: false
+  location_details: true
+  temporal_context: true
+
+# 👇 Новое: буфер для региона
+geometry_buffer_m: 1000  # +1 км вокруг региона (леса, дороги и т.д.)

@@ -1,0 +1,15 @@
+scope_type: "group"
+focus_entities: ["{{.group_id}}"]
+time_window: "5m"
+context_depth:
+  canon: 1
+  history: 3
+  entities: 2
+include:
+  world_facts: false
+  entity_emotions: true
+  location_details: false
+  temporal_context: true
+
+# 👇 Новое: радиус группы
+base_radius_m: 300  # Базовый радиус (плюс размер группы из геометрии)
