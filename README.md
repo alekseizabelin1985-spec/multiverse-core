@@ -1,6 +1,6 @@
 # Multiverse-Core
 
-A sophisticated distributed system designed for managing complex virtual worlds and narratives. This platform combines event-driven architecture, vector databases, graph databases, and AI-powered orchestration to create dynamic, evolving virtual environments.
+A sophisticated distributed system designed for managing complex virtual worlds and narratives. This platform combines event-driven architecture, vector databases, graph databases, and AI-powered orchestration to create dynamic, evolving virtual environments. The system implements a philosophy where worlds are not programmed but born, evolving organically through player actions while maintaining internal consistency and narrative depth.
 
 ## 🚀 Features
 
@@ -11,21 +11,99 @@ A sophisticated distributed system designed for managing complex virtual worlds 
 - **AI Integration**: Qwen3 integration for narrative generation and decision-making
 - **Modular Services**: Microservices architecture for scalability and maintainability
 - **Time Series Metrics**: TimescaleDB for performance monitoring
+- **Hierarchical Worlds**: Organized from unique base worlds → fusion zones → abstract planes → Source
+- **Living Narratives**: Dynamic storylines that evolve naturally from player actions
+- **Entity-Based Memory**: History stored within objects themselves rather than in separate systems
 
 ## 🏗️ Architecture
 
-The system consists of multiple interconnected services:
+The system consists of multiple interconnected services that follow key architectural principles:
+
+### Core Principles
+- **Event-Driven Architecture (EDA)**: All interactions occur through events in a unified bus (Redpanda)
+- **Weak Coupling**: Services only know about events, not each other
+- **Stateful Services with Recovery**: Each service maintains its state and recovers through snapshot + replay
+- **Generativity over Scripting**: Qwen3 creates unique outcomes instead of choosing from presets
+- **Ontological Awareness**: Knowledge about the world affects logic through ontological profiles
 
 ### Core Services
-- **Entity Manager**: Manages virtual entities and their states
-- **Narrative Orchestrator**: Coordinates storylines and narrative events
-- **Semantic Memory**: Handles vector embeddings and semantic search
-- **Ontological Archivist**: Maintains knowledge graphs and relationships
-- **Plan Manager**: Orchestrates complex multi-step plans
-- **World Generator**: Creates and manages virtual world environments
-- **Universe Genesis Oracle**: Makes high-level decisions about world evolution
-- **Cultivation Module**: Manages character progression and skill systems
-- **Game Service**: Provides game-specific APIs and interfaces
+
+#### Entity Manager
+- **Purpose**: Manages hierarchical entities with history and references
+- **Features**: 
+  - Stateful: caches hot entities
+  - Recoverable: snapshots in MinIO + replay from Redpanda
+  - Shardable: by world_id
+- **Events**: Subscribes to entity.create, entity.update, entity.link; publishes entity.created, entity.updated, entity.history.appended
+- **Storage**: MinIO buckets: entities-{world_id}, snapshots: snapshots/em-{world_id}-v{N}.json
+
+#### Narrative Orchestrator (GM)
+- **Purpose**: Generates living, context-dependent narrative based on events in a given scope
+- **Features**:
+  - Stateful: stores semantic state of the area (fatigue, mood, etc.)
+  - Dynamic: created/deleted based on scope events
+  - Recoverable: aggregates state from Event Log
+- **Scope Types**: solo, group, city, region, quest
+- **Events**: Subscribes to entire world_events topic; publishes narrative.description, npc.action.*, weather.change.*
+
+#### World Generator
+- **Purpose**: Generates new worlds, regions, and ontologies based on seed or AI
+- **Features**: Stateless, initiated manually or by event
+- **Output**: World entity, ontological profile (in MinIO), world.generated event
+- **Integrations**: Publishes to EntityManager, BanOfWorld, CityGovernor; uses Ascension Oracle for entity schema generation; saves schemas via HTTP to OntologicalArchivist
+
+#### Ban Of World (Запрет Мира)
+- **Purpose**: Serves as guardian of reality integrity, detecting and neutralizing threats that violate world ontology
+- **Features**: Stateful, stores world health metrics; recoverable; parameterizable (one code, different ontologies)
+- **Metrics**: spatial_integrity, karma_entropy, core_resonance
+- **AI Integration**: Calls AscensionOracle as Oracle during anomalies; generates mythological consequences instead of penalties
+
+#### City Governor
+- **Purpose**: Manages urban life: economy, NPCs, quests, mood
+- **Features**: Stateful (reputation, crime_rate, active_quests), recoverable
+- **Events**: Subscribes to player.enter.city, trade.*, crime.*; publishes quest.issued, market.price_changed, festival.started
+- **Features**: Reacts to group composition (rich/poor), can generate unique quests through AI
+
+#### Cultivation Module
+- **Purpose**: Implements cultivation system: skills, dao, ascension
+- **Features**: Stateful (stores player profiles), hierarchical (modules at each plane level)
+- **Events**: Subscribes to player.skill_use, ascension.triggered; publishes dao.portrait.updated, ascension.trial.started
+- **Ascension**: Generates "Dao Portrait" from player history → passes to AscensionOracle
+
+#### Reality Monitor
+- **Purpose**: Aggregates metrics from all worlds and publishes anomalies
+- **Features**: Stateful (aggregated metrics), real-time monitoring
+- **Events**: Subscribes to world.metrics.*; publishes reality.anomaly.detected
+- **Interaction**: Trigger for BanOfWorld and AscensionOracle
+
+#### Plan Manager
+- **Purpose**: Manages transitions between planes, fusion zones, availability of ascension
+- **Features**: Stateful (plane graph as DAG), stores connections: who can go where
+- **Events**: Subscribes to ascension.completed, planar.violation; publishes planar.transition.granted
+
+#### Ascension Oracle
+- **Purpose**: Generative AI oracle based on Qwen3. Creates unique ascension outcomes, trials, interventions
+- **Features**: Stateless (HTTP client), RAG: context from SemanticMemory
+- **Input**: Dao Portrait, world state, player history
+- **Output**: JSON with narrative and new_events; can propose new mechanics, zones, laws
+
+#### Semantic Memory Builder
+- **Purpose**: Builds context for AI from events: vectors + knowledge graph
+- **Features**: Stateless, indexes events in real-time, stores all system events for context and replay
+- **Storage**: ChromaDB/Qdrant: event embeddings; Neo4j: relationships between entities and events
+- **Interaction**: Used by AscensionOracle and GM through RAG
+
+#### Ontological Archivist
+- **Purpose**: Stores and evolves world ontological schemas
+- **Features**: Stateful (versioned schemas), storage: MinIO (ontologies/{world_id}/v{N}.json)
+- **Events**: Subscribes to world.generated, ontology.evolved; publishes ontology.published
+- **Validation**: Provides schemas for validating events and entities
+
+#### Universe Genesis Oracle
+- **Purpose**: Generates fundamental plane hierarchy of the universe and basic ontological profiles for each level
+- **Features**: Stateless/one-time, generates only the fundamental foundation of the Universe (Core, Laws)
+- **Events**: Publishes universe.genesis.completed, entity.created (for Universe Core entity)
+- **Interactions**: Uses Ascension Oracle for law and profile generation; saves profile to OntologicalArchivist via HTTP; publishes event for PlanManager and CosmicBan
 
 ### Infrastructure Components
 - **Redpanda**: Event streaming platform
@@ -34,6 +112,16 @@ The system consists of multiple interconnected services:
 - **Neo4j**: Graph database for knowledge representation
 - **TimescaleDB**: Time-series database for metrics
 - **Qwen3**: AI model for narrative generation (via Ollama)
+
+## 🌌 Philosophy
+
+The system implements:
+- Hierarchy of worlds leading to the unreachable Source (Plan Ω)
+- Cultivation as a path from unique form to universal essence
+- Narration as a natural, continuous process, not scripted reactions
+- Integrity through the Ban of World, not through rules
+
+**Goal**: Create a world that evolves through player actions while maintaining internal integrity and narrative depth.
 
 ## 🛠️ Prerequisites
 
@@ -114,7 +202,6 @@ go build -o bin/narrative-orchestrator ./cmd/narrative-orchestrator
 ```bash
 # Run all tests
 go test ./...
-
 # Run tests with coverage
 go test -cover ./...
 ```
