@@ -20,6 +20,16 @@ services:
       - --kafka-addr PLAINTEXT://0.0.0.0:9092
       - --advertise-kafka-addr PLAINTEXT://redpanda:9092 # ← говорить клиентам: "подключайтесь сюда"
 
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    env_file:
+      - .env
+    ports:
+      - "8092:8080"   # Kafka API  
+    depends_on:
+      - redpanda
+    
+
   redpanda-init:
     image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
     depends_on:

@@ -64,6 +64,7 @@ func NewStore(minioClient *minio.Client, bucket string) *Store {
 
 // GetProfile возвращает профиль по scope_type (с кэшированием).
 func (s *Store) GetProfile(scopeType string) (*Profile, error) {
+
 	s.cacheLock.RLock()
 	if p, ok := s.cache[scopeType]; ok {
 		s.cacheLock.RUnlock()
@@ -71,13 +72,18 @@ func (s *Store) GetProfile(scopeType string) (*Profile, error) {
 	}
 	s.cacheLock.RUnlock()
 
-	key := path.Join("gm-profiles", scopeType+".yaml")
+	key := path.Join("gm-profiles", "gm_"+scopeType+".yaml")
+	log.Println(s.bucket)
+	log.Println(key)
 	data, err := s.minioClient.GetObject(s.bucket, key)
+	log.Println(string(data))
 	if err != nil {
+		log.Println(err)
 		return nil, fmt.Errorf("profile %s not found: %w", scopeType, err)
 	}
 
 	var profile Profile
+
 	if err := yaml.Unmarshal(data, &profile); err != nil {
 		return nil, fmt.Errorf("invalid YAML for %s: %w", scopeType, err)
 	}
@@ -85,6 +91,9 @@ func (s *Store) GetProfile(scopeType string) (*Profile, error) {
 	s.cacheLock.Lock()
 	s.cache[scopeType] = &profile
 	s.cacheLock.Unlock()
+
+	log.Println(scopeType)
+	log.Println(profile)
 
 	return &profile, nil
 }

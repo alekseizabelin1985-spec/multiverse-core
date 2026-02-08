@@ -1,18 +1,22 @@
 // internal/minio/http_client.go
 
-// MinIO HTTP Client — без использования chroma-go или CGO.
-// Использует только стандартную библиотеку Go и S3-compatible API.
+// MinIO HTTP Client — полная реализация AWS Signature V4.
+// Использует только стандартную библиотеку Go.
 
 package minio
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -37,6 +41,10 @@ func NewClient(cfg Config) (*Client, error) {
 	baseURL, err := url.Parse(cfg.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint: %w", err)
+	}
+
+	if cfg.Region == "" {
+		cfg.Region = "us-east-1"
 	}
 
 	return &Client{
@@ -188,11 +196,8 @@ func (c *Client) ListObjects(bucket, prefix string) ([]ObjectInfo, error) {
 	return objects, nil
 }
 
-// PresignedGetObject генерирует подписанную ссылку для скачивания (для отладки).
+// PresignedGetObject генерирует подписанную ссылку для скачивания.
 func (c *Client) PresignedGetObject(bucket, object string, expires time.Duration) (string, error) {
-	// Простая реализация без полной AWS Signature V4 (для внутреннего использования)
-	// В production — лучше использовать официальный minio-go, но по требованию — HTTP-only.
-	// Здесь — заглушка.
 	return fmt.Sprintf("%s/%s/%s?debug=1", c.baseURL.String(), bucket, object), nil
 }
 
@@ -214,17 +219,101 @@ func (c *Client) newRequest(method, bucket, object string, body io.Reader) (*htt
 	}
 
 	// Устанавливаем обязательные заголовки
+	date := time.Now().UTC().Format("20060102T150405Z")
 	req.Header.Set("Host", u.Host)
-	req.Header.Set("x-amz-date", time.Now().UTC().Format("20060102T150405Z"))
+	req.Header.Set("x-amz-date", date)
 	req.Header.Set("x-amz-content-sha256", "UNSIGNED-PAYLOAD")
 
-	// Подписываем (упрощённо — для MinIO в доверенной сети)
-	// В production с публичным доступом — нужна полная AWS Signature V4.
-	if c.config.AccessKeyID != "" {
-		req.Header.Set("Authorization", fmt.Sprintf("AWS %s:dummy-signature", c.config.AccessKeyID))
+	// Подписываем запрос (AWS Signature V4)
+	if c.config.AccessKeyID != "" && c.config.SecretAccessKey != "" {
+		signature := c.signRequest(req, date)
+		authHeader := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s/%s/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=%s",
+			c.config.AccessKeyID,
+			date[:8], // YYYYMMDD
+			c.config.Region,
+			signature)
+		req.Header.Set("Authorization", authHeader)
 	}
 
 	return req, nil
+}
+
+// signRequest вычисляет подпись запроса (AWS Signature V4).
+func (c *Client) signRequest(req *http.Request, date string) string {
+	// 1. Canonical Request
+	canonicalRequest := c.buildCanonicalRequest(req)
+
+	// 2. String to Sign
+	stringToSign := c.buildStringToSign(canonicalRequest, date)
+
+	// 3. Signature
+	signature := c.calculateSignature(stringToSign, date[:8])
+
+	return signature
+}
+
+func (c *Client) buildCanonicalRequest(req *http.Request) string {
+	method := req.Method
+	uri := req.URL.Path
+	if uri == "" {
+		uri = "/"
+	}
+	query := req.URL.Query().Encode()
+	if query == "" {
+		query = ""
+	}
+
+	// Canonical Headers
+	var headers []string
+	for k := range req.Header {
+		headers = append(headers, strings.ToLower(k))
+	}
+	sort.Strings(headers)
+
+	var canonicalHeaders strings.Builder
+	for _, k := range headers {
+		canonicalHeaders.WriteString(fmt.Sprintf("%s:%s\n", k, req.Header.Get(k)))
+	}
+
+	signedHeaders := strings.Join(headers, ";")
+
+	// Hashed Payload
+	hashedPayload := "UNSIGNED-PAYLOAD"
+
+	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s",
+		method,
+		uri,
+		query,
+		canonicalHeaders.String(),
+		signedHeaders,
+		hashedPayload)
+}
+
+func (c *Client) buildStringToSign(canonicalRequest, date string) string {
+	hash := sha256.Sum256([]byte(canonicalRequest))
+	return fmt.Sprintf("AWS4-HMAC-SHA256\n%s\n%s/%s/s3/aws4_request\n%x",
+		date,
+		date[:8],
+		c.config.Region,
+		hash)
+}
+
+func (c *Client) calculateSignature(stringToSign, date string) string {
+	// 1. Derive signing key
+	kDate := hmacSHA256([]byte("AWS4"+c.config.SecretAccessKey), date)
+	kRegion := hmacSHA256(kDate, c.config.Region)
+	kService := hmacSHA256(kRegion, "s3")
+	kSigning := hmacSHA256(kService, "aws4_request")
+
+	// 2. Signature
+	signature := hmacSHA256(kSigning, stringToSign)
+	return hex.EncodeToString(signature)
+}
+
+func hmacSHA256(key []byte, data string) []byte {
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(data))
+	return h.Sum(nil)
 }
 
 // --- Структуры для XML-парсинга ---

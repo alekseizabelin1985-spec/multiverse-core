@@ -65,7 +65,23 @@ ID области: ` + input.ScopeID + `
 1. Ответ строго в формате JSON.
 2. "narrative": 1–3 предложения.
 3. "mood": массив строк (опционально).
-4. "new_events": массив (макс. 3) событий.`)
+4. "new_events": массив (макс. 3) событий.
+Структура event примерно такая:
+{  
+  "event_type": "player.used_skill", обязательно
+  "timestamp": "2025-10-28T12:00:00Z", обязательно
+  "source": "player-777", обязательно
+  "world_id": "pain-realm", обязательно
+  "scope_id": "city-ashes", необезательно
+  "payload": { могут быть любые поля, например:
+    "spell_id": "fireball",
+    "state_changes": [ ... ],
+    "entity_snapshots": [ ... ],
+    "description": "Вы выпустили огненный шар..."
+	и так далее любой набор свойств
+  }
+}
+`)
 	return system, user
 }
 

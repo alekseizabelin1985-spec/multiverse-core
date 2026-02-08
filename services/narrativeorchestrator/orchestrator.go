@@ -87,9 +87,10 @@ func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
 	}
 
 	minioCfg := minio.Config{
-		Endpoint:        os.Getenv("MINIO_ENDPOINT"),
+		Endpoint:        "http://"+os.Getenv("MINIO_ENDPOINT"),
 		AccessKeyID:     os.Getenv("MINIO_ACCESS_KEY"),
 		SecretAccessKey: os.Getenv("MINIO_SECRET_KEY"),
+		UseSSL:          false,
 		Region:          "us-east-1",
 	}
 	minioClient, _ := minio.NewClient(minioCfg)
@@ -139,15 +140,18 @@ func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
 	}
 
 	profile, _ := no.configStore.GetProfile(scopeType)
+	log.Println(profile)
 	if profile == nil {
 		profile = getDefaultProfile()
 	}
-
+	log.Println(profile)
 	override, _ := no.configStore.GetOverride(scopeID)
+	
 	if override != nil {
 		profile = config.MergeProfiles(profile, override)
 	}
 
+	
 	focusEntities := []string{scopeID}
 	for _, tpl := range profile.FocusEntities {
 		id := strings.ReplaceAll(tpl, "{{.player_id}}", extractIDFromScope(scopeID))
@@ -191,6 +195,7 @@ func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
 			timeoutMin = intervalMs / 60000.0 * 5
 		}
 	}
+	timeoutMin = 30.0
 	time.AfterFunc(time.Duration(timeoutMin)*time.Minute, func() {
 		no.DeleteGMByScope(scopeID)
 	})
@@ -198,6 +203,8 @@ func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
 	no.mu.Lock()
 	no.gms[scopeID] = gm
 	no.mu.Unlock()
+
+	log.Println(gm.Config)
 
 	log.Printf("GM created: %s (type: %s)", scopeID, scopeType)
 }
@@ -363,25 +370,35 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 			return
 		}
 	}
-
+	fmt.Println(ev)
 	// 2. Для обычных событий — находим GM по scope_id
 	if ev.ScopeID == nil {
+		println("no scope ID")
 		return
 	}
 	scopeID := *ev.ScopeID
+	fmt.Println(scopeID)
 
 	no.mu.RLock()
 	gm, exists := no.gms[scopeID]
 	no.mu.RUnlock()
+
+	fmt.Println(gm)
+
 	if !exists {
+		fmt.Println("no gm found")
 		return
 	}
 
 	// 3. Мгновенная реакция: проверяем, есть ли ev.EventType в narrative_triggers GM
 	if triggersRaw, ok := gm.Config["triggers"].(map[string]interface{}); ok {
 		if triggersList, ok := triggersRaw["narrative_triggers"].([]interface{}); ok {
+			fmt.Println("Trigers list")
+			fmt.Println(triggersList)
 			for _, t := range triggersList {
+				fmt.Println(t.(string))
 				if tStr, ok := t.(string); ok && tStr == ev.EventType {
+					fmt.Println("process event")
 					go no.processEventForGM(ev, gm)
 					return
 				}
@@ -462,33 +479,70 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	}
 
 	// Получаем контекст с событиями из Semantic Memory
+	// 🔑 ДОБАВИТЬ: защита от пустых сущностей
 	entityIDs := append([]string{}, gm.FocusEntities...)
+	if len(entityIDs) == 0 {
+		log.Printf("No entity IDs for GM %s, skipping", gm.ScopeID)
+		return
+	}
+
+	// 🔑 ДОБАВИТЬ: защита от нулевого клиента
+	if no.semantic == nil {
+		log.Printf("SemanticMemoryClient is nil for GM %s", gm.ScopeID)
+		return
+	}
+
+	
+
 	eventTypes := []string{} // или ["player.*", "combat.*"] из конфига
 	contexts, err := no.semantic.GetContextWithEvents(context.Background(), entityIDs, eventTypes, 2)
 	if err != nil {
 		log.Printf("Failed to get context with events: %v", err)
-		return
+		//return
 	}
 
-	// Извлекаем данные
-	worldContext := ""
-	if wc, ok := contexts[gm.WorldID].(map[string]interface{})["context"].(string); ok {
-		worldContext = wc
-	}
-	if worldContext == "" {
-		worldContext = "Нет данных о мире"
-	}
+	
 
-	var entitiesLines []string
-	for _, id := range gm.FocusEntities {
-		if ctx, ok := contexts[id].(map[string]interface{})["context"].(string); ok {
-			entitiesLines = append(entitiesLines, ctx)
+
+
+	// 🔑 ИЗМЕНИТЬ: защита при извлечении данных
+	worldContext := "Нет данных о мире"
+	entitiesContext := "Нет данных"
+
+	// Защита для мира
+	// БЫЛО:
+	// if wc, ok := contexts[gm.WorldID].(map[string]interface{})["context"].(string); ok {
+	// СТАЛО:
+	// ✅ Добавляем проверку на nil contexts
+	if contexts != nil {
+		if worldRaw, ok := contexts[gm.WorldID]; ok {
+			if worldMap, ok := worldRaw.(map[string]interface{}); ok {
+				if wc, ok := worldMap["context"].(string); ok {
+					worldContext = wc
+				}
+			}
 		}
 	}
-	entitiesContext := "Нет данных"
+
+	// Защита для сущностей
+	entitiesLines := []string{}
+	if contexts != nil {
+		for _, id := range gm.FocusEntities {
+			if ctxRaw, ok := contexts[id]; ok {
+				if ctxMap, ok := ctxRaw.(map[string]interface{}); ok {
+					if ctxStr, ok := ctxMap["context"].(string); ok {
+						entitiesLines = append(entitiesLines, ctxStr)
+					}
+				}
+			}
+		}
+	}
 	if len(entitiesLines) > 0 {
 		entitiesContext = strings.Join(entitiesLines, "\n")
 	}
+
+
+
 
 	// Кластеризация событий
 	clusters := clusterEvents(eventsToProcess)
@@ -524,10 +578,16 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	systemPrompt, userPrompt := BuildPrompt(input)
 
 	// Вызов Oracle
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	oracleResp, _ := CallOracle(ctx, systemPrompt, userPrompt)
+	log.Println("------------------")
+	log.Println(systemPrompt)
+	log.Println("------------------")
+	log.Println(userPrompt)
+	log.Println("------------------")
+	oracleResp, err := CallOracle(ctx, systemPrompt, userPrompt)
 
+	log.Println(oracleResp)
 	// Публикация
 	if len(oracleResp.Mood) > 0 {
 		no.mu.Lock()
@@ -542,6 +602,9 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		eventType, _ := evMap["event_type"].(string)
 		payload, _ := evMap["payload"].(map[string]interface{})
 
+		log.Println(evMap)
+		log.Println("------------------")
+		log.Println(payload)
 		outputEvent := eventbus.Event{
 			EventID:   "evt-" + uuid.New().String()[:8],
 			EventType: eventType,
@@ -552,10 +615,39 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			Timestamp: time.Now(),
 		}
 
-		no.bus.Publish(context.Background(), eventbus.TopicWorldEvents, outputEvent)
+		 error1 := no.bus.Publish(context.Background(), eventbus.TopicWorldEvents, outputEvent)
+		if error1 != nil {
+			log.Println(error1)
+
+		}
+	}
+	if oracleResp.Narrative != "" {
+		narative :=map[string]interface{}{}
+		narative["narrative"] = oracleResp.Narrative
+		outputEvent := eventbus.Event{
+			EventID:   "evt-" + uuid.New().String()[:8],
+			EventType: "narrative.generate",
+			Source:    "narrative-orchestrator",
+			WorldID:   gm.WorldID,
+			ScopeID:   &gm.ScopeID,
+			Payload:   narative,
+			Timestamp: time.Now(),
+		}
+
+		 error1 := no.bus.Publish(context.Background(), eventbus.TopicNarrativeOutput, outputEvent)
+		if error1 != nil {
+			log.Println(error1)
+
+		}
 	}
 
-	no.saveSnapshot(gm.ScopeID, gm)
+		
+	
+
+	err1 := no.saveSnapshot(gm.ScopeID, gm)
+	if err1 != nil {
+		log.Println(err1)
+	}
 	log.Printf("GM %s generated narrative", gm.ScopeID)
 }
 
