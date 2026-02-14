@@ -60,7 +60,7 @@ services:
 
   # ========== Векторная БД (Semantic Memory) ==========
   chromadb:
-    image: chromadb/chroma:0.4.24
+    image: chromadb/chroma:latest
     ports:
       - "8000:8000"
     environment:
@@ -138,6 +138,8 @@ services:
       dockerfile: ./Dockerfile
       args:
         - SERVICE=semantic-memory
+        - GO_BUILD_TAGS=chroma_v2_enabled
+        - BUILD_CGO=1  # ← включаем CGO только здесь
     command: ./semantic-memory
     depends_on:
       - redpanda

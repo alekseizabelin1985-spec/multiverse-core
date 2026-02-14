@@ -3,6 +3,8 @@ package semanticmemory
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -45,6 +47,20 @@ func TestIndexer_HandleEvent(t *testing.T) {
 	if len(events) == 0 {
 		t.Error("No events were retrieved")
 	}
+}
+
+func TestCromaV2(t *testing.T) {
+	//CHROMA_URL=http://chromadb:8000
+	//CHROMA_USE_V2=true
+	os.Setenv("CHROMA_URL", "http://127.0.0.1:8000")
+	os.Setenv("EMBEDING_URL", "http://127.0.0.1:11434")
+	os.Setenv("EMBEDING_MODEL", "nomic-embed-text:latest")
+	_, err := createChromaV2Client()
+	if err != nil {
+		fmt.Printf("Warning: failed to create ChromaDB v2 client: %v. Falling back to ChromaDB v1 client.", err)
+
+	}
+
 }
 
 func TestIndexer_GetContextWithEvents(t *testing.T) {

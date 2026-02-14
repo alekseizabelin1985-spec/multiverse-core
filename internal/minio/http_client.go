@@ -1,5 +1,5 @@
 // internal/minio/http_client.go
-
+//
 // MinIO HTTP Client — полная реализация AWS Signature V4.
 // Использует только стандартную библиотеку Go.
 
@@ -20,15 +20,6 @@ import (
 	"time"
 )
 
-// Config для MinIO-клиента.
-type Config struct {
-	Endpoint        string // Например: "http://minio:9000"
-	AccessKeyID     string
-	SecretAccessKey string
-	UseSSL          bool
-	Region          string // По умолчанию "us-east-1"
-}
-
 // Client — HTTP-клиент для MinIO.
 type Client struct {
 	config  Config
@@ -36,9 +27,19 @@ type Client struct {
 	baseURL *url.URL
 }
 
-// NewClient создаёт новый MinIO HTTP-клиент.
-func NewClient(cfg Config) (*Client, error) {
-	baseURL, err := url.Parse(cfg.Endpoint)
+// newClientHTTP создаёт новый MinIO HTTP-клиент.
+func newClientHTTP(cfg Config) (*Client, error) {
+	// 🔑 Добавляем схему, если её нет
+	endpoint := cfg.Endpoint
+	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+		if cfg.UseSSL {
+			endpoint = "https://" + endpoint
+		} else {
+			endpoint = "http://" + endpoint
+		}
+	}
+
+	baseURL, err := url.Parse(endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("invalid endpoint: %w", err)
 	}
@@ -140,6 +141,7 @@ func (c *Client) GetObject(bucket, object string) ([]byte, error) {
 		return nil, fmt.Errorf("object not found: %s/%s", bucket, object)
 	}
 	if resp.StatusCode >= 400 {
+
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("get object failed: %d %s", resp.StatusCode, string(body))
 	}
@@ -153,17 +155,51 @@ func (c *Client) ListObjects(bucket, prefix string) ([]ObjectInfo, error) {
 		return nil, err
 	}
 
+	// Создаем URL с параметрами до создания запроса
+	u := *c.baseURL
+	if bucket != "" {
+		u.Path = "/" + bucket
+	}
+
 	params := url.Values{}
 	if prefix != "" {
 		params.Set("prefix", prefix)
 	}
+	params.Set("delimiter", "")
 	params.Set("list-type", "2")
+	u.RawQuery = params.Encode()
 
-	req, err := c.newRequest("GET", bucket, "", nil)
+	fmt.Println(u.String())
+	// Создаем новый запрос с правильным URL, содержащим параметры
+	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
 		return nil, err
 	}
-	req.URL.RawQuery = params.Encode()
+
+	// Устанавливаем обязательные заголовки
+	date := time.Now().UTC().Format("20060102T150405Z")
+
+	// 🔑 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: используем ПОЛНЫЙ хост (с портом) для подписи
+	host := u.Host
+	req.Header.Set("Host", host)
+
+	req.Header.Set("x-amz-date", date)
+
+	// Для GET-запросов без тела используем хэш пустой строки
+	h := sha256.Sum256([]byte{})
+	hashedPayload := hex.EncodeToString(h[:])
+	req.Header.Set("x-amz-content-sha256", hashedPayload)
+
+	// Подписываем запрос (только если есть ключи)
+	if c.config.AccessKeyID != "" && c.config.SecretAccessKey != "" {
+		signature := c.signRequest(req, date)
+		authHeader := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s/%s/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=%s",
+			c.config.AccessKeyID,
+			date[:8], // YYYYMMDD
+			c.config.Region,
+			signature)
+		req.Header.Set("Authorization", authHeader)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -189,7 +225,7 @@ func (c *Client) ListObjects(bucket, prefix string) ([]ObjectInfo, error) {
 			Size:         c.Size,
 		})
 	}
-	// Сортируем по времени (новые — первыми)
+	// Сортируем по времени (новые — первями)
 	sort.Slice(objects, func(i, j int) bool {
 		return objects[i].LastModified.After(objects[j].LastModified)
 	})
@@ -213,18 +249,41 @@ func (c *Client) newRequest(method, bucket, object string, body io.Reader) (*htt
 		}
 	}
 
-	req, err := http.NewRequest(method, u.String(), body)
+	// Подготовим тело запроса для подписи и последующего использования
+	var bodyBytes []byte
+	var hashedPayload string
+
+	if body != nil {
+		var err error
+		bodyBytes, err = io.ReadAll(body)
+		if err != nil {
+			return nil, err
+		}
+		h := sha256.Sum256(bodyBytes)
+		hashedPayload = hex.EncodeToString(h[:])
+	} else {
+		h := sha256.Sum256([]byte{})
+		hashedPayload = hex.EncodeToString(h[:])
+	}
+
+	req, err := http.NewRequest(method, u.String(), bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, err
 	}
 
 	// Устанавливаем обязательные заголовки
 	date := time.Now().UTC().Format("20060102T150405Z")
-	req.Header.Set("Host", u.Host)
-	req.Header.Set("x-amz-date", date)
-	req.Header.Set("x-amz-content-sha256", "UNSIGNED-PAYLOAD")
 
-	// Подписываем запрос (AWS Signature V4)
+	// 🔑 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: используем ПОЛНЫЙ хост (с портом) для подписи
+	// В подписи должен использоваться тот же хост, что и в запросе
+	// Если в запросе "minio:9090", то и в заголовке "Host: minio:9090"
+	host := u.Host
+	req.Header.Set("Host", host)
+
+	req.Header.Set("x-amz-date", date)
+	req.Header.Set("x-amz-content-sha256", hashedPayload)
+
+	// Подписываем запрос (только если есть ключи)
 	if c.config.AccessKeyID != "" && c.config.SecretAccessKey != "" {
 		signature := c.signRequest(req, date)
 		authHeader := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s/%s/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=%s",
@@ -258,12 +317,14 @@ func (c *Client) buildCanonicalRequest(req *http.Request) string {
 	if uri == "" {
 		uri = "/"
 	}
-	query := req.URL.Query().Encode()
-	if query == "" {
-		query = ""
-	}
+
+	// ВАЖНО: строка запроса должна быть правильно отформатирована
+	// в соответствии со спецификацией AWS Signature Version 4
+	query := c.canonicalQueryString(req.URL.Query())
 
 	// Canonical Headers
+	// 🔑 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: сортируем заголовки в алфавитном порядке
+	// и используем нижний регистр для ключей
 	var headers []string
 	for k := range req.Header {
 		headers = append(headers, strings.ToLower(k))
@@ -272,13 +333,16 @@ func (c *Client) buildCanonicalRequest(req *http.Request) string {
 
 	var canonicalHeaders strings.Builder
 	for _, k := range headers {
-		canonicalHeaders.WriteString(fmt.Sprintf("%s:%s\n", k, req.Header.Get(k)))
+		// 🔑 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: значения заголовков должны быть
+		// с удалёнными лишними пробелами
+		value := strings.TrimSpace(req.Header.Get(k))
+		canonicalHeaders.WriteString(fmt.Sprintf("%s:%s\n", k, value))
 	}
 
 	signedHeaders := strings.Join(headers, ";")
 
-	// Hashed Payload
-	hashedPayload := "UNSIGNED-PAYLOAD"
+	// Hashed Payload - используем значение из заголовка x-amz-content-sha256
+	hashedPayload := req.Header.Get("x-amz-content-sha256")
 
 	return fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n%s",
 		method,
@@ -287,6 +351,50 @@ func (c *Client) buildCanonicalRequest(req *http.Request) string {
 		canonicalHeaders.String(),
 		signedHeaders,
 		hashedPayload)
+}
+
+// canonicalQueryString формирует каноническую строку запроса в соответствии с AWS спецификацией
+func (c *Client) canonicalQueryString(queryValues url.Values) string {
+	if len(queryValues) == 0 {
+		return ""
+	}
+
+	var keys []string
+	for k := range queryValues {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var pairs []string
+	for _, k := range keys {
+		// Значения для одного ключа должны быть отсортированы
+		values := queryValues[k]
+		sort.Strings(values)
+		for _, v := range values {
+			// Кодируем ключ и значение согласно спецификации
+			encodedK := c.uriEncode(k, false)
+			encodedV := c.uriEncode(v, false)
+			pairs = append(pairs, fmt.Sprintf("%s=%s", encodedK, encodedV))
+		}
+	}
+
+	return strings.Join(pairs, "&")
+}
+
+// uriEncode кодирует строку в соответствии с AWS спецификацией
+func (c *Client) uriEncode(str string, encodeSlash bool) string {
+	var encoded strings.Builder
+	for i := 0; i < len(str); i++ {
+		c := str[i]
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '~' || c == '.' {
+			encoded.WriteByte(c)
+		} else if c == '/' && !encodeSlash {
+			encoded.WriteByte(c)
+		} else {
+			encoded.WriteString(fmt.Sprintf("%%%.2X", c))
+		}
+	}
+	return encoded.String()
 }
 
 func (c *Client) buildStringToSign(canonicalRequest, date string) string {
@@ -326,10 +434,4 @@ type Content struct {
 	Key          string    `xml:"Key"`
 	LastModified time.Time `xml:"LastModified"`
 	Size         int64     `xml:"Size"`
-}
-
-type ObjectInfo struct {
-	Key          string
-	LastModified time.Time
-	Size         int64
 }

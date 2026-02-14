@@ -45,19 +45,20 @@ type Profile struct {
 
 // Store управляет динамическими конфигами в MinIO.
 type Store struct {
-	minioClient *minio.Client
+	minioClient minio.ClientInterface
 	cache       map[string]*Profile
 	cacheLock   sync.RWMutex
 	bucket      string
 }
 
 // NewStore создаёт новый config store.
-func NewStore(minioClient *minio.Client, bucket string) *Store {
+func NewStore(minioClient minio.ClientInterface, bucket string) *Store {
 	store := &Store{
 		minioClient: minioClient,
 		cache:       make(map[string]*Profile),
 		bucket:      bucket,
 	}
+
 	go store.backgroundRefresh()
 	return store
 }

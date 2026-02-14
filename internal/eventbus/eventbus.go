@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
+	"time"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -53,12 +56,26 @@ func (eb *EventBus) Publish(ctx context.Context, topic string, event Event) erro
 }
 
 func (eb *EventBus) Subscribe(ctx context.Context, topic, groupID string, handler func(Event)) {
+	// Get polling frequency from environment variable, default to 1 second
+	pollFreqStr := os.Getenv("KAFKA_POLL_FREQUENCY_MS")
+	if pollFreqStr == "" {
+		pollFreqStr = "1000" // default to 1 second (1000 ms)
+	}
+	pollFreqMs, err := strconv.Atoi(pollFreqStr)
+	if err != nil {
+		log.Printf("Invalid KAFKA_POLL_FREQUENCY_MS value: %v, using default 1000ms", err)
+		pollFreqMs = 1000
+	}
+	
+	maxWait := time.Millisecond * time.Duration(pollFreqMs)
+	
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  eb.brokers,
 		Topic:    topic,
 		GroupID:  groupID,
 		MinBytes: 10e3,
 		MaxBytes: 10e6,
+		MaxWait:  maxWait,
 	})
 	defer reader.Close()
 	log.Printf("Subscribed to %s as %s", topic, groupID)

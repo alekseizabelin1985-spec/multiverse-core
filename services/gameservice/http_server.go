@@ -57,11 +57,12 @@ func (hs *HTTPServer) RegisterRoutes(service *Service, wsServer *WebSocketServer
 	hs.router.HandleFunc("/ws/entities", wsServer.HandleWebSocket)
 	hs.router.HandleFunc("/ws/events", wsServer.HandleWebSocket)
 	hs.router.HandleFunc("/ws/actions", wsServer.HandleWebSocket)
-	
+
 	// REST API endpoints
 	hs.router.HandleFunc("/entities/{entity_id}", service.GetEntityHandler).Methods("GET")
 	hs.router.HandleFunc("/players/register", service.RegisterPlayerHandler).Methods("POST")
 	hs.router.HandleFunc("/players/login", service.LoginPlayerHandler).Methods("POST")
 	hs.router.HandleFunc("/entities/{entity_id}/history", service.GetEntityHistoryHandler).Methods("GET")
 	hs.router.HandleFunc("/events/recent", service.GetRecentEventsHandler).Methods("GET")
+	hs.router.HandleFunc("/run_test", service.RunTestHandler).Methods("GET")
 }

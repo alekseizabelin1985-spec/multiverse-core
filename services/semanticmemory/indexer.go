@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"multiverse-core/internal/eventbus"
@@ -66,16 +67,28 @@ func BuildTextContext(entityID, entityType string, payload map[string]interface{
 
 // Indexer processes entity events and indexes them.
 type Indexer struct {
-	chroma *ChromaClient
+	chroma SemanticStorage
 	neo4j  *Neo4jClient
 }
 
 // NewIndexer creates a new Indexer.
 func NewIndexer() (*Indexer, error) {
-	chroma := NewChromaClient() // ← Использует новый клиент
-	//if err != nil {
-	//	return nil, err
-	//}
+	var storage SemanticStorage
+	var err error
+
+	// Check environment variable to determine which implementation to use
+	useChromaV2 := os.Getenv("CHROMA_USE_V2") == "true"
+	log.Printf("Using ChromaDB v2: %t", useChromaV2)
+	if useChromaV2 {
+		// Only try to create ChromaV2Client if the build tag is enabled
+		storage, err = createChromaV2Client()
+		if err != nil {
+			log.Printf("Warning: failed to create ChromaDB v2 client: %v. Falling back to ChromaDB v1 client.", err)
+			storage = NewChromaClient() // ← Возвращаемся к старому клиенту в случае ошибки
+		}
+	} else {
+		storage = NewChromaClient() // ← Использует старый клиент по умолчанию
+	}
 
 	neo4j, err := NewNeo4jClient()
 	if err != nil {
@@ -83,10 +96,11 @@ func NewIndexer() (*Indexer, error) {
 	}
 
 	return &Indexer{
-		chroma: chroma,
+		chroma: storage,
 		neo4j:  neo4j,
 	}, nil
 }
+
 
 // HandleEvent processes all events and indexes them.
 func (i *Indexer) HandleEvent(ev eventbus.Event) {

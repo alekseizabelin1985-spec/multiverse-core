@@ -7,7 +7,7 @@ type VisibilityScope struct {
 	Center   Point
 	Radius   float64
 	Polygon  *Polygon
-	Override func(eventPoint Point) bool // Кастомная логика (опционально)
+	Override func(eventPoint Point) bool `json:"-"` // Кастомная логика (опционально)
 }
 
 // DefaultScope создаёт область по типу и параметрам.

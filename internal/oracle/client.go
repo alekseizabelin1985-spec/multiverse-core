@@ -149,10 +149,12 @@ func (c *Client) CallStructured(ctx context.Context, systemPrompt, userPrompt st
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userPrompt},
 		},
-		"temperature": 0.7,
-		"max_tokens":  1024,
+		"temperature": 0.8,
+		//"repetition_penalty": 1.15,
+		//"min_p":              0.05,
+		"max_tokens": 1024,
 		"response_format": map[string]string{
-			"type": "json_object",
+			"type": "text",
 		},
 	})
 	if err != nil {

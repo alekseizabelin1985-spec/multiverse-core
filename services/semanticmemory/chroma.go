@@ -14,12 +14,16 @@ import (
 )
 
 // ChromaClient handles communication with ChromaDB via HTTP API.
+// Implements the SemanticStorage interface.
 type ChromaClient struct {
 	baseURL        string
 	httpClient     *http.Client
 	collectionID   string // Кэшируем ID коллекции
 	collectionName string // Имя коллекции
 }
+
+// Ensure ChromaClient implements SemanticStorage interface
+var _ SemanticStorage = (*ChromaClient)(nil)
 
 // NewChromaClient creates a new ChromaClient using native HTTP.
 func NewChromaClient() *ChromaClient {

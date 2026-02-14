@@ -6,7 +6,9 @@ import (
 	"log"
 	"multiverse-core/internal/eventbus"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 )
 
@@ -218,5 +220,82 @@ func (s *Service) GetRecentEventsHandler(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"events": []interface{}{}, // Заглушка
+	})
+}
+
+func (s *Service) RunTestHandler(w http.ResponseWriter, r *http.Request) {
+	// Создаем первое событие для system_events
+	systemEventPayload := map[string]interface{}{
+		"scope_id":   "player:kain-777",
+		"scope_type": "player",
+		"config": map[string]interface{}{
+			"perception": 0.8,
+			"focus_entities": []string{
+				"player:kain-777",
+			},
+		},
+	}
+
+	systemEvent := eventbus.Event{
+		EventID:   "evt-gm-player-kain-777-" + uuid.NewString(),
+		EventType: "gm.created",
+		Source:    "client",
+		WorldID:   "pain-realm",
+		Timestamp: time.Now().UTC(),
+		Payload:   systemEventPayload,
+	}
+
+	// Публикуем событие в system_events
+	err := s.bus.PublishSystemEvent(r.Context(), systemEvent)
+	if err != nil {
+		log.Printf("Failed to publish system event: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Failed to publish system event: %v", err)))
+		return
+	}
+
+	// Ждем 5 секунд
+	time.Sleep(5 * time.Second)
+
+	// Создаем второе событие для world_events
+	worldEventPayload := map[string]interface{}{
+		"entity_id":  "player:kain-777",
+		"skill_id":   "sky_rend",
+		"skill_name": "Разрыв небес",
+		"target":     "npc:wolf-5",
+		"location": map[string]interface{}{
+			"x":        123.4,
+			"y":        56.7,
+			"location": "location:dark_alley",
+		},
+		"description": "Хоббит с карими глазами применил умение 'Разрыв небес' на белого волка.",
+	}
+
+	worldEvent := eventbus.Event{
+		EventID:   "evt-skill-" + uuid.NewString(),
+		EventType: "player.used_skill",
+		Source:    "client",
+		WorldID:   "pain-realm",
+		ScopeID:   &[]string{"player:kain-777"}[0], // Указатель на строку
+		Timestamp: time.Now().UTC(),
+		Payload:   worldEventPayload,
+	}
+
+	// Публикуем событие в world_events
+	err = s.bus.PublishWorldEvent(r.Context(), worldEvent)
+	if err != nil {
+		log.Printf("Failed to publish world event: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Failed to publish world event: %v", err)))
+		return
+	}
+
+	// Возвращаем успешный ответ
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":         "Test events published successfully",
+		"system_event_id": systemEvent.EventID,
+		"world_event_id":  worldEvent.EventID,
 	})
 }
