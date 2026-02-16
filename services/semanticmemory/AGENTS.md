@@ -1,67 +1,190 @@
-# AGENTS.md for SemanticMemory
+# SemanticMemory Agent Guide
 
-This file provides guidance to AI assistants when working with the SemanticMemory service.
+## 🎯 Назначение
 
-## Service Overview
+SemanticMemory — это система семантической памяти с двойным индексированием для поддержки RAG в игровой вселенной.
 
-SemanticMemory is a powerful memory system with dual indexing (vector + graph) for RAG.
+## 🔌 API Endpoints
 
-### Key Responsibilities
-- Storing and searching semantic entities
-- Supporting RAG for narratives and other AI services
-- Combining vector and graph indexing
-- Searching by entity context and relationships
-- Storing events for context and replay
-- Providing event-based context for narrative generation
+### POST /v1/context/structured — Структурированный контекст с ID (RECOMMENDED)
 
-### Event Integration
-- Subscribes to: all event topics (`player_events`, `world_events`, `game_events`, `system_events`, `scope_management`, `narrative_output`)
-- Publishes: search results and context data
-- Event types: all system events (entity creation/update, world generation, player actions, etc.)
+**Запрос:**
+```json
+{
+  "entity_ids": ["player_123", "npc_elder123"],
+  "world_id": "world_alpha",
+  "time_range": "last_2h",
+  "max_events": 50,
+  "event_types": ["entity.moved", "item.found", "npc.met"]
+}
+```
 
-## Build/Run Commands
+**Параметры:**
+| Поле | Тип | Обязательный | Описание |
+|------|-----|--------------|----------|
+| `entity_ids` | `[]string` | ✅ | IDs сущностей для получения контекста |
+| `world_id` | `string` | ❌ | Фильтр по миру |
+| `time_range` | `string` | ❌ | `"last_1h"`, `"last_2h"`, `"last_24h"`, `"last_7d"` (default: `"last_2h"`) |
+| `max_events` | `int` | ❌ | Максимальное количество событий (default: all) |
+| `event_types` | `[]string` | ❌ | Фильтр по типам событий |
 
-- Build: `make build-service SERVICE=semantic-memory`
-- Run: `make run SERVICE=semantic-memory`
-- Logs: `make logs-service SERVICE=semantic-memory`
+**Ответ:**
+```json
+{
+  "context": "{event_456:10:00} {player_123:Вася} {event_456:entered} {region_forest123:Темный лес}. {event_789:10:15} {player_123:Вася} {event_789:found} {items_bottle_life:Бутыль жизни}. {event_123:10:30} {player_123:Вася} {event_123:met} {npc_elder123:Лесник}.",
+  "entities": {
+    "player_123": {
+      "id": "player_123",
+      "name": "Вася",
+      "type": "player",
+      "world_id": "world_alpha",
+      "description": "Отважный воин 3 уровня"
+    },
+    "region_forest123": {
+      "id": "region_forest123",
+      "name": "Темный лес",
+      "type": "region",
+      "description": "Густой, таинственный лес с древними деревьями"
+    }
+  },
+  "timeline": [
+    {
+      "timestamp": "2024-01-15T10:00:00Z",
+      "event_id": "event_456",
+      "type": "entity.moved",
+      "format": "{event_456:10:00} {player_123:Вася} {event_456:entered} {region_forest123:Темный лес}",
+      "entities": ["player_123", "region_forest123"]
+    }
+  ],
+  "metadata": {
+    "request_time": "2024-01-15T14:30:00Z",
+    "entity_count": 4,
+    "event_count": 3,
+    "time_range": "last_2h",
+    "processing_ms": 45,
+    "source_indexes": ["chroma:world_memory", "neo4j:entity_graph"]
+  }
+}
+```
 
-## Code Style Guidelines
+### Формат контекста для AI
 
-- All services written in Go 1.25
-- Use JSON Schema Draft 7 for payload validation
-- Follow event-driven architecture with Kafka/Redpanda
-- Use entity paths with dot notation for nested access (e.g., `payload.health.current`)
-- Build with CGO disabled (`CGO_ENABLED=0`)
-- Use UUIDs for entity IDs
-- Containerize with Docker multi-stage builds
+**Структура:** `{event_id:time} {entity_id:name} {event_id:action} {target_id:name}`
 
-## Key Patterns and Utilities
+**Примеры:**
+```
+{event_456:10:00} {player_123:Вася} {event_456:entered} {region_forest123:Темный лес}
+{event_789:10:15} {player_123:Вася} {event_789:found} {items_bottle_life:Бутыль жизни}
+{event_123:10:30} {player_123:Вася} {event_123:met} {npc_elder123:Лесник}
+{event_122313:10:35} {npc_elder123:Лесник} {event_122313:offered} {quest_secret_path:квест}
+```
 
-- Event bus integration via `internal/eventbus`
-- Dual indexing system (ChromaDB + Neo4j)
-- RAG (Retrieval-Augmented Generation) support
-- Stateless service architecture
-- Event storage with persistence
-- Event search by type functionality
+**Преимущества формата:**
+- ✅ **Машинно-интерпретируемый**: AI легко извлекает ID для действий
+- ✅ **Человечески-читаемый**: Текст остаётся естественным
+- ✅ **Согласованный**: Все сервисы используют одинаковые ID
+- ✅ **Хронологический**: События отсортированы по времени
 
-## Directory Structure
+## 🤖 Использование в AscensionOracle промптах
 
-- Service implementation: `services/semanticmemory/`
-- Command entry point: `cmd/semantic-memory/
-- Internal packages: `internal/eventbus/`
+```text
+Ты - Game Master для RPG игры. Используй следующий контекст для генерации ответа:
 
-## Service-Specific Conventions
+Контекст:
+{event_456:10:00} {player_123:Вася} {event_456:entered} {region_forest123:Темный лес}. 
+{event_789:10:15} {player_123:Вася} {event_789:found} {items_bottle_life:Бутыль жизни}. 
+{event_123:10:30} {player_123:Вася} {event_123:met} {npc_elder123:Лесник}.
 
-- Vector indexing in ChromaDB
-- Graph model in Neo4j
-- Search cache management
-- Integrates with NarrativeOrchestrator for context
-- Works with AscensionOracle for AI context
-- Supports WorldGenerator for world context
-- Stateless with persistent storage
-- Entity-based indexing approach
-- Event-based context storage
-- HTTP API on port 8082 (default)
-- Event search endpoint at `/v1/events`
-- Context retrieval endpoint at `/v1/context`
-- Context with events retrieval endpoint at `/v1/context-with-events`
+Действие игрока:
+"Я хочу принять квест"
+
+Сгенерируй ответ от лица Лесника. Используй ID сущностей из контекста для ссылок:
+- {npc_elder123:Лесник} для себя
+- {player_123:Вася} для игрока  
+- {quest_secret_path:квест} для квеста
+
+Формат ответа JSON:
+{
+  "narrative": "Текст ответа...",
+  "actions": [
+    {"id": "accept", "target": "quest_secret_path", "desc": "Принять квест"},
+    {"id": "ask", "target": "npc_elder123", "desc": "Расспросить подробнее"}
+  ]
+}
+```
+
+## 🔄 Legacy Endpoints (для обратной совместимости)
+
+### POST /v1/context
+Возвращает `map[string]string` с plain text контекстом.
+
+### POST /v1/events
+Возвращает список событий по типу.
+
+### POST /v1/context-with-events
+Возвращает контекст сущностей с добавлением событий.
+
+> ⚠️ Рекомендуется использовать `/v1/context/structured` для новых интеграций.
+
+## 🔧 Конфигурация
+
+```env
+# ChromaDB (официальный клиент v2)
+CHROMA_URL=http://chromadb:8000
+CHROMA_COLLECTION_NAME=world_memory
+CHROMA_USE_V2=true
+
+# Embedding модель
+EMBEDING_URL=http://qwen3-service:11434
+EMBEDING_MODEL=nomic-embed-text:latest
+
+# Neo4j
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=***
+
+# Kafka
+KAFKA_BROKERS=kafka:9092
+
+# Сервис
+SEMANTIC_PORT=8080
+```
+
+## 📡 Подписанные Kafka топики
+
+- `player_events` — события игроков
+- `world_events` — события мира
+- `game_events` — игровые события
+- `system_events` — системные события
+- `scope_management` — управление scope
+- `narrative_output` — вывод повествования
+
+## 🧪 Тестирование
+
+```bash
+# Тест нового endpoint
+curl -X POST http://localhost:8080/v1/context/structured \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entity_ids": ["player_123"],
+    "time_range": "last_1h"
+  }'
+
+# Проверка health
+curl http://localhost:8080/health
+```
+
+## 🚨 Обработка ошибок
+
+| Код | Сообщение | Причина |
+|-----|-----------|---------|
+| 400 | `invalid_json` | Некорректный JSON в запросе |
+| 400 | `entity_ids_required` | Пустой массив `entity_ids` |
+| 500 | `failed_to_load_events` | Ошибка при получении событий |
+| 500 | `internal_error` | Внутренняя ошибка сервера |
+
+---
+
+**Версия:** 2.0  
+**Обновлено:** 2026-02-16  
+**Статус:** ✅ Production-ready с поддержкой structured context
