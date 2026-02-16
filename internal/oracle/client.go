@@ -151,8 +151,8 @@ func (c *Client) CallStructured(ctx context.Context, systemPrompt, userPrompt st
 		},
 		"temperature": 0.8,
 		//"repetition_penalty": 1.15,
-		//"min_p":              0.05,
-		"max_tokens": 1024,
+		"min_p":      0.05,
+		"max_tokens": 4086,
 		"response_format": map[string]string{
 			"type": "text",
 		},
@@ -176,7 +176,7 @@ func (c *Client) Call(ctx context.Context, prompt string) (string, error) {
 		"temperature": 0.8,
 		"max_tokens":  1500,
 		"response_format": map[string]string{
-			"type": "json_object",
+			"type": "text",
 		},
 	})
 	if err != nil {

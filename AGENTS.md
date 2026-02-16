@@ -18,6 +18,7 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 - Clean build artifacts: `make clean`
 - Show logs for all services: `make logs`
 - Show logs for specific service: `make logs-service SERVICE=entity-manager`
+- Run tests: `make test`
 
 ## Code style guidelines
 
@@ -28,7 +29,7 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 - Entity management uses MinIO for storage with bucket naming pattern: `entities-{world_id}`
 - All services are stateful and support recovery via snapshots and event replay
 - Use entity paths with dot notation for nested payload access (e.g., `payload.health.current`)
-- All services must be built with CGO disabled for cross-platform compatibility
+- All services must be built with CGO disabled for cross-platform compatibility (`CGO_ENABLED=0`)
 - Use UUIDs for event IDs and entity IDs
 - All services must be containerized with Docker using multi-stage builds
 
@@ -44,6 +45,9 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 - Services use context for cancellation and timeouts
 - Event bus uses Kafka with LeastBytes balancer for load distribution
 - Services implement graceful shutdown with HTTP server shutdown and resource cleanup
+- Custom Oracle client with retry logic and structured response handling
+- Custom MinIO client with common interfaces for storage operations
+- Event bus with configurable polling frequency via `KAFKA_POLL_FREQUENCY_MS` environment variable
 
 ## Non-standard directory structures
 
@@ -70,6 +74,10 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 - Services must handle entity travel between worlds through snapshot management
 - All services must be able to handle concurrent access to shared resources
 - Services use specific event types for different operations (entity.created, entity.updated, world.generated, etc.)
+- Semantic Memory service stores all events for context and replay
+- Services must handle entity travel between worlds through snapshot management
+- All services must be able to handle concurrent access to shared resources
+- Services use specific event types for different operations (entity.created, entity.updated, world.generated, etc)
 - Semantic Memory service stores all events for context and replay
 
 ## Service-Specific Guidance

@@ -125,6 +125,7 @@ func CallOracle(ctx context.Context, systemPrompt, userPrompt string) (*OracleRe
 		return nil, fmt.Errorf("empty content")
 	}
 
+	log.Printf("Oracle response: %s", content)
 	var result OracleResponse
 	if err := json.Unmarshal([]byte(content), &result); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %s", content)

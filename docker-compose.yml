@@ -168,7 +168,7 @@ services:
       - chromadb
       - neo4j
     ports:
-      - "8080:8080"
+      - "8083:8083"
     env_file:
       - .env  
     #environment:
@@ -226,12 +226,12 @@ services:
     env_file:
       - .env  
   # ========== ИИ: Qwen3 через Ollama ==========
-  qwen3-pull:
-    image: ollama/ollama:latest
-    volumes:
-      - ollama_data:/root/.ollama
-    command: [ "pull", "qwen3"]
-    profiles: ["init"]  # ← запускается только при необходимости
+#  qwen3-pull:
+#    image: ollama/ollama:latest
+#    volumes:
+#      - ollama_data:/root/.ollama
+#    command: [ "pull", "qwen3"]
+#    profiles: ["init"]  # ← запускается только при необходимости
   qwen3-service:
     image: ollama/ollama:latest
     ports:
@@ -251,6 +251,23 @@ services:
     #           count: 1
     #           capabilities: [gpu]
       
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__PORT=6333
+      - QDRANT__GRPC__PORT=6334
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "http://localhost:6333/health", "-O", "/dev/null" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   # ========== Game Service ==========
   game-service:
     build:
@@ -285,5 +302,6 @@ volumes:
   neo4j_data:
   timescale_data:
   ollama_data:  # ← для кэша моделей Ollama
+  qdrant_storage:
 
   
