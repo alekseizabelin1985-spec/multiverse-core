@@ -44,7 +44,7 @@ func (s *Service) HandleStructuredContext(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	// 1. Загружаем кэш сущностей из Neo4j
-	entityCache, err := GetEntityCache(ctx, s.indexer.neo4j, req.EntityIDs)
+	entityCache, err := s.indexer.neo4j.GetEntityCache(req.EntityIDs)
 	if err != nil {
 		log.Printf("Failed to load entity cache: %v", err)
 		// Не блокируем запрос, используем fallback
@@ -150,95 +150,7 @@ func writeError(w http.ResponseWriter, code string, status int) {
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
 }
 
-// GetEntityCache получает информацию о сущностях из Neo4j
-func GetEntityCache(ctx context.Context, neo4jClient *Neo4jClient, entityIDs []string) (map[string]EntityInfo, error) {
-	if neo4jClient == nil || neo4jClient.driver == nil {
-		return nil, fmt.Errorf("neo4j client not initialized")
-	}
-
-	session := neo4jClient.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
-	defer session.Close() // v5: Close() без аргументов
-
-	query := `
-	MATCH (e:Entity)
-	WHERE e.id IN $entity_ids
-	RETURN e.id AS id, e.name AS name, e.type AS type, e.world_id AS world_id, e.description AS description, e.payload AS payload
-	`
-
-	result, err := session.ReadTransaction(ctx, func(tx neo4j.Transaction) (any, error) {
-		res, err := tx.Run(ctx, query, map[string]any{
-			"entity_ids": entityIDs,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		cache := make(map[string]EntityInfo)
-		for res.Next(ctx) {
-			record := res.Record()
-
-			var id, name, entityType, worldID, description string
-			var payload map[string]interface{}
-
-			if val, ok := record.Get("id"); ok && val != nil {
-				if s, ok := val.(string); ok {
-					id = s
-				}
-			}
-			if val, ok := record.Get("name"); ok && val != nil {
-				if s, ok := val.(string); ok {
-					name = s
-				}
-			}
-			if val, ok := record.Get("type"); ok && val != nil {
-				if s, ok := val.(string); ok {
-					entityType = s
-				}
-			}
-			if val, ok := record.Get("world_id"); ok && val != nil {
-				if s, ok := val.(string); ok {
-					worldID = s
-				}
-			}
-			if val, ok := record.Get("description"); ok && val != nil {
-				if s, ok := val.(string); ok {
-					description = s
-				}
-			}
-			if val, ok := record.Get("payload"); ok && val != nil {
-				if p, ok := val.(map[string]interface{}); ok {
-					payload = p
-				}
-			}
-
-			if id != "" {
-				cache[id] = EntityInfo{
-					ID:          id,
-					Name:        name,
-					Type:        entityType,
-					WorldID:     worldID,
-					Description: description,
-					Payload:     payload,
-				}
-			}
-		}
-
-		return cache, res.Err()
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if cache, ok := result.(map[string]EntityInfo); ok {
-		return cache, nil
-	}
-
-	return nil, fmt.Errorf("unexpected result type from GetEntityCache")
-}
-
 // SearchEventsByEntity ищет события по entity_id через интерфейс SemanticStorage
-// Реализация зависит от конкретного клиента (ChromaClient или ChromaV2Client)
 func SearchEventsByEntity(ctx context.Context, storage SemanticStorage, entityID, worldID string, timeRange time.Duration, limit int) ([]eventbus.Event, error) {
 	// Для ChromaV2Client можно использовать прямой доступ через type assertion
 	if v2Client, ok := storage.(*ChromaV2Client); ok {
@@ -246,24 +158,14 @@ func SearchEventsByEntity(ctx context.Context, storage SemanticStorage, entityID
 	}
 
 	// Fallback для HTTP-клиента: возвращаем пустой список
-	// В реальной реализации нужно добавить метод в интерфейс SemanticStorage
 	log.Printf("SearchEventsByEntity: using fallback for non-v2 client, entity=%s", entityID)
 	return []eventbus.Event{}, nil
 }
 
 // searchEventsByEntityV2 реализует поиск для официального клиента ChromaDB v2
-// Примечание: эта функция использует internal API ChromaV2Client
 func searchEventsByEntityV2(ctx context.Context, client *ChromaV2Client, entityID, worldID string, timeRange time.Duration, limit int) ([]eventbus.Event, error) {
 	// Эта функция должна быть в chroma_v2.go из-за build tag
 	// Здесь оставляем заглушку для компиляции
 	log.Printf("searchEventsByEntityV2: entity=%s, world=%s, range=%v", entityID, worldID, timeRange)
-
-	// В production реализовать через v2 API:
-	// whereFilter := v2.And(
-	//     v2.EqString("entity_id", entityID),
-	//     v2.GteString("timestamp", startTime.Format(time.RFC3339)),
-	// )
-	// result, err := client.collection.Query(ctx, v2.WithWhereQuery(whereFilter), ...)
-
 	return []eventbus.Event{}, nil
 }
