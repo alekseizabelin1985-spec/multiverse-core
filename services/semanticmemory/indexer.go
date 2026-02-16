@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"multiverse-core/internal/eventbus"
 
@@ -100,7 +101,6 @@ func NewIndexer() (*Indexer, error) {
 		neo4j:  neo4j,
 	}, nil
 }
-
 
 // HandleEvent processes all events and indexes them.
 func (i *Indexer) HandleEvent(ev eventbus.Event) {
@@ -216,15 +216,17 @@ func (i *Indexer) saveEventToNeo4j(ctx context.Context, ev eventbus.Event) error
 	RETURN e
 	`
 
-	_, err = session.Run(query, map[string]interface{}{
-		"event_id":   ev.EventID,
-		"event_type": ev.EventType,
-		"timestamp":  ev.Timestamp,
-		"source":     ev.Source,
-		"world_id":   ev.WorldID,
-		"scope_id":   ev.ScopeID,
-		"payload":    ev.Payload,
-		"raw_data":   string(eventJSON),
+	_, err = session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
+		return tx.Run(query, map[string]any{
+			"event_id":   ev.EventID,
+			"event_type": ev.EventType,
+			"timestamp":  ev.Timestamp,
+			"source":     ev.Source,
+			"world_id":   ev.WorldID,
+			"scope_id":   ev.ScopeID,
+			"payload":    ev.Payload,
+			"raw_data":   string(eventJSON),
+		})
 	})
 	return err
 }
@@ -256,7 +258,7 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	}
 
 	// Index in Neo4j
-	if err := i.neo4j.UpsertEntity(ctx, entityID, entityType, payload); err != nil {
+	if err := i.neo4j.UpsertEntity(entityID, entityType, payload); err != nil {
 		log.Printf("Neo4j upsert failed for %s: %v", entityID, err)
 	}
 
@@ -264,7 +266,7 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	if inv, ok := payload["inventory"]; ok {
 		inventory := toStringSlice(inv)
 		for _, itemID := range inventory {
-			if err := i.neo4j.CreateRelationship(ctx, entityID, itemID, "CONTAINS"); err != nil {
+			if err := i.neo4j.CreateRelationship(entityID, itemID, "CONTAINS"); err != nil {
 				log.Printf("Neo4j relationship failed: %s -> %s: %v", entityID, itemID, err)
 			}
 		}
@@ -284,10 +286,19 @@ func (i *Indexer) GetEventsByType(ctx context.Context, eventType string, limit i
 	return i.chroma.SearchEventsByType(ctx, eventType, limit)
 }
 
+// GetEventsForEntities retrieves events for given entity IDs within a time range.
+// This is a simplified implementation - in production, use ChromaDB v2 with proper filtering.
+func (i *Indexer) GetEventsForEntities(ctx context.Context, entityIDs []string, worldID string, timeRange time.Duration, maxEvents int) ([]eventbus.Event, error) {
+	// Simplified: return empty list - real implementation requires ChromaDB v2 filtering
+	// In production, implement proper where-filtering in chroma_v2.go
+	log.Printf("GetEventsForEntities: entities=%v, world=%s, range=%v, max=%d", entityIDs, worldID, timeRange, maxEvents)
+	return []eventbus.Event{}, nil
+}
+
 // Close the chroma client when indexer is done
-//func (i *Indexer) Close() error {
-//if i.chroma != nil {
-//	return i.chroma.Close()
-//}
-//return nil
-//}
+func (i *Indexer) Close() error {
+	if i.chroma != nil {
+		return i.chroma.Close()
+	}
+	return nil
+}
