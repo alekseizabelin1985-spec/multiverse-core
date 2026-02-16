@@ -48,18 +48,16 @@ func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[stri
 	defer session.Close()
 
 	query := `
-	MERGE (e:Entity {id: $entity_id})
-	SET e.type = $entity_type,
-	    e += $payload
-	RETURN e
-	`
+MERGE (e:Entity {id: $entity_id})
+SET e.type = $entity_type,
+    e += $payload
+RETURN e
+`
 
-	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
-		return tx.Run(query, map[string]any{
-			"entity_id":   entityID,
-			"entity_type": entityType,
-			"payload":     payload,
-		})
+	_, err := session.Run(query, map[string]any{
+		"entity_id":   entityID,
+		"entity_type": entityType,
+		"payload":     payload,
 	})
 	return err
 }
@@ -70,17 +68,15 @@ func (n *Neo4jClient) CreateRelationship(fromID, toID, relType string) error {
 	defer session.Close()
 
 	query := fmt.Sprintf(`
-	MATCH (a:Entity {id: $from_id})
-	MATCH (b:Entity {id: $to_id})
-	MERGE (a)-[r:%s]->(b)
-	RETURN r
-	`, relType)
+MATCH (a:Entity {id: $from_id})
+MATCH (b:Entity {id: $to_id})
+MERGE (a)-[r:%s]->(b)
+RETURN r
+`, relType)
 
-	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
-		return tx.Run(query, map[string]any{
-			"from_id": fromID,
-			"to_id":   toID,
-		})
+	_, err := session.Run(query, map[string]any{
+		"from_id": fromID,
+		"to_id":   toID,
 	})
 	return err
 }
@@ -90,46 +86,42 @@ func (n *Neo4jClient) StoreEvent(eventID string, eventType string, timestamp str
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
-		// Create or merge the event node with all event data
-		eventQuery := `
-			MERGE (e:Event {id: $eventID})
-			SET e.type = $eventType, e.timestamp = $timestamp
-			SET e += $eventData
-			RETURN e
+	// Create or merge the event node with all event data
+	eventQuery := `
+		MERGE (e:Event {id: $eventID})
+		SET e.type = $eventType, e.timestamp = $timestamp
+		SET e += $eventData
+		RETURN e
+	`
+
+	_, err := session.Run(eventQuery, map[string]any{
+		"eventID":   eventID,
+		"eventType": eventType,
+		"timestamp": timestamp,
+		"eventData": eventData,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create/merge event node: %w", err)
+	}
+
+	// Create relationship to the associated entity if entityID is provided
+	if entityID != "" {
+		relQuery := `
+			MERGE (ev:Event {id: $eventID})
+			MERGE (en:Entity {id: $entityID})
+			MERGE (ev)-[:RELATED_TO]->(en)
 		`
 
-		_, err := tx.Run(eventQuery, map[string]any{
-			"eventID":   eventID,
-			"eventType": eventType,
-			"timestamp": timestamp,
-			"eventData": eventData,
+		_, err := session.Run(relQuery, map[string]any{
+			"eventID":  eventID,
+			"entityID": entityID,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("failed to create/merge event node: %w", err)
+			return fmt.Errorf("failed to create relationship to entity: %w", err)
 		}
+	}
 
-		// Create relationship to the associated entity if entityID is provided
-		if entityID != "" {
-			relQuery := `
-				MERGE (ev:Event {id: $eventID})
-				MERGE (en:Entity {id: $entityID})
-				MERGE (ev)-[:RELATED_TO]->(en)
-			`
-
-			_, err := tx.Run(relQuery, map[string]any{
-				"eventID":  eventID,
-				"entityID": entityID,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create relationship to entity: %w", err)
-			}
-		}
-
-		return nil, nil
-	})
-
-	return err
+	return nil
 }
 
 // GetEventsByType retrieves events of a specific type from Neo4j, sorted by timestamp.

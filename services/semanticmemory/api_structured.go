@@ -2,17 +2,13 @@
 package semanticmemory
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sort"
 	"time"
 
 	"multiverse-core/internal/eventbus"
-
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 // StructuredContextRequest запрос структурированного контекста
@@ -20,7 +16,7 @@ type StructuredContextRequest struct {
 	EntityIDs   []string `json:"entity_ids"`
 	WorldID     string   `json:"world_id,omitempty"`
 	RegionID    string   `json:"region_id,omitempty"`
-	TimeRange   string   `json:"time_range"`   // "last_1h", "last_24h", "last_7d"
+	TimeRange   string   `json:"time_range"` // "last_1h", "last_24h", "last_7d"
 	MaxEvents   int      `json:"max_events,omitempty"`
 	IncludeDesc bool     `json:"include_description,omitempty"`
 	EventTypes  []string `json:"event_types,omitempty"`
@@ -54,7 +50,7 @@ func (s *Service) HandleStructuredContext(w http.ResponseWriter, r *http.Request
 	// 2. Получаем события для сущностей через ChromaDB
 	var allEvents []eventbus.Event
 	for _, entityID := range req.EntityIDs {
-		events, err := SearchEventsByEntity(ctx, s.indexer.chroma, entityID, req.WorldID, parseTimeRange(req.TimeRange), req.MaxEvents)
+		events, err := s.indexer.GetEventsForEntities(ctx, []string{entityID}, req.WorldID, parseTimeRange(req.TimeRange), req.MaxEvents)
 		if err != nil {
 			log.Printf("Warning: failed to search events for entity %s: %v", entityID, err)
 			continue
@@ -148,24 +144,4 @@ func writeError(w http.ResponseWriter, code string, status int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
-}
-
-// SearchEventsByEntity ищет события по entity_id через интерфейс SemanticStorage
-func SearchEventsByEntity(ctx context.Context, storage SemanticStorage, entityID, worldID string, timeRange time.Duration, limit int) ([]eventbus.Event, error) {
-	// Для ChromaV2Client можно использовать прямой доступ через type assertion
-	if v2Client, ok := storage.(*ChromaV2Client); ok {
-		return searchEventsByEntityV2(ctx, v2Client, entityID, worldID, timeRange, limit)
-	}
-
-	// Fallback для HTTP-клиента: возвращаем пустой список
-	log.Printf("SearchEventsByEntity: using fallback for non-v2 client, entity=%s", entityID)
-	return []eventbus.Event{}, nil
-}
-
-// searchEventsByEntityV2 реализует поиск для официального клиента ChromaDB v2
-func searchEventsByEntityV2(ctx context.Context, client *ChromaV2Client, entityID, worldID string, timeRange time.Duration, limit int) ([]eventbus.Event, error) {
-	// Эта функция должна быть в chroma_v2.go из-за build tag
-	// Здесь оставляем заглушку для компиляции
-	log.Printf("searchEventsByEntityV2: entity=%s, world=%s, range=%v", entityID, worldID, timeRange)
-	return []eventbus.Event{}, nil
 }

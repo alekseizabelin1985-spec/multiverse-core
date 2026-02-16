@@ -205,28 +205,26 @@ func (i *Indexer) saveEventToNeo4j(ctx context.Context, ev eventbus.Event) error
 	}
 
 	query := `
-	MERGE (e:Event {id: $event_id})
-	SET e.type = $event_type,
-	    e.timestamp = $timestamp,
-	    e.source = $source,
-	    e.world_id = $world_id,
-	    e.scope_id = $scope_id,
-	    e.payload = $payload,
-	    e.raw_data = $raw_data
-	RETURN e
-	`
+MERGE (e:Event {id: $event_id})
+SET e.type = $event_type,
+    e.timestamp = $timestamp,
+    e.source = $source,
+    e.world_id = $world_id,
+    e.scope_id = $scope_id,
+    e.payload = $payload,
+    e.raw_data = $raw_data
+RETURN e
+`
 
-	_, err = session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
-		return tx.Run(query, map[string]any{
-			"event_id":   ev.EventID,
-			"event_type": ev.EventType,
-			"timestamp":  ev.Timestamp,
-			"source":     ev.Source,
-			"world_id":   ev.WorldID,
-			"scope_id":   ev.ScopeID,
-			"payload":    ev.Payload,
-			"raw_data":   string(eventJSON),
-		})
+	_, err = session.Run(query, map[string]any{
+		"event_id":   ev.EventID,
+		"event_type": ev.EventType,
+		"timestamp":  ev.Timestamp,
+		"source":     ev.Source,
+		"world_id":   ev.WorldID,
+		"scope_id":   ev.ScopeID,
+		"payload":    ev.Payload,
+		"raw_data":   string(eventJSON),
 	})
 	return err
 }
