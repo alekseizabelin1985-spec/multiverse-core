@@ -132,7 +132,7 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		start := time.Now()
 
 		// Load entity cache from Neo4j
-		entityCache, err := indexer.neo4j.GetEntityCache(ctx, req.EntityIDs)
+		entityCache, err := indexer.neo4j.GetEntityCache(req.EntityIDs)
 		if err != nil {
 			log.Printf("Failed to load entity cache: %v", err)
 			entityCache = buildFallbackEntityCache(req.EntityIDs)
