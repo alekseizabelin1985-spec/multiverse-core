@@ -49,6 +49,8 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 
 	// Setup HTTP server
 	r := mux.NewRouter()
+
+	// Legacy endpoint for backward compatibility
 	r.HandleFunc("/v1/context", func(w http.ResponseWriter, r *http.Request) {
 		var req contextRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -67,7 +69,7 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		json.NewEncoder(w).Encode(response)
 	}).Methods("POST")
 
-	// Add new endpoint for events
+	// Endpoint for events by type
 	r.HandleFunc("/v1/events", func(w http.ResponseWriter, r *http.Request) {
 		var req eventRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -92,7 +94,7 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		json.NewEncoder(w).Encode(response)
 	}).Methods("POST")
 
-	// Add new endpoint for context with events
+	// Endpoint for context with events (legacy)
 	r.HandleFunc("/v1/context-with-events", func(w http.ResponseWriter, r *http.Request) {
 		var req contextWithEventsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -112,6 +114,65 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(response)
 	}).Methods("POST")
+
+	// NEW: Structured context endpoint with embedded IDs for AI
+	r.HandleFunc("/v1/context/structured", func(w http.ResponseWriter, r *http.Request) {
+		var req StructuredContextRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, "invalid_json", http.StatusBadRequest)
+			return
+		}
+
+		if len(req.EntityIDs) == 0 {
+			writeError(w, "entity_ids_required", http.StatusBadRequest)
+			return
+		}
+
+		ctx := r.Context()
+		start := time.Now()
+
+		// Load entity cache from Neo4j
+		entityCache, err := indexer.neo4j.GetEntityCache(ctx, req.EntityIDs)
+		if err != nil {
+			log.Printf("Failed to load entity cache: %v", err)
+			entityCache = buildFallbackEntityCache(req.EntityIDs)
+		}
+
+		// Get events for entities
+		events, err := indexer.GetEventsForEntities(ctx, req.EntityIDs, req.WorldID, parseTimeRange(req.TimeRange), req.MaxEvents)
+		if err != nil {
+			log.Printf("Failed to load events: %v", err)
+			writeError(w, "failed_to_load_events", http.StatusInternalServerError)
+			return
+		}
+
+		// Filter by event types if specified
+		if len(req.EventTypes) > 0 {
+			events = filterEventsByTypes(events, req.EventTypes)
+		}
+
+		// Build structured context
+		structured := indexer.BuildStructuredContext(events, entityCache)
+		structured.Metadata.ProcessingMs = time.Since(start).Milliseconds()
+		structured.Metadata.TimeRange = req.TimeRange
+
+		// Return response
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if err := json.NewEncoder(w).Encode(structured); err != nil {
+			log.Printf("Failed to encode structured context response: %v", err)
+			http.Error(w, "internal_error", http.StatusInternalServerError)
+		}
+	}).Methods("POST")
+
+	// Health check endpoint
+	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]string{
+			"status": "healthy",
+			"time":   time.Now().Format(time.RFC3339),
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(response)
+	}).Methods("GET")
 
 	semanticport := os.Getenv("SEMANTIC_PORT")
 	if semanticport == "" {
@@ -157,7 +218,9 @@ func (s *Service) Run(ctx context.Context) error {
 	s.server.Shutdown(shutdownCtx)
 
 	// Close chroma client
-	//s.indexer.Close()
+	if s.indexer.chroma != nil {
+		s.indexer.chroma.Close()
+	}
 
 	// Close Neo4j driver
 	s.indexer.neo4j.Close()
