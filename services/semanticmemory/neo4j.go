@@ -2,7 +2,6 @@
 package semanticmemory
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -34,9 +33,9 @@ func NewNeo4jClient() (*Neo4jClient, error) {
 		return nil, fmt.Errorf("neo4j driver creation failed: %w", err)
 	}
 
-	// Test connection (no context in v5)
+	// Test connection (Neo4j v5 API)
 	if err := driver.VerifyConnectivity(); err != nil {
-		driver.Close()
+		_ = driver.Close()
 		return nil, fmt.Errorf("neo4j connectivity test failed: %w", err)
 	}
 
@@ -44,8 +43,7 @@ func NewNeo4jClient() (*Neo4jClient, error) {
 }
 
 // UpsertEntity creates or updates an entity node in Neo4j.
-func (n *Neo4jClient) UpsertEntity(ctx context.Context, entityID, entityType string, payload map[string]interface{}) error {
-	// В v5: NewSession принимает только SessionConfig (без context)
+func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[string]interface{}) error {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
@@ -56,17 +54,18 @@ func (n *Neo4jClient) UpsertEntity(ctx context.Context, entityID, entityType str
 	RETURN e
 	`
 
-	// В v5: Run принимает context как первый аргумент
-	_, err := session.Run(query, map[string]interface{}{
-		"entity_id":   entityID,
-		"entity_type": entityType,
-		"payload":     payload,
+	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
+		return tx.Run(query, map[string]any{
+			"entity_id":   entityID,
+			"entity_type": entityType,
+			"payload":     payload,
+		})
 	})
 	return err
 }
 
 // CreateRelationship creates a relationship between entities.
-func (n *Neo4jClient) CreateRelationship(ctx context.Context, fromID, toID, relType string) error {
+func (n *Neo4jClient) CreateRelationship(fromID, toID, relType string) error {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
@@ -77,19 +76,21 @@ func (n *Neo4jClient) CreateRelationship(ctx context.Context, fromID, toID, relT
 	RETURN r
 	`, relType)
 
-	_, err := session.Run(query, map[string]interface{}{
-		"from_id": fromID,
-		"to_id":   toID,
+	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
+		return tx.Run(query, map[string]any{
+			"from_id": fromID,
+			"to_id":   toID,
+		})
 	})
 	return err
 }
 
 // StoreEvent stores an event in Neo4j as a node with relationships to relevant entities.
-func (n *Neo4jClient) StoreEvent(ctx context.Context, eventID string, eventType string, timestamp string, entityID string, eventData map[string]interface{}) error {
+func (n *Neo4jClient) StoreEvent(eventID string, eventType string, timestamp string, entityID string, eventData map[string]interface{}) error {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+	_, err := session.ExecuteWrite(func(tx neo4j.Transaction) (any, error) {
 		// Create or merge the event node with all event data
 		eventQuery := `
 			MERGE (e:Event {id: $eventID})
@@ -98,7 +99,7 @@ func (n *Neo4jClient) StoreEvent(ctx context.Context, eventID string, eventType 
 			RETURN e
 		`
 
-		_, err := tx.Run(eventQuery, map[string]interface{}{
+		_, err := tx.Run(eventQuery, map[string]any{
 			"eventID":   eventID,
 			"eventType": eventType,
 			"timestamp": timestamp,
@@ -116,7 +117,7 @@ func (n *Neo4jClient) StoreEvent(ctx context.Context, eventID string, eventType 
 				MERGE (ev)-[:RELATED_TO]->(en)
 			`
 
-			_, err := tx.Run(relQuery, map[string]interface{}{
+			_, err := tx.Run(relQuery, map[string]any{
 				"eventID":  eventID,
 				"entityID": entityID,
 			})
@@ -132,11 +133,11 @@ func (n *Neo4jClient) StoreEvent(ctx context.Context, eventID string, eventType 
 }
 
 // GetEventsByType retrieves events of a specific type from Neo4j, sorted by timestamp.
-func (n *Neo4jClient) GetEventsByType(ctx context.Context, eventType string, limit int) ([]map[string]interface{}, error) {
+func (n *Neo4jClient) GetEventsByType(eventType string, limit int) ([]map[string]interface{}, error) {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (interface{}, error) {
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
 		query := `
 			MATCH (e:Event {type: $eventType})
 			RETURN e
@@ -144,7 +145,7 @@ func (n *Neo4jClient) GetEventsByType(ctx context.Context, eventType string, lim
 			LIMIT $limit
 		`
 
-		records, err := tx.Run(query, map[string]interface{}{
+		records, err := tx.Run(query, map[string]any{
 			"eventType": eventType,
 			"limit":     limit,
 		})
@@ -159,7 +160,7 @@ func (n *Neo4jClient) GetEventsByType(ctx context.Context, eventType string, lim
 			if !ok {
 				continue // Skip invalid records
 			}
-			
+
 			// Convert node to map
 			if node, ok := eventNode.(neo4j.Node); ok {
 				events = append(events, node.Props)
@@ -181,7 +182,95 @@ func (n *Neo4jClient) GetEventsByType(ctx context.Context, eventType string, lim
 	return events, nil
 }
 
+// GetEntityCache retrieves entity information for a list of entity IDs.
+// Neo4j v5 compatible: no context in method signatures.
+func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo, error) {
+	if n.driver == nil {
+		return nil, fmt.Errorf("neo4j driver not initialized")
+	}
+
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+	MATCH (e:Entity)
+	WHERE e.id IN $entity_ids
+	RETURN e.id AS id, e.name AS name, e.type AS type, e.world_id AS world_id, e.description AS description, e.payload AS payload
+	`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		res, err := tx.Run(query, map[string]any{
+			"entity_ids": entityIDs,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		cache := make(map[string]EntityInfo)
+		for res.Next() {
+			record := res.Record()
+
+			var id, name, entityType, worldID, description string
+			var payload map[string]interface{}
+
+			if val, ok := record.Get("id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					id = s
+				}
+			}
+			if val, ok := record.Get("name"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					name = s
+				}
+			}
+			if val, ok := record.Get("type"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					entityType = s
+				}
+			}
+			if val, ok := record.Get("world_id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					worldID = s
+				}
+			}
+			if val, ok := record.Get("description"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					description = s
+				}
+			}
+			if val, ok := record.Get("payload"); ok && val != nil {
+				if p, ok := val.(map[string]interface{}); ok {
+					payload = p
+				}
+			}
+
+			if id != "" {
+				cache[id] = EntityInfo{
+					ID:          id,
+					Name:        name,
+					Type:        entityType,
+					WorldID:     worldID,
+					Description: description,
+					Payload:     payload,
+				}
+			}
+		}
+
+		return cache, res.Err()
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if cache, ok := result.(map[string]EntityInfo); ok {
+		return cache, nil
+	}
+
+	return nil, fmt.Errorf("unexpected result type from GetEntityCache")
+}
+
 // Close closes the Neo4j driver.
 func (n *Neo4jClient) Close() {
-	n.driver.Close()
+	_ = n.driver.Close()
 }
