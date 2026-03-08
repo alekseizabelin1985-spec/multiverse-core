@@ -42,8 +42,9 @@ func NewService(cfg Config) (*Service, error) {
 }
 
 func (s *Service) Start(ctx context.Context) {
-	log.Println("EntityManager started (lazy mode). Listening to all event topics...")
+	log.Println("EntityManager started")
 
+	// Subscribe to all event topics for entity management
 	topics := []string{
 		eventbus.TopicPlayerEvents,
 		eventbus.TopicWorldEvents,
@@ -57,6 +58,9 @@ func (s *Service) Start(ctx context.Context) {
 			s.bus.Subscribe(ctx, topic, "entity-manager-group", s.manager.HandleEvent)
 		}()
 	}
+
+	// Subscribe to Entity-Actor lifecycle events
+	s.manager.SubscribeToEvents(ctx, s.bus)
 }
 
 func (s *Service) Stop() {

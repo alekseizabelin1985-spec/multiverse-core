@@ -13,7 +13,11 @@ SERVICES := \
 	reality-monitor \
 	plan-manager \
 	semantic-memory \
-	ontological-archivist
+	ontological-archivist \
+	entity-actor \
+	evolution-watcher \
+	rule-engine \
+	universe-genesis-oracle
 
 # Default target
 .PHONY: all
@@ -72,6 +76,12 @@ test:
 	@echo "Running tests..."
 	@go test ./...
 
+# Test specific service
+.PHONY: test-service
+test-service:
+	@echo "Testing service: $(SERVICE)..."
+	@go test ./services/$(SERVICE)
+
 # Help
 .PHONY: help
 help:
@@ -87,6 +97,7 @@ help:
 	@echo "  make logs-service SERVICE=<name>  Show logs for specific service"
 	@echo "  make clean              Clean build artifacts"
 	@echo "  make test               Run tests"
+	@echo "  make test-service SERVICE=<name>  Run tests for specific service"
 	@echo ""
 	@echo "Available services:"
 	@echo "  $(SERVICES)"

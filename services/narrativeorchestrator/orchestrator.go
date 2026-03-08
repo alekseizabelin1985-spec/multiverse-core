@@ -69,6 +69,7 @@ func errorLog(scopeID, worldID, msg string, fields map[string]interface{}) {
 
 type SemanticMemoryClient struct {
 	BaseURL string
+	logger  *log.Logger
 }
 
 type GetContextResponse struct {
@@ -87,6 +88,15 @@ type ContextWithEventsResponse struct {
 }
 
 func (c *SemanticMemoryClient) GetContextWithEvents(ctx context.Context, entityIDs []string, eventTypes []string, depth int) (map[string]interface{}, error) {
+	// Validate inputs
+	if c == nil {
+		return nil, fmt.Errorf("semantic memory client is nil")
+	}
+
+	if len(entityIDs) == 0 {
+		return nil, fmt.Errorf("entity IDs cannot be empty")
+	}
+
 	debugLog("", "", "Getting context with events from semantic memory", map[string]interface{}{
 		"entity_ids":  entityIDs,
 		"event_types": eventTypes,
@@ -102,7 +112,7 @@ func (c *SemanticMemoryClient) GetContextWithEvents(ctx context.Context, entityI
 		errorLog("", "", "Failed to marshal context request", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal context request: %w", err)
 	}
 
 	resp, err := http.Post(c.BaseURL+"/v1/context-with-events", "application/json", bytes.NewBuffer(reqBody))
@@ -110,7 +120,7 @@ func (c *SemanticMemoryClient) GetContextWithEvents(ctx context.Context, entityI
 		errorLog("", "", "Failed to call semantic memory service", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return nil, err
+		return nil, fmt.Errorf("failed to call semantic memory service: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -119,7 +129,7 @@ func (c *SemanticMemoryClient) GetContextWithEvents(ctx context.Context, entityI
 		errorLog("", "", "Failed to decode semantic memory response", map[string]interface{}{
 			"error": err.Error(),
 		})
-		return nil, err
+		return nil, fmt.Errorf("failed to decode semantic memory response: %w", err)
 	}
 
 	infoLog("", "", "Successfully retrieved context with events from semantic memory", map[string]interface{}{
@@ -142,9 +152,12 @@ type NarrativeOrchestrator struct {
 	minioClient minio.ClientInterface
 	configStore *config.Store
 	geoProvider spatial.GeometryProvider
+	logger      *log.Logger
 }
 
 func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
+	logger := log.New(log.Writer(), "NarrativeOrchestrator: ", log.LstdFlags|log.Lshortfile)
+
 	debugLog("", "", "Initializing Narrative Orchestrator", map[string]interface{}{})
 
 	semanticURL := os.Getenv("SEMANTIC_MEMORY_URL")
@@ -180,10 +193,11 @@ func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
 	return &NarrativeOrchestrator{
 		gms:         make(map[string]*GMInstance),
 		bus:         bus,
-		semantic:    &SemanticMemoryClient{BaseURL: semanticURL},
+		semantic:    &SemanticMemoryClient{BaseURL: semanticURL, logger: logger},
 		minioClient: minioClient,
 		configStore: configStore,
 		geoProvider: geoProvider,
+		logger:      logger,
 	}
 }
 
@@ -232,8 +246,19 @@ func getDefaultProfile() *config.Profile {
 }
 
 func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
-	scopeID, _ := ev.Payload["scope_id"].(string)
-	scopeType, _ := ev.Payload["scope_type"].(string)
+	scopeID, ok := ev.Payload["scope_id"].(string)
+	if !ok || scopeID == "" {
+		errorLog("", ev.WorldID, "Invalid or missing scope_id in event payload", map[string]interface{}{
+			"event_id": ev.EventID,
+			"payload":  ev.Payload,
+		})
+		return
+	}
+
+	scopeType, ok := ev.Payload["scope_type"].(string)
+	if !ok {
+		scopeType = ""
+	}
 	if scopeType == "" {
 		if parts := strings.SplitN(scopeID, ":", 2); len(parts) == 2 {
 			scopeType = parts[0]
@@ -337,7 +362,6 @@ func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
 				})
 			}
 		}
-
 	}
 
 	timeoutMin := 30.0
@@ -811,6 +835,125 @@ func (no *NarrativeOrchestrator) processBatchForGM(gm *GMInstance) {
 	infoLog(gm.ScopeID, gm.WorldID, "Batch processing completed", map[string]interface{}{
 		"batch_event_id": batchEventID,
 	})
+}
+
+// NEW: Handle mechanical results from Entity-Actors
+func (no *NarrativeOrchestrator) HandleMechanicalResult(ev eventbus.Event) {
+	debugLog("", ev.WorldID, "Processing mechanical result event", map[string]interface{}{
+		"event_id": ev.EventID,
+	})
+
+	// Extract mechanical result from payload with proper validation
+	mechanicalResult, exists := ev.Payload["mechanical_result"]
+	if !exists {
+		warnLog("", ev.WorldID, "No mechanical_result in event payload", map[string]interface{}{
+			"event_id": ev.EventID,
+		})
+		return
+	}
+
+	// Validate that mechanical result is a map
+	mechanicalResultMap, ok := mechanicalResult.(map[string]interface{})
+	if !ok {
+		errorLog("", ev.WorldID, "Invalid mechanical result structure", map[string]interface{}{
+			"event_id": ev.EventID,
+			"type":     fmt.Sprintf("%T", mechanicalResult),
+		})
+		return
+	}
+
+	// Validate required fields in mechanical result
+	entityID, entityIDExists := mechanicalResultMap["entity_id"].(string)
+	if !entityIDExists || entityID == "" {
+		warnLog("", ev.WorldID, "Missing or invalid entity_id in mechanical result", map[string]interface{}{
+			"event_id": ev.EventID,
+			"result":   mechanicalResultMap,
+		})
+		return
+	}
+
+	mood, moodExists := mechanicalResultMap["mood"].(string)
+	if !moodExists {
+		warnLog("", ev.WorldID, "Missing or invalid mood in mechanical result", map[string]interface{}{
+			"event_id": ev.EventID,
+			"result":   mechanicalResultMap,
+		})
+		// Continue processing without mood
+		mood = ""
+	}
+
+	// Get GM for this scope with proper validation
+	var gm *GMInstance
+	if ev.ScopeID == nil {
+		warnLog("", ev.WorldID, "Event missing scope ID", map[string]interface{}{
+			"event_id": ev.EventID,
+		})
+		return
+	}
+
+	gm, exists = no.gms[*ev.ScopeID]
+	if !exists {
+		warnLog("", ev.WorldID, "No GM found for mechanical result", map[string]interface{}{
+			"scope_id": *ev.ScopeID,
+		})
+		return
+	}
+
+	// Build narrative from mechanical result with proper error handling
+	narrative := no.buildNarrativeFromMechanics(mechanicalResultMap, gm)
+	// if err != nil { // Removed since buildNarrativeFromMechanics doesn't return an error
+	// 	errorLog(gm.ScopeID, gm.WorldID, "Failed to build narrative from mechanics", map[string]interface{}{
+	// 		"error": err.Error(),
+	// 	})
+	// 	return
+	// }
+
+	// Publish narrative output
+	narrativeEvent := eventbus.Event{
+		EventID:   "narrative-" + time.Now().Format("20060102-150405"),
+		EventType: "narrative.generate",
+		Source:    "narrative-orchestrator",
+		WorldID:   ev.WorldID,
+		ScopeID:   ev.ScopeID,
+		Payload: map[string]interface{}{
+			"narrative": narrative,
+			"mood":      mood,
+			"entity_id": entityID,
+		},
+		Timestamp: time.Now(),
+	}
+
+	err := no.bus.Publish(context.Background(), eventbus.TopicNarrativeOutput, narrativeEvent)
+	if err != nil {
+		errorLog("", ev.WorldID, "Failed to publish narrative output", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	infoLog(gm.ScopeID, gm.WorldID, "Published mechanical result narrative", map[string]interface{}{
+		"event_id": narrativeEvent.EventID,
+	})
+}
+
+// buildNarrativeFromMechanics converts mechanical results to narrative
+func (no *NarrativeOrchestrator) buildNarrativeFromMechanics(result interface{}, gm *GMInstance) string {
+	// Convert result to map for processing
+	resultMap, ok := result.(map[string]interface{})
+	if !ok {
+		return "Mechanical result could not be processed"
+	}
+
+	// Use semantic layer from rule engine if available
+	ruleID, exists := resultMap["rule_id"].(string)
+	if exists && ruleID != "" {
+		// In a real implementation, we would get the rule and use its semantic layer
+		// For now, return basic narrative
+		return fmt.Sprintf("Mechanical result processed with rule: %s", ruleID)
+	}
+
+	// Fallback to basic narrative
+	return "Mechanical result processed successfully"
 }
 
 // processEventForGM — основной метод обработки.

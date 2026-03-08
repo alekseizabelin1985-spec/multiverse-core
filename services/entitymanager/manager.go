@@ -106,6 +106,38 @@ func (m *Manager) saveSnapshotToMinIO(ctx context.Context, ent *entity.Entity, e
 	return err
 }
 
+// CreateEntityActor creates a new Entity-Actor for an entity
+func (m *Manager) CreateEntityActor(entityID string, entityType string) error {
+	// In a real implementation, this would create and register an EntityActor
+	// For now, we'll just log the action
+	log.Printf("Creating Entity-Actor for entity %s of type %s", entityID, entityType)
+	return nil
+}
+
+// DestroyEntityActor cleans up an Entity-Actor
+func (m *Manager) DestroyEntityActor(entityID string) error {
+	// In a real implementation, this would clean up the EntityActor
+	// For now, we'll just log the action
+	log.Printf("Destroying Entity-Actor for entity %s", entityID)
+	return nil
+}
+
+// SubscribeToEvents subscribes to events for Entity-Actor lifecycle management
+func (m *Manager) SubscribeToEvents(ctx context.Context, bus *eventbus.EventBus) {
+	// Create Entity-Actor when entity is created
+	bus.Subscribe(ctx, "entity.created", "entity-actor-group", func(ev eventbus.Event) {
+		entityID, _ := ev.Payload["entity_id"].(string)
+		entityType, _ := ev.Payload["entity_type"].(string)
+		m.CreateEntityActor(entityID, entityType)
+	})
+
+	// Destroy Entity-Actor when entity is deleted
+	bus.Subscribe(ctx, "entity.deleted", "entity-actor-group", func(ev eventbus.Event) {
+		entityID, _ := ev.Payload["entity_id"].(string)
+		m.DestroyEntityActor(entityID)
+	})
+}
+
 // HandleEvent processes an event from any topic.
 func (m *Manager) HandleEvent(ev eventbus.Event) {
 	ctx := context.Background()
@@ -224,7 +256,7 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 				log.Printf("Saved newly created entity %s to bucket %s", entityID, m.getBucketForEntity(ent, &ev))
 			}
 		} else {
-			log.Printf("Incomplete entity.created event payload for entity_id=%v, entity_type=%v, payload=%v", 
+			log.Printf("Incomplete entity.created event payload for entity_id=%v, entity_type=%v, payload=%v",
 				entityID, entityType, payloadExists)
 		}
 	}

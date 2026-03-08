@@ -12,6 +12,8 @@ import (
 
 	"multiverse-core/internal/eventbus"
 
+	minio "github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
@@ -70,6 +72,7 @@ func BuildTextContext(entityID, entityType string, payload map[string]interface{
 type Indexer struct {
 	chroma SemanticStorage
 	neo4j  *Neo4jClient
+	minio  *minio.Client
 }
 
 // NewIndexer creates a new Indexer.
@@ -96,14 +99,37 @@ func NewIndexer() (*Indexer, error) {
 		return nil, err
 	}
 
+	// Initialize MinIO client
+	minioEndpoint := os.Getenv("MINIO_ENDPOINT")
+	if minioEndpoint == "" {
+		minioEndpoint = "minio:9000"
+	}
+
+	minioClient, err := minio.New(minioEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4("minioadmin", "minioadmin", ""),
+		Secure: false,
+	})
+	if err != nil {
+		log.Printf("Warning: failed to create MinIO client: %v", err)
+		// Continue without MinIO client
+		minioClient = nil
+	}
+
 	return &Indexer{
 		chroma: storage,
 		neo4j:  neo4j,
+		minio:  minioClient,
 	}, nil
 }
 
 // HandleEvent processes all events and indexes them.
 func (i *Indexer) HandleEvent(ev eventbus.Event) {
+	// Validate input event
+	if ev.EventID == "" {
+		log.Printf("Invalid event: missing EventID")
+		return
+	}
+
 	// Process all events, not just entity-related events
 	ctx := context.Background()
 
@@ -121,6 +147,11 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 
 // saveEvent saves an event to both ChromaDB and Neo4j for context and replay
 func (i *Indexer) saveEvent(ctx context.Context, ev eventbus.Event) error {
+	// Validate input event
+	if ev.EventID == "" {
+		return fmt.Errorf("event ID cannot be empty")
+	}
+
 	// Create a text representation of the event for ChromaDB
 	eventText := i.buildEventTextContext(ev)
 
@@ -291,6 +322,32 @@ func (i *Indexer) GetEventsForEntities(ctx context.Context, entityIDs []string, 
 	// In production, implement proper where-filtering in chroma_v2.go
 	log.Printf("GetEventsForEntities: entities=%v, world=%s, range=%v, max=%d", entityIDs, worldID, timeRange, maxEvents)
 	return []eventbus.Event{}, nil
+}
+
+// GetEntityContext retrieves context for a specific entity ID from MinIO storage.
+func (i *Indexer) GetEntityContext(ctx context.Context, entityID string, timeRange string) (map[string]interface{}, error) {
+	// If no MinIO client is available, return an error
+	if i.minio == nil {
+		return nil, fmt.Errorf("MinIO client not initialized")
+	}
+
+	// Try to load from global bucket first (entities-global)
+	bucket := "entities-global"
+	obj, err := i.minio.GetObject(ctx, bucket, entityID+".json", minio.GetObjectOptions{})
+	if err == nil {
+		defer obj.Close()
+		var result map[string]interface{}
+		if err := json.NewDecoder(obj).Decode(&result); err != nil {
+			return nil, fmt.Errorf("failed to decode entity from global bucket: %w", err)
+		}
+		return result, nil
+	}
+
+	// If not found in global bucket, try to find it in world buckets
+	// This is a simplified approach - in production, we'd need better logic for world identification
+
+	// Return error if no entity found
+	return nil, fmt.Errorf("entity %s not found in storage", entityID)
 }
 
 // Close the chroma client when indexer is done

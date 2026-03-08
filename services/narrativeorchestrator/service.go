@@ -50,6 +50,11 @@ func (s *Service) Start(ctx context.Context) {
 	// Игровые события
 	go s.bus.Subscribe(ctx, eventbus.TopicWorldEvents, "narrative-world-group", s.orchestrator.HandleGameEvent)
 	go s.bus.Subscribe(ctx, eventbus.TopicGameEvents, "narrative-game-group", s.orchestrator.HandleGameEvent)
+
+	// NEW: Mechanical results from Entity-Actors
+	go s.bus.Subscribe(ctx, "mechanical_results", "narrative-mechanical-group", func(ev eventbus.Event) {
+		s.orchestrator.HandleMechanicalResult(ev)
+	})
 }
 
 func (s *Service) Stop() {

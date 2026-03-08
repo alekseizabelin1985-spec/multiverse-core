@@ -1,4 +1,5 @@
 # Living Worlds Integration Guide
+
 **Version**: 1.0  
 **Date**: 2026-02-22  
 **Status**: Ready for Implementation
@@ -69,7 +70,7 @@ services:
       - redis
       - kafka
       - oracle
-  
+
   evolution-watcher:
     build:
       context: .
@@ -82,7 +83,7 @@ services:
       - minio
       - kafka
       - oracle
-  
+
   rule-engine:
     build:
       context: .
@@ -93,6 +94,7 @@ services:
       - MINIO_ENDPOINT=minio:9090
     depends_on:
       - minio
+
 ```
 
 #### ✅ 1.3 Create New Kafka Topics
@@ -112,7 +114,7 @@ kafka-topics --create --topic evolution_analysis --partitions 5 --replication-fa
 
 ---
 
-### Phase 2: SemanticMemory Integration (Week 2)
+## 📦 SemanticMemory Integration (Week 2)
 
 #### ✅ 2.1 Add Entity Context Endpoint
 
@@ -166,7 +168,7 @@ mc policy set public myminio/gnue-entity-actors
 
 ---
 
-### Phase 3: NarrativeOrchestrator Integration (Week 3)
+## 🎭 NarrativeOrchestrator Integration (Week 3)
 
 #### ✅ 3.1 Add Mechanical Results Handler
 
@@ -244,7 +246,7 @@ func (s *Service) Start() error {
 
 ---
 
-### Phase 4: EntityManager Integration (Week 4)
+## 🧠 EntityManager Integration (Week 4)
 
 #### ✅ 4.1 Add Entity-Actor Lifecycle
 
@@ -323,7 +325,7 @@ func (em *EntityManager) SubscribeToEvents() {
 
 ---
 
-### Phase 5: Testing & Validation (Week 5)
+## 🧪 Testing & Validation (Week 5)
 
 #### ✅ 5.1 Unit Tests
 
@@ -421,7 +423,7 @@ func TestLivingWorlds_FullFlow(t *testing.T) {
 
 ---
 
-### Phase 6: Monitoring & Observability (Week 6)
+## 📊 Monitoring & Observability (Week 6)
 
 #### ✅ 6.1 Add Prometheus Metrics
 

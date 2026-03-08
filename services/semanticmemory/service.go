@@ -164,6 +164,39 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		}
 	}).Methods("POST")
 
+	// NEW: Entity context endpoint for Living Worlds integration
+	r.HandleFunc("/v1/entity-context/{entity_id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		entityID := vars["entity_id"]
+
+		if entityID == "" {
+			http.Error(w, "entity_id is required", http.StatusBadRequest)
+			return
+		}
+
+		// Get time range from query parameters
+		timeRange := r.URL.Query().Get("time_range")
+		if timeRange == "" {
+			timeRange = "last_24h" // default
+		}
+
+		// Load entity context from storage (using existing logic)
+		context, err := indexer.GetEntityContext(r.Context(), entityID, timeRange)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		response := map[string]interface{}{
+			"entity_id":  entityID,
+			"context":    context,
+			"time_range": timeRange,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(response)
+	}).Methods("GET")
+
 	// Health check endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{
