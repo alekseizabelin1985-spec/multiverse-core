@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/cultivationmodule"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/cultivation-module/cultivationmodule"
 )
 
 func main() {

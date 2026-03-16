@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // TestChromaCompatibility tests both ChromaClient and ChromaV2Client implementations

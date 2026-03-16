@@ -8,11 +8,11 @@ import (
 	"sync"
 	"time"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/intent"
-	"multiverse-core/internal/redis"
-	"multiverse-core/internal/rules"
-	"multiverse-core/internal/tinyml"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/intent"
+	"multiverse-core.io/shared/redis"
+	"multiverse-core.io/shared/rules"
+	"multiverse-core.io/shared/tinyml"
 )
 
 // Actor представляет собой актор сущности с буферизацией и состоянием

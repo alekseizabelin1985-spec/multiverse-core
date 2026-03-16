@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/oracle"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/oracle"
 )
 
 type Generator struct {

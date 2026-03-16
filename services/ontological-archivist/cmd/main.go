@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"multiverse-core/services/ontologicalarchivist"
+	"multiverse-core.io/services/ontological-archivist/ontologicalarchivist"
 
 	"github.com/gorilla/mux"
 )

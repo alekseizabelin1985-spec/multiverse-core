@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"multiverse-core/internal/config"
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/minio"
-	"multiverse-core/internal/spatial"
+	"multiverse-core.io/shared/config"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/minio"
+	"multiverse-core.io/shared/spatial"
 
 	"github.com/google/uuid"
 )

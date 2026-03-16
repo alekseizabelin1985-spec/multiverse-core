@@ -1,9 +1,8 @@
-module multiverse-core/services/ban-of-world
+module multiverse-core.io/services/ban-of-world
 
-go 1.25
+go 1.24
 
 require (
-	multiverse-core/shared v0.0.0
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/google/uuid v1.6.0
 )

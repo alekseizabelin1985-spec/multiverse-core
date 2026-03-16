@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"multiverse-core/internal/minio"
+	"multiverse-core.io/shared/minio"
 )
 
 // Engine движок применения правил

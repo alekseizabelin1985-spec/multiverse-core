@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 	"net/http"
 	"time"
 

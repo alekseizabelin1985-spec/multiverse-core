@@ -3,7 +3,7 @@ package gameservice
 import (
 	"sync"
 	"time"
-	"multiverse-core/internal/entity"
+	"multiverse-core.io/shared/entity"
 )
 
 // EntityCacheKey представляет ключ для кэширования сущностей

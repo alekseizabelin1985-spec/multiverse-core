@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/realitymonitor"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/reality-monitor/realitymonitor"
 )
 
 func main() {

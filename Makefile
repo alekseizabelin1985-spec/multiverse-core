@@ -17,23 +17,34 @@ SERVICES := \
 	entity-actor \
 	evolution-watcher \
 	rule-engine \
-	universe-genesis-oracle
+	universe-genesis-oracle \
+	game-service
 
 # Default target
 .PHONY: all
 all: build
 
-# Build all services
+# Build all services via Docker
 .PHONY: build
 build:
 	@echo "Building all services..."
 	@docker build -t $(DOCKER_IMAGE) -f build/Dockerfile .
 
-# Build specific service (make build-service SERVICE=entity-manager)
+# Build specific service locally (make build-service SERVICE=entity-manager)
 .PHONY: build-service
 build-service:
 	@echo "Building service: $(SERVICE)..."
-	@CGO_ENABLED=0 GOOS=linux go build -o bin/$(SERVICE) ./cmd/$(SERVICE)
+	@cd services/$(SERVICE) && CGO_ENABLED=0 GOOS=linux go build -o ../../bin/$(SERVICE) ./cmd/
+
+# Build all services locally
+.PHONY: build-all
+build-all:
+	@echo "Building all services locally..."
+	@mkdir -p bin
+	@for svc in $(SERVICES); do \
+		echo "  Building $$svc..."; \
+		cd services/$$svc && CGO_ENABLED=0 GOOS=linux go build -o ../../bin/$$svc ./cmd/ && cd ../..; \
+	done
 
 # Run services
 .PHONY: up
@@ -70,17 +81,33 @@ logs:
 logs-service:
 	@docker-compose logs -f $(SERVICE)
 
-# Test (placeholder)
+# Test all modules
 .PHONY: test
 test:
 	@echo "Running tests..."
-	@go test ./...
+	@go test ./shared/...
+	@for svc in $(SERVICES); do \
+		echo "  Testing $$svc..."; \
+		cd services/$$svc && go test ./... && cd ../..; \
+	done
 
 # Test specific service
 .PHONY: test-service
 test-service:
 	@echo "Testing service: $(SERVICE)..."
-	@go test ./services/$(SERVICE)
+	@cd services/$(SERVICE) && go test ./...
+
+# Test shared module
+.PHONY: test-shared
+test-shared:
+	@echo "Testing shared module..."
+	@cd shared && go test ./...
+
+# Sync workspace
+.PHONY: sync
+sync:
+	@echo "Syncing workspace..."
+	@go work sync
 
 # Help
 .PHONY: help
@@ -88,16 +115,19 @@ help:
 	@echo "Makefile for $(PROJECT_NAME)"
 	@echo ""
 	@echo "Usage:"
-	@echo "  make build              Build all services"
-	@echo "  make build-service SERVICE=<name>  Build specific service"
-	@echo "  make up                 Start all services"
-	@echo "  make run SERVICE=<name> Start specific service"
-	@echo "  make down               Stop all services"
-	@echo "  make logs               Show logs for all services"
-	@echo "  make logs-service SERVICE=<name>  Show logs for specific service"
-	@echo "  make clean              Clean build artifacts"
-	@echo "  make test               Run tests"
-	@echo "  make test-service SERVICE=<name>  Run tests for specific service"
+	@echo "  make build                      Build all services (Docker)"
+	@echo "  make build-service SERVICE=<n>  Build specific service locally"
+	@echo "  make build-all                  Build all services locally"
+	@echo "  make up                         Start all services"
+	@echo "  make run SERVICE=<name>         Start specific service"
+	@echo "  make down                       Stop all services"
+	@echo "  make logs                       Show logs for all services"
+	@echo "  make logs-service SERVICE=<n>   Show logs for specific service"
+	@echo "  make clean                      Clean build artifacts"
+	@echo "  make test                       Run all tests"
+	@echo "  make test-service SERVICE=<n>   Run tests for specific service"
+	@echo "  make test-shared                Run tests for shared module"
+	@echo "  make sync                       Sync go workspace"
 	@echo ""
 	@echo "Available services:"
 	@echo "  $(SERVICES)"

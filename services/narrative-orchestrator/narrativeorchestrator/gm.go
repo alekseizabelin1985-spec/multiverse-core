@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"multiverse-core/internal/spatial"
+	"multiverse-core.io/shared/spatial"
 )
 
 type HistoryEntry struct {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 func TestIndexer_HandleEvent(t *testing.T) {

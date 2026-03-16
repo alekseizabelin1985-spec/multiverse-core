@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/services/entityactor"
+	"multiverse-core.io/services/entity-actor/entityactor"
 )
 
 func main() {

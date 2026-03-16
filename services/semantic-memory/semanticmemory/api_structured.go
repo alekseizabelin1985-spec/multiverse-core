@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // StructuredContextRequest запрос структурированного контекста

@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"multiverse-core/internal/oracle"
+	"multiverse-core.io/shared/oracle"
 	"strings"
 	"time"
 )

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"multiverse-core/internal/entity"
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/eventbus"
 	"time"
 )
 

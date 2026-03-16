@@ -4,7 +4,7 @@ package worldgenerator
 import (
 	"testing"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 
 	"github.com/stretchr/testify/assert"
 )

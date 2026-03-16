@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // StructuredContext представляет контекст с встроенными ID для AI

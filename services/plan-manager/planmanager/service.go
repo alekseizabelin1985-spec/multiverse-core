@@ -4,7 +4,7 @@ package planmanager
 import (
 	"context"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // Service manages the PlanManager lifecycle.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/planmanager"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/plan-manager/planmanager"
 )
 
 func main() {

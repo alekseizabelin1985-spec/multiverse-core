@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/services/ruleengine"
+	"multiverse-core.io/services/rule-engine/ruleengine"
 )
 
 func main() {

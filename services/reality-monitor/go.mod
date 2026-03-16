@@ -1,4 +1,4 @@
-module multiverse-core.io/services/cultivation-module
+module multiverse-core.io/services/reality-monitor
 
 go 1.24
 

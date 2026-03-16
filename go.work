@@ -1,0 +1,22 @@
+go 1.24.0
+
+toolchain go1.24.7
+
+use (
+	.
+	./services/ban-of-world
+	./services/city-governor
+	./services/cultivation-module
+	./services/entity-actor
+	./services/entity-manager
+	./services/evolution-watcher
+	./services/game-service
+	./services/narrative-orchestrator
+	./services/ontological-archivist
+	./services/plan-manager
+	./services/reality-monitor
+	./services/rule-engine
+	./services/semantic-memory
+	./services/universe-genesis-oracle
+	./services/world-generator
+)

@@ -5,8 +5,8 @@ import (
 	"context"
 	"log"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/oracle" // <-- Импорт общего клиента
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/oracle" // <-- Импорт общего клиента
 
 	"github.com/google/uuid"
 )

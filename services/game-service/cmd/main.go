@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"multiverse-core/services/gameservice"
+	"multiverse-core.io/services/game-service/gameservice"
 )
 
 func main() {

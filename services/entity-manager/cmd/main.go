@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/services/entitymanager"
+	"multiverse-core.io/services/entity-manager/entitymanager"
 )
 
 func main() {

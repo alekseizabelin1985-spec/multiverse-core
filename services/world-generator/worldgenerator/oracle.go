@@ -4,7 +4,7 @@ package worldgenerator
 import (
 	"context"
 	"fmt"
-	"multiverse-core/internal/oracle"
+	"multiverse-core.io/shared/oracle"
 )
 
 // OracleResponse represents the JSON output from Qwen3.

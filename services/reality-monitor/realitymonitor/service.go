@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // Service represents the Reality Monitor service

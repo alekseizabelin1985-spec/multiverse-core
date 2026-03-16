@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"time"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/intent"
-	"multiverse-core/internal/minio"
-	"multiverse-core/internal/redis"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/intent"
+	"multiverse-core.io/shared/minio"
+	"multiverse-core.io/shared/redis"
 )
 
 // Service структура сервиса Evolution Watcher

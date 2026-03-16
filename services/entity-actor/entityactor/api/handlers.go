@@ -9,9 +9,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"multiverse-core/internal/intent"
-	"multiverse-core/internal/rules"
-	"multiverse-core/internal/tinyml"
+	"multiverse-core.io/shared/intent"
+	"multiverse-core.io/shared/rules"
+	"multiverse-core.io/shared/tinyml"
 )
 
 // Service HTTP сервис для EntityActor API

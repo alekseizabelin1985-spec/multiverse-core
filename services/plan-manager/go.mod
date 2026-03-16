@@ -1,4 +1,4 @@
-module multiverse-core.io/services/cultivation-module
+module multiverse-core.io/services/plan-manager
 
 go 1.24
 

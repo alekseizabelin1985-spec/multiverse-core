@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"multiverse-core/internal/minio"
+	"multiverse-core.io/shared/minio"
 )
 
 // ModelLoader загрузчик моделей из хранилища

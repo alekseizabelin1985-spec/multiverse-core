@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/intent"
-	"multiverse-core/internal/minio"
-	"multiverse-core/internal/redis"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/intent"
+	"multiverse-core.io/shared/minio"
+	"multiverse-core.io/shared/redis"
 )
 
 // Watcher отслеживает аномалии в поведении сущностей с иерархической памятью

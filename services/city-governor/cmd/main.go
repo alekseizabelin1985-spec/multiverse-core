@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/citygovernor"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/city-governor/citygovernor"
 )
 
 func main() {

@@ -4,8 +4,8 @@ package api
 import (
 	"time"
 
-	"multiverse-core/internal/rules"
-	"multiverse-core/internal/tinyml"
+	"multiverse-core.io/shared/rules"
+	"multiverse-core.io/shared/tinyml"
 )
 
 // EntityActorRequest запрос на создание/обновление сущности

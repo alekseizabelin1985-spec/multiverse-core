@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/worldgenerator"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/world-generator/worldgenerator"
 )
 
 func main() {

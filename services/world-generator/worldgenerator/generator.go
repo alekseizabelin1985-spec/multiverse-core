@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 
 	"github.com/google/uuid"
 )

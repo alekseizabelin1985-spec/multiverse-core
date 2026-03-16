@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/minio"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/minio"
 )
 
 // Engine represents the rule application engine

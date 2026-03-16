@@ -5,8 +5,8 @@ import (
 	"context"
 	"log"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/internal/minio"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/minio"
 )
 
 // Config represents the configuration for the RuleEngine service

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/services/narrativeorchestrator"
+	"multiverse-core.io/services/narrative-orchestrator/narrativeorchestrator"
 )
 
 func main() {

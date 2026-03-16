@@ -8,8 +8,8 @@ import (
 	"log"
 	"os"
 
-	"multiverse-core/internal/entity"
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/eventbus"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"

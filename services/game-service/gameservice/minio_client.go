@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"multiverse-core/internal/entity"
+	"multiverse-core.io/shared/entity"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"

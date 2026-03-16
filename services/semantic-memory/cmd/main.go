@@ -9,8 +9,8 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/internal/eventbus"
-	"multiverse-core/services/semanticmemory"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/services/semantic-memory/semanticmemory"
 )
 
 func main() {

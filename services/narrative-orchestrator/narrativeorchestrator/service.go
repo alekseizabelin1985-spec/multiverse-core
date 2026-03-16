@@ -6,7 +6,7 @@ import (
 	"context"
 	"log"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 )
 
 type Config struct {

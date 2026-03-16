@@ -4,7 +4,7 @@ package entitymanager
 import (
 	"context"
 	"log"
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"

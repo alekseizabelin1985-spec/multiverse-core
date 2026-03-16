@@ -10,7 +10,7 @@ import (
 	"strings"
 	"syscall"
 
-	"multiverse-core/services/evolutionwatcher"
+	"multiverse-core.io/services/evolution-watcher/evolutionwatcher"
 )
 
 func main() {

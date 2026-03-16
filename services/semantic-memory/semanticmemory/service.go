@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"multiverse-core/internal/eventbus"
+	"multiverse-core.io/shared/eventbus"
 
 	"github.com/gorilla/mux"
 )
