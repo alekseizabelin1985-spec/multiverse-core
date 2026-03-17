@@ -136,6 +136,78 @@ func CallOracle(ctx context.Context, systemPrompt, userPrompt string) (*OracleRe
 	return &result, nil
 }
 
+// cleanJSONResponse снимает markdown code block, если LLM обернул JSON в него.
+func cleanJSONResponse(s string) string {
+	s = strings.TrimSpace(s)
+	// Снять ```json ... ``` или ``` ... ```
+	if strings.HasPrefix(s, "```") {
+		// Отрезать первую строку (```json или ```)
+		idx := strings.Index(s, "\n")
+		if idx != -1 {
+			s = s[idx+1:]
+		}
+		// Отрезать финальный ```
+		if end := strings.LastIndex(s, "```"); end != -1 {
+			s = s[:end]
+		}
+		s = strings.TrimSpace(s)
+	}
+	return s
+}
+
+// CallOracleStructured — новая версия CallOracle на основе PromptSections.
+// Использует BuildStructuredPrompt + CallStructuredJSON + валидацию на стороне Go.
+// Старая CallOracle остаётся без изменений.
+func CallOracleStructured(ctx context.Context, sections PromptSections) (*OracleResponse, error) {
+	systemPrompt, userPrompt := BuildStructuredPrompt(sections)
+
+	client := oracle.NewClient()
+	content, err := client.CallStructuredJSON(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("oracle call failed: %w", err)
+	}
+	if content == "" {
+		return nil, fmt.Errorf("empty content from oracle")
+	}
+
+	log.Printf("Oracle structured response: %s", content)
+
+	// Fallback: очистить markdown code block если есть
+	cleaned := cleanJSONResponse(content)
+
+	var result OracleResponse
+	if err := json.Unmarshal([]byte(cleaned), &result); err != nil {
+		return nil, fmt.Errorf("invalid JSON from oracle: %s", cleaned)
+	}
+
+	// Валидация: narrative не пустой
+	if result.Narrative == "" {
+		return nil, fmt.Errorf("oracle returned empty narrative")
+	}
+
+	// Валидация: обрезать лишние события
+	maxEvents := sections.MaxEvents
+	if maxEvents <= 0 {
+		maxEvents = 3
+	}
+	if len(result.NewEvents) > maxEvents {
+		log.Printf("[WARN] Oracle returned %d events, trimming to %d", len(result.NewEvents), maxEvents)
+		result.NewEvents = result.NewEvents[:maxEvents]
+	}
+
+	// Валидация: ensure world_id и scope_id для каждого события
+	for i, ev := range result.NewEvents {
+		if _, ok := ev["world_id"].(string); !ok || ev["world_id"] == "" {
+			result.NewEvents[i]["world_id"] = sections.DefaultWorldID
+		}
+		if _, ok := ev["scope_id"]; !ok {
+			result.NewEvents[i]["scope_id"] = sections.ScopeID
+		}
+	}
+
+	return &result, nil
+}
+
 // Вспомогательные функции
 func buildEventClusters(clusters []EventCluster) string {
 	if len(clusters) == 0 {
