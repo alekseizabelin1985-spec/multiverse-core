@@ -1083,28 +1083,43 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		triggerEvent = "Накопленные события за период"
 	}
 
-	// Формируем промт
-	input := PromptInput{
-		WorldContext:    worldContext,
-		ScopeID:         gm.ScopeID,
-		ScopeType:       gm.ScopeType,
-		EntitiesContext: entitiesContext,
-		EventClusters:   clusters,
-		TimeContext:     timeContext,
-		TriggerEvent:    triggerEvent,
+	// Извлечь Canon из gm.State, если есть
+	var canon []string
+	if raw, ok := gm.State["canon"].([]interface{}); ok {
+		for _, v := range raw {
+			if s, ok := v.(string); ok {
+				canon = append(canon, s)
+			}
+		}
 	}
-	systemPrompt, userPrompt := BuildPrompt(input)
+
+	// Формируем промт
+	sections := PromptSections{
+		WorldFacts:     worldContext,
+		EntityStates:   entitiesContext,
+		Canon:          canon,
+		ScopeID:        gm.ScopeID,
+		ScopeType:      gm.ScopeType,
+		WorldID:        gm.WorldID,
+		TimeContext:    timeContext,
+		EventClusters:  clusters,
+		TriggerEvent:   triggerEvent,
+		LastMood:       lastMood,
+		MaxEvents:      3,
+		DefaultSource:  "narrative-orchestrator",
+		DefaultWorldID: gm.WorldID,
+	}
 
 	// Вызов Oracle
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	infoLog(gm.ScopeID, gm.WorldID, "Calling Oracle for narrative generation", map[string]interface{}{
-		"system_prompt_length": len(systemPrompt),
-		"user_prompt_length":   len(userPrompt),
+	infoLog(gm.ScopeID, gm.WorldID, "Calling Oracle (structured) for narrative generation", map[string]interface{}{
+		"scope_id": gm.ScopeID,
+		"world_id": gm.WorldID,
 	})
 
-	oracleResp, err := CallOracle(ctx, systemPrompt, userPrompt)
+	oracleResp, err := CallOracleStructured(ctx, sections)
 	if err != nil {
 		errorLog(gm.ScopeID, gm.WorldID, "Oracle call failed", map[string]interface{}{
 			"error": err.Error(),

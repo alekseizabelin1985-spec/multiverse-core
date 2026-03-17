@@ -1,4 +1,4 @@
-github.com/amikos-tech/chroma-go v0.3.4/go.mod h1:Ozns0Gnfdgm67nfBGvpADqUBixmqsbU8mWjM0H818hU=
+github.com/amikos-tech/chroma-go v0.3.4/go.mod h1:npSAl5gvRNdUSPuk854u/BBNHa4V0hWvC+Ot06HG6JA=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/neo4j/neo4j-go-driver/v5 v5.28.4/go.mod h1:Vff8OwT7QpLm7L2yYr85XNWe9Rbqlbeb9asNXJTHO4k=

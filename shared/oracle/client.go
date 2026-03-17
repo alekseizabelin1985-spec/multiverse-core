@@ -164,6 +164,30 @@ func (c *Client) CallStructured(ctx context.Context, systemPrompt, userPrompt st
 	return c.callRaw(ctx, requestBody)
 }
 
+// CallStructuredJSON вызывает Oracle с system и user промтами и запрашивает JSON-ответ.
+// Использует response_format: {"type": "json_object"} вместо "text".
+// Старый CallStructured остаётся без изменений для обратной совместимости.
+func (c *Client) CallStructuredJSON(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"model": c.Model,
+		"messages": []map[string]interface{}{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userPrompt},
+		},
+		"temperature": 0.8,
+		"min_p":      0.05,
+		"max_tokens": 4096,
+		"response_format": map[string]string{
+			"type": "json_object",
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal prompt: %w", err)
+	}
+
+	return c.callRaw(ctx, requestBody)
+}
+
 // Call — устаревший метод для обратной совместимости.
 // Передаёт весь промт как один user-месседж.
 // Рекомендуется использовать CallStructured.
