@@ -27,6 +27,9 @@ COPY go.mod go.sum ./
 COPY shared/ ./shared/
 COPY services/entity-actor/ ./services/entity-actor/
 
+# Minimal go.work: root module + this service only
+RUN printf 'go 1.24.0\n\nuse (\n\t.\n\t./services/entity-actor\n)\n' > go.work && rm -f go.work.sum
+
 RUN cd services/entity-actor && go mod download
 
 RUN echo "Building entity-actor CGO_ENABLED=${BUILD_CGO}" && \

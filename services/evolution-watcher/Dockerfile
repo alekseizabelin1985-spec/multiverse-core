@@ -27,6 +27,9 @@ COPY go.mod go.sum ./
 COPY shared/ ./shared/
 COPY services/evolution-watcher/ ./services/evolution-watcher/
 
+# Minimal go.work: root module + this service only
+RUN printf 'go 1.24.0\n\nuse (\n\t.\n\t./services/evolution-watcher\n)\n' > go.work && rm -f go.work.sum
+
 RUN cd services/evolution-watcher && go mod download
 
 RUN echo "Building evolution-watcher CGO_ENABLED=${BUILD_CGO}" && \

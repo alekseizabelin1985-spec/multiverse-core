@@ -33,6 +33,9 @@ COPY shared/ ./shared/
 # Copy only the target service module
 COPY services/${SERVICE}/ ./services/${SERVICE}/
 
+# Replace go.work with a minimal version: root module + target service only
+RUN printf 'go 1.24.0\n\nuse (\n\t.\n\t./services/%s\n)\n' "${SERVICE}" > go.work && rm -f go.work.sum
+
 # Download dependencies for this service
 RUN cd services/${SERVICE} && go mod download
 
