@@ -29,7 +29,6 @@ services:
     depends_on:
       - redpanda
     
-
   redpanda-init:
     image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
     depends_on:
@@ -97,7 +96,7 @@ services:
   entity-manager:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=entity-manager    
     command: ./entity-manager
@@ -117,7 +116,7 @@ services:
   narrative-orchestrator:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=narrative-orchestrator
     command: ./narrative-orchestrator
@@ -131,11 +130,11 @@ services:
     #  - KAFKA_BROKERS=redpanda:9092
     #  - SEMANTIC_MEMORY_URL=http://semantic-memory:8080
     #  - ORACLE_URL=http://qwen3-service:11434/v1/chat/completions
-      #- ORACLE_URL=http://192.168.3.12:1234/v1/chat/completions
+    #  - ORACLE_URL=http://192.168.3.12:1234/v1/chat/completions
   semantic-memory:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=semantic-memory
         - GO_BUILD_TAGS=chroma_v2_enabled
@@ -159,7 +158,7 @@ services:
   ontological-archivist:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=ontological-archivist
     command: ./ontological-archivist
@@ -181,7 +180,7 @@ services:
   plan-manager:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=plan-manager
     command: ./plan-manager
@@ -192,7 +191,7 @@ services:
   world-generator:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=world-generator
     command: ./world-generator
@@ -204,7 +203,7 @@ services:
   universe-genesis-oracle:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=universe-genesis-oracle
     command: ./universe-genesis-oracle
@@ -216,7 +215,7 @@ services:
   cultivation-module:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
         - SERVICE=cultivation-module
     command: ./cultivation-module
@@ -279,10 +278,10 @@ services:
   game-service:
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./build/Dockerfile
       args:
-        - SERVICE=gameservice
-    command: ./gameservice
+        - SERVICE=game-service
+    command: ./game-service
     depends_on:
       - redpanda
       - entity-manager
@@ -293,7 +292,49 @@ services:
     environment:
       - HTTP_ADDR=:8088
       - CACHE_TTL=5m
-      
+
+  # ========== Entity Actor Service ==========
+  entity-actor:
+    build:
+      context: .
+      dockerfile: ./services/entity-actor/Dockerfile
+      args:
+        - SERVICE=entity-actor
+    command: ./entity-actor
+    depends_on:
+      - redpanda
+      - minio
+    env_file:
+      - .env
+
+  # ========== Evolution Watcher Service ==========
+  evolution-watcher:
+    build:
+      context: .
+      dockerfile: ./services/evolution-watcher/Dockerfile
+      args:
+        - SERVICE=evolution-watcher
+    command: ./evolution-watcher
+    depends_on:
+      - redpanda
+      - minio
+    env_file:
+      - .env
+
+  # ========== Rule Engine Service ==========
+  rule-engine:
+    build:
+      context: .
+      dockerfile: ./services/rule-engine/Dockerfile
+      args:
+        - SERVICE=rule-engine
+    command: ./rule-engine
+    depends_on:
+      - redpanda
+      - minio
+    env_file:
+      - .env
+
   # ========== Утилита для работы с Kafka ==========
   kafkacat:
     image: confluentinc/cp-kafkacat:latest
@@ -301,7 +342,6 @@ services:
       - redpanda
     entrypoint: /bin/sh
     command: -c "echo 'Waiting for Redpanda to be ready...' && while ! nc -z redpanda 9092; do sleep 1; done && echo 'Redpanda is ready!' && tail -f /dev/null"
-    
 
 volumes:
   minio_data:
@@ -310,5 +350,3 @@ volumes:
   timescale_data:
   ollama_data:  # ← для кэша моделей Ollama
   qdrant_storage:
-
-  

@@ -2,169 +2,599 @@
 
 ## Project Overview
 
-Multiverse-Core is a sophisticated distributed system designed for managing complex virtual worlds and narratives. This platform combines event-driven architecture, vector databases, graph databases, and AI-powered orchestration to create dynamic, evolving virtual environments. The system implements a philosophy where worlds are not programmed but born, evolving organically through player actions while maintaining internal consistency and narrative depth.
+**Multiverse-Core** — это распределённая система для управления сложными виртуальными мирами и нарративами. Платформа сочетает event-driven архитектуру, векторные базы данных, графовые базы данных и AI-оркестрацию для создания динамических, эволюционирующих виртуальных сред.
 
-## Architecture
+**Философия**: Миры не программируются, а рождаются — эволюционируют органично через действия игроков, сохраняя внутреннюю согласованность и нарративную глубину.
 
-The system follows an event-driven architecture with multiple interconnected services that communicate through a unified event bus (Redpanda). Key architectural principles include:
+### Ключевые принципы
 
-- **Event-Driven Architecture (EDA)**: All interactions occur through events in a unified bus (Redpanda)
-- **Weak Coupling**: Services only know about events, not each other
-- **Stateful Services with Recovery**: Each service maintains its state and recovers through snapshot + replay
-- **Generativity over Scripting**: Qwen3 creates unique outcomes instead of choosing from presets
-- **Ontological Awareness**: Knowledge about the world affects logic through ontological profiles
+| Принцип | Описание |
+|---------|----------|
+| **Event-Driven Architecture (EDA)** | Все взаимодействия происходят через события в единой шине (Redpanda) |
+| **Слабое связывание** | Сервисы знают только о событиях, а не друг о друге |
+| **Stateful Services с восстановлением** | Каждый сервис хранит состояние и восстанавливается через snapshot + replay |
+| **Генеративность над скриптами** | Qwen3 создаёт уникальные исходы вместо预设ленных реакций |
+| **Онтологическая осознанность** | Знания о мире влияют на логику через онтологические профили |
 
-### Core Services
-
-- **Entity Manager**: Manages hierarchical entities with history and references
-- **Narrative Orchestrator (GM)**: Generates living, context-dependent narrative based on events
-- **World Generator**: Generates new worlds, regions, and ontologies based on seed or AI
-- **Ban Of World (Запрет Мира)**: Serves as guardian of reality integrity, detecting and neutralizing threats
-- **City Governor**: Manages urban life: economy, NPCs, quests, mood
-- **Cultivation Module**: Implements cultivation system: skills, dao, ascension
-- **Reality Monitor**: Aggregates metrics from all worlds and publishes anomalies
-- **Plan Manager**: Manages transitions between planes, fusion zones, availability of ascension
-- **Ascension Oracle**: Generative AI oracle based on Qwen3 for unique ascension outcomes
-- **Semantic Memory Builder**: Builds context for AI from events: vectors + knowledge graph
-- **Ontological Archivist**: Stores and evolves world ontological schemas
-- **Universe Genesis Oracle**: Generates fundamental plane hierarchy of the universe
+---
 
 ## Technology Stack
 
-- **Language**: Go 1.25
-- **Event Streaming**: Redpanda (Kafka-compatible)
-- **Object Storage**: MinIO
-- **Vector Database**: ChromaDB
-- **Graph Database**: Neo4j
-- **Time-Series Database**: TimescaleDB
-- **AI Model Serving**: Ollama with Qwen3
-- **Containerization**: Docker & Docker Compose
+| Компонент | Технология | Назначение |
+|-----------|------------|------------|
+| **Язык** | Go 1.25 | Основной язык разработки |
+| **Event Streaming** | Redpanda v24.2.5 | Шина событий (Kafka-совместимая) |
+| **Object Storage** | MinIO | Хранение снапшотов, онтологий, артефактов |
+| **Vector Database** | ChromaDB + Qdrant | Семантическая память, RAG, эмбеддинги |
+| **Graph Database** | Neo4j 5.18 + APOC | Граф знаний, связи между сущностями |
+| **Time-Series DB** | TimescaleDB (PostgreSQL 16) | Метрики производительности |
+| **AI Model** | Qwen3 через Ollama | Генерация нарративов, оракулы |
+| **Containerization** | Docker & Docker Compose | Развёртывание сервисов |
+
+### Go Dependencies (ключевые)
+
+```go
+github.com/amikos-tech/chroma-go v0.3.4    // ChromaDB клиент
+github.com/minio/minio-go/v7 v7.0.95       // MinIO клиент
+github.com/neo4j/neo4j-go-driver/v5 v5.28.4 // Neo4j драйвер
+github.com/segmentio/kafka-go v0.4.49      // Kafka/Redpanda клиент
+github.com/gorilla/mux v1.8.1              // HTTP роутинг
+github.com/google/uuid v1.6.0              // UUID генерация
+github.com/xeipuuv/gojsonschema v1.2.0     // JSON Schema валидация
+go.uber.org/zap v1.27.0                    // Структурированное логирование
+```
+
+---
+
+## Architecture
+
+### Инфраструктурные компоненты (Docker Compose)
+
+```yaml
+# Инфраструктура
+redpanda:9092        # Event bus (PLAINTEXT)
+redpanda-console:8092 # Web UI для Kafka
+minio:9000/9001      # Object storage + Console
+chromadb:8000        # Vector DB
+neo4j:7474/7687      # Graph DB + Browser
+timescaledb:5433     # Metrics (PostgreSQL порт)
+qwen3-service:11434  # Ollama с моделью Qwen3
+qdrant:6333/6334     # Alternative vector DB
+```
+
+### Топики Kafka/Redpanda
+
+| Топик | Назначение | Примеры событий |
+|-------|-----------|-----------------|
+| `player_events` | События игроков | `player.enter.city`, `player.used_skill` |
+| `world_events` | События миров | `world.generated`, `entity.travelled`, `violation.detected` |
+| `game_events` | Игровые события | `quest.issued`, `game.state.changed` |
+| `system_events` | Системные события | `entity.created`, `world.generated`, `system.startup` |
+| `scope_management` | Управление скоупами | `scope.created`, `scope.destroyed` |
+| `narrative_output` | Выход нарративов | `narrative.description`, `npc.action` |
+
+### Core Services
+
+| Сервис | Порт | Назначение | Stateful |
+|--------|------|-----------|----------|
+| **entity-manager** | - | Управление иерархическими сущностями с историей | ✅ MinIO + replay |
+| **narrative-orchestrator** | - | Генерация живых нарративов на основе событий | ✅ Semantic state |
+| **world-generator** | - | Генерация новых миров, регионов, онтологий | ❌ Stateless |
+| **ban-of-world** | - | Guardian реальности, детекция аномалий | ✅ World health metrics |
+| **city-governor** | - | Управление городской жизнью: экономика, NPC, квесты | ✅ Reputation, quests |
+| **cultivation-module** | - | Система культивации: навыки, dao, ascension | ✅ Player profiles |
+| **reality-monitor** | - | Агрегация метрик, публикация аномалий | ✅ Aggregated metrics |
+| **plan-manager** | - | Переходы между планами, fusion zones | ✅ Plane graph (DAG) |
+| **ascension-oracle** | - | AI-оракул для уникальных исходов ascension | ❌ Stateless (HTTP) |
+| **semantic-memory** | 8082 | Векторные эмбеддинги + граф знаний для RAG | ✅ ChromaDB + Neo4j |
+| **ontological-archivist** | 8083 | Хранение и эволюция онтологических схем | ✅ Versioned schemas |
+| **universe-genesis-oracle** | - | Генерация фундаментальной иерархии вселенной | ❌ Stateless/one-time |
+| **game-service** | 8088 | HTTP API для взаимодействия игроков | ✅ Cache TTL |
+| **entity-actor** | - | Нейронные агенты для автономных сущностей (Living Worlds) | ✅ Neural state |
+| **evolution-watcher** | - | Детекция эволюции и аномалий в поведении | ✅ Anomaly models |
+| **rule-engine** | - | Применение универсальных правил к типам сущностей | ✅ Rule sets |
+
+---
 
 ## Building and Running
 
 ### Prerequisites
 
-- Docker and Docker Compose
+- Docker и Docker Compose
 - Go 1.25+
 - Git
+- (Опционально) MinIO CLI (`mc`) для отладки
 
 ### Quick Start
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-repo/multiverse-core.git
-   cd multiverse-core
-   ```
+```bash
+# 1. Клонировать репозиторий
+git clone https://github.com/alekseizabelin1985-spec/multiverse-core.git
+cd multiverse-core
 
-2. **Copy the environment template**:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your specific configurations
-   ```
+# 2. Скопировать окружение
+cp .env.example .env
+# Отредактировать .env с вашими настройками
 
-3. **Start infrastructure services**:
-   ```bash
-   docker-compose up -d
-   ```
+# 3. Запустить инфраструктуру
+docker-compose up -d redpanda minio chromadb neo4j timescaledb qwen3-service
 
-4. **Build and run individual services**:
-   ```bash
-   # Build a specific service
-   go build -o bin/service-name ./cmd/service-name
+# 4. Собрать все сервисы
+make build
 
-   # Or use the Dockerfile directly
-   docker build --build-arg SERVICE=service-name -t multiverse-core:service-name .
-   ```
+# 5. Запустить конкретный сервис
+make run SERVICE=entity-manager
 
-### Using Make Commands
+# 6. Посмотреть логи
+make logs-service SERVICE=entity-manager
+```
 
-The project includes a comprehensive Makefile with the following commands:
+### Make Commands
 
-- `make build` - Build all services
-- `make build-service SERVICE=<name>` - Build specific service
-- `make up` - Start all services
-- `make run SERVICE=<name>` - Start specific service
-- `make down` - Stop all services
-- `make logs` - Show logs for all services
-- `make logs-service SERVICE=<name>` - Show logs for specific service
-- `make clean` - Clean build artifacts
-- `make test` - Run tests
+| Команда | Описание |
+|---------|----------|
+| `make build` | Собрать все сервисы (Docker) |
+| `make build-service SERVICE=<name>` | Собрать конкретный сервис (Linux binary) |
+| `make up` | Запустить все сервисы через Docker Compose |
+| `make run SERVICE=<name>` | Запустить конкретный сервис |
+| `make down` | Остановить все сервисы |
+| `make logs` | Показать логи всех сервисов |
+| `make logs-service SERVICE=<name>` | Логи конкретного сервиса |
+| `make clean` | Очистить артефакты сборки |
+| `make test` | Запустить все тесты |
+| `make test-service SERVICE=<name>` | Тесты конкретного сервиса |
 
 ### Local Development
 
-For local development, you can run services individually while keeping infrastructure in Docker:
-
 ```bash
-# Start infrastructure
-docker-compose up redpanda minio chromadb neo4j
+# Запустить инфраструктуру
+docker-compose up -d redpanda minio chromadb neo4j
 
-# Run a service locally
-KAFKA_BROKERS=localhost:9092 MINIO_ENDPOINT=localhost:9000 go run cmd/entity-manager/main.go
+# Запустить сервис локально (на примере entity-manager)
+cd cmd/entity-manager
+KAFKA_BROKERS=localhost:9092 \
+MINIO_ENDPOINT=localhost:9000 \
+MINIO_ACCESS_KEY=minioadmin \
+MINIO_SECRET_KEY=minioadmin \
+go run main.go
 ```
 
-## Testing
+### Docker Build (мульти-стадия)
 
-Run all tests with:
-```bash
-go test ./...
+```dockerfile
+# Сборка сервиса
+docker build --build-arg SERVICE=entity-manager -t multiverse-core:entity-manager .
+
+# Сборка с CGO (для semantic-memory с ONNX)
+docker build \
+  --build-arg SERVICE=semantic-memory \
+  --build-arg GO_BUILD_TAGS=chroma_v2_enabled \
+  --build-arg BUILD_CGO=1 \
+  -t multiverse-core:semantic-memory .
 ```
 
-Run tests with coverage:
-```bash
-go test -cover ./...
-```
-
-## Configuration
-
-Configuration is handled through:
-- Environment variables (`.env` file)
-- Service-specific configuration files
-- Docker environment variables
-
-Key configuration points:
-- Kafka brokers endpoint
-- MinIO credentials and endpoints
-- Database connection strings
-- AI model endpoints
-- Service-specific settings
+---
 
 ## Development Conventions
 
-- All services are written in Go 1.25
-- Use JSON Schema Draft 7 for entity payload validation
-- Follow event-driven architecture with Kafka/Redpanda as message broker
-- Services communicate through events in the event bus (topics: player_events, world_events, game_events, system_events, scope_management, narrative_output)
-- Entity management uses MinIO for storage with bucket naming pattern: `entities-{world_id}`
-- All services are stateful and support recovery via snapshots and event replay
-- Use entity paths with dot notation for nested payload access (e.g., `payload.health.current`)
-- All services must be built with CGO disabled for cross-platform compatibility
-- Use UUIDs for event IDs and entity IDs
-- All services must be containerized with Docker using multi-stage builds
+### Код
+
+- **Язык**: Go 1.25
+- **CGO**: `CGO_ENABLED=0` для всех сервисов, кроме `semantic-memory`
+- **JSON Schema**: Draft 7 для валидации payload сущностей
+- **UUID**: Использовать `github.com/google/uuid` для event_id и entity_id
+- **Логирование**: Структурированное с контекстом (`event_id`, `world_id`, `entity_id`)
+- **Context**: Использовать `context.Context` для отмены и таймаутов
+- **Graceful Shutdown**: Обработка `SIGINT`/`SIGTERM` с очисткой ресурсов
+
+### Event-Driven Architecture
+
+```go
+// Пример подписки на события
+topics := []string{
+    eventbus.TopicPlayerEvents,  // player.*
+    eventbus.TopicWorldEvents,   // world.*, entity.*
+    eventbus.TopicGameEvents,    // quest.*, game.*
+    eventbus.TopicSystemEvents,  // system.*, entity.created
+}
+
+// Формат события
+type Event struct {
+    EventID   string                 `json:"event_id"`
+    EventType string                 `json:"event_type"`
+    WorldID   string                 `json:"world_id"`
+    Timestamp time.Time              `json:"timestamp"`
+    Payload   map[string]interface{} `json:"payload"`  // Динамический!
+}
+```
+
+### Entity Paths (dot notation)
+
+```go
+// Доступ к вложенным полям через путь
+"path": "payload.health.current"  // → entity.Payload.Health.Current
+"path": "stats.mp"                 // → entity.Payload.Stats.MP
+"path": "inventory"                // → entity.Payload.Inventory (slice)
+```
+
+### MinIO Bucket Naming
+
+```go
+// Паттерны имён бакетов
+`entities-{world_id}`      // Сущности конкретного мира
+`entities-global`          // Глобальные сущности (до входа в мир)
+`snapshots/em-{world_id}-v{N}.json`  // Снапшоты EntityManager
+`schemas/{type}/{name}/v{version}.json`  // Онтологические схемы
+`ontologies/{world_id}/v{N}.json`  // Онтологии миров
+```
+
+### Docker Compose Conventions
+
+```yaml
+# Шаблон сервиса
+service-name:
+  build:
+    context: .
+    dockerfile: ./Dockerfile
+    args:
+      - SERVICE=service-name
+      - BUILD_CGO=0  # =1 только для semantic-memory
+  command: ./service-name
+  depends_on:
+    - redpanda
+    - minio
+  env_file:
+    - .env
+  # ports: только для HTTP сервисов
+  #   - "808X:808X"
+```
+
+---
+
+## Testing
+
+### Запуск тестов
+
+```bash
+# Все тесты
+go test ./...
+
+# С покрытием
+go test -cover ./...
+
+# Конкретный пакет
+go test ./services/entitymanager
+
+# Интеграционные тесты
+go test -tags integration ./...
+```
+
+### Пример теста (EntityManager)
+
+```go
+func TestManager_SaveSnapshot(t *testing.T) {
+    // Arrange
+    m := &Manager{minio: mockMinioClient}
+    ent := entity.NewEntity("test-123", "artifact", map[string]interface{}{
+        "name": "Осколок",
+        "current_world_id": "test-world",
+    })
+
+    // Act
+    err := m.saveEntityToBucket(context.Background(), ent, "entities-test-world")
+
+    // Assert
+    assert.NoError(t, err)
+    // Проверка вызова MinIO PutObject
+}
+```
+
+### Интеграционное тестирование через Kafka
+
+```bash
+# Отправить тестовое событие
+echo '{"event_type":"entity.created","world_id":"test-world","payload":{"entity_id":"test-1","entity_type":"item","payload":{"name":"Test"}}}' | \
+  kafkacat -P -b localhost:9092 -t system_events
+
+# Проверить в MinIO
+mc alias set myminio http://minio:9000 minioadmin minioadmin
+mc ls myminio/entities-test-world/
+
+# Прочитать события
+kafkacat -C -b localhost:9092 -t world_events -o beginning -c 10
+```
+
+---
+
+## Configuration
+
+### Environment Variables (.env)
+
+```env
+# Redpanda/Kafka
+KAFKA_BROKERS=redpanda:9092
+KAFKA_POLL_FREQUENCY_MS=100
+
+# MinIO
+MINIO_ENDPOINT=minio:9000        # БЕЗ http:// префикса!
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_USE_SSL=false
+
+# ChromaDB
+CHROMA_URL=http://chromadb:8000
+CHROMA_API_KEY=  # Опционально
+
+# Neo4j
+NEO4J_URI=neo4j://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=password
+
+# TimescaleDB
+TIMESCALE_HOST=timescaledb:5432
+TIMESCALE_USER=metrics
+TIMESCALE_PASSWORD=metrics
+TIMESCALE_DB=metrics
+
+# Qwen3 (Ollama)
+ORACLE_URL=http://qwen3-service:11434/v1/chat/completions
+QWEN_MODEL=qwen3
+
+# Semantic Memory
+SEMANTIC_MEMORY_URL=http://semantic-memory:8082
+
+# Service-specific
+PORT=8080
+HTTP_ADDR=:8088
+CACHE_TTL=5m
+```
+
+---
 
 ## Directory Structure
 
-- `cmd/` - Main application entry points for each service
-- `services/` - Service implementations
-- `configs/` - Configuration files
-- `Docs/` - Documentation
-- `internal/` - Internal packages
-- `plans/` - Planning documents
-- `reports/` - Reports and analytics
-- `build/` - Build configuration
-- `fake_deps/` - Fake dependencies for CGO issues
+```
+multiverse-core/
+├── cmd/                          # Точки входа сервисов
+│   ├── entity-manager/
+│   │   └── main.go
+│   ├── narrative-orchestrator/
+│   ├── semantic-memory/
+│   └── ... (15 сервисов)
+│
+├── services/                     # Бизнес-логика сервисов
+│   ├── entitymanager/
+│   │   ├── service.go           # Start/Stop, Config
+│   │   ├── manager.go           # HandleEvent, MinIO ops
+│   │   ├── operations.go        # OperationType constants
+│   │   └── AGENTS.md            # Service-specific guide
+│   ├── narrativeorchestrator/
+│   ├── semanticmemory/
+│   └── ... (15 сервисов)
+│
+├── internal/                     # Общие пакеты
+│   ├── config/                  # Конфигурация
+│   ├── entity/                  # Entity структура
+│   ├── eventbus/                # EventBus, Event types, Topics
+│   ├── minio/                   # MinIO клиенты
+│   ├── oracle/                  # Oracle HTTP клиент
+│   ├── schema/                  # JSON Schema валидация
+│   └── spatial/                 # Пространственные утилиты
+│
+├── Docs/                         # Документация
+│   ├── architecture.md          # Общая архитектура
+│   ├── entity-manager.md        # Spec EntityManager
+│   ├── LIVING_WORLDS_*.md       # Living Worlds архитектура
+│   └── ... (20+ документов)
+│
+├── build/                        # Docker конфигурация
+│   └── Dockerfile               # Мульти-стадия сборка
+│
+├── plans/                        # Планы развития
+├── reports/                      # Отчёты и аналитика
+├── fake_deps/                    # Fake зависимости для CGO
+│
+├── docker-compose.yml            # Оркестрация сервисов
+├── Dockerfile                    # Шаблон сборки
+├── Makefile                      # Build команды
+├── go.mod / go.sum               # Go модули
+├── .env                          # Переменные окружения
+├── .gitignore                    # Игнорируемые файлы
+├── AGENTS.md                     # General agent guide
+└── QWEN.md                       # Этот файл
+```
 
-## Monitoring
+---
 
-The system includes:
-- Event stream monitoring through Redpanda Console
-- Database health checks
-- Service logs aggregation
-- Performance metrics in TimescaleDB
+## Key Design Patterns
+
+### 1. Event Handler Pattern
+
+```go
+type Handler interface {
+    HandleEvent(ctx context.Context, event Event) error
+}
+
+func (s *Service) processEvents(ctx context.Context) {
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case msg := <-s.reader.Messages():
+            event := parseEvent(msg)
+            if err := s.handler.HandleEvent(ctx, event); err != nil {
+                log.Error("Failed to handle event", err, "event_id", event.EventID)
+            }
+            s.reader.CommitMessages(ctx, msg)
+        }
+    }
+}
+```
+
+### 2. Snapshot + Replay Recovery
+
+```go
+func (s *Service) Recover(ctx context.Context) error {
+    // 1. Загрузить последний снапшот из MinIO
+    snapshot, err := s.loadLatestSnapshot(ctx)
+    if err != nil {
+        return fmt.Errorf("failed to load snapshot: %w", err)
+    }
+    s.state = snapshot.State
+
+    // 2. Replay событий с момента снапшота
+    events, err := s.getEventsSince(ctx, snapshot.Timestamp)
+    for _, event := range events {
+        s.applyEvent(event)
+    }
+
+    return nil
+}
+```
+
+### 3. Oracle Client with Retry
+
+```go
+type OracleClient struct {
+    httpClient *http.Client
+    baseURL    string
+    maxRetries int
+}
+
+func (c *OracleClient) Call(ctx context.Context, prompt string) (*Response, error) {
+    for i := 0; i < c.maxRetries; i++ {
+        resp, err := c.doRequest(ctx, prompt)
+        if err == nil {
+            return resp, nil
+        }
+        if i == c.maxRetries-1 {
+            return nil, err
+        }
+        time.Sleep(time.Duration(i+1) * time.Second)
+    }
+    return nil, fmt.Errorf("max retries exceeded")
+}
+```
+
+### 4. MinIO Bucket Isolation
+
+```go
+func (m *Manager) getBucketForEvent(worldID string) string {
+    if worldID == "" {
+        return "entities-global"
+    }
+    return "entities-" + worldID  // Изоляция по миру
+}
+
+func (m *Manager) saveEntity(ctx context.Context, ent *Entity, worldID string) error {
+    bucket := m.getBucketForEvent(worldID)
+    key := ent.ID + ".json"
+    return m.minio.PutObject(ctx, bucket, key, ent.Marshal(), nil)
+}
+```
+
+---
+
+## Living Worlds Architecture (New Feature)
+
+**Статус**: Design Complete ✅ (Branch: `feat/living-worlds-entity-actor`)
+
+### Компоненты
+
+| Сервис | Назначение |
+|--------|-----------|
+| **entity-actor** | Нейронные агенты (TinyML) для автономных сущностей |
+| **evolution-watcher** | Детекция аномалий в поведении через нейросети |
+| **rule-engine** | Универсальные правила для типов сущностей |
+
+### Ключевые инновации
+
+- ✅ **No Hardcoded Logic**: Поведение emerges из нейронных весов
+- ✅ **Self-Evolution**: Сущности учатся через gameplay опыт
+- ✅ **Oracle-First Intent Recognition**: NLU без training
+- ✅ **Mechanics/Narrative Separation**: Чистое разделение правил и сторителлинга
+
+### Performance Targets
+
+| Метрика | Target |
+|---------|--------|
+| Inference Latency | <50ms |
+| State Recovery | <200ms |
+| Events/Second | 18 TPS/actor |
+| Scaling | 10,000+ entities |
+| Oracle Cost | $0.0018/1000 actions |
+
+---
 
 ## Troubleshooting
 
-Common issues and solutions:
-- If services fail to connect to infrastructure, ensure all required containers are running with `docker-compose ps`
-- Check logs with `make logs` or `docker-compose logs -f <service-name>`
-- Verify environment variables in `.env` file match your setup
-- Ensure sufficient system resources (RAM, disk space) for all services
+### Частые проблемы
+
+| Проблема | Решение |
+|----------|---------|
+| `SignatureDoesNotMatch` (MinIO) | Убедиться, что `MINIO_ENDPOINT` без `http://` префикса |
+| Сервис не подключается к Kafka | Проверить `KAFKA_BROKERS=redpanda:9092` (не localhost!) |
+| CGO ошибки при сборке | Использовать `BUILD_CGO=0` (кроме semantic-memory) |
+| `NoSuchKey` при загрузке сущности | Нормально — сущность может не существовать; обработать как `nil` |
+| Пустой payload в событии | EntityManager игнорирует события без `entity_snapshots`/`state_changes` |
+
+### Debug Commands
+
+```bash
+# Проверить статус контейнеров
+docker-compose ps
+
+# Логи конкретного сервиса
+docker-compose logs -f entity-manager
+
+# Проверить MinIO бакеты
+mc alias set myminio http://minio:9000 minioadmin minioadmin
+mc ls myminio/
+
+# Проверить топики Kafka
+docker-compose exec redpanda rpk topic list
+
+# Прочитать события из топика
+docker-compose exec redpanda rpk topic consume world_events -n 10
+
+# Проверить здоровье сервисов
+curl http://localhost:8082/health  # Semantic Memory
+curl http://localhost:8083/health  # Ontological Archivist
+curl http://localhost:8088/health  # Game Service
+```
+
+---
+
+## MCP Server Integration
+
+Для работы с проектом через MCP (Model Context Protocol):
+
+### Доступные инструменты (github-official)
+
+- Управление issue и PR
+- Поиск кода на GitHub
+- Создание/обновление файлов в репозитории
+- Code review через Copilot
+- Управление branch и tags
+
+### Настройка MCP сервера для проекта
+
+Локальный MCP сервер может предоставлять инструменты для:
+- Управления сервисами (start/stop/status)
+- Публикации событий в Kafka
+- Запросов к MinIO/ChromaDB/Neo4j
+- Вызова Oracle (Qwen3)
+
+---
+
+## Resources
+
+- **GitHub**: https://github.com/alekseizabelin1985-spec/multiverse-core
+- **Документация**: `/Docs` директория
+- **Living Worlds**: `Docs/LIVING_WORLDS_*.md`
+- **Контакты**: alekseizabelin1985@gmail.com
+
+---
+
+> **"Мы не строим миры. Мы создаём условия для того, чтобы миры строили себя сами."**
+> *— Философия Living Worlds, 2026*
