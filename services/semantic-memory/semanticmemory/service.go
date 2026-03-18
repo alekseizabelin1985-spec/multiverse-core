@@ -197,7 +197,7 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		json.NewEncoder(w).Encode(response)
 	}).Methods("GET")
 
-		// GET /v1/entities/{entity_id} — retrieve a single entity by its ID.
+	// GET /v1/entities/{entity_id} — retrieve a single entity by its ID.
 	r.HandleFunc("/v1/entities/{entity_id}", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		entityID := vars["entity_id"]

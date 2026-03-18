@@ -14,11 +14,11 @@ func TestIndexerCreation(t *testing.T) {
 		// Восстанавливаем исходное значение
 		os.Setenv("CHROMA_USE_V2", originalValue)
 	}()
-	
+
 	// Тестируем создание Indexer без включенного v2 (должно использовать ChromaClient)
 	t.Run("Indexer with default client", func(t *testing.T) {
 		os.Unsetenv("CHROMA_USE_V2")
-		
+
 		// Создаем Indexer - это должно пройти успешно с ChromaClient
 		indexer, err := NewIndexer()
 		if err != nil {
@@ -35,11 +35,11 @@ func TestIndexerCreation(t *testing.T) {
 			}
 		}
 	})
-	
+
 	// Тестируем создание Indexer с включенным v2 (должно вернуть ошибку, потому что chroma_v2_enabled не включен при сборке)
 	t.Run("Indexer with v2 client disabled", func(t *testing.T) {
 		os.Setenv("CHROMA_USE_V2", "true")
-		
+
 		// Создаем Indexer - это должно привести к ошибке, потому что chroma_v2_enabled не включен при сборке
 		indexer, err := NewIndexer()
 		if err == nil {
@@ -47,7 +47,7 @@ func TestIndexerCreation(t *testing.T) {
 		} else if indexer != nil {
 			t.Error("Expected nil indexer when creation fails")
 		}
-		
+
 		// Проверим, что ошибка содержит ожидаемое сообщение
 		expectedMsg := "ChromaDB v2 client not available in this build - compile with -tags chroma_v2_enabled"
 		if err != nil && err.Error() != "failed to create ChromaDB v2 client: "+expectedMsg {

@@ -66,12 +66,12 @@ func TestNeo4jGraphMode(t *testing.T) {
 		WorldID:   "test-world",
 		ScopeID:   stringPtr("test-scope"),
 		Payload: map[string]interface{}{
-			"action":     "attack",
-			"player_id":  "player-1",
-			"target_id":  "enemy-1",
-			"source_id":  "hero-2",
-			"damage":     10,
-			"inventory":  []string{"sword-1", "shield-2"},
+			"action":    "attack",
+			"player_id": "player-1",
+			"target_id": "enemy-1",
+			"source_id": "hero-2",
+			"damage":    10,
+			"inventory": []string{"sword-1", "shield-2"},
 		},
 	}
 

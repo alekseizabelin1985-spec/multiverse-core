@@ -12,10 +12,10 @@ import (
 
 // StructuredContext представляет контекст с встроенными ID для AI
 type StructuredContext struct {
-	Context  string                 `json:"context"`  // "{player_123:Вася} {event_456:вошел в} {region_forest123:Темный лес}"
-	Entities map[string]EntityInfo  `json:"entities"` // Детали сущностей
-	Timeline []TimelineEvent        `json:"timeline"` // Хронология событий
-	Metadata ContextMetadata        `json:"metadata"` // Метаданные запроса
+	Context  string                `json:"context"`  // "{player_123:Вася} {event_456:вошел в} {region_forest123:Темный лес}"
+	Entities map[string]EntityInfo `json:"entities"` // Детали сущностей
+	Timeline []TimelineEvent       `json:"timeline"` // Хронология событий
+	Metadata ContextMetadata       `json:"metadata"` // Метаданные запроса
 }
 
 // EntityInfo содержит информацию о сущности
