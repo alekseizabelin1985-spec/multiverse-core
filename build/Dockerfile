@@ -39,14 +39,27 @@ RUN printf 'go 1.24.0\n\nuse (\n\t.\n\t./services/%s\n)\n' "${SERVICE}" > go.wor
 # Download dependencies for this service
 RUN cd services/${SERVICE} && go mod download
 
-# Build the service
+# Build the service.
+# Static linking (-extldflags "-static") is used only when CGO is disabled.
+# With CGO=1 (e.g. chroma_v2 + ONNX Runtime) dynamic linking is required.
 RUN echo "Building ${SERVICE} CGO_ENABLED=${BUILD_CGO} tags='${GO_BUILD_TAGS}'" && \
     cd services/${SERVICE} && \
-    CGO_ENABLED=${BUILD_CGO} GOOS=linux go build \
-      -a -ldflags '-extldflags "-static"' \
-      -tags "${GO_BUILD_TAGS}" \
-      -o /bin/${SERVICE} \
-      ./cmd/
+    if [ "${BUILD_CGO}" = "1" ]; then \
+      CGO_ENABLED=1 GOOS=linux \
+        CGO_CFLAGS="-I/opt/onnxruntime/include" \
+        CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime" \
+        go build \
+          -a \
+          -tags "${GO_BUILD_TAGS}" \
+          -o /bin/${SERVICE} \
+          ./cmd/ ; \
+    else \
+      CGO_ENABLED=0 GOOS=linux go build \
+        -a -ldflags '-extldflags "-static"' \
+        -tags "${GO_BUILD_TAGS}" \
+        -o /bin/${SERVICE} \
+        ./cmd/ ; \
+    fi
 
 # ========== Runtime stage ==========
 FROM debian:bookworm-slim

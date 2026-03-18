@@ -222,28 +222,26 @@ func (c *ChromaV2Client) QueryByMetadata(ctx context.Context, where map[string]i
 		return nil, fmt.Errorf("QueryByMetadata: where filter cannot be empty")
 	}
 
-	// Build a composite EQ filter from the where map.
-	// ChromaDB v2 Go client expects typed filter expressions.
-	var filters []v2.WhereFilter
+	// v2.EqString / v2.And operate on WhereClause, not WhereFilter.
+	var clauses []v2.WhereClause
 	for k, v := range where {
 		switch val := v.(type) {
 		case string:
-			filters = append(filters, v2.EqString(k, val))
+			clauses = append(clauses, v2.EqString(k, val))
 		default:
-			// Skip unsupported types; callers should use string values.
 			log.Printf("QueryByMetadata: skipping non-string filter key=%s", k)
 		}
 	}
 
-	if len(filters) == 0 {
+	if len(clauses) == 0 {
 		return nil, fmt.Errorf("QueryByMetadata: no valid filters provided")
 	}
 
-	var whereFilter v2.WhereFilter
-	if len(filters) == 1 {
-		whereFilter = filters[0]
+	var whereFilter v2.WhereClause
+	if len(clauses) == 1 {
+		whereFilter = clauses[0]
 	} else {
-		whereFilter = v2.And(filters...)
+		whereFilter = v2.And(clauses...)
 	}
 
 	result, err := c.collection.Get(ctx,
@@ -269,8 +267,17 @@ func (c *ChromaV2Client) QueryByMetadata(ctx context.Context, where map[string]i
 		if i < len(docList) {
 			entry["document"] = docList[i].ContentString()
 		}
-		if i < len(metaList) {
-			entry["metadata"] = metaList[i].ToMap()
+		if i < len(metaList) && metaList[i] != nil {
+			// DocumentMetadata has no ToMap(); use MarshalJSON → unmarshal as fallback.
+			if impl, ok := metaList[i].(*v2.DocumentMetadataImpl); ok {
+				m := map[string]interface{}{}
+				for _, key := range impl.Keys() {
+					if val, found := impl.GetRaw(key); found {
+						m[key] = val
+					}
+				}
+				entry["metadata"] = m
+			}
 		}
 		out = append(out, entry)
 	}
