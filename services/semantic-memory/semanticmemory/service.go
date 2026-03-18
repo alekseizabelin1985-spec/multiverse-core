@@ -197,6 +197,173 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		json.NewEncoder(w).Encode(response)
 	}).Methods("GET")
 
+		// GET /v1/entities/{entity_id} — retrieve a single entity by its ID.
+	r.HandleFunc("/v1/entities/{entity_id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		entityID := vars["entity_id"]
+		if entityID == "" {
+			writeError(w, "entity_id_required", http.StatusBadRequest)
+			return
+		}
+
+		entity, err := indexer.GetEntityByID(r.Context(), entityID)
+		if err != nil {
+			log.Printf("GetEntityByID(%s): %v", entityID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if entity == nil {
+			writeError(w, "entity_not_found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(entity)
+	}).Methods("GET")
+
+	// POST /v1/entities/query — flexible entity query.
+	// All filter fields are optional; results combine matching filters with AND logic.
+	r.HandleFunc("/v1/entities/query", func(w http.ResponseWriter, r *http.Request) {
+		var q EntityQuery
+		if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+			writeError(w, "invalid_json", http.StatusBadRequest)
+			return
+		}
+
+		entities, err := indexer.QueryEntities(r.Context(), q)
+		if err != nil {
+			log.Printf("entities/query: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(map[string]interface{}{"entities": entities})
+	}).Methods("POST")
+
+	// GET /v1/events/{event_id} — retrieve a single event by its ID.
+	r.HandleFunc("/v1/events/{event_id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		eventID := vars["event_id"]
+		if eventID == "" {
+			writeError(w, "event_id_required", http.StatusBadRequest)
+			return
+		}
+
+		ev, err := indexer.neo4j.GetEventByID(eventID)
+		if err != nil {
+			log.Printf("GetEventByID(%s): %v", eventID, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if ev == nil {
+			writeError(w, "event_not_found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(ev)
+	}).Methods("GET")
+
+	// POST /v1/events/query — flexible event query by entity_ids, world_id, event_types, time_range.
+	r.HandleFunc("/v1/events/query", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			EntityIDs  []string `json:"entity_ids"`
+			WorldID    string   `json:"world_id"`
+			EventTypes []string `json:"event_types"`
+			TimeRange  string   `json:"time_range"`
+			Limit      int      `json:"limit"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, "invalid_json", http.StatusBadRequest)
+			return
+		}
+
+		if req.Limit <= 0 {
+			req.Limit = 10
+		}
+
+		ctx := r.Context()
+
+		// Branch: query by entity IDs via Neo4j (supports time range + world filter).
+		if len(req.EntityIDs) > 0 {
+			events, err := indexer.GetEventsForEntities(ctx, req.EntityIDs, req.WorldID, parseTimeRange(req.TimeRange), req.Limit)
+			if err != nil {
+				log.Printf("events/query GetEventsForEntities: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if len(req.EventTypes) > 0 {
+				events = filterEventsByTypes(events, req.EventTypes)
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": events})
+			return
+		}
+
+		// Branch: query by world_id only via Neo4j.
+		if req.WorldID != "" && len(req.EventTypes) == 0 {
+			events, err := indexer.neo4j.GetEventsByWorldID(req.WorldID, req.Limit)
+			if err != nil {
+				log.Printf("events/query GetEventsByWorldID: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": events})
+			return
+		}
+
+		// Branch: query by event_type (one type) via ChromaDB.
+		if len(req.EventTypes) == 1 {
+			docs, err := indexer.GetEventsByType(ctx, req.EventTypes[0], req.Limit)
+			if err != nil {
+				log.Printf("events/query GetEventsByType: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": docs})
+			return
+		}
+
+		// Branch: metadata filter via ChromaDB QueryByMetadata.
+		if len(req.EventTypes) > 1 || req.WorldID != "" {
+			where := map[string]interface{}{}
+			if req.WorldID != "" {
+				where["world_id"] = req.WorldID
+			}
+			// Multi-type filtering via ChromaDB is not directly supported in a single where clause;
+			// fall back to retrieving all and filtering in memory.
+			docs, err := indexer.chroma.QueryByMetadata(ctx, where, req.Limit*len(req.EventTypes))
+			if err != nil {
+				log.Printf("events/query QueryByMetadata: %v", err)
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Filter by event types in memory if needed.
+			if len(req.EventTypes) > 0 {
+				typeSet := make(map[string]bool, len(req.EventTypes))
+				for _, t := range req.EventTypes {
+					typeSet[t] = true
+				}
+				var filtered []map[string]interface{}
+				for _, d := range docs {
+					meta, _ := d["metadata"].(map[string]interface{})
+					if et, _ := meta["event_type"].(string); typeSet[et] {
+						filtered = append(filtered, d)
+					}
+				}
+				docs = filtered
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": docs})
+			return
+		}
+
+		writeError(w, "no_filter_provided", http.StatusBadRequest)
+	}).Methods("POST")
+
 	// Health check endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{

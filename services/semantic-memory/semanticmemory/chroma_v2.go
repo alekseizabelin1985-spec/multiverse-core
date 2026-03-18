@@ -215,6 +215,75 @@ func (c *ChromaV2Client) SearchEventsByType(ctx context.Context, eventType strin
 	return documents, nil
 }
 
+// QueryByMetadata retrieves documents matching the given metadata where-filter via the Go client.
+// Returns a slice of maps with "id", "document", and "metadata" keys.
+func (c *ChromaV2Client) QueryByMetadata(ctx context.Context, where map[string]interface{}, limit int) ([]map[string]interface{}, error) {
+	if len(where) == 0 {
+		return nil, fmt.Errorf("QueryByMetadata: where filter cannot be empty")
+	}
+
+	// v2.EqString / v2.And operate on WhereClause, not WhereFilter.
+	var clauses []v2.WhereClause
+	for k, v := range where {
+		switch val := v.(type) {
+		case string:
+			clauses = append(clauses, v2.EqString(k, val))
+		default:
+			log.Printf("QueryByMetadata: skipping non-string filter key=%s", k)
+		}
+	}
+
+	if len(clauses) == 0 {
+		return nil, fmt.Errorf("QueryByMetadata: no valid filters provided")
+	}
+
+	var whereFilter v2.WhereClause
+	if len(clauses) == 1 {
+		whereFilter = clauses[0]
+	} else {
+		whereFilter = v2.And(clauses...)
+	}
+
+	result, err := c.collection.Get(ctx,
+		v2.WithWhereGet(whereFilter),
+		v2.WithLimitGet(limit),
+		v2.WithIncludeGet(v2.IncludeDocuments, v2.IncludeMetadatas),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("QueryByMetadata: failed to get documents: %w", err)
+	}
+
+	idList := result.GetIDs()
+	docList := result.GetDocuments()
+	metaList := result.GetMetadatas()
+
+	out := make([]map[string]interface{}, 0, len(idList))
+	for i, id := range idList {
+		entry := map[string]interface{}{
+			"id":       string(id),
+			"document": "",
+			"metadata": map[string]interface{}{},
+		}
+		if i < len(docList) {
+			entry["document"] = docList[i].ContentString()
+		}
+		if i < len(metaList) && metaList[i] != nil {
+			// DocumentMetadata has no ToMap(); use MarshalJSON → unmarshal as fallback.
+			if impl, ok := metaList[i].(*v2.DocumentMetadataImpl); ok {
+				m := map[string]interface{}{}
+				for _, key := range impl.Keys() {
+					if val, found := impl.GetRaw(key); found {
+						m[key] = val
+					}
+				}
+				entry["metadata"] = m
+			}
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
 // Close closes the ChromaDB client connection.
 func (c *ChromaV2Client) Close() error {
 	// The client doesn't typically require closing, but we could add cleanup here if needed

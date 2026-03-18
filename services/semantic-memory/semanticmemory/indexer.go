@@ -224,12 +224,12 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 	return strings.Join(parts, "\n")
 }
 
-// saveEventToNeo4j saves an event to Neo4j
+// saveEventToNeo4j saves an event to Neo4j and links it to related Entity nodes.
 func (i *Indexer) saveEventToNeo4j(ctx context.Context, ev eventbus.Event) error {
 	session := i.neo4j.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	// Convert event to JSON for storage
+	// Convert event to JSON for storage so it can be deserialised later.
 	eventJSON, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
@@ -257,7 +257,17 @@ RETURN e
 		"payload":    ev.Payload,
 		"raw_data":   string(eventJSON),
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Link event to entities mentioned in its payload.
+	if linkErr := i.neo4j.LinkEventToEntities(ev.EventID, ev.Payload); linkErr != nil {
+		log.Printf("Warning: failed to link event %s to entities: %v", ev.EventID, linkErr)
+		// Non-fatal: continue without blocking the save.
+	}
+
+	return nil
 }
 
 // processEntityEvent handles entity-related events for backward compatibility
@@ -315,13 +325,17 @@ func (i *Indexer) GetEventsByType(ctx context.Context, eventType string, limit i
 	return i.chroma.SearchEventsByType(ctx, eventType, limit)
 }
 
-// GetEventsForEntities retrieves events for given entity IDs within a time range.
-// This is a simplified implementation - in production, use ChromaDB v2 with proper filtering.
+// GetEventsForEntities retrieves events for given entity IDs within a time range from Neo4j.
+// worldID is optional (pass "" to skip world filter). maxEvents=0 defaults to 50.
 func (i *Indexer) GetEventsForEntities(ctx context.Context, entityIDs []string, worldID string, timeRange time.Duration, maxEvents int) ([]eventbus.Event, error) {
-	// Simplified: return empty list - real implementation requires ChromaDB v2 filtering
-	// In production, implement proper where-filtering in chroma_v2.go
-	log.Printf("GetEventsForEntities: entities=%v, world=%s, range=%v, max=%d", entityIDs, worldID, timeRange, maxEvents)
-	return []eventbus.Event{}, nil
+	if len(entityIDs) == 0 {
+		return nil, nil
+	}
+	if maxEvents <= 0 {
+		maxEvents = 50
+	}
+	since := time.Now().Add(-timeRange)
+	return i.neo4j.GetEventsForEntities(entityIDs, worldID, since, maxEvents)
 }
 
 // GetEntityContext retrieves context for a specific entity ID from MinIO storage.
