@@ -14,7 +14,6 @@ import (
 
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 // toStringSlice converts an interface{} to a []string
@@ -217,67 +216,21 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 	return strings.Join(parts, "\n")
 }
 
-// saveEventToNeo4j saves an event to Neo4j and links it to related Entity nodes.
+// saveEventToNeo4j saves an event to Neo4j as a graph node with relationships to entities.
 func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
-	session := i.neo4j.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
-	defer session.Close()
-
-	// Convert event to JSON for storage so it can be deserialised later.
-	eventJSON, err := json.Marshal(ev)
-	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
-	}
-
-	// Serialize payload to JSON string (Neo4j only accepts primitives, not Maps)
+	// Serialize payload to JSON string
 	payloadJSON, err := json.Marshal(ev.Payload)
 	if err != nil {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Use transaction to guarantee the data is committed
-	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
-		query := `
-MERGE (e:Event {id: $event_id})
-SET e.type = $event_type,
-    e.timestamp = $timestamp,
-    e.source = $source,
-    e.world_id = $world_id,
-    e.scope_id = $scope_id,
-    e.payload = $payload_json,
-    e.raw_data = $raw_data
-RETURN e
-`
-		result, runErr := tx.Run(query, map[string]any{
-			"event_id":   ev.EventID,
-			"event_type": ev.EventType,
-			"timestamp":  ev.Timestamp,
-			"source":     ev.Source,
-			"world_id":   ev.WorldID,
-			"scope_id":   ev.ScopeID,
-			"payload_json": string(payloadJSON),
-			"raw_data":   string(eventJSON),
-		})
-		if runErr != nil {
-			return nil, runErr
-		}
-		// Consume result to ensure query executes and transaction commits
-		_, consumeErr := result.Consume()
-		return nil, consumeErr
-	})
-
-	if err != nil {
-		log.Printf("Neo4j transaction failed for event %s: %v", ev.EventID, err)
-		return fmt.Errorf("transaction failed for event %s: %w", ev.EventID, err)
+	// Save as graph node with proper relationships
+	if err := i.neo4j.SaveEventAsGraph(ev, string(payloadJSON)); err != nil {
+		log.Printf("Neo4j SaveEventAsGraph failed for event %s: %v", ev.EventID, err)
+		return fmt.Errorf("saveEventAsGraph failed for event %s: %w", ev.EventID, err)
 	}
 
-	log.Printf("Saved event %s to Neo4j", ev.EventID)
-
-	// Link event to entities mentioned in its payload.
-	if linkErr := i.neo4j.LinkEventToEntities(ev.EventID, ev.Payload); linkErr != nil {
-		log.Printf("Warning: failed to link event %s to entities: %v", ev.EventID, linkErr)
-		// Non-fatal: continue without blocking the save.
-	}
-
+	log.Printf("Saved event %s to Neo4j (graph mode)", ev.EventID)
 	return nil
 }
 

@@ -973,28 +973,6 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		no.mu.Unlock()
 	}
 
-	// Определяем события для обработки
-	var eventsToProcess []HistoryEntry
-	if ev.EventType == "batch.process" || ev.EventType == "time.syncTime" {
-		no.mu.RLock()
-		eventsToProcess = make([]HistoryEntry, len(gm.History))
-		copy(eventsToProcess, gm.History)
-		no.mu.RUnlock()
-
-		infoLog(gm.ScopeID, gm.WorldID, "Processing batch of events", map[string]interface{}{
-			"events_count": len(eventsToProcess),
-		})
-	} else {
-		eventsToProcess = []HistoryEntry{{
-			EventID:   ev.EventID,
-			Timestamp: ev.Timestamp,
-		}}
-
-		infoLog(gm.ScopeID, gm.WorldID, "Processing single event", map[string]interface{}{
-			"event_id": ev.EventID,
-		})
-	}
-
 	// Получаем контекст с событиями из Semantic Memory
 	// 🔑 ДОБАВИТЬ: защита от пустых сущностей
 	entityIDs := append([]string{}, gm.FocusEntities...)
@@ -1024,6 +1002,49 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			"error": err.Error(),
 		})
 		// Продолжаем выполнение без контекста
+	}
+
+	// Получаем полные события из Neo4j для кластеризации
+	var fullEvents []eventbus.Event
+	no.mu.RLock()
+	historyCopy := make([]HistoryEntry, len(gm.History))
+	copy(historyCopy, gm.History)
+	no.mu.RUnlock()
+
+	if len(historyCopy) > 0 {
+		fullEvents, err = no.semantic.GetEventsForEntities(entityIDs, gm.WorldID, time.Now().Add(-1*time.Hour), 50)
+		if err != nil {
+			warnLog(gm.ScopeID, gm.WorldID, "Failed to get full events from semantic memory, using history fallback", map[string]interface{}{
+				"error": err.Error(),
+			})
+			// Fallback: используем HistoryEntry как eventbus.Event с минимальными данными
+			fullEvents = make([]eventbus.Event, len(historyCopy))
+			for i, he := range historyCopy {
+				fullEvents[i] = eventbus.Event{
+					EventID:   he.EventID,
+					Timestamp: he.Timestamp,
+					WorldID:   gm.WorldID,
+					ScopeID:   &gm.ScopeID,
+					Payload:   map[string]interface{}{"source": "narrative-orchestrator"},
+				}
+			}
+		}
+	} else {
+		// Нет событий в истории, но есть новое событие
+		fullEvents = []eventbus.Event{ev}
+	}
+
+	infoLog(gm.ScopeID, gm.WorldID, "Retrieved full events for clustering", map[string]interface{}{
+		"full_events_count": len(fullEvents),
+	})
+
+	// Кластеризация событий
+	clusters := clusterEvents(fullEvents)
+
+	// Триггер
+	triggerEvent := "Прошло время. Мир продолжает жить."
+	if len(fullEvents) > 0 {
+		triggerEvent = "Накопленные события за период"
 	}
 
 	// 🔑 ИЗМЕНИТЬ: защита при извлечении данных
@@ -1062,9 +1083,6 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		entitiesContext = strings.Join(entitiesLines, "\n")
 	}
 
-	// Кластеризация событий
-	clusters := clusterEvents(eventsToProcess)
-
 	// Временной контекст
 	var lastEventTime *time.Time
 	if len(gm.History) > 0 {
@@ -1076,12 +1094,6 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		lastMood = mood
 	}
 	timeContext := BuildTimeContext(lastEventTime, lastMood)
-
-	// Триггер
-	triggerEvent := "Прошло время. Мир продолжает жить."
-	if len(eventsToProcess) > 0 {
-		triggerEvent = "Накопленные события за период"
-	}
 
 	// Извлечь Canon из gm.State, если есть
 	var canon []string
@@ -1243,8 +1255,8 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	})
 }
 
-// clusterEvents — группировка по времени.
-func clusterEvents(events []HistoryEntry) []EventCluster {
+// clusterEvents — группировка по времени для полных событий eventbus.Event.
+func clusterEvents(events []eventbus.Event) []EventCluster {
 	debugLog("", "", "Starting event clustering", map[string]interface{}{
 		"events_count": len(events),
 	})
@@ -1259,13 +1271,26 @@ func clusterEvents(events []HistoryEntry) []EventCluster {
 	})
 
 	var clusters []EventCluster
-	currentEvents := []string{}
+	currentEvents := []eventbus.Event{}
 
-	addCluster := func(first, last time.Time, events []string) {
+	addCluster := func(first, last time.Time, events []eventbus.Event) {
 		duration := last.Sub(first).Milliseconds()
+		eventDetails := make([]EventDetail, 0, len(events))
+		for _, ev := range events {
+			eventDetails = append(eventDetails, EventDetail{
+				EventID:     ev.EventID,
+				EventType:   ev.EventType,
+				Timestamp:   ev.Timestamp,
+				Source:      ev.Source,
+				WorldID:     ev.WorldID,
+				ScopeID:     func() string { if ev.ScopeID != nil { return *ev.ScopeID }; return "" }(),
+				Payload:     ev.Payload,
+				Description: formatEventDescription(ev),
+			})
+		}
 		clusters = append(clusters, EventCluster{
 			RelativeTime: humanizeDuration(duration),
-			Description:  strings.Join(events, "; "),
+			Events:       eventDetails,
 		})
 	}
 
@@ -1275,7 +1300,7 @@ func clusterEvents(events []HistoryEntry) []EventCluster {
 	}
 
 	first := events[0].Timestamp
-	currentEvents = append(currentEvents, fmt.Sprintf("Событие: %s", events[0].EventID))
+	currentEvents = append(currentEvents, events[0])
 
 	for i := 1; i < len(events); i++ {
 		prev := events[i-1].Timestamp
@@ -1285,9 +1310,9 @@ func clusterEvents(events []HistoryEntry) []EventCluster {
 		if gap > 50 {
 			addCluster(first, prev, currentEvents)
 			first = curr
-			currentEvents = []string{}
+			currentEvents = []eventbus.Event{}
 		}
-		currentEvents = append(currentEvents, fmt.Sprintf("Событие: %s", events[i].EventID))
+		currentEvents = append(currentEvents, events[i])
 	}
 
 	addCluster(first, events[len(events)-1].Timestamp, currentEvents)
@@ -1298,6 +1323,77 @@ func clusterEvents(events []HistoryEntry) []EventCluster {
 	})
 
 	return clusters
+}
+
+// capitalizeFirst делает первую букву заглавной
+func capitalizeFirst(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	runes := []rune(s)
+	runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
+	return string(runes)
+}
+
+// formatEventDescription формирует человеко-читаемое описание события.
+func formatEventDescription(ev eventbus.Event) string {
+	// Сначала проверяем наличие explicit описания
+	if desc, ok := ev.Payload["description"].(string); ok && desc != "" {
+		return desc
+	}
+	if desc, ok := ev.Payload["detail"].(string); ok && desc != "" {
+		return desc
+	}
+
+	// Извлекаем ключевые поля из payload для формирования описания
+	var parts []string
+
+	// Источник (если есть)
+	if sourceID, ok := ev.Payload["entity_id"].(string); ok && sourceID != "" {
+		parts = append(parts, sourceID)
+	}
+	// Также проверяем player_id, actor_id, character_id
+	for _, key := range []string{"player_id", "actor_id", "character_id", "npc_id"} {
+		if id, ok := ev.Payload[key].(string); ok && id != "" {
+			if len(parts) == 0 {
+				parts = append(parts, id)
+			}
+			break
+		}
+	}
+
+	// Действие (на основе типа события или explicit action)
+	action := ev.EventType
+	if action == "" {
+		action = "действие"
+	}
+	if explicitAction, ok := ev.Payload["action"].(string); ok && explicitAction != "" {
+		action = explicitAction
+	}
+	if explicitType, ok := ev.Payload["type"].(string); ok && explicitType != "" {
+		action = explicitType
+	}
+	// Преобразуем snake_case/camelCase в readable текст
+	action = strings.ReplaceAll(action, ".", " ")
+	action = strings.ReplaceAll(action, "_", " ")
+	action = capitalizeFirst(action) // Первая буква заглавная
+	parts = append(parts, action)
+
+	// Цель (если есть)
+	if targetID, ok := ev.Payload["target_id"].(string); ok && targetID != "" {
+		parts = append(parts, fmt.Sprintf("к %s", targetID))
+	}
+	if to, ok := ev.Payload["to"].(map[string]interface{}); ok {
+		if toID, ok := to["id"].(string); ok && toID != "" {
+			parts = append(parts, fmt.Sprintf("к %s", toID))
+		}
+	}
+
+	result := strings.Join(parts, " ")
+	if result == "" {
+		result = fmt.Sprintf("Событие %s", ev.EventID[:8])
+	}
+	return result
 }
 
 func (no *NarrativeOrchestrator) extractEventPoint(ev eventbus.Event) (spatial.Point, bool) {

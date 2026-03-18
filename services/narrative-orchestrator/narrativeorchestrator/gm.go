@@ -27,10 +27,22 @@ type GMInstance struct {
 	CreatedAt       time.Time               `json:"created_at"`
 }
 
-// EventCluster для временной группировки.
+// EventDetail содержит полную информацию о событии для промта.
+type EventDetail struct {
+	EventID     string    `json:"event_id"`
+	EventType   string    `json:"event_type"`
+	Timestamp   time.Time `json:"timestamp"`
+	Source      string    `json:"source"`
+	WorldID     string    `json:"world_id"`
+	ScopeID     string    `json:"scope_id,omitempty"`
+	Payload     map[string]interface{} `json:"payload"`
+	Description string    `json:"description"` // Человеко-читаемое описание
+}
+
+// EventCluster для временной группировки событий.
 type EventCluster struct {
-	RelativeTime string
-	Description  string
+	RelativeTime string       `json:"relative_time"`
+	Events       []EventDetail `json:"events"` // Полный список событий в кластере
 }
 
 func (gm *GMInstance) UpdateVisibilityScope(provider spatial.GeometryProvider) {
