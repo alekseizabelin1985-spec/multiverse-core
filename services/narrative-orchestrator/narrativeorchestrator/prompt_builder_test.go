@@ -119,7 +119,7 @@ func TestMigratePromptInput(t *testing.T) {
 		ScopeID:         "scope-1",
 		ScopeType:       "location",
 		EntitiesContext: "Сущности",
-		EventClusters:   []EventCluster{{RelativeTime: "сейчас", Description: "событие"}},
+		EventClusters:   []EventCluster{{RelativeTime: "сейчас", Events: []EventDetail{{EventID: "ev1", Description: "событие"}}}},
 		TimeContext:     "Утро",
 		TriggerEvent:    "Триггер",
 	}

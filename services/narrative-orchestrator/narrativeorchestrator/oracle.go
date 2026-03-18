@@ -3,11 +3,14 @@
 package narrativeorchestrator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/oracle"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -215,7 +218,21 @@ func buildEventClusters(clusters []EventCluster) string {
 	}
 	var lines []string
 	for _, c := range clusters {
-		lines = append(lines, fmt.Sprintf("[ %s ] %s", c.RelativeTime, c.Description))
+		// Формируем список событий из полной информации
+		if len(c.Events) > 0 {
+			eventDetails := make([]string, len(c.Events))
+			for i, ev := range c.Events {
+				// Формат: [event_id] тип события: описание
+				eventDetails[i] = fmt.Sprintf("• [%s] %s: %s",
+					ev.EventID[:8]+"...",
+					ev.EventType,
+					ev.Description)
+			}
+			lines = append(lines, fmt.Sprintf("[ %s ]:\n%s", c.RelativeTime, strings.Join(eventDetails, "\n")))
+		} else {
+			// Fallback для старых структур
+			lines = append(lines, fmt.Sprintf("[ %s ]", c.RelativeTime))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -288,4 +305,57 @@ func getSeason(t time.Time) string {
 	default:
 		return "осень"
 	}
+}
+
+// GetEventsForEntities retrieves full event details for given entity IDs from Semantic Memory API.
+// Returns full eventbus.Event structs with complete payload instead of just IDs.
+func (c *SemanticMemoryClient) GetEventsForEntities(entityIDs []string, worldID string, since time.Time, limit int) ([]eventbus.Event, error) {
+	if c == nil {
+		return nil, fmt.Errorf("semantic memory client is nil")
+	}
+	if len(entityIDs) == 0 {
+		return nil, fmt.Errorf("entity IDs cannot be empty")
+	}
+
+	debugLog("", "", "Getting full events from semantic memory", map[string]interface{}{
+		"entity_ids":  entityIDs,
+		"world_id":    worldID,
+		"since":       since,
+		"limit":       limit,
+	})
+
+	reqBody, err := json.Marshal(map[string]interface{}{
+		"entity_ids": entityIDs,
+		"world_id":   worldID,
+		"since":      since.Format(time.RFC3339),
+		"limit":      limit,
+	})
+	if err != nil {
+		errorLog("", "", "Failed to marshal events request", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return nil, fmt.Errorf("failed to marshal events request: %w", err)
+	}
+
+	resp, err := http.Post(c.BaseURL+"/v1/events-by-entities", "application/json", bytes.NewBuffer(reqBody))
+	if err != nil {
+		errorLog("", "", "Failed to call semantic memory service", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return nil, fmt.Errorf("failed to call semantic memory service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var events []eventbus.Event
+	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
+		errorLog("", "", "Failed to decode events response", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return nil, fmt.Errorf("failed to decode events response: %w", err)
+	}
+
+	infoLog("", "", "Successfully retrieved full events from semantic memory", map[string]interface{}{
+		"events_count": len(events),
+	})
+	return events, nil
 }
