@@ -81,7 +81,7 @@ func BuildStructuredPrompt(s PromptSections) (systemPrompt, userPrompt string) {
 	sys.WriteString("\n<schema>\n")
 	sys.WriteString("{\n")
 	sys.WriteString("  \"narrative\": \"1–3 предложения повествования\",\n")
-	sys.WriteString("  \"mood\": [\"настроение1\", \"настроение2\"],\n")
+	sys.WriteString("  \"mood\": [\"настроение1\", \"настроение2\",\"\"],\n")
 	sys.WriteString("  \"new_events\": [\n")
 	sys.WriteString("    {\n")
 	sys.WriteString("      \"event_type\": \"тип.события\",\n")
@@ -89,7 +89,7 @@ func BuildStructuredPrompt(s PromptSections) (systemPrompt, userPrompt string) {
 	sys.WriteString(fmt.Sprintf("      \"source\": \"%s\",\n", defaultSource))
 	sys.WriteString(fmt.Sprintf("      \"world_id\": \"%s\",\n", defaultWorldID))
 	sys.WriteString("      \"scope_id\": \"область\",\n")
-	sys.WriteString("      \"payload\": {\"description\": \"краткое описание\"}\n")
+	sys.WriteString("      \"payload\": {\"description\": \"краткое описание\", \"любые_поля_тип\": \"в зависимости от контекста\"}\n")
 	sys.WriteString("    }\n")
 	sys.WriteString("  ]\n")
 	sys.WriteString("}\n")
@@ -133,9 +133,15 @@ func BuildStructuredPrompt(s PromptSections) (systemPrompt, userPrompt string) {
 	}
 	usr.WriteString("</situation>\n")
 
-	usr.WriteString("\n<task>Продолжи повествование: что логично происходит дальше в этой области?</task>\n")
+	usr.WriteString("\n<task>Продолжи повествование: что логично происходит дальше в этой области?\n\n")
+	usr.WriteString("— Учитывай факты, характеры, обстановку.\n")
+	usr.WriteString("— Даже если событий мало — мир живёт.\n")
+	usr.WriteString("— Используй стилевые модификаторы: «внезапно», «плавно», «тревожно».</task>\n")
 
 	userPrompt = strings.TrimSpace(usr.String())
+
+	fmt.Println("system:", systemPrompt)
+	fmt.Println("user:", userPrompt)
 	return
 }
 
