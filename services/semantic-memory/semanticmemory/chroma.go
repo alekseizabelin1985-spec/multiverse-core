@@ -260,29 +260,32 @@ func (c *ChromaClient) GetDocuments(ctx context.Context, entityIDs []string) (ma
 	return contexts, nil
 }
 
-// SearchEventsByType searches for events by type in ChromaDB.
-func (c *ChromaClient) SearchEventsByType(ctx context.Context, eventType string, limit int) ([]string, error) {
-	// Получаем ID коллекции
+// chromaGetResponse is the shared response structure for ChromaDB /get endpoint.
+type chromaGetResponse struct {
+	Ids       []string                 `json:"ids"`
+	Documents []string                 `json:"documents"`
+	Metadatas []map[string]interface{} `json:"metadatas"`
+}
+
+// chromaGet executes a GET request against the collection using a metadata where-filter.
+// Uses /api/v1/collections/{id}/get which supports where-filtering without requiring embeddings.
+func (c *ChromaClient) chromaGet(ctx context.Context, where map[string]interface{}, limit int) (*chromaGetResponse, error) {
 	collectionID, err := c.getOrCreateCollectionID(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get collection ID for search: %w", err)
+		return nil, fmt.Errorf("failed to get collection ID: %w", err)
 	}
 
-	endpoint := fmt.Sprintf("%s/api/v1/collections/%s/query", c.baseURL, collectionID)
-
-	// Создаем фильтр для поиска событий по типу
-	whereClause := map[string]interface{}{
-		"event_type": eventType,
-	}
+	endpoint := fmt.Sprintf("%s/api/v1/collections/%s/get", c.baseURL, collectionID)
 
 	payload := map[string]interface{}{
-		"where":     whereClause,
-		"n_results": limit,
+		"where":   where,
+		"limit":   limit,
+		"include": []string{"documents", "metadatas"},
 	}
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal search request: %w", err)
+		return nil, fmt.Errorf("failed to marshal get request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewBuffer(jsonData))
@@ -293,26 +296,56 @@ func (c *ChromaClient) SearchEventsByType(ctx context.Context, eventType string,
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute search request: %w", err)
+		return nil, fmt.Errorf("failed to execute get request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body) // Читаем тело для лога
-		return nil, fmt.Errorf("search request failed with status %d: %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var result struct {
-		Ids        []string                 `json:"ids"`
-		Documents  []string                 `json:"documents"`
-		Metadatas  []map[string]interface{} `json:"metadatas"`
-		Embeddings [][]float32              `json:"embeddings"`
-	}
+	var result chromaGetResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode search response: %w", err)
+		return nil, fmt.Errorf("failed to decode get response: %w", err)
 	}
 
+	return &result, nil
+}
+
+// SearchEventsByType searches for events by type in ChromaDB using /get with where-filter.
+func (c *ChromaClient) SearchEventsByType(ctx context.Context, eventType string, limit int) ([]string, error) {
+	result, err := c.chromaGet(ctx, map[string]interface{}{"event_type": eventType}, limit)
+	if err != nil {
+		return nil, fmt.Errorf("SearchEventsByType: %w", err)
+	}
 	return result.Documents, nil
+}
+
+// QueryByMetadata retrieves documents matching the given metadata where-filter.
+// Returns a slice of maps with "id", "document", and "metadata" keys.
+func (c *ChromaClient) QueryByMetadata(ctx context.Context, where map[string]interface{}, limit int) ([]map[string]interface{}, error) {
+	result, err := c.chromaGet(ctx, where, limit)
+	if err != nil {
+		return nil, fmt.Errorf("QueryByMetadata: %w", err)
+	}
+
+	out := make([]map[string]interface{}, 0, len(result.Ids))
+	for i, id := range result.Ids {
+		entry := map[string]interface{}{
+			"id":       id,
+			"document": "",
+			"metadata": map[string]interface{}{},
+		}
+		if i < len(result.Documents) {
+			entry["document"] = result.Documents[i]
+		}
+		if i < len(result.Metadatas) {
+			entry["metadata"] = result.Metadatas[i]
+		}
+		out = append(out, entry)
+	}
+	return out, nil
 }
 
 // Close closes the HTTP client (optional).

@@ -215,6 +215,68 @@ func (c *ChromaV2Client) SearchEventsByType(ctx context.Context, eventType strin
 	return documents, nil
 }
 
+// QueryByMetadata retrieves documents matching the given metadata where-filter via the Go client.
+// Returns a slice of maps with "id", "document", and "metadata" keys.
+func (c *ChromaV2Client) QueryByMetadata(ctx context.Context, where map[string]interface{}, limit int) ([]map[string]interface{}, error) {
+	if len(where) == 0 {
+		return nil, fmt.Errorf("QueryByMetadata: where filter cannot be empty")
+	}
+
+	// Build a composite EQ filter from the where map.
+	// ChromaDB v2 Go client expects typed filter expressions.
+	var filters []v2.WhereFilter
+	for k, v := range where {
+		switch val := v.(type) {
+		case string:
+			filters = append(filters, v2.EqString(k, val))
+		default:
+			// Skip unsupported types; callers should use string values.
+			log.Printf("QueryByMetadata: skipping non-string filter key=%s", k)
+		}
+	}
+
+	if len(filters) == 0 {
+		return nil, fmt.Errorf("QueryByMetadata: no valid filters provided")
+	}
+
+	var whereFilter v2.WhereFilter
+	if len(filters) == 1 {
+		whereFilter = filters[0]
+	} else {
+		whereFilter = v2.And(filters...)
+	}
+
+	result, err := c.collection.Get(ctx,
+		v2.WithWhereGet(whereFilter),
+		v2.WithLimitGet(limit),
+		v2.WithIncludeGet(v2.IncludeDocuments, v2.IncludeMetadatas),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("QueryByMetadata: failed to get documents: %w", err)
+	}
+
+	idList := result.GetIDs()
+	docList := result.GetDocuments()
+	metaList := result.GetMetadatas()
+
+	out := make([]map[string]interface{}, 0, len(idList))
+	for i, id := range idList {
+		entry := map[string]interface{}{
+			"id":       string(id),
+			"document": "",
+			"metadata": map[string]interface{}{},
+		}
+		if i < len(docList) {
+			entry["document"] = docList[i].ContentString()
+		}
+		if i < len(metaList) {
+			entry["metadata"] = metaList[i].ToMap()
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
 // Close closes the ChromaDB client connection.
 func (c *ChromaV2Client) Close() error {
 	// The client doesn't typically require closing, but we could add cleanup here if needed
