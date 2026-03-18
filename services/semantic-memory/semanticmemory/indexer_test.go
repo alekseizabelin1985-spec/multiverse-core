@@ -52,7 +52,7 @@ func TestIndexer_HandleEvent(t *testing.T) {
 func TestCromaV2(t *testing.T) {
 	//CHROMA_URL=http://chromadb:8000
 	//CHROMA_USE_V2=true
-	os.Setenv("CHROMA_URL", "http://127.0.0.1:8000")
+	os.Setenv("CHROMA_URL", "http://127.0.0.1:8082")
 	os.Setenv("EMBEDING_URL", "http://127.0.0.1:11434")
 	os.Setenv("EMBEDING_MODEL", "nomic-embed-text:latest")
 	_, err := createChromaV2Client()

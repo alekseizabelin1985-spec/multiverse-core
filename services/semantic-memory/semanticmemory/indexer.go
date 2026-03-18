@@ -133,23 +133,22 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 	// Process all events, not just entity-related events
 	ctx := context.Background()
 
-	// Save event to storage
-	if err := i.saveEvent(ctx, ev); err != nil {
-		log.Printf("Failed to save event %s: %v", ev.EventID, err)
-		return
-	}
+	// Save to both ChromaDB and Neo4j independently
+	i.saveEventToChroma(ctx, ev)
+	i.saveEventToNeo4j(ctx, ev)
 
-	// Process entity-related events for backward compatibility
+	// Process entity-related events for both ChromaDB and Neo4j
 	if ev.EventType == "entity.created" || ev.EventType == "entity.updated" {
 		i.processEntityEvent(ctx, ev)
 	}
 }
 
-// saveEvent saves an event to both ChromaDB and Neo4j for context and replay
-func (i *Indexer) saveEvent(ctx context.Context, ev eventbus.Event) error {
+// saveEventToChroma saves an event to ChromaDB
+func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 	// Validate input event
 	if ev.EventID == "" {
-		return fmt.Errorf("event ID cannot be empty")
+		log.Printf("Invalid event: missing EventID for ChromaDB")
+		return
 	}
 
 	// Create a text representation of the event for ChromaDB
@@ -172,16 +171,10 @@ func (i *Indexer) saveEvent(ctx context.Context, ev eventbus.Event) error {
 	// Save to ChromaDB
 	eventID := fmt.Sprintf("event_%s", ev.EventID)
 	if err := i.chroma.UpsertDocument(ctx, eventID, eventText, metadata); err != nil {
-		return fmt.Errorf("ChromaDB upsert failed for event %s: %w", ev.EventID, err)
+		log.Printf("ChromaDB upsert failed for event %s: %v", ev.EventID, err)
+	} else {
+		log.Printf("Saved event %s to ChromaDB", ev.EventID)
 	}
-
-	// Save to Neo4j
-	if err := i.saveEventToNeo4j(ctx, ev); err != nil {
-		return fmt.Errorf("Neo4j upsert failed for event %s: %w", ev.EventID, err)
-	}
-
-	log.Printf("Saved event %s of type %s", ev.EventID, ev.EventType)
-	return nil
 }
 
 // buildEventTextContext creates a human-readable context string from an event
@@ -225,7 +218,7 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 }
 
 // saveEventToNeo4j saves an event to Neo4j and links it to related Entity nodes.
-func (i *Indexer) saveEventToNeo4j(ctx context.Context, ev eventbus.Event) error {
+func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 	session := i.neo4j.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
@@ -235,31 +228,49 @@ func (i *Indexer) saveEventToNeo4j(ctx context.Context, ev eventbus.Event) error
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	query := `
+	// Serialize payload to JSON string (Neo4j only accepts primitives, not Maps)
+	payloadJSON, err := json.Marshal(ev.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Use transaction to guarantee the data is committed
+	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+		query := `
 MERGE (e:Event {id: $event_id})
 SET e.type = $event_type,
     e.timestamp = $timestamp,
     e.source = $source,
     e.world_id = $world_id,
     e.scope_id = $scope_id,
-    e.payload = $payload,
+    e.payload = $payload_json,
     e.raw_data = $raw_data
 RETURN e
 `
-
-	_, err = session.Run(query, map[string]any{
-		"event_id":   ev.EventID,
-		"event_type": ev.EventType,
-		"timestamp":  ev.Timestamp,
-		"source":     ev.Source,
-		"world_id":   ev.WorldID,
-		"scope_id":   ev.ScopeID,
-		"payload":    ev.Payload,
-		"raw_data":   string(eventJSON),
+		result, runErr := tx.Run(query, map[string]any{
+			"event_id":   ev.EventID,
+			"event_type": ev.EventType,
+			"timestamp":  ev.Timestamp,
+			"source":     ev.Source,
+			"world_id":   ev.WorldID,
+			"scope_id":   ev.ScopeID,
+			"payload_json": string(payloadJSON),
+			"raw_data":   string(eventJSON),
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		// Consume result to ensure query executes and transaction commits
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
 	})
+
 	if err != nil {
-		return err
+		log.Printf("Neo4j transaction failed for event %s: %v", ev.EventID, err)
+		return fmt.Errorf("transaction failed for event %s: %w", ev.EventID, err)
 	}
+
+	log.Printf("Saved event %s to Neo4j", ev.EventID)
 
 	// Link event to entities mentioned in its payload.
 	if linkErr := i.neo4j.LinkEventToEntities(ev.EventID, ev.Payload); linkErr != nil {

@@ -47,21 +47,35 @@ func NewNeo4jClient() (*Neo4jClient, error) {
 }
 
 // UpsertEntity creates or updates an entity node in Neo4j.
-func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[string]interface{}) error {
+func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[string]any) error {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
+
+	// Serialize payload to JSON string (Neo4j only accepts primitives, not Maps)
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal payload: %w", err)
+	}
 
 	query := `
 MERGE (e:Entity {id: $entity_id})
 SET e.type = $entity_type,
-    e += $payload
+    e.payload = $payload_json
 RETURN e
 `
 
-	_, err := session.Run(query, map[string]any{
-		"entity_id":   entityID,
-		"entity_type": entityType,
-		"payload":     payload,
+	// Use transaction to guarantee the data is committed
+	_, err = session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"entity_id":   entityID,
+			"entity_type": entityType,
+			"payload_json": string(payloadJSON),
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
 	})
 	return err
 }
@@ -78,9 +92,17 @@ MERGE (a)-[r:%s]->(b)
 RETURN r
 `, relType)
 
-	_, err := session.Run(query, map[string]any{
-		"from_id": fromID,
-		"to_id":   toID,
+	// Use transaction to guarantee the data is committed
+	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"from_id": fromID,
+			"to_id":   toID,
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
 	})
 	return err
 }
@@ -292,9 +314,18 @@ UNWIND $entity_ids AS eid
 MERGE (en:Entity {id: eid})
 MERGE (ev)-[:RELATED_TO]->(en)
 `
-	_, err := session.Run(query, map[string]any{
-		"event_id":   eventID,
-		"entity_ids": entityIDs,
+	// Use transaction to guarantee the data is committed
+	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"event_id":   eventID,
+			"entity_ids": entityIDs,
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		// Consume result to ensure query executes and transaction commits
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
 	})
 	if err != nil {
 		return fmt.Errorf("LinkEventToEntities: %w", err)

@@ -1214,6 +1214,18 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		}
 	}
 
+	// 🔑 Очистка History после успешной отправки событий в Oracle
+	no.mu.Lock()
+	historySizeBefore := len(gm.History)
+	gm.History = nil
+	historySizeAfter := len(gm.History)
+	no.mu.Unlock()
+
+	infoLog(gm.ScopeID, gm.WorldID, "Cleared history buffer after Oracle processing", map[string]interface{}{
+		"cleared_events_count": historySizeBefore,
+		"remaining_events":     historySizeAfter,
+	})
+
 	saveErr := no.saveSnapshot(gm.ScopeID, gm)
 	if saveErr != nil {
 		errorLog(gm.ScopeID, gm.WorldID, "Failed to save GM snapshot after processing", map[string]interface{}{
