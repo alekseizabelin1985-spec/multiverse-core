@@ -4,6 +4,7 @@ package semanticmemory
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -43,7 +44,40 @@ func NewNeo4jClient() (*Neo4jClient, error) {
 		return nil, fmt.Errorf("neo4j connectivity test failed: %w", err)
 	}
 
-	return &Neo4jClient{driver: driver}, nil
+	client := &Neo4jClient{driver: driver}
+	// Create indexes for efficient queries
+	if err := client.createIndexes(); err != nil {
+		log.Printf("Warning: failed to create indexes: %v", err)
+	}
+
+	return client, nil
+}
+
+// createIndexes creates indexes for efficient graph queries
+func (n *Neo4jClient) createIndexes() error {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	indexes := []string{
+		"CREATE INDEX event_id IF NOT EXISTS FOR (e:Event) ON (e.id)",
+		"CREATE INDEX entity_id IF NOT EXISTS FOR (e:Entity) ON (e.id)",
+		"CREATE INDEX event_type IF NOT EXISTS FOR (e:Event) ON (e.type)",
+		"CREATE INDEX world_id IF NOT EXISTS FOR (e:Event) ON (e.world_id)",
+		"CREATE INDEX event_timestamp IF NOT EXISTS FOR (e:Event) ON (e.timestamp)",
+		"CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.type)",
+		"CREATE INDEX entity_world_id IF NOT EXISTS FOR (e:Entity) ON (e.world_id)",
+	}
+
+	var lastErr error
+	for _, idx := range indexes {
+		_, err := session.Run(idx, nil)
+		if err != nil {
+			lastErr = err
+			log.Printf("Index creation failed: %v", err)
+			continue
+		}
+	}
+	return lastErr
 }
 
 // UpsertEntity creates or updates an entity node in Neo4j.
@@ -67,8 +101,8 @@ RETURN e
 	// Use transaction to guarantee the data is committed
 	_, err = session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
 		result, runErr := tx.Run(query, map[string]any{
-			"entity_id":   entityID,
-			"entity_type": entityType,
+			"entity_id":    entityID,
+			"entity_type":  entityType,
 			"payload_json": string(payloadJSON),
 		})
 		if runErr != nil {
@@ -292,12 +326,17 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 // whose IDs are found in the event payload. Entity stub nodes are created if missing.
 // Recognised payload keys: entity_id, source_id, target_id, character_id, player_id, npc_id.
 func (n *Neo4jClient) LinkEventToEntities(eventID string, payload map[string]interface{}) error {
-	entityKeys := []string{"entity_id", "source_id", "target_id", "character_id", "player_id", "npc_id"}
+	entityKeys := []string{"entity_id", "source_id", "target_id", "character_id", "player_id", "npc_id", "actor_id", "subject_id", "object_id", "focus_entities"}
 
 	var entityIDs []string
 	for _, key := range entityKeys {
 		if val, ok := payload[key].(string); ok && val != "" {
 			entityIDs = append(entityIDs, val)
+		}
+		if val, ok := payload[key].([]string); ok && val != nil {
+			for _, v := range val {
+				entityIDs = append(entityIDs, v)
+			}
 		}
 	}
 
@@ -315,7 +354,7 @@ MERGE (en:Entity {id: eid})
 MERGE (ev)-[:RELATED_TO]->(en)
 `
 	// Use transaction to guarantee the data is committed
-	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
 		result, runErr := tx.Run(query, map[string]any{
 			"event_id":   eventID,
 			"entity_ids": entityIDs,
@@ -610,4 +649,333 @@ LIMIT $limit
 // Close closes the Neo4j driver.
 func (n *Neo4jClient) Close() {
 	_ = n.driver.Close()
+}
+
+// GetEventsByWorldAndType retrieves events for a specific world and optionally by event type.
+func (n *Neo4jClient) GetEventsByWorldAndType(worldID, eventType string, limit int) ([]eventbus.Event, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	var query string
+	if eventType != "" {
+		query = `MATCH (e:Event) WHERE e.world_id = $world_id AND e.type = $event_type RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+	} else {
+		query = `MATCH (e:Event) WHERE e.world_id = $world_id RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+	}
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{"world_id": worldID, "event_type": eventType, "limit": limit})
+		if err != nil {
+			return nil, err
+		}
+		var events []eventbus.Event
+		for records.Next() {
+			record := records.Record()
+			payloadVal, ok := record.Get("payload_json")
+			if !ok || payloadVal == nil {
+				continue
+			}
+			payloadStr, ok := payloadVal.(string)
+			if !ok {
+				continue
+			}
+			var evPayload map[string]any
+			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+				continue
+			}
+			events = append(events, eventbus.Event{Payload: evPayload})
+		}
+		return events, records.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	events, _ := result.([]eventbus.Event)
+	return events, nil
+}
+
+// GetEventsByTypeNeo4j retrieves events by type from Neo4j graph nodes.
+func (n *Neo4jClient) GetEventsByTypeNeo4j(eventType string, limit int) ([]eventbus.Event, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `MATCH (e:Event) WHERE e.type = $event_type RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{"event_type": eventType, "limit": limit})
+		if err != nil {
+			return nil, err
+		}
+		var events []eventbus.Event
+		for records.Next() {
+			record := records.Record()
+			payloadVal, ok := record.Get("payload_json")
+			if !ok || payloadVal == nil {
+				continue
+			}
+			payloadStr, ok := payloadVal.(string)
+			if !ok {
+				continue
+			}
+			var evPayload map[string]any
+			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+				continue
+			}
+			events = append(events, eventbus.Event{Payload: evPayload})
+		}
+		return events, records.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	events, _ := result.([]eventbus.Event)
+	return events, nil
+}
+
+// GetEventsByEntity retrieves events related to a specific entity via graph relationships.
+func (n *Neo4jClient) GetEventsByEntity(entityID string, limit int) ([]eventbus.Event, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `MATCH (e:Event)-[:RELATED_TO]->(en:Entity) WHERE en.id = $entity_id RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{"entity_id": entityID, "limit": limit})
+		if err != nil {
+			return nil, err
+		}
+		var events []eventbus.Event
+		for records.Next() {
+			record := records.Record()
+			payloadVal, ok := record.Get("payload_json")
+			if !ok || payloadVal == nil {
+				continue
+			}
+			payloadStr, ok := payloadVal.(string)
+			if !ok {
+				continue
+			}
+			var evPayload map[string]any
+			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+				continue
+			}
+			events = append(events, eventbus.Event{Payload: evPayload})
+		}
+		return events, records.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	events, _ := result.([]eventbus.Event)
+	return events, nil
+}
+
+// GetEntitiesByType retrieves entities by type from Neo4j graph.
+func (n *Neo4jClient) GetEntitiesByType(entityType, worldID string, limit int) ([]EntityInfo, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `MATCH (e:Entity) WHERE ($entity_type = '' OR e.type = $entity_type) AND ($world_id = '' OR e.world_id = $world_id) RETURN e.id AS id, e.type AS type, e.payload AS payload LIMIT $limit`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{"entity_type": entityType, "world_id": worldID, "limit": limit})
+		if err != nil {
+			return nil, err
+		}
+		var entities []EntityInfo
+		for records.Next() {
+			record := records.Record()
+			var id, entityType string
+			var payload map[string]any
+			if val, ok := record.Get("id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					id = s
+				}
+			}
+			if val, ok := record.Get("type"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					entityType = s
+				}
+			}
+			if val, ok := record.Get("payload"); ok && val != nil {
+				if p, ok := val.(map[string]any); ok {
+					payload = p
+				}
+			}
+			if id != "" {
+				entities = append(entities, EntityInfo{ID: id, Type: entityType, Payload: payload})
+			}
+		}
+		return entities, records.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	entities, _ := result.([]EntityInfo)
+	return entities, nil
+}
+
+// SaveEventAsGraph saves an event as a graph node with relationships to entities
+func (n *Neo4jClient) SaveEventAsGraph(ev eventbus.Event, payloadJSON string) error {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+		query := `
+MERGE (e:Event {id: $event_id})
+SET e.type = $event_type,
+    e.timestamp = $timestamp,
+    e.source = $source,
+    e.world_id = $world_id,
+    e.payload_json = $payload_json
+`
+		params := map[string]any{
+			"event_id":     ev.EventID,
+			"event_type":   ev.EventType,
+			"timestamp":    ev.Timestamp,
+			"source":       ev.Source,
+			"world_id":     ev.WorldID,
+			"payload_json": payloadJSON,
+		}
+
+		// Add scope_id if present
+		if ev.ScopeID != nil {
+			params["scope_id"] = *ev.ScopeID
+			query = `
+MERGE (e:Event {id: $event_id})
+SET e.type = $event_type,
+    e.timestamp = $timestamp,
+    e.source = $source,
+    e.world_id = $world_id,
+    e.scope_id = $scope_id,
+    e.payload_json = $payload_json
+`
+		}
+
+		result, runErr := tx.Run(query, params)
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
+	})
+	if err != nil {
+		return err
+	}
+
+	// Link event to entities in payload
+	if linkErr := n.LinkEventToEntities(ev.EventID, ev.Payload); linkErr != nil {
+		log.Printf("Warning: failed to link event %s to entities: %v", ev.EventID, linkErr)
+	}
+
+	return nil
+}
+
+// extractEntitiesFromPayload extracts entity IDs from event payload
+// It handles various common patterns in event payloads
+func extractEntitiesFromPayload(payload map[string]interface{}) []string {
+	entityKeys := []string{
+		"entity_id", "source_id", "target_id",
+		"player_id", "character_id", "npc_id",
+		"actor_id", "object_id", "item_id", "actor_id", "subject_id", "focus_entities",
+	}
+
+	var entityIDs []string
+	seen := make(map[string]bool)
+
+	for _, key := range entityKeys {
+		if val, ok := payload[key]; ok {
+			switch v := val.(type) {
+			case string:
+				if v != "" && !seen[v] {
+					entityIDs = append(entityIDs, v)
+					seen[v] = true
+				}
+			case []interface{}:
+				for _, item := range v {
+					if s, ok := item.(string); ok && s != "" && !seen[s] {
+						entityIDs = append(entityIDs, s)
+						seen[s] = true
+					}
+				}
+			case map[string]interface{}:
+				// Handle nested structures like { "player": { "id": "xxx" } }
+				if nested, ok := v["id"]; ok {
+					if s, ok := nested.(string); ok && s != "" && !seen[s] {
+						entityIDs = append(entityIDs, s)
+						seen[s] = true
+					}
+				}
+			}
+		}
+	}
+
+	// Also check inventory array
+	if inv, ok := payload["inventory"]; ok {
+		switch v := inv.(type) {
+		case []interface{}:
+			for _, item := range v {
+				if s, ok := item.(string); ok && s != "" && !seen[s] {
+					entityIDs = append(entityIDs, s)
+					seen[s] = true
+				}
+			}
+		case []string:
+			for _, s := range v {
+				if s != "" && !seen[s] {
+					entityIDs = append(entityIDs, s)
+					seen[s] = true
+				}
+			}
+		}
+	}
+
+	return entityIDs
+}
+
+// ExtractNestedEntityIDs extracts entity IDs from nested payload structures
+// Handles patterns like payload.player.id, payload.target.id, etc.
+func ExtractNestedEntityIDs(payload map[string]interface{}) map[string]string {
+	ids := make(map[string]string)
+
+	// Direct string fields that might be entity IDs
+	directFields := []string{"player_id", "target_id", "source_id", "entity_id",
+		"character_id", "npc_id", "item_id", "object_id", "subject_id", "focus_entities"}
+	for _, field := range directFields {
+		if val, ok := payload[field]; ok {
+			if s, ok := val.(string); ok && s != "" {
+				ids[field] = s
+			}
+		}
+	}
+
+	// Nested structures like { "player": { "id": "xxx", "name": "yyy" } }
+	nestedFields := []string{"player", "target", "source", "entity", "actor",
+		"character", "npc", "item", "object", "metadata"}
+	for _, field := range nestedFields {
+		if nested, ok := payload[field].(map[string]interface{}); ok {
+			if id, ok := nested["id"].(string); ok && id != "" {
+				key := fmt.Sprintf("%s.id", field)
+				ids[key] = id
+			}
+			if name, ok := nested["name"].(string); ok && name != "" {
+				key := fmt.Sprintf("%s.name", field)
+				ids[key] = name
+			}
+		}
+	}
+
+	// Array of entities
+	if entities, ok := payload["entities"].([]interface{}); ok {
+		for i, entity := range entities {
+			if ent, ok := entity.(map[string]interface{}); ok {
+				if id, ok := ent["id"].(string); ok && id != "" {
+					key := fmt.Sprintf("entities[%d].id", i)
+					ids[key] = id
+				}
+			}
+		}
+	}
+
+	return ids
 }
