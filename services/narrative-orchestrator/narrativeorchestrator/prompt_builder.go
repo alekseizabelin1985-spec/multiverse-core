@@ -68,6 +68,7 @@ func BuildStructuredPrompt(s PromptSections) (systemPrompt, userPrompt string) {
 	sys.WriteString("\n<rules>\n")
 	sys.WriteString(fmt.Sprintf("• МАКСИМУМ %d событий в new_events.\n", maxEvents))
 	sys.WriteString("• События должны быть СЕМАНТИЧЕСКИМИ (звук за дверью, появление сущности), а не атомарными действиями.\n")
+	sys.WriteString("• События это не только краткое описание, а полноценные сцены что надо сделать например появилась сущность с полным ее описанием и созданием ново1 сущности в мире, а не просто \"появилась сущность\".\n")
 	sys.WriteString("• Каждое событие ОБЯЗАТЕЛЬНО содержит: event_type, timestamp, source, world_id, scope_id, payload.\n")
 	sys.WriteString("• event_type — snake_case (например: \"environment.sound\", \"player.reacted\").\n")
 	sys.WriteString("• timestamp — ISO 8601 UTC (оканчивается на Z).\n")

@@ -1117,7 +1117,7 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		EventClusters:  clusters,
 		TriggerEvent:   triggerEvent,
 		LastMood:       lastMood,
-		MaxEvents:      3,
+		MaxEvents:      10,
 		DefaultSource:  "narrative-orchestrator",
 		DefaultWorldID: gm.WorldID,
 	}

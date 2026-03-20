@@ -174,9 +174,18 @@ func (c *Client) CallStructuredJSON(ctx context.Context, systemPrompt, userPromp
 			{"role": "system", "content": systemPrompt},
 			{"role": "user", "content": userPrompt},
 		},
-		"temperature": 0.8,
-		"min_p":      0.05,
-		"max_tokens": 4096,
+		"temperature":        1,
+		"min_p":              0.05,
+		"top_p":              0.95,
+		"presence_penalty":   1.5,
+		"repetition_penalty": 1.0,
+		"max_tokens":         4096,
+		"extra_body": map[string]interface{}{
+			"top_k": 40,
+			"chat_template_kwargs": map[string]interface{}{
+				"enable_thinking": false,
+			},
+		},
 		"response_format": map[string]string{
 			"type": "json_object",
 		},
