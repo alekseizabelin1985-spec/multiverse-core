@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__memory-new__store_memory",
+      "mcp__memory-new__list_memories",
+      "mcp__github_*",
+      "mcp__qdrant_*",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(go fmt:*)",
+      "Bash(gofmt:*)",
+      "Bash(golangci-lint:*)",
+      "Bash(go vet:*)",
+      "Bash(make test:*)",
+      "Bash(make build:*)",
+      "Bash(dc-*:*)",
+      "mcp__memory-new__search_by_tag",
+      "mcp__memory-new__delete_memory",
+      "mcp__memory-new__check_database_health",
+      "mcp__plugin_context7_context7__resolve-library-id"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "memory-new",
+    "github",
+    "qdrant"
+  ],
+  "hooks": {
+    "PostToolUse": {
+      "Bash(gofmt:*)": "Bash(gofmt -w .)",
+      "Bash(gofmt -w *.go)": "Bash(gofmt -w .)",
+      "Bash(go fmt *.go)": "Bash(gofmt -w .)"
+    }
+  }
+}

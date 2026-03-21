@@ -1,0 +1,23 @@
+{
+  "name": "multiverse-core-plugins",
+  "version": "1.0.0",
+  "description": "Плагин для автоматизации multiverse-core",
+  "type": "plugin",
+  "skills": [
+    "make-command",
+    "docker-compose-control",
+    "redpanda-topic-check",
+    "service-health-check",
+    "go-test-automation",
+    "redpanda-schema-validator"
+  ],
+  "mcpServers": [
+    "context7",
+    "database"
+  ],
+  "subagents": [
+    "microservice-reviewer",
+    "go-workspace-manager",
+    "event-schema-validator"
+  ]
+}

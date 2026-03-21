@@ -1,0 +1,14 @@
+{
+  "name": "redpanda-tools-plugin",
+  "version": "1.0.0",
+  "description": "Plugin for Redpanda automation in multiverse-core",
+  "type": "plugin",
+  "skills": [
+    "redpanda-topic-check",
+    "redpanda-lag-monitor",
+    "redpanda-replay",
+    "redpanda-schema-check"
+  ],
+  "mcpServers": [],
+  "subagents": []
+}

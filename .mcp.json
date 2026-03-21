@@ -1,0 +1,30 @@
+{
+  "mcpServers": {
+    "memory-new": {
+      "type": "http",
+      "url": "http://localhost:3001/mcp"
+    },
+    "context7": {
+      "type": "http",
+      "url": "http://localhost:3002/mcp"
+    },
+    "database": {
+      "type": "http",
+      "url": "http://localhost:3003/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DB_MCP_TOKEN}"
+      }
+    },
+    "github": {
+      "type": "http",
+      "url": "http://localhost:3004/mcp",
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "qdrant": {
+      "type": "http",
+      "url": "http://localhost:6333"
+    }
+  }
+}
