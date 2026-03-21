@@ -915,8 +915,15 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 
 // dispatchEventToGM handles trigger check, buffering, and threshold for a single GM.
 func (no *NarrativeOrchestrator) dispatchEventToGM(ev eventbus.Event, gm *GMInstance) {
-	// Мгновенная реакция: проверяем narrative_triggers
+	// Каскад-защита: ГМ не реагирует на события, которые сам опубликовал
 	gm.mu.Lock()
+	if gm.isOwnEvent(ev.EventID) {
+		gm.mu.Unlock()
+		debugLog(gm.ScopeID, gm.WorldID, "Skipping own emitted event", map[string]interface{}{
+			"event_id": ev.EventID,
+		})
+		return
+	}
 	triggers := gm.Config["triggers"]
 	gm.mu.Unlock()
 
@@ -1165,9 +1172,19 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		})
 	}
 
+	// Определяем начало окна: от LastProcessTime (скользящее окно), а не фиксированный час
+	gm.mu.Lock()
+	var sinceTime time.Time
+	if gm.LastProcessTime > 0 {
+		sinceTime = time.UnixMilli(gm.LastProcessTime)
+	} else {
+		sinceTime = time.Now().Add(-10 * time.Minute) // fallback для первого запуска
+	}
+	gm.mu.Unlock()
+
 	var fullEvents []eventbus.Event
 	if len(historyCopy) > 0 {
-		fullEvents, err = no.semantic.GetEventsForEntities(entityIDs, gm.WorldID, time.Now().Add(-1*time.Hour), 50)
+		fullEvents, err = no.semantic.GetEventsForEntities(entityIDs, gm.WorldID, sinceTime, 50)
 		if err != nil {
 			warnLog(gm.ScopeID, gm.WorldID, "Failed to get full events, using history fallback", map[string]interface{}{
 				"error": err.Error(),
@@ -1176,13 +1193,26 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			for i, he := range historyCopy {
 				fullEvents[i] = eventbus.Event{
 					EventID:   he.EventID,
+					EventType: "history.fallback",
 					Timestamp: he.Timestamp,
 					WorldID:   gm.WorldID,
 					ScopeID:   &gm.ScopeID,
-					Payload:   map[string]interface{}{"source": "narrative-orchestrator"},
+					Payload:   map[string]interface{}{},
 				}
 			}
 		}
+
+		// Фильтруем события которые этот конкретный ГМ сам опубликовал
+		// (события других ГМ с Source "narrative-orchestrator" — легитимный вход)
+		gm.mu.Lock()
+		filtered := fullEvents[:0]
+		for _, fe := range fullEvents {
+			if !gm.isOwnEvent(fe.EventID) {
+				filtered = append(filtered, fe)
+			}
+		}
+		gm.mu.Unlock()
+		fullEvents = filtered
 	} else {
 		fullEvents = []eventbus.Event{ev}
 	}
@@ -1194,10 +1224,27 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	// Кластеризация событий
 	clusters := clusterEvents(fullEvents)
 
-	// Триггер
-	triggerEvent := "Прошло время. Мир продолжает жить."
-	if len(fullEvents) > 0 {
-		triggerEvent = "Накопленные события за период"
+	// Триггер — описание инициирующего события
+	var triggerEvent string
+	switch {
+	case ev.EventType == "batch.process":
+		// Батч — триггером является последнее реальное событие
+		if len(fullEvents) > 0 {
+			lastEv := fullEvents[len(fullEvents)-1]
+			triggerEvent = formatEventDescription(lastEv)
+		} else {
+			triggerEvent = "Прошло время. Мир продолжает жить."
+		}
+	case ev.EventType == "time.syncTime":
+		if len(fullEvents) > 0 {
+			lastEv := fullEvents[len(fullEvents)-1]
+			triggerEvent = formatEventDescription(lastEv)
+		} else {
+			triggerEvent = "Прошло время. Мир продолжает жить."
+		}
+	default:
+		// Прямой триггер — описание самого события
+		triggerEvent = formatEventDescription(ev)
 	}
 
 	// 🔑 ИЗМЕНИТЬ: защита при извлечении данных
@@ -1333,6 +1380,11 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		// 	outputEvent.ScopeID = &gm.ScopeID
 		// }
 
+		// Запоминаем event_id чтобы не реагировать на своё же событие
+		gm.mu.Lock()
+		gm.trackEmitted(outputEvent.EventID)
+		gm.mu.Unlock()
+
 		err := no.bus.Publish(context.Background(), eventbus.TopicWorldEvents, outputEvent)
 		if err != nil {
 			errorLog(gm.ScopeID, gm.WorldID, "Failed to publish generated event", map[string]interface{}{
@@ -1376,10 +1428,11 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		}
 	}
 
-	// Clear history after successful Oracle processing
+	// Clear history and evict old emitted IDs after successful Oracle processing
 	gm.mu.Lock()
 	clearedCount := len(gm.History)
 	gm.History = nil
+	gm.evictExpiredEmitted()
 	gm.mu.Unlock()
 
 	infoLog(gm.ScopeID, gm.WorldID, "Cleared history buffer after Oracle processing", map[string]interface{}{
@@ -1518,7 +1571,10 @@ func formatEventDescription(ev eventbus.Event) string {
 	// Действие (на основе типа события или explicit action)
 	action := ev.EventType
 	if action == "" {
-		action = "действие"
+		if ev.EventID != "" {
+			return fmt.Sprintf("Событие %s", ev.EventID[:min(8, len(ev.EventID))])
+		}
+		action = "неизвестное событие"
 	}
 	if explicitAction, ok := ev.Payload["action"].(string); ok && explicitAction != "" {
 		action = explicitAction
