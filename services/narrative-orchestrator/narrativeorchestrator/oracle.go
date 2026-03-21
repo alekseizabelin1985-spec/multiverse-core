@@ -218,15 +218,16 @@ func buildEventClusters(clusters []EventCluster) string {
 	}
 	var lines []string
 	for _, c := range clusters {
-		// Формируем список событий из полной информации
 		if len(c.Events) > 0 {
 			eventDetails := make([]string, len(c.Events))
 			for i, ev := range c.Events {
-				// Формат: [event_id] тип события: описание
-				eventDetails[i] = fmt.Sprintf("• [%s] %s: %s",
-					ev.EventID[:8]+"...",
-					ev.EventType,
-					ev.Description)
+				// Полный JSON события для контекста LLM
+				evJSON, err := json.Marshal(ev)
+				if err != nil {
+					eventDetails[i] = fmt.Sprintf("• %s: %s", ev.EventType, ev.Description)
+					continue
+				}
+				eventDetails[i] = string(evJSON)
 			}
 			lines = append(lines, fmt.Sprintf("[ %s ]:\n%s", c.RelativeTime, strings.Join(eventDetails, "\n")))
 		} else {
