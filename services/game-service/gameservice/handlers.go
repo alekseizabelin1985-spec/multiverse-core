@@ -223,79 +223,331 @@ func (s *Service) GetRecentEventsHandler(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+// RunTestHandler запускает полный тестовый сценарий для проверки narrative-orchestrator.
+// Тестирует: создание GM, моментальные триггеры, пакетную обработку,
+// spatial routing, state_changes, и TTL-сброс.
+//
+// Query params:
+//
+//	?scenario=all|instant|batch|spatial|state_changes|merge_split (default: all)
 func (s *Service) RunTestHandler(w http.ResponseWriter, r *http.Request) {
-	// Создаем первое событие для system_events
-	systemEventPayload := map[string]interface{}{
-		"scope_id":   "player:kain-777",
-		"scope_type": "player",
-		"config": map[string]interface{}{
-			"perception": 0.8,
-			"focus_entities": []string{
-				"player:kain-777",
+	scenario := r.URL.Query().Get("scenario")
+	if scenario == "" {
+		scenario = "all"
+	}
+
+	ctx := r.Context()
+	worldID := "pain-realm"
+	scopePlayer := "player:kain-777"
+	scopeLocation := "location:dark_alley"
+	results := make([]map[string]interface{}, 0)
+
+	publish := func(topic string, ev eventbus.Event) error {
+		var err error
+		switch topic {
+		case "system":
+			err = s.bus.PublishSystemEvent(ctx, ev)
+		case "world":
+			err = s.bus.PublishWorldEvent(ctx, ev)
+		case "game":
+			err = s.bus.PublishGameEvent(ctx, ev)
+		}
+		if err != nil {
+			log.Printf("Failed to publish %s event %s: %v", topic, ev.EventType, err)
+		} else {
+			results = append(results, map[string]interface{}{
+				"step":       len(results) + 1,
+				"topic":      topic,
+				"event_type": ev.EventType,
+				"event_id":   ev.EventID,
+			})
+		}
+		return err
+	}
+
+	scopePtr := func(s string) *string { return &s }
+
+	// ===== STEP 1: Создание GM для player =====
+	if scenario == "all" || scenario == "instant" || scenario == "batch" || scenario == "spatial" || scenario == "state_changes" {
+		err := publish("system", eventbus.Event{
+			EventID:   "evt-gm-create-" + uuid.NewString()[:8],
+			EventType: "gm.created",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id":   scopePlayer,
+				"scope_type": "player",
+				"config": map[string]interface{}{
+					"perception": 0.8,
+					"focus_entities": []string{
+						scopePlayer,
+					},
+				},
 			},
-		},
+		})
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Step 1 failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		time.Sleep(2 * time.Second)
 	}
 
-	systemEvent := eventbus.Event{
-		EventID:   "evt-gm-player-kain-777-" + uuid.NewString(),
-		EventType: "gm.created",
-		Source:    "client",
-		WorldID:   "pain-realm",
-		Timestamp: time.Now().UTC(),
-		Payload:   systemEventPayload,
+	// ===== STEP 2: Моментальный триггер (player.used_skill) =====
+	if scenario == "all" || scenario == "instant" {
+		err := publish("world", eventbus.Event{
+			EventID:   "evt-skill-" + uuid.NewString()[:8],
+			EventType: "player.used_skill",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopePlayer),
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"entity_id":  scopePlayer,
+				"skill_id":   "sky_rend",
+				"skill_name": "Разрыв небес",
+				"target":     "npc:wolf-5",
+				"location": map[string]interface{}{
+					"x": 123.4, "y": 56.7,
+					"location": scopeLocation,
+				},
+				"description": "Каин применил умение 'Разрыв небес' на белого волка.",
+			},
+		})
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Step 2 failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+		time.Sleep(2 * time.Second)
+
+		// Ещё один моментальный: player.died
+		_ = publish("world", eventbus.Event{
+			EventID:   "evt-died-" + uuid.NewString()[:8],
+			EventType: "player.died",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopePlayer),
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"entity_id":   scopePlayer,
+				"killer":      "npc:wolf-5",
+				"cause":       "damage",
+				"description": "Белый волк нанёс смертельный удар Каину.",
+			},
+		})
+		time.Sleep(2 * time.Second)
+
+		// И ещё: player.got_item
+		_ = publish("world", eventbus.Event{
+			EventID:   "evt-item-" + uuid.NewString()[:8],
+			EventType: "player.got_item",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopePlayer),
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"entity_id":   scopePlayer,
+				"item_id":     "item:wolf-fang",
+				"item_name":   "Клык белого волка",
+				"description": "После победы Каин подобрал клык поверженного волка.",
+			},
+		})
+		time.Sleep(1 * time.Second)
 	}
 
-	// Публикуем событие в system_events
-	err := s.bus.PublishSystemEvent(r.Context(), systemEvent)
-	if err != nil {
-		log.Printf("Failed to publish system event: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Failed to publish system event: %v", err)))
-		return
+	// ===== STEP 3: Пакетная обработка — серия мелких событий без триггера =====
+	if scenario == "all" || scenario == "batch" {
+		batchEvents := []struct {
+			eventType   string
+			description string
+		}{
+			{"player.moved", "Каин пошёл на восток по тёмной аллее."},
+			{"player.looked_around", "Каин осмотрелся, заметив странные тени."},
+			{"npc.said", "Торговец крикнул: 'Сюда, путник!'"},
+			{"player.moved", "Каин подошёл к торговцу."},
+			{"ambient.sound", "Где-то в переулке послышался рык."},
+			{"player.emote", "Каин нахмурился и положил руку на меч."},
+			{"weather.changed", "Начался мелкий дождь."},
+			{"npc.moved", "Бродячий кот прошмыгнул мимо."},
+		}
+
+		for i, be := range batchEvents {
+			_ = publish("world", eventbus.Event{
+				EventID:   fmt.Sprintf("evt-batch-%d-%s", i, uuid.NewString()[:8]),
+				EventType: be.eventType,
+				Source:    "test-harness",
+				WorldID:   worldID,
+				ScopeID:   scopePtr(scopePlayer),
+				Timestamp: time.Now().UTC(),
+				Payload: map[string]interface{}{
+					"entity_id":   scopePlayer,
+					"description": be.description,
+					"location": map[string]interface{}{
+						"x": 125.0 + float64(i), "y": 58.0,
+					},
+				},
+			})
+			// Небольшая задержка между событиями чтобы имитировать реальность
+			time.Sleep(200 * time.Millisecond)
+		}
+		// Ждём пока таймер GM соберёт и обработает пакет (time_interval_ms=5000 для player)
+		time.Sleep(6 * time.Second)
 	}
 
-	// Ждем 5 секунд
-	time.Sleep(5 * time.Second)
+	// ===== STEP 4: Spatial routing — событие рядом с GM, но с другим scope_id =====
+	if scenario == "all" || scenario == "spatial" {
+		// Создаём GM для локации
+		_ = publish("system", eventbus.Event{
+			EventID:   "evt-gm-loc-" + uuid.NewString()[:8],
+			EventType: "gm.created",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id":   scopeLocation,
+				"scope_type": "location",
+			},
+		})
+		time.Sleep(2 * time.Second)
 
-	// Создаем второе событие для world_events
-	worldEventPayload := map[string]interface{}{
-		"entity_id":  "player:kain-777",
-		"skill_id":   "sky_rend",
-		"skill_name": "Разрыв небес",
-		"target":     "npc:wolf-5",
-		"location": map[string]interface{}{
-			"x":        123.4,
-			"y":        56.7,
-			"location": "location:dark_alley",
-		},
-		"description": "Хоббит с карими глазами применил умение 'Разрыв небес' на белого волка.",
+		// Событие с scope_id=location, но с координатами внутри видимости player GM
+		// Player GM с perception=0.8 имеет радиус 0.8*200=160м
+		// Координаты (123.4, 56.7) — центр player, (130, 60) — в радиусе
+		_ = publish("world", eventbus.Event{
+			EventID:   "evt-spatial-" + uuid.NewString()[:8],
+			EventType: "npc.attacked_player",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopeLocation), // Другой scope!
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"entity_id":   "npc:bandit-3",
+				"target":      scopePlayer,
+				"description": "Бандит из тени напал на Каина!",
+				"location": map[string]interface{}{
+					"x": 130.0, "y": 60.0, // В радиусе видимости player GM
+				},
+			},
+		})
+		time.Sleep(2 * time.Second)
+
+		// Событие далеко — player GM НЕ должен получить, только location GM
+		_ = publish("world", eventbus.Event{
+			EventID:   "evt-far-" + uuid.NewString()[:8],
+			EventType: "npc.spawned",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopeLocation),
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"entity_id":   "npc:merchant-99",
+				"description": "Новый торговец появился на рыночной площади.",
+				"location": map[string]interface{}{
+					"x": 9999.0, "y": 9999.0, // Далеко от player
+				},
+			},
+		})
+		time.Sleep(1 * time.Second)
 	}
 
-	worldEvent := eventbus.Event{
-		EventID:   "evt-skill-" + uuid.NewString(),
-		EventType: "player.used_skill",
-		Source:    "client",
-		WorldID:   "pain-realm",
-		ScopeID:   &[]string{"player:kain-777"}[0], // Указатель на строку
-		Timestamp: time.Now().UTC(),
-		Payload:   worldEventPayload,
+	// ===== STEP 5: state_changes — обновление entity через state_changes =====
+	if scenario == "all" || scenario == "state_changes" {
+		_ = publish("world", eventbus.Event{
+			EventID:   "evt-state-" + uuid.NewString()[:8],
+			EventType: "entity.updated",
+			Source:    "entity-manager",
+			WorldID:   worldID,
+			ScopeID:   scopePtr(scopePlayer),
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"state_changes": []interface{}{
+					map[string]interface{}{
+						"entity_id": scopePlayer,
+						"operations": []interface{}{
+							map[string]interface{}{
+								"op":    "set",
+								"path":  "health.current",
+								"value": 42.0,
+							},
+							map[string]interface{}{
+								"op":    "set",
+								"path":  "status",
+								"value": "wounded",
+							},
+						},
+					},
+				},
+			},
+		})
+		time.Sleep(1 * time.Second)
 	}
 
-	// Публикуем событие в world_events
-	err = s.bus.PublishWorldEvent(r.Context(), worldEvent)
-	if err != nil {
-		log.Printf("Failed to publish world event: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Failed to publish world event: %v", err)))
-		return
+	// ===== STEP 6: Merge/Split GM =====
+	if scenario == "all" || scenario == "merge_split" {
+		// Создаём два отдельных GM для merge
+		_ = publish("system", eventbus.Event{
+			EventID:   "evt-gm-a-" + uuid.NewString()[:8],
+			EventType: "gm.created",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id":   "group:party-alpha",
+				"scope_type": "group",
+			},
+		})
+		_ = publish("system", eventbus.Event{
+			EventID:   "evt-gm-b-" + uuid.NewString()[:8],
+			EventType: "gm.created",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id":   "group:party-beta",
+				"scope_type": "group",
+			},
+		})
+		time.Sleep(2 * time.Second)
+
+		// Merge: beta вливается в alpha
+		_ = publish("system", eventbus.Event{
+			EventID:   "evt-merge-" + uuid.NewString()[:8],
+			EventType: "gm.merged",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id":         "group:party-alpha",
+				"source_scope_ids": []interface{}{"group:party-beta"},
+			},
+		})
+		time.Sleep(1 * time.Second)
+
+		// Split: из alpha выделяем scout
+		_ = publish("system", eventbus.Event{
+			EventID:   "evt-split-" + uuid.NewString()[:8],
+			EventType: "gm.split",
+			Source:    "test-harness",
+			WorldID:   worldID,
+			Timestamp: time.Now().UTC(),
+			Payload: map[string]interface{}{
+				"scope_id": "group:party-alpha",
+				"new_scopes": []interface{}{
+					map[string]interface{}{
+						"scope_id":       "group:scout-team",
+						"scope_type":     "group",
+						"focus_entities": []interface{}{"player:scout-1", "player:scout-2"},
+					},
+				},
+			},
+		})
+		time.Sleep(1 * time.Second)
 	}
 
-	// Возвращаем успешный ответ
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":         "Test events published successfully",
-		"system_event_id": systemEvent.EventID,
-		"world_event_id":  worldEvent.EventID,
+		"message":      fmt.Sprintf("Test scenario '%s' completed", scenario),
+		"events_sent":  len(results),
+		"steps":        results,
 	})
 }
