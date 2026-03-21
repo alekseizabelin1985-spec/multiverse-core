@@ -278,15 +278,48 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	log.Printf("Indexed entity %s", entityID)
 }
 
-// GetContext retrieves full context for entity IDs.
+// GetContext retrieves full context for entity IDs. Uses Neo4j as primary source, falls back to ChromaDB.
 func (i *Indexer) GetContext(ctx context.Context, entityIDs []string, depth int) (map[string]string, error) {
-	// For simplicity, we use ChromaDB for text context
-	return i.chroma.GetDocuments(ctx, entityIDs)
+	entityCache, err := i.neo4j.GetEntityCache(entityIDs)
+	if err != nil {
+		log.Printf("Neo4j GetEntityCache failed, falling back to ChromaDB: %v", err)
+		return i.chroma.GetDocuments(ctx, entityIDs)
+	}
+
+	result := make(map[string]string, len(entityCache))
+	for id, info := range entityCache {
+		text := BuildTextContext(id, info.Type, info.Payload)
+
+		// Enrich with related events if depth > 0
+		if depth > 0 {
+			events, err := i.neo4j.GetEventsByEntity(id, depth)
+			if err == nil && len(events) > 0 {
+				text += "\n\nRelated Events:"
+				for _, ev := range events {
+					text += "\n" + i.buildEventTextContext(ev)
+				}
+			}
+		}
+
+		result[id] = text
+	}
+
+	return result, nil
 }
 
-// GetEventsByType retrieves events by type from ChromaDB
+// GetEventsByType retrieves events by type. Uses Neo4j as primary source, falls back to ChromaDB.
 func (i *Indexer) GetEventsByType(ctx context.Context, eventType string, limit int) ([]string, error) {
-	return i.chroma.SearchEventsByType(ctx, eventType, limit)
+	events, err := i.neo4j.GetEventsByTypeNeo4j(eventType, limit)
+	if err != nil {
+		log.Printf("Neo4j GetEventsByTypeNeo4j failed, falling back to ChromaDB: %v", err)
+		return i.chroma.SearchEventsByType(ctx, eventType, limit)
+	}
+
+	var results []string
+	for _, ev := range events {
+		results = append(results, i.buildEventTextContext(ev))
+	}
+	return results, nil
 }
 
 // GetEventsForEntities retrieves events for given entity IDs within a time range from Neo4j.

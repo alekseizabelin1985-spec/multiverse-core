@@ -314,50 +314,35 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 			return
 		}
 
-		// Branch: query by event_type (one type) via ChromaDB.
+		// Branch: query by event_type(s) via Neo4j.
 		if len(req.EventTypes) == 1 {
-			docs, err := indexer.GetEventsByType(ctx, req.EventTypes[0], req.Limit)
+			var events []eventbus.Event
+			var err error
+			if req.WorldID != "" {
+				events, err = indexer.neo4j.GetEventsByWorldAndType(req.WorldID, req.EventTypes[0], req.Limit)
+			} else {
+				events, err = indexer.neo4j.GetEventsByTypeNeo4j(req.EventTypes[0], req.Limit)
+			}
 			if err != nil {
-				log.Printf("events/query GetEventsByType: %v", err)
+				log.Printf("events/query GetEventsByType (Neo4j): %v", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			json.NewEncoder(w).Encode(map[string]interface{}{"events": docs})
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": events})
 			return
 		}
 
-		// Branch: metadata filter via ChromaDB QueryByMetadata.
+		// Branch: multiple event types via Neo4j single query.
 		if len(req.EventTypes) > 1 || req.WorldID != "" {
-			where := map[string]interface{}{}
-			if req.WorldID != "" {
-				where["world_id"] = req.WorldID
-			}
-			// Multi-type filtering via ChromaDB is not directly supported in a single where clause;
-			// fall back to retrieving all and filtering in memory.
-			docs, err := indexer.chroma.QueryByMetadata(ctx, where, req.Limit*len(req.EventTypes))
+			events, err := indexer.neo4j.GetEventsByTypes(req.EventTypes, req.WorldID, req.Limit)
 			if err != nil {
-				log.Printf("events/query QueryByMetadata: %v", err)
+				log.Printf("events/query GetEventsByTypes (Neo4j): %v", err)
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			// Filter by event types in memory if needed.
-			if len(req.EventTypes) > 0 {
-				typeSet := make(map[string]bool, len(req.EventTypes))
-				for _, t := range req.EventTypes {
-					typeSet[t] = true
-				}
-				var filtered []map[string]interface{}
-				for _, d := range docs {
-					meta, _ := d["metadata"].(map[string]interface{})
-					if et, _ := meta["event_type"].(string); typeSet[et] {
-						filtered = append(filtered, d)
-					}
-				}
-				docs = filtered
-			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			json.NewEncoder(w).Encode(map[string]interface{}{"events": docs})
+			json.NewEncoder(w).Encode(map[string]interface{}{"events": events})
 			return
 		}
 

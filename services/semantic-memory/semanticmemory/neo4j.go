@@ -646,21 +646,71 @@ LIMIT $limit
 	return entities, nil
 }
 
+// GetEventsByTypes retrieves events matching any of the given types, optionally filtered by world_id.
+// Returns full eventbus.Event structs deserialized from raw_data.
+func (n *Neo4jClient) GetEventsByTypes(eventTypes []string, worldID string, limit int) ([]eventbus.Event, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+MATCH (e:Event)
+WHERE e.type IN $types AND ($world_id = '' OR e.world_id = $world_id)
+RETURN e.raw_data AS raw_data
+ORDER BY e.timestamp DESC
+LIMIT $limit
+`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{
+			"types":    eventTypes,
+			"world_id": worldID,
+			"limit":    limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		var events []eventbus.Event
+		for records.Next() {
+			record := records.Record()
+			rawVal, ok := record.Get("raw_data")
+			if !ok || rawVal == nil {
+				continue
+			}
+			rawStr, ok := rawVal.(string)
+			if !ok {
+				continue
+			}
+			var ev eventbus.Event
+			if err := json.Unmarshal([]byte(rawStr), &ev); err != nil {
+				continue
+			}
+			events = append(events, ev)
+		}
+		return events, records.Err()
+	})
+	if err != nil {
+		return nil, err
+	}
+	events, _ := result.([]eventbus.Event)
+	return events, nil
+}
+
 // Close closes the Neo4j driver.
 func (n *Neo4jClient) Close() {
 	_ = n.driver.Close()
 }
 
 // GetEventsByWorldAndType retrieves events for a specific world and optionally by event type.
+// Returns full eventbus.Event structs deserialized from raw_data.
 func (n *Neo4jClient) GetEventsByWorldAndType(worldID, eventType string, limit int) ([]eventbus.Event, error) {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
 	var query string
 	if eventType != "" {
-		query = `MATCH (e:Event) WHERE e.world_id = $world_id AND e.type = $event_type RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+		query = `MATCH (e:Event) WHERE e.world_id = $world_id AND e.type = $event_type RETURN e.raw_data AS raw_data ORDER BY e.timestamp DESC LIMIT $limit`
 	} else {
-		query = `MATCH (e:Event) WHERE e.world_id = $world_id RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+		query = `MATCH (e:Event) WHERE e.world_id = $world_id RETURN e.raw_data AS raw_data ORDER BY e.timestamp DESC LIMIT $limit`
 	}
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
@@ -671,19 +721,19 @@ func (n *Neo4jClient) GetEventsByWorldAndType(worldID, eventType string, limit i
 		var events []eventbus.Event
 		for records.Next() {
 			record := records.Record()
-			payloadVal, ok := record.Get("payload_json")
-			if !ok || payloadVal == nil {
+			rawVal, ok := record.Get("raw_data")
+			if !ok || rawVal == nil {
 				continue
 			}
-			payloadStr, ok := payloadVal.(string)
+			rawStr, ok := rawVal.(string)
 			if !ok {
 				continue
 			}
-			var evPayload map[string]any
-			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+			var ev eventbus.Event
+			if err := json.Unmarshal([]byte(rawStr), &ev); err != nil {
 				continue
 			}
-			events = append(events, eventbus.Event{Payload: evPayload})
+			events = append(events, ev)
 		}
 		return events, records.Err()
 	})
@@ -695,11 +745,12 @@ func (n *Neo4jClient) GetEventsByWorldAndType(worldID, eventType string, limit i
 }
 
 // GetEventsByTypeNeo4j retrieves events by type from Neo4j graph nodes.
+// Returns full eventbus.Event structs deserialized from raw_data.
 func (n *Neo4jClient) GetEventsByTypeNeo4j(eventType string, limit int) ([]eventbus.Event, error) {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	query := `MATCH (e:Event) WHERE e.type = $event_type RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+	query := `MATCH (e:Event) WHERE e.type = $event_type RETURN e.raw_data AS raw_data ORDER BY e.timestamp DESC LIMIT $limit`
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
 		records, err := tx.Run(query, map[string]any{"event_type": eventType, "limit": limit})
@@ -709,19 +760,19 @@ func (n *Neo4jClient) GetEventsByTypeNeo4j(eventType string, limit int) ([]event
 		var events []eventbus.Event
 		for records.Next() {
 			record := records.Record()
-			payloadVal, ok := record.Get("payload_json")
-			if !ok || payloadVal == nil {
+			rawVal, ok := record.Get("raw_data")
+			if !ok || rawVal == nil {
 				continue
 			}
-			payloadStr, ok := payloadVal.(string)
+			rawStr, ok := rawVal.(string)
 			if !ok {
 				continue
 			}
-			var evPayload map[string]any
-			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+			var ev eventbus.Event
+			if err := json.Unmarshal([]byte(rawStr), &ev); err != nil {
 				continue
 			}
-			events = append(events, eventbus.Event{Payload: evPayload})
+			events = append(events, ev)
 		}
 		return events, records.Err()
 	})
@@ -733,11 +784,12 @@ func (n *Neo4jClient) GetEventsByTypeNeo4j(eventType string, limit int) ([]event
 }
 
 // GetEventsByEntity retrieves events related to a specific entity via graph relationships.
+// Returns full eventbus.Event structs deserialized from raw_data.
 func (n *Neo4jClient) GetEventsByEntity(entityID string, limit int) ([]eventbus.Event, error) {
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	query := `MATCH (e:Event)-[:RELATED_TO]->(en:Entity) WHERE en.id = $entity_id RETURN e.payload_json AS payload_json ORDER BY e.timestamp DESC LIMIT $limit`
+	query := `MATCH (e:Event)-[:RELATED_TO]->(en:Entity) WHERE en.id = $entity_id RETURN e.raw_data AS raw_data ORDER BY e.timestamp DESC LIMIT $limit`
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
 		records, err := tx.Run(query, map[string]any{"entity_id": entityID, "limit": limit})
@@ -747,19 +799,19 @@ func (n *Neo4jClient) GetEventsByEntity(entityID string, limit int) ([]eventbus.
 		var events []eventbus.Event
 		for records.Next() {
 			record := records.Record()
-			payloadVal, ok := record.Get("payload_json")
-			if !ok || payloadVal == nil {
+			rawVal, ok := record.Get("raw_data")
+			if !ok || rawVal == nil {
 				continue
 			}
-			payloadStr, ok := payloadVal.(string)
+			rawStr, ok := rawVal.(string)
 			if !ok {
 				continue
 			}
-			var evPayload map[string]any
-			if err := json.Unmarshal([]byte(payloadStr), &evPayload); err != nil {
+			var ev eventbus.Event
+			if err := json.Unmarshal([]byte(rawStr), &ev); err != nil {
 				continue
 			}
-			events = append(events, eventbus.Event{Payload: evPayload})
+			events = append(events, ev)
 		}
 		return events, records.Err()
 	})
@@ -817,17 +869,24 @@ func (n *Neo4jClient) GetEntitiesByType(entityType, worldID string, limit int) (
 
 // SaveEventAsGraph saves an event as a graph node with relationships to entities
 func (n *Neo4jClient) SaveEventAsGraph(ev eventbus.Event, payloadJSON string) error {
+	// Serialize full event as raw_data for complete retrieval
+	rawData, err := json.Marshal(ev)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event to raw_data: %w", err)
+	}
+
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
 		query := `
 MERGE (e:Event {id: $event_id})
 SET e.type = $event_type,
     e.timestamp = $timestamp,
     e.source = $source,
     e.world_id = $world_id,
-    e.payload_json = $payload_json
+    e.payload_json = $payload_json,
+    e.raw_data = $raw_data
 `
 		params := map[string]any{
 			"event_id":     ev.EventID,
@@ -836,6 +895,7 @@ SET e.type = $event_type,
 			"source":       ev.Source,
 			"world_id":     ev.WorldID,
 			"payload_json": payloadJSON,
+			"raw_data":     string(rawData),
 		}
 
 		// Add scope_id if present
@@ -848,7 +908,8 @@ SET e.type = $event_type,
     e.source = $source,
     e.world_id = $world_id,
     e.scope_id = $scope_id,
-    e.payload_json = $payload_json
+    e.payload_json = $payload_json,
+    e.raw_data = $raw_data
 `
 		}
 
