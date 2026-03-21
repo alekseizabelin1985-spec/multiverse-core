@@ -1271,7 +1271,7 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		EventClusters:  clusters,
 		TriggerEvent:   triggerEvent,
 		LastMood:       lastMood,
-		MaxEvents:      10,
+		MaxEvents:      4,
 		DefaultSource:  "narrative-orchestrator",
 		DefaultWorldID: gm.WorldID,
 	}
@@ -1426,12 +1426,17 @@ func clusterEvents(events []eventbus.Event) []EventCluster {
 		eventDetails := make([]EventDetail, 0, len(events))
 		for _, ev := range events {
 			eventDetails = append(eventDetails, EventDetail{
-				EventID:     ev.EventID,
-				EventType:   ev.EventType,
-				Timestamp:   ev.Timestamp,
-				Source:      ev.Source,
-				WorldID:     ev.WorldID,
-				ScopeID:     func() string { if ev.ScopeID != nil { return *ev.ScopeID }; return "" }(),
+				EventID:   ev.EventID,
+				EventType: ev.EventType,
+				Timestamp: ev.Timestamp,
+				Source:    ev.Source,
+				WorldID:   ev.WorldID,
+				ScopeID: func() string {
+					if ev.ScopeID != nil {
+						return *ev.ScopeID
+					}
+					return ""
+				}(),
 				Payload:     ev.Payload,
 				Description: formatEventDescription(ev),
 			})
