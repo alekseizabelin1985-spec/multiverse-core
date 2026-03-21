@@ -11,8 +11,10 @@ import (
 )
 
 type HistoryEntry struct {
-	EventID   string    `json:"event_id"`
-	Timestamp time.Time `json:"timestamp"`
+	EventID     string    `json:"event_id"`
+	EventType   string    `json:"event_type"`
+	Description string    `json:"description,omitempty"`
+	Timestamp   time.Time `json:"timestamp"`
 }
 
 type GMInstance struct {

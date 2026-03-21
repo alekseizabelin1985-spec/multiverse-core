@@ -28,3 +28,11 @@ func NewEvent(eventType, source, worldID string, payload map[string]interface{})
 		Payload:   payload,
 	}
 }
+
+// NewEventWithDescription creates an event with a pre-filled description in payload
+func NewEventWithDescription(eventType, source, worldID, description string) Event {
+	payload := map[string]interface{}{
+		"description": description,
+	}
+	return NewEvent(eventType, source, worldID, payload)
+}

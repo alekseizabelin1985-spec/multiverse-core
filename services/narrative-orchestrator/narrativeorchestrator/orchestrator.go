@@ -943,9 +943,20 @@ func (no *NarrativeOrchestrator) dispatchEventToGM(ev eventbus.Event, gm *GMInst
 
 	// Буферизация — per-GM lock
 	gm.mu.Lock()
+
+	// Extract description from payload
+	description := ""
+	if desc, ok := ev.Payload["description"].(string); ok {
+		description = desc
+	} else if detail, ok := ev.Payload["detail"].(string); ok {
+		description = detail
+	}
+
 	gm.History = append(gm.History, HistoryEntry{
-		EventID:   ev.EventID,
-		Timestamp: ev.Timestamp,
+		EventID:     ev.EventID,
+		EventType:   ev.EventType,
+		Description: description,
+		Timestamp:   ev.Timestamp,
 	})
 
 	// Проверка переполнения
@@ -1192,12 +1203,14 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			fullEvents = make([]eventbus.Event, len(historyCopy))
 			for i, he := range historyCopy {
 				fullEvents[i] = eventbus.Event{
-					EventID:   he.EventID,
-					EventType: "history.fallback",
-					Timestamp: he.Timestamp,
-					WorldID:   gm.WorldID,
-					ScopeID:   &gm.ScopeID,
-					Payload:   map[string]interface{}{},
+					EventID:     he.EventID,
+					EventType:   "history.fallback",
+					Timestamp:   he.Timestamp,
+					WorldID:     gm.WorldID,
+					ScopeID:     &gm.ScopeID,
+					Payload: map[string]interface{}{
+						"description": he.Description,
+					},
 				}
 			}
 		}
