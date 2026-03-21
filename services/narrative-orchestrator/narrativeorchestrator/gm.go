@@ -27,7 +27,12 @@ type GMInstance struct {
 	LastProcessTime int64                  `json:"last_process_time"`
 	CreatedAt       time.Time              `json:"created_at"`
 
-	// Per-GM mutex protects State, History, Config from concurrent access
+	// EmittedEventIDs — event_id которые этот ГМ сам опубликовал, с временем публикации.
+	// Используется для предотвращения каскадной реакции на свои же события.
+	// Записи старше LastProcessTime - 1min автоматически вычищаются.
+	EmittedEventIDs map[string]time.Time `json:"-"`
+
+	// Per-GM mutex protects State, History, Config, EmittedEventIDs from concurrent access
 	// without holding the global NarrativeOrchestrator.mu lock.
 	mu sync.Mutex `json:"-"`
 
@@ -38,6 +43,45 @@ type GMInstance struct {
 	// ttlTimer is the inactivity cleanup timer. Reset on each received event.
 	ttlTimer *time.Timer `json:"-"`
 	ttlDur   time.Duration `json:"-"`
+}
+
+// trackEmitted запоминает event_id который этот ГМ опубликовал.
+// Вызывать под gm.mu.Lock().
+func (gm *GMInstance) trackEmitted(eventID string) {
+	if gm.EmittedEventIDs == nil {
+		gm.EmittedEventIDs = make(map[string]time.Time)
+	}
+	gm.EmittedEventIDs[eventID] = time.Now()
+}
+
+// isOwnEvent проверяет, был ли event_id сгенерирован этим ГМ.
+// Вызывать под gm.mu.Lock().
+func (gm *GMInstance) isOwnEvent(eventID string) bool {
+	if gm.EmittedEventIDs == nil {
+		return false
+	}
+	_, ok := gm.EmittedEventIDs[eventID]
+	return ok
+}
+
+// evictExpiredEmitted удаляет записи старше LastProcessTime - 1 минута.
+// Предотвращает рост map до OOM при долгоживущих ГМ.
+// Вызывать под gm.mu.Lock().
+func (gm *GMInstance) evictExpiredEmitted() {
+	if len(gm.EmittedEventIDs) == 0 {
+		return
+	}
+	var cutoff time.Time
+	if gm.LastProcessTime > 0 {
+		cutoff = time.UnixMilli(gm.LastProcessTime).Add(-1 * time.Minute)
+	} else {
+		cutoff = time.Now().Add(-2 * time.Minute)
+	}
+	for id, ts := range gm.EmittedEventIDs {
+		if ts.Before(cutoff) {
+			delete(gm.EmittedEventIDs, id)
+		}
+	}
 }
 
 // initConcurrency sets up per-GM concurrency primitives.
