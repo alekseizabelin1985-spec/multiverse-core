@@ -364,20 +364,24 @@ func (no *NarrativeOrchestrator) CreateGM(ev eventbus.Event) {
 		}
 	}
 
-	timeoutMin := 30.0
+	ttlMinutes := 30.0
 	if cfgTriggers, ok := gm.Config["triggers"].(map[string]interface{}); ok {
 		if intervalMs, ok := cfgTriggers["time_interval_ms"].(float64); ok {
-			timeoutMin = intervalMs / 60000.0 * 5
+			// TTL = 5x the processing interval, minimum 10 minutes
+			computed := intervalMs / 60000.0 * 5
+			if computed > 10 {
+				ttlMinutes = computed
+			}
 		}
 	}
-	timeoutMin = 30.0
 
-	infoLog(scopeID, ev.WorldID, "Setting up GM cleanup timer", map[string]interface{}{
-		"timeout_minutes": timeoutMin,
+	ttlDur := time.Duration(ttlMinutes) * time.Minute
+	infoLog(scopeID, ev.WorldID, "Setting up GM with activity-based TTL", map[string]interface{}{
+		"ttl_minutes": ttlMinutes,
 	})
 
-	time.AfterFunc(time.Duration(timeoutMin)*time.Minute, func() {
-		infoLog(scopeID, ev.WorldID, "GM cleanup timer triggered", map[string]interface{}{})
+	gm.initConcurrency(ttlDur, func() {
+		infoLog(scopeID, ev.WorldID, "GM inactivity TTL expired", map[string]interface{}{})
 		no.DeleteGMByScope(scopeID)
 	})
 
@@ -395,10 +399,18 @@ func (no *NarrativeOrchestrator) DeleteGMByScope(scopeID string) {
 	infoLog(scopeID, "", "Deleting GM by scope", map[string]interface{}{})
 
 	no.mu.Lock()
-	defer no.mu.Unlock()
-	delete(no.gms, scopeID)
+	gm, exists := no.gms[scopeID]
+	if exists {
+		gm.stopTTL()
+		delete(no.gms, scopeID)
+	}
+	no.mu.Unlock()
 
-	infoLog(scopeID, "", "GM deleted successfully", map[string]interface{}{})
+	if exists {
+		infoLog(scopeID, "", "GM deleted successfully", map[string]interface{}{})
+	} else {
+		warnLog(scopeID, "", "GM not found for deletion", map[string]interface{}{})
+	}
 }
 
 func (no *NarrativeOrchestrator) DeleteGM(ev eventbus.Event) {
@@ -411,27 +423,151 @@ func (no *NarrativeOrchestrator) DeleteGM(ev eventbus.Event) {
 }
 
 func (no *NarrativeOrchestrator) MergeGM(ev eventbus.Event) {
-	scopeID := ""
-	if sid, ok := ev.Payload["scope_id"].(string); ok {
-		scopeID = sid
-	}
+	targetScopeID, _ := ev.Payload["scope_id"].(string)
 	worldID := ev.WorldID
 
-	infoLog(scopeID, worldID, "Processing GM merge event", map[string]interface{}{
-		"payload_keys": len(ev.Payload),
+	// source_scope_ids — список GM, которые вливаются в target
+	sourceScopeIDsRaw, _ := ev.Payload["source_scope_ids"].([]interface{})
+	if targetScopeID == "" || len(sourceScopeIDsRaw) == 0 {
+		warnLog(targetScopeID, worldID, "MergeGM: missing scope_id or source_scope_ids", map[string]interface{}{})
+		return
+	}
+
+	infoLog(targetScopeID, worldID, "Processing GM merge event", map[string]interface{}{
+		"source_count": len(sourceScopeIDsRaw),
+	})
+
+	no.mu.Lock()
+	targetGM, exists := no.gms[targetScopeID]
+	if !exists {
+		no.mu.Unlock()
+		warnLog(targetScopeID, worldID, "MergeGM: target GM not found", map[string]interface{}{})
+		return
+	}
+
+	for _, raw := range sourceScopeIDsRaw {
+		srcID, ok := raw.(string)
+		if !ok || srcID == "" {
+			continue
+		}
+		srcGM, srcExists := no.gms[srcID]
+		if !srcExists {
+			continue
+		}
+
+		// Merge focus entities (deduplicate)
+		seen := make(map[string]bool, len(targetGM.FocusEntities))
+		for _, id := range targetGM.FocusEntities {
+			seen[id] = true
+		}
+		for _, id := range srcGM.FocusEntities {
+			if !seen[id] {
+				targetGM.FocusEntities = append(targetGM.FocusEntities, id)
+			}
+		}
+
+		// Merge history
+		targetGM.History = append(targetGM.History, srcGM.History...)
+
+		// Merge canon from state
+		if srcCanon, ok := srcGM.State["canon"].([]interface{}); ok {
+			existingCanon, _ := targetGM.State["canon"].([]interface{})
+			targetGM.State["canon"] = append(existingCanon, srcCanon...)
+		}
+
+		srcGM.stopTTL()
+		delete(no.gms, srcID)
+
+		infoLog(targetScopeID, worldID, "Merged source GM into target", map[string]interface{}{
+			"source_scope_id": srcID,
+		})
+	}
+	no.mu.Unlock()
+
+	// Update visibility after merge (HTTP call outside lock)
+	targetGM.mu.Lock()
+	targetGM.UpdateVisibilityScope(no.geoProvider)
+	targetGM.mu.Unlock()
+
+	infoLog(targetScopeID, worldID, "GM merge completed", map[string]interface{}{
+		"focus_entities_count": len(targetGM.FocusEntities),
 	})
 }
 
 func (no *NarrativeOrchestrator) SplitGM(ev eventbus.Event) {
-	scopeID := ""
-	if sid, ok := ev.Payload["scope_id"].(string); ok {
-		scopeID = sid
-	}
+	sourceScopeID, _ := ev.Payload["scope_id"].(string)
 	worldID := ev.WorldID
 
-	infoLog(scopeID, worldID, "Processing GM split event", map[string]interface{}{
-		"payload_keys": len(ev.Payload),
+	// new_scopes — список новых скоупов для создания
+	newScopesRaw, _ := ev.Payload["new_scopes"].([]interface{})
+	if sourceScopeID == "" || len(newScopesRaw) == 0 {
+		warnLog(sourceScopeID, worldID, "SplitGM: missing scope_id or new_scopes", map[string]interface{}{})
+		return
+	}
+
+	infoLog(sourceScopeID, worldID, "Processing GM split event", map[string]interface{}{
+		"new_scopes_count": len(newScopesRaw),
 	})
+
+	// Create each new scope as a separate gm.created event
+	for _, raw := range newScopesRaw {
+		scopeDef, ok := raw.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		newScopeID, _ := scopeDef["scope_id"].(string)
+		if newScopeID == "" {
+			continue
+		}
+
+		// Entities to move to the new scope
+		focusRaw, _ := scopeDef["focus_entities"].([]interface{})
+
+		createEv := eventbus.Event{
+			EventID:   "split-" + time.Now().Format("20060102-150405") + "-" + newScopeID,
+			EventType: "gm.created",
+			Source:    "narrative-orchestrator",
+			WorldID:   worldID,
+			Payload: map[string]interface{}{
+				"scope_id":       newScopeID,
+				"scope_type":     scopeDef["scope_type"],
+				"focus_entities": focusRaw,
+			},
+			Timestamp: time.Now(),
+		}
+
+		no.CreateGM(createEv)
+
+		// Remove moved entities from source GM
+		if len(focusRaw) > 0 {
+			no.mu.RLock()
+			srcGM, exists := no.gms[sourceScopeID]
+			no.mu.RUnlock()
+			if exists {
+				removeSet := make(map[string]bool)
+				for _, f := range focusRaw {
+					if s, ok := f.(string); ok {
+						removeSet[s] = true
+					}
+				}
+				srcGM.mu.Lock()
+				filtered := srcGM.FocusEntities[:0]
+				for _, id := range srcGM.FocusEntities {
+					if !removeSet[id] {
+						filtered = append(filtered, id)
+					}
+				}
+				srcGM.FocusEntities = filtered
+				srcGM.mu.Unlock()
+			}
+		}
+
+		infoLog(sourceScopeID, worldID, "Created split GM", map[string]interface{}{
+			"new_scope_id": newScopeID,
+		})
+	}
+
+	infoLog(sourceScopeID, worldID, "GM split completed", map[string]interface{}{})
 }
 
 func (no *NarrativeOrchestrator) HandleTimerEvent(ev eventbus.Event) {
@@ -462,6 +598,7 @@ func (no *NarrativeOrchestrator) HandleTimerEvent(ev eventbus.Event) {
 
 	for _, gm := range gms {
 		intervalMs := int64(10000)
+		gm.mu.Lock()
 		if triggers, ok := gm.Config["triggers"].(map[string]interface{}); ok {
 			if ms, ok := triggers["time_interval_ms"].(float64); ok {
 				intervalMs = int64(ms)
@@ -469,16 +606,18 @@ func (no *NarrativeOrchestrator) HandleTimerEvent(ev eventbus.Event) {
 		}
 
 		nextProcessTime := gm.LastProcessTime + intervalMs
-		if gm.LastProcessTime == 0 || currentTimeMs >= nextProcessTime {
+		shouldProcess := gm.LastProcessTime == 0 || currentTimeMs >= nextProcessTime
+		if shouldProcess {
+			gm.LastProcessTime = currentTimeMs
+		}
+		gm.mu.Unlock()
+
+		if shouldProcess {
 			infoLog(gm.ScopeID, gm.WorldID, "Scheduling batch processing for GM", map[string]interface{}{
 				"interval_ms":       intervalMs,
 				"next_process_time": nextProcessTime,
 				"current_time_ms":   currentTimeMs,
 			})
-
-			no.mu.Lock()
-			gm.LastProcessTime = currentTimeMs
-			no.mu.Unlock()
 			go no.processBatchForGM(gm)
 		}
 	}
@@ -493,8 +632,8 @@ func (no *NarrativeOrchestrator) processEntityUpdate(gm *GMInstance, changes []m
 		"changes_count": len(changes),
 	})
 
-	no.mu.Lock()
-	defer no.mu.Unlock()
+	// Use per-GM lock instead of global lock to avoid blocking other GMs
+	gm.mu.Lock()
 
 	if gm.Config == nil {
 		gm.Config = make(map[string]interface{})
@@ -514,54 +653,36 @@ func (no *NarrativeOrchestrator) processEntityUpdate(gm *GMInstance, changes []m
 			for _, opRaw := range opsRaw {
 				if op, ok := opRaw.(map[string]interface{}); ok {
 					opType, _ := op["op"].(string)
-					path, _ := op["path"].(string)
+					opPath, _ := op["path"].(string)
 
 					switch opType {
 					case "set":
 						if value, exists := op["value"]; exists {
-							gm.Config[prefix+path] = value
-							infoLog(gm.ScopeID, gm.WorldID, "Set config value for entity", map[string]interface{}{
-								"entity_id": entityID,
-								"key":       prefix + path,
-							})
+							gm.Config[prefix+opPath] = value
 						}
 					case "add_to_slice":
 						if value, exists := op["value"].(string); exists {
-							key := prefix + path
+							key := prefix + opPath
 							slice, ok := gm.Config[key].([]interface{})
 							if !ok {
 								slice = []interface{}{}
 							}
 							gm.Config[key] = append(slice, value)
-							infoLog(gm.ScopeID, gm.WorldID, "Added value to slice for entity", map[string]interface{}{
-								"entity_id": entityID,
-								"key":       key,
-								"value":     value,
-							})
 						}
 					case "remove_from_slice":
 						if value, exists := op["value"].(string); exists {
-							key := prefix + path
+							key := prefix + opPath
 							if slice, ok := gm.Config[key].([]interface{}); ok {
 								for i, v := range slice {
 									if v == value {
 										gm.Config[key] = append(slice[:i], slice[i+1:]...)
-										infoLog(gm.ScopeID, gm.WorldID, "Removed value from slice for entity", map[string]interface{}{
-											"entity_id": entityID,
-											"key":       key,
-											"value":     value,
-										})
 										break
 									}
 								}
 							}
 						}
 					case "remove":
-						delete(gm.Config, prefix+path)
-						infoLog(gm.ScopeID, gm.WorldID, "Removed config key for entity", map[string]interface{}{
-							"entity_id": entityID,
-							"key":       prefix + path,
-						})
+						delete(gm.Config, prefix+opPath)
 					}
 				}
 			}
@@ -570,6 +691,10 @@ func (no *NarrativeOrchestrator) processEntityUpdate(gm *GMInstance, changes []m
 		updatedEntities = append(updatedEntities, entityID)
 	}
 
+	// Release per-GM lock BEFORE making HTTP call to geoProvider
+	gm.mu.Unlock()
+
+	// HTTP call to update visibility — outside any lock
 	gm.UpdateVisibilityScope(no.geoProvider)
 
 	infoLog(gm.ScopeID, gm.WorldID, "Completed entity update processing", map[string]interface{}{
@@ -673,13 +798,72 @@ func (no *NarrativeOrchestrator) saveSnapshot(scopeID string, gm *GMInstance) er
 	return nil
 }
 
+// findGMsForEvent returns all GMs that should receive this event:
+// 1. Exact scope_id match
+// 2. Spatial match — event point is within GM's VisibilityScope
+func (no *NarrativeOrchestrator) findGMsForEvent(ev eventbus.Event) []*GMInstance {
+	no.mu.RLock()
+	defer no.mu.RUnlock()
+
+	var result []*GMInstance
+	matched := make(map[string]bool)
+
+	// 1. Exact scope_id match
+	if ev.ScopeID != nil {
+		if gm, exists := no.gms[*ev.ScopeID]; exists {
+			result = append(result, gm)
+			matched[gm.ScopeID] = true
+		}
+	}
+
+	// 2. Spatial routing — check if event point falls within any GM's visibility
+	eventPoint, hasPoint := no.extractEventPoint(ev)
+	if hasPoint {
+		for _, gm := range no.gms {
+			if matched[gm.ScopeID] {
+				continue
+			}
+			if gm.VisibilityScope.IsInScope(eventPoint) {
+				result = append(result, gm)
+				matched[gm.ScopeID] = true
+			}
+		}
+	}
+
+	// 3. Entity mention match — check if any entity mentioned in event is a focus entity
+	mentionedIDs := extractEntityIDs(ev.Payload)
+	if len(mentionedIDs) > 0 {
+		for _, gm := range no.gms {
+			if matched[gm.ScopeID] {
+				continue
+			}
+			for _, mentioned := range mentionedIDs {
+				found := false
+				for _, focus := range gm.FocusEntities {
+					if focus == mentioned {
+						result = append(result, gm)
+						matched[gm.ScopeID] = true
+						found = true
+						break
+					}
+				}
+				if found {
+					break
+				}
+			}
+		}
+	}
+
+	return result
+}
+
 func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 	localScopeID := ""
 	if ev.ScopeID != nil {
 		localScopeID = *ev.ScopeID
 	}
 
-	infoLog(localScopeID, ev.WorldID, "Processing game event", map[string]interface{}{
+	debugLog(localScopeID, ev.WorldID, "Processing game event", map[string]interface{}{
 		"event_type": ev.EventType,
 		"event_id":   ev.EventID,
 	})
@@ -694,19 +878,13 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 				}
 			}
 
-			infoLog(localScopeID, ev.WorldID, "Processing state changes", map[string]interface{}{
-				"changes_count": len(changesMap),
-			})
-
 			no.mu.RLock()
 			for _, gm := range no.gms {
 				for _, change := range changesMap {
 					if entityID, ok := change["entity_id"].(string); ok {
 						for _, focusID := range gm.FocusEntities {
 							if focusID == entityID {
-								infoLog(gm.ScopeID, gm.WorldID, "Scheduling entity update for GM", map[string]interface{}{
-									"entity_id": entityID,
-								})
+								gm.resetTTL()
 								go no.processEntityUpdate(gm, changesMap)
 								break
 							}
@@ -719,37 +897,34 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 		}
 	}
 
-	// 2. Для обычных событий — находим GM по scope_id
-	if ev.ScopeID == nil {
-		warnLog("", ev.WorldID, "Game event missing scope ID", map[string]interface{}{
+	// 2. Find all GMs that should receive this event (spatial + exact match)
+	targetGMs := no.findGMsForEvent(ev)
+	if len(targetGMs) == 0 {
+		debugLog(localScopeID, ev.WorldID, "No GMs matched for event", map[string]interface{}{
 			"event_type": ev.EventType,
-			"event_id":   ev.EventID,
-		})
-		return
-	}
-	scopeID := localScopeID
-
-	no.mu.RLock()
-	gm, exists := no.gms[scopeID]
-	no.mu.RUnlock()
-
-	if !exists {
-		warnLog(scopeID, ev.WorldID, "No GM found for scope ID", map[string]interface{}{
-			"scope_id": scopeID,
 		})
 		return
 	}
 
-	// 3. Мгновенная реакция: проверяем, есть ли ev.EventType в narrative_triggers GM
-	if triggersRaw, ok := gm.Config["triggers"].(map[string]interface{}); ok {
+	// 3. Dispatch event to each matched GM
+	for _, gm := range targetGMs {
+		gm.resetTTL()
+		no.dispatchEventToGM(ev, gm)
+	}
+}
+
+// dispatchEventToGM handles trigger check, buffering, and threshold for a single GM.
+func (no *NarrativeOrchestrator) dispatchEventToGM(ev eventbus.Event, gm *GMInstance) {
+	// Мгновенная реакция: проверяем narrative_triggers
+	gm.mu.Lock()
+	triggers := gm.Config["triggers"]
+	gm.mu.Unlock()
+
+	if triggersRaw, ok := triggers.(map[string]interface{}); ok {
 		if triggersList, ok := triggersRaw["narrative_triggers"].([]interface{}); ok {
-			infoLog(gm.ScopeID, gm.WorldID, "Checking narrative triggers", map[string]interface{}{
-				"triggers_count": len(triggersList),
-			})
-
 			for _, t := range triggersList {
 				if tStr, ok := t.(string); ok && tStr == ev.EventType {
-					infoLog(gm.ScopeID, gm.WorldID, "Event matches narrative trigger, scheduling processing", map[string]interface{}{
+					infoLog(gm.ScopeID, gm.WorldID, "Event matches narrative trigger", map[string]interface{}{
 						"event_type": ev.EventType,
 					})
 					go no.processEventForGM(ev, gm)
@@ -759,8 +934,8 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 		}
 	}
 
-	// 4. Буферизация
-	no.mu.Lock()
+	// Буферизация — per-GM lock
+	gm.mu.Lock()
 	gm.History = append(gm.History, HistoryEntry{
 		EventID:   ev.EventID,
 		Timestamp: ev.Timestamp,
@@ -777,49 +952,31 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 			dropLow = d
 		}
 		if dropLow {
-			oldSize := len(gm.History)
 			gm.History = gm.History[len(gm.History)-maxSize:]
-			infoLog(gm.ScopeID, gm.WorldID, "History buffer trimmed", map[string]interface{}{
-				"old_size": oldSize,
-				"new_size": len(gm.History),
-			})
 		}
 	}
-	no.mu.Unlock()
 
 	// Проверка порога по объёму
 	maxEvents := 50
-	if triggers, ok := gm.Config["triggers"].(map[string]interface{}); ok {
-		if me, ok := triggers["max_events"].(float64); ok {
+	if tr, ok := gm.Config["triggers"].(map[string]interface{}); ok {
+		if me, ok := tr["max_events"].(float64); ok {
 			maxEvents = int(me)
 		}
 	}
+	historySize := len(gm.History)
+	gm.mu.Unlock()
 
-	infoLog(gm.ScopeID, gm.WorldID, "Event added to history buffer", map[string]interface{}{
-		"history_size":         len(gm.History),
-		"max_events_threshold": maxEvents,
-	})
-
-	if len(gm.History) >= maxEvents {
-		infoLog(gm.ScopeID, gm.WorldID, "History threshold reached, scheduling batch processing", map[string]interface{}{
-			"history_size": len(gm.History),
+	if historySize >= maxEvents {
+		infoLog(gm.ScopeID, gm.WorldID, "History threshold reached, scheduling batch", map[string]interface{}{
+			"history_size": historySize,
 			"threshold":    maxEvents,
 		})
 		go no.processBatchForGM(gm)
 	}
-
-	infoLog(gm.ScopeID, gm.WorldID, "Game event processing completed", map[string]interface{}{
-		"event_type": ev.EventType,
-		"event_id":   ev.EventID,
-	})
 }
 
 func (no *NarrativeOrchestrator) processBatchForGM(gm *GMInstance) {
 	batchEventID := "batch-" + time.Now().Format("20060102-150405")
-	infoLog(gm.ScopeID, gm.WorldID, "Starting batch processing", map[string]interface{}{
-		"batch_event_id": batchEventID,
-		"history_size":   len(gm.History),
-	})
 
 	dummyEvent := eventbus.Event{
 		EventID:   batchEventID,
@@ -831,10 +988,6 @@ func (no *NarrativeOrchestrator) processBatchForGM(gm *GMInstance) {
 	}
 
 	no.processEventForGM(dummyEvent, gm)
-
-	infoLog(gm.ScopeID, gm.WorldID, "Batch processing completed", map[string]interface{}{
-		"batch_event_id": batchEventID,
-	})
 }
 
 // NEW: Handle mechanical results from Entity-Actors
@@ -891,7 +1044,9 @@ func (no *NarrativeOrchestrator) HandleMechanicalResult(ev eventbus.Event) {
 		return
 	}
 
+	no.mu.RLock()
 	gm, exists = no.gms[*ev.ScopeID]
+	no.mu.RUnlock()
 	if !exists {
 		warnLog("", ev.WorldID, "No GM found for mechanical result", map[string]interface{}{
 			"scope_id": *ev.ScopeID,
@@ -957,7 +1112,17 @@ func (no *NarrativeOrchestrator) buildNarrativeFromMechanics(result interface{},
 }
 
 // processEventForGM — основной метод обработки.
+// Uses per-GM processing guard to prevent concurrent Oracle calls.
 func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInstance) {
+	// Per-GM processing guard: only one goroutine processes at a time
+	if !gm.tryStartProcessing() {
+		debugLog(gm.ScopeID, gm.WorldID, "GM already processing, skipping", map[string]interface{}{
+			"event_type": ev.EventType,
+		})
+		return
+	}
+	defer gm.doneProcessing()
+
 	infoLog(gm.ScopeID, gm.WorldID, "Starting event processing", map[string]interface{}{
 		"event_type": ev.EventType,
 		"event_id":   ev.EventID,
@@ -965,59 +1130,48 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	})
 
 	if ev.EventType != "batch.process" && ev.EventType != "time.syncTime" {
-		no.mu.Lock()
+		gm.mu.Lock()
 		gm.History = append(gm.History, HistoryEntry{
 			EventID:   ev.EventID,
 			Timestamp: ev.Timestamp,
 		})
-		no.mu.Unlock()
+		gm.mu.Unlock()
 	}
 
-	// Получаем контекст с событиями из Semantic Memory
-	// 🔑 ДОБАВИТЬ: защита от пустых сущностей
-	entityIDs := append([]string{}, gm.FocusEntities...)
-	if len(entityIDs) == 0 {
-		warnLog(gm.ScopeID, gm.WorldID, "No entity IDs for GM, skipping context retrieval", map[string]interface{}{
-			"focus_entities_count": len(gm.FocusEntities),
-		})
-		return
-	}
-
-	// 🔑 ДОБАВИТЬ: защита от нулевого клиента
-	if no.semantic == nil {
-		warnLog(gm.ScopeID, gm.WorldID, "SemanticMemoryClient is nil, cannot retrieve context", map[string]interface{}{})
-		return
-	}
-
-	eventTypes := []string{} // или ["player.*", "combat.*"] из конфига
-	infoLog(gm.ScopeID, gm.WorldID, "Retrieving context with events from semantic memory", map[string]interface{}{
-		"entity_ids_count":  len(entityIDs),
-		"event_types_count": len(eventTypes),
-		"depth":             2,
-	})
-
-	contexts, err := no.semantic.GetContextWithEvents(context.Background(), entityIDs, eventTypes, 2)
-	if err != nil {
-		warnLog(gm.ScopeID, gm.WorldID, "Failed to get context with events, continuing without context", map[string]interface{}{
-			"error": err.Error(),
-		})
-		// Продолжаем выполнение без контекста
-	}
-
-	// Получаем полные события из Neo4j для кластеризации
-	var fullEvents []eventbus.Event
-	no.mu.RLock()
+	// Copy data under per-GM lock
+	gm.mu.Lock()
+	entityIDs := make([]string, len(gm.FocusEntities))
+	copy(entityIDs, gm.FocusEntities)
 	historyCopy := make([]HistoryEntry, len(gm.History))
 	copy(historyCopy, gm.History)
-	no.mu.RUnlock()
+	gm.mu.Unlock()
 
+	if len(entityIDs) == 0 {
+		warnLog(gm.ScopeID, gm.WorldID, "No entity IDs for GM, skipping", map[string]interface{}{})
+		return
+	}
+
+	if no.semantic == nil {
+		warnLog(gm.ScopeID, gm.WorldID, "SemanticMemoryClient is nil", map[string]interface{}{})
+		return
+	}
+
+	// All network calls happen outside any lock
+	eventTypes := []string{}
+	contexts, err := no.semantic.GetContextWithEvents(context.Background(), entityIDs, eventTypes, 2)
+	if err != nil {
+		warnLog(gm.ScopeID, gm.WorldID, "Failed to get context with events, continuing without", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	var fullEvents []eventbus.Event
 	if len(historyCopy) > 0 {
 		fullEvents, err = no.semantic.GetEventsForEntities(entityIDs, gm.WorldID, time.Now().Add(-1*time.Hour), 50)
 		if err != nil {
-			warnLog(gm.ScopeID, gm.WorldID, "Failed to get full events from semantic memory, using history fallback", map[string]interface{}{
+			warnLog(gm.ScopeID, gm.WorldID, "Failed to get full events, using history fallback", map[string]interface{}{
 				"error": err.Error(),
 			})
-			// Fallback: используем HistoryEntry как eventbus.Event с минимальными данными
 			fullEvents = make([]eventbus.Event, len(historyCopy))
 			for i, he := range historyCopy {
 				fullEvents[i] = eventbus.Event{
@@ -1030,7 +1184,6 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			}
 		}
 	} else {
-		// Нет событий в истории, но есть новое событие
 		fullEvents = []eventbus.Event{ev}
 	}
 
@@ -1083,7 +1236,8 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		entitiesContext = strings.Join(entitiesLines, "\n")
 	}
 
-	// Временной контекст
+	// Read state under per-GM lock
+	gm.mu.Lock()
 	var lastEventTime *time.Time
 	if len(gm.History) > 0 {
 		t := gm.History[len(gm.History)-1].Timestamp
@@ -1093,9 +1247,6 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 	if mood, ok := gm.State["last_mood"].([]string); ok {
 		lastMood = mood
 	}
-	timeContext := BuildTimeContext(lastEventTime, lastMood)
-
-	// Извлечь Canon из gm.State, если есть
 	var canon []string
 	if raw, ok := gm.State["canon"].([]interface{}); ok {
 		for _, v := range raw {
@@ -1104,6 +1255,9 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			}
 		}
 	}
+	gm.mu.Unlock()
+
+	timeContext := BuildTimeContext(lastEventTime, lastMood)
 
 	// Формируем промт
 	sections := PromptSections{
@@ -1145,18 +1299,14 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		"mood_length":      len(oracleResp.Mood),
 	})
 
-	// Публикация
+	// Update mood under per-GM lock
 	if len(oracleResp.Mood) > 0 {
-		no.mu.Lock()
+		gm.mu.Lock()
 		if gm.State == nil {
 			gm.State = make(map[string]interface{})
 		}
 		gm.State["last_mood"] = oracleResp.Mood
-		no.mu.Unlock()
-
-		infoLog(gm.ScopeID, gm.WorldID, "Updated GM mood state", map[string]interface{}{
-			"mood_length": len(oracleResp.Mood),
-		})
+		gm.mu.Unlock()
 	}
 
 	for i, evMap := range oracleResp.NewEvents {
@@ -1226,16 +1376,14 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		}
 	}
 
-	// 🔑 Очистка History после успешной отправки событий в Oracle
-	no.mu.Lock()
-	historySizeBefore := len(gm.History)
+	// Clear history after successful Oracle processing
+	gm.mu.Lock()
+	clearedCount := len(gm.History)
 	gm.History = nil
-	historySizeAfter := len(gm.History)
-	no.mu.Unlock()
+	gm.mu.Unlock()
 
 	infoLog(gm.ScopeID, gm.WorldID, "Cleared history buffer after Oracle processing", map[string]interface{}{
-		"cleared_events_count": historySizeBefore,
-		"remaining_events":     historySizeAfter,
+		"cleared_events_count": clearedCount,
 	})
 
 	saveErr := no.saveSnapshot(gm.ScopeID, gm)
