@@ -66,6 +66,9 @@ func (n *Neo4jClient) createIndexes() error {
 		"CREATE INDEX event_timestamp IF NOT EXISTS FOR (e:Event) ON (e.timestamp)",
 		"CREATE INDEX entity_type IF NOT EXISTS FOR (e:Entity) ON (e.type)",
 		"CREATE INDEX entity_world_id IF NOT EXISTS FOR (e:Entity) ON (e.world_id)",
+		"CREATE INDEX entity_x IF NOT EXISTS FOR (e:Entity) ON (e.x)",
+		"CREATE INDEX entity_y IF NOT EXISTS FOR (e:Entity) ON (e.y)",
+		"CREATE INDEX entity_z IF NOT EXISTS FOR (e:Entity) ON (e.z)",
 	}
 
 	var lastErr error
@@ -91,10 +94,27 @@ func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[stri
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	// Extract coordinates from position field if present
+	var x, y, z float64
+	if pos, ok := payload["position"].(map[string]any); ok {
+		if xVal, ok := pos["x"].(float64); ok {
+			x = xVal
+		}
+		if yVal, ok := pos["y"].(float64); ok {
+			y = yVal
+		}
+		if zVal, ok := pos["z"].(float64); ok {
+			z = zVal
+		}
+	}
+
 	query := `
 MERGE (e:Entity {id: $entity_id})
 SET e.type = $entity_type,
-    e.payload = $payload_json
+    e.payload = $payload_json,
+    e.x = $x,
+    e.y = $y,
+    e.z = $z
 RETURN e
 `
 
@@ -104,6 +124,9 @@ RETURN e
 			"entity_id":    entityID,
 			"entity_type":  entityType,
 			"payload_json": string(payloadJSON),
+			"x":            x,
+			"y":            y,
+			"z":            z,
 		})
 		if runErr != nil {
 			return nil, runErr
@@ -247,7 +270,7 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 	query := `
 	MATCH (e:Entity)
 	WHERE e.id IN $entity_ids
-	RETURN e.id AS id, e.name AS name, e.type AS type, e.world_id AS world_id, e.description AS description, e.payload AS payload
+	RETURN e.id AS id, e.name AS name, e.type AS type, e.world_id AS world_id, e.description AS description, e.payload AS payload, e.x AS x, e.y AS y, e.z AS z
 	`
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
@@ -264,6 +287,7 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 
 			var id, name, entityType, worldID, description string
 			var payload map[string]interface{}
+			var x, y, z float64
 
 			if val, ok := record.Get("id"); ok && val != nil {
 				if s, ok := val.(string); ok {
@@ -295,9 +319,24 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 					payload = p
 				}
 			}
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
 
 			if id != "" {
-				cache[id] = EntityInfo{
+				entityInfo := EntityInfo{
 					ID:          id,
 					Name:        name,
 					Type:        entityType,
@@ -305,6 +344,11 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 					Description: description,
 					Payload:     payload,
 				}
+				// Set coordinates if any coordinate is present
+				if x != 0 || y != 0 || z != 0 {
+					entityInfo.Coordinates = &Coordinates{X: x, Y: y, Z: z}
+				}
+				cache[id] = entityInfo
 			}
 		}
 
@@ -551,10 +595,32 @@ func (n *Neo4jClient) QueryEntities(q EntityQuery) ([]EntityInfo, error) {
 		"world_id":    q.WorldID,
 		"name":        q.Name,
 		"limit":       q.Limit,
+		"x":           q.X,
+		"y":           q.Y,
+		"z":           q.Z,
 	}
 
+	// Helper to check if coordinate filter is set
+	hasCoordFilter := q.X != nil || q.Y != nil || q.Z != nil
+
 	if len(q.IDs) > 0 {
-		query = `
+		if hasCoordFilter {
+			query = `
+MATCH (e:Entity)
+WHERE e.id IN $ids
+  AND ($entity_type = '' OR e.type = $entity_type)
+  AND ($world_id    = '' OR e.world_id = $world_id)
+  AND ($name        = '' OR toLower(e.name) CONTAINS toLower($name))
+  AND ($x IS NULL   OR e.x = $x)
+  AND ($y IS NULL   OR e.y = $y)
+  AND ($z IS NULL   OR e.z = $z)
+RETURN e.id AS id, e.name AS name, e.type AS type,
+       e.world_id AS world_id, e.description AS description, e.payload AS payload,
+       e.x AS x, e.y AS y, e.z AS z
+LIMIT $limit
+`
+		} else {
+			query = `
 MATCH (e:Entity)
 WHERE e.id IN $ids
   AND ($entity_type = '' OR e.type = $entity_type)
@@ -564,9 +630,25 @@ RETURN e.id AS id, e.name AS name, e.type AS type,
        e.world_id AS world_id, e.description AS description, e.payload AS payload
 LIMIT $limit
 `
+		}
 		params["ids"] = q.IDs
 	} else {
-		query = `
+		if hasCoordFilter {
+			query = `
+MATCH (e:Entity)
+WHERE ($entity_type = '' OR e.type = $entity_type)
+  AND ($world_id    = '' OR e.world_id = $world_id)
+  AND ($name        = '' OR toLower(e.name) CONTAINS toLower($name))
+  AND ($x IS NULL   OR e.x = $x)
+  AND ($y IS NULL   OR e.y = $y)
+  AND ($z IS NULL   OR e.z = $z)
+RETURN e.id AS id, e.name AS name, e.type AS type,
+       e.world_id AS world_id, e.description AS description, e.payload AS payload,
+       e.x AS x, e.y AS y, e.z AS z
+LIMIT $limit
+`
+		} else {
+			query = `
 MATCH (e:Entity)
 WHERE ($entity_type = '' OR e.type = $entity_type)
   AND ($world_id    = '' OR e.world_id = $world_id)
@@ -575,6 +657,7 @@ RETURN e.id AS id, e.name AS name, e.type AS type,
        e.world_id AS world_id, e.description AS description, e.payload AS payload
 LIMIT $limit
 `
+		}
 	}
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
@@ -589,6 +672,7 @@ LIMIT $limit
 
 			var id, name, entityType, worldID, description string
 			var payload map[string]interface{}
+			var x, y, z float64
 
 			if val, ok := record.Get("id"); ok && val != nil {
 				if s, ok := val.(string); ok {
@@ -620,16 +704,37 @@ LIMIT $limit
 					payload = p
 				}
 			}
+			// Check if x, y, z are present in the result (when coordinate filter is used)
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
 
 			if id != "" {
-				entities = append(entities, EntityInfo{
+				entityInfo := EntityInfo{
 					ID:          id,
 					Name:        name,
 					Type:        entityType,
 					WorldID:     worldID,
 					Description: description,
 					Payload:     payload,
-				})
+				}
+				// Set coordinates if any coordinate is present
+				if x != 0 || y != 0 || z != 0 {
+					entityInfo.Coordinates = &Coordinates{X: x, Y: y, Z: z}
+				}
+				entities = append(entities, entityInfo)
 			}
 		}
 		return entities, records.Err()
@@ -827,7 +932,7 @@ func (n *Neo4jClient) GetEntitiesByType(entityType, worldID string, limit int) (
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	query := `MATCH (e:Entity) WHERE ($entity_type = '' OR e.type = $entity_type) AND ($world_id = '' OR e.world_id = $world_id) RETURN e.id AS id, e.type AS type, e.payload AS payload LIMIT $limit`
+	query := `MATCH (e:Entity) WHERE ($entity_type = '' OR e.type = $entity_type) AND ($world_id = '' OR e.world_id = $world_id) RETURN e.id AS id, e.type AS type, e.payload AS payload, e.x AS x, e.y AS y, e.z AS z LIMIT $limit`
 
 	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
 		records, err := tx.Run(query, map[string]any{"entity_type": entityType, "world_id": worldID, "limit": limit})
@@ -839,6 +944,7 @@ func (n *Neo4jClient) GetEntitiesByType(entityType, worldID string, limit int) (
 			record := records.Record()
 			var id, entityType string
 			var payload map[string]any
+			var x, y, z float64
 			if val, ok := record.Get("id"); ok && val != nil {
 				if s, ok := val.(string); ok {
 					id = s
@@ -854,8 +960,27 @@ func (n *Neo4jClient) GetEntitiesByType(entityType, worldID string, limit int) (
 					payload = p
 				}
 			}
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
 			if id != "" {
-				entities = append(entities, EntityInfo{ID: id, Type: entityType, Payload: payload})
+				entityInfo := EntityInfo{ID: id, Type: entityType, Payload: payload}
+				if x != 0 || y != 0 || z != 0 {
+					entityInfo.Coordinates = &Coordinates{X: x, Y: y, Z: z}
+				}
+				entities = append(entities, entityInfo)
 			}
 		}
 		return entities, records.Err()
