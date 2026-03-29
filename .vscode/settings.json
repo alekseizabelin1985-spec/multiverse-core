@@ -22,5 +22,9 @@
                 "copilot/oswe-vscode-prime"
             ]
         }
+    },
+    "env": { 
+        "ANTHROPIC_BASE_URL":"http://localhost:1234",
+        "CLAUDE_CODE_ATTRIBUTION_HEADER":"0"
     }
 }

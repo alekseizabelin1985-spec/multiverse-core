@@ -17,7 +17,8 @@
       "mcp__memory-new__search_by_tag",
       "mcp__memory-new__delete_memory",
       "mcp__memory-new__check_database_health",
-      "mcp__plugin_context7_context7__resolve-library-id"
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__memory__check_database_health"
     ]
   },
   "enableAllProjectMcpServers": true,
@@ -25,12 +26,5 @@
     "memory-new",
     "github",
     "qdrant"
-  ],
-  "hooks": {
-    "PostToolUse": {
-      "Bash(gofmt:*)": "Bash(gofmt -w .)",
-      "Bash(gofmt -w *.go)": "Bash(gofmt -w .)",
-      "Bash(go fmt *.go)": "Bash(gofmt -w .)"
-    }
-  }
+  ]
 }
