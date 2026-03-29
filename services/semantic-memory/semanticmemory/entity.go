@@ -24,6 +24,14 @@ type EntityQuery struct {
 
 	// Limit caps the number of returned results. Defaults to 20 when <= 0.
 	Limit int `json:"limit,omitempty"`
+
+	// Coordinates for spatial filtering
+	// X filters entities with exact X coordinate match
+	X *float64 `json:"x,omitempty"`
+	// Y filters entities with exact Y coordinate match
+	Y *float64 `json:"y,omitempty"`
+	// Z filters entities with exact Z coordinate match
+	Z *float64 `json:"z,omitempty"`
 }
 
 // GetEntityByID returns the entity with the given ID, or nil if not found.

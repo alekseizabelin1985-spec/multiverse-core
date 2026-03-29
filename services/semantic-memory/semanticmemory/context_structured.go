@@ -26,6 +26,15 @@ type EntityInfo struct {
 	WorldID     string                 `json:"world_id"`
 	Description string                 `json:"description,omitempty"`
 	Payload     map[string]interface{} `json:"payload,omitempty"`
+	// Coordinates хранит position объект из payload: {x: float, y: float, z: float}
+	Coordinates *Coordinates `json:"coordinates,omitempty"`
+}
+
+// Coordinates представляет координаты сущности в пространстве
+type Coordinates struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+	Z float64 `json:"z"`
 }
 
 // TimelineEvent представляет событие в хронологии
