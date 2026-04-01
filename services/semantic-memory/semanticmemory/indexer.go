@@ -260,8 +260,15 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 		log.Printf("ChromaDB upsert failed for %s: %v", entityID, err)
 	}
 
+	// Add world_id to payload for Neo4j indexing
+	neo4jPayload := make(map[string]any)
+	for k, v := range payload {
+		neo4jPayload[k] = v
+	}
+	neo4jPayload["world_id"] = ev.WorldID
+
 	// Index in Neo4j
-	if err := i.neo4j.UpsertEntity(entityID, entityType, payload); err != nil {
+	if err := i.neo4j.UpsertEntity(entityID, entityType, neo4jPayload); err != nil {
 		log.Printf("Neo4j upsert failed for %s: %v", entityID, err)
 	}
 

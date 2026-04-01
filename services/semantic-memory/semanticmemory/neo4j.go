@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"multiverse-core.io/shared/eventbus"
@@ -94,6 +95,12 @@ func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[stri
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
+	// Extract world_id from payload if present
+	var worldID string
+	if wid, ok := payload["world_id"].(string); ok {
+		worldID = wid
+	}
+
 	// Extract coordinates from position field if present
 	var x, y, z float64
 	if pos, ok := payload["position"].(map[string]any); ok {
@@ -112,6 +119,7 @@ func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[stri
 MERGE (e:Entity {id: $entity_id})
 SET e.type = $entity_type,
     e.payload = $payload_json,
+    e.world_id = $world_id,
     e.x = $x,
     e.y = $y,
     e.z = $z
@@ -124,6 +132,7 @@ RETURN e
 			"entity_id":    entityID,
 			"entity_type":  entityType,
 			"payload_json": string(payloadJSON),
+			"world_id":     worldID,
 			"x":            x,
 			"y":            y,
 			"z":            z,
@@ -1164,4 +1173,496 @@ func ExtractNestedEntityIDs(payload map[string]interface{}) map[string]string {
 	}
 
 	return ids
+}
+
+// GetWorldByID retrieves world entity from Neo4j by ID
+func (n *Neo4jClient) GetWorldByID(worldID string) (*WorldInfo, error) {
+	if n.driver == nil {
+		return nil, fmt.Errorf("neo4j driver not initialized")
+	}
+
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	var worldInfo *WorldInfo
+	query := `
+	MATCH (w:World {id: $world_id})
+	RETURN w.id AS id, w.type AS type, w.payload AS payload, w.x AS x, w.y AS y, w.z AS z
+	`
+
+	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{
+			"world_id": worldID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if records.Next() {
+			record := records.Record()
+			var id, entityType string
+			var payload map[string]interface{}
+			var x, y, z float64
+
+			if val, ok := record.Get("id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					id = s
+				}
+			}
+			if val, ok := record.Get("type"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					entityType = s
+				}
+			}
+			if val, ok := record.Get("payload"); ok && val != nil {
+				if p, ok := val.(map[string]interface{}); ok {
+					payload = p
+				}
+			}
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
+
+			worldInfo = &WorldInfo{
+				ID:          id,
+				Type:        entityType,
+				Payload:     payload,
+				Coordinates: &Coordinates{X: x, Y: y, Z: z},
+			}
+		}
+
+		return nil, records.Err()
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("GetWorldByID: %w", err)
+	}
+
+	return worldInfo, nil
+}
+
+// GetWorldByEvent retrieves world data from world creation/update events in Neo4j
+func (n *Neo4jClient) GetWorldByEvent(worldID string) (*WorldInfo, error) {
+	if n.driver == nil {
+		return nil, fmt.Errorf("neo4j driver not initialized")
+	}
+
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	var worldInfo *WorldInfo
+	query := `
+	MATCH (w:Event)
+	WHERE w.world_id = $world_id AND w.type IN ['entity.created', 'entity.updated']
+	ORDER BY w.timestamp DESC
+	LIMIT 1
+	RETURN w.raw_data AS raw_data
+	`
+
+	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{
+			"world_id": worldID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if records.Next() {
+			record := records.Record()
+			if val, ok := record.Get("raw_data"); ok && val != nil {
+				if rawStr, ok := val.(string); ok {
+					var ev eventbus.Event
+					if err := json.Unmarshal([]byte(rawStr), &ev); err != nil {
+						return nil, err
+					}
+
+					// Extract entity_id and payload from world event
+					entityID, _ := ev.Payload["entity_id"].(string)
+					payload, _ := ev.Payload["payload"].(map[string]interface{})
+					// Use world_id as entity_id for consistency
+					if entityID == "" {
+						entityID = worldID
+					}
+
+					// Try to get coordinates from position in payload
+					var x, y, z float64
+					if pos, ok := payload["position"].(map[string]interface{}); ok {
+						if xVal, ok := pos["x"].(float64); ok {
+							x = xVal
+						}
+						if yVal, ok := pos["y"].(float64); ok {
+							y = yVal
+						}
+						if zVal, ok := pos["z"].(float64); ok {
+							z = zVal
+						}
+					}
+
+					worldInfo = &WorldInfo{
+						ID:          entityID,
+						Type:        "world",
+						Payload:     payload,
+						Coordinates: &Coordinates{X: x, Y: y, Z: z},
+					}
+				}
+			}
+		}
+
+		return nil, records.Err()
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("GetWorldByEvent: %w", err)
+	}
+
+	return worldInfo, nil
+}
+
+// GetWorldContext retrieves world context from world events
+func (n *Neo4jClient) GetWorldContext(worldID string) (string, error) {
+	worldInfo, err := n.GetWorldByEvent(worldID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get world info: %w", err)
+	}
+
+	if worldInfo == nil || worldInfo.Payload == nil {
+		return "", nil
+	}
+
+	// Build context string from world payload
+	var parts []string
+	parts = append(parts, fmt.Sprintf("World ID: %s", worldInfo.ID))
+
+	if core, ok := worldInfo.Payload["core"].(string); ok {
+		parts = append(parts, fmt.Sprintf("Core: %s", core))
+	}
+	if era, ok := worldInfo.Payload["era"].(string); ok {
+		parts = append(parts, fmt.Sprintf("Era: %s", era))
+	}
+	if mode, ok := worldInfo.Payload["mode"].(string); ok {
+		parts = append(parts, fmt.Sprintf("Mode: %s", mode))
+	}
+	if theme, ok := worldInfo.Payload["theme"].(string); ok {
+		parts = append(parts, fmt.Sprintf("Theme: %s", theme))
+	}
+	if seed, ok := worldInfo.Payload["seed"].(string); ok {
+		parts = append(parts, fmt.Sprintf("Seed: %s", seed))
+	}
+
+	// Add unique_traits if present
+	if traits, ok := worldInfo.Payload["unique_traits"]; ok {
+		parts = append(parts, "Unique Traits:")
+		if traitSlice, ok := traits.([]interface{}); ok {
+			for _, t := range traitSlice {
+				parts = append(parts, fmt.Sprintf("  - %v", t))
+			}
+		}
+	}
+
+	return strings.Join(parts, "\n"), nil
+}
+
+// GetRegionsByWorldID retrieves all region entities for a given world
+func (n *Neo4jClient) GetRegionsByWorldID(worldID string, limit int) ([]EntityInfo, error) {
+	if n.driver == nil {
+		return nil, fmt.Errorf("neo4j driver not initialized")
+	}
+
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+	MATCH (r:Region)
+	WHERE r.world_id = $world_id
+	RETURN r.id AS id, r.name AS name, r.type AS type, r.world_id AS world_id, r.description AS description, r.payload AS payload, r.x AS x, r.y AS y, r.z AS z
+	`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{
+			"world_id": worldID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		regions := make([]EntityInfo, 0)
+		for records.Next() {
+			record := records.Record()
+			var id, name, entityType, worldID, description string
+			var payload map[string]interface{}
+			var x, y, z float64
+
+			if val, ok := record.Get("id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					id = s
+				}
+			}
+			if val, ok := record.Get("name"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					name = s
+				}
+			}
+			if val, ok := record.Get("type"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					entityType = s
+				}
+			}
+			if val, ok := record.Get("world_id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					worldID = s
+				}
+			}
+			if val, ok := record.Get("description"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					description = s
+				}
+			}
+			if val, ok := record.Get("payload"); ok && val != nil {
+				if p, ok := val.(map[string]interface{}); ok {
+					payload = p
+				}
+			}
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
+
+			if id != "" {
+				entityInfo := EntityInfo{
+					ID:          id,
+					Name:        name,
+					Type:        entityType,
+					WorldID:     worldID,
+					Description: description,
+					Payload:     payload,
+				}
+				if x != 0 || y != 0 || z != 0 {
+					entityInfo.Coordinates = &Coordinates{X: x, Y: y, Z: z}
+				}
+				regions = append(regions, entityInfo)
+			}
+		}
+
+		return regions, records.Err()
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("GetRegionsByWorldID: %w", err)
+	}
+
+	regions, ok := result.([]EntityInfo)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type")
+	}
+
+	return regions, nil
+}
+
+// GetLocationsByWorldID retrieves all location entities for a given world
+func (n *Neo4jClient) GetLocationsByWorldID(worldID string, limit int) ([]EntityInfo, error) {
+	if n.driver == nil {
+		return nil, fmt.Errorf("neo4j driver not initialized")
+	}
+
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+	MATCH (l:Location)
+	WHERE l.world_id = $world_id
+	RETURN l.id AS id, l.name AS name, l.type AS type, l.world_id AS world_id, l.description AS description, l.payload AS payload, l.x AS x, l.y AS y, l.z AS z
+	`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		records, err := tx.Run(query, map[string]any{
+			"world_id": worldID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		locations := make([]EntityInfo, 0)
+		for records.Next() {
+			record := records.Record()
+			var id, name, entityType, worldID, description string
+			var payload map[string]interface{}
+			var x, y, z float64
+
+			if val, ok := record.Get("id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					id = s
+				}
+			}
+			if val, ok := record.Get("name"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					name = s
+				}
+			}
+			if val, ok := record.Get("type"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					entityType = s
+				}
+			}
+			if val, ok := record.Get("world_id"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					worldID = s
+				}
+			}
+			if val, ok := record.Get("description"); ok && val != nil {
+				if s, ok := val.(string); ok {
+					description = s
+				}
+			}
+			if val, ok := record.Get("payload"); ok && val != nil {
+				if p, ok := val.(map[string]interface{}); ok {
+					payload = p
+				}
+			}
+			if val, ok := record.Get("x"); ok && val != nil {
+				if xVal, ok := val.(float64); ok {
+					x = xVal
+				}
+			}
+			if val, ok := record.Get("y"); ok && val != nil {
+				if yVal, ok := val.(float64); ok {
+					y = yVal
+				}
+			}
+			if val, ok := record.Get("z"); ok && val != nil {
+				if zVal, ok := val.(float64); ok {
+					z = zVal
+				}
+			}
+
+			if id != "" {
+				entityInfo := EntityInfo{
+					ID:          id,
+					Name:        name,
+					Type:        entityType,
+					WorldID:     worldID,
+					Description: description,
+					Payload:     payload,
+				}
+				if x != 0 || y != 0 || z != 0 {
+					entityInfo.Coordinates = &Coordinates{X: x, Y: y, Z: z}
+				}
+				locations = append(locations, entityInfo)
+			}
+		}
+
+		return locations, records.Err()
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("GetLocationsByWorldID: %w", err)
+	}
+
+	locations, ok := result.([]EntityInfo)
+	if !ok {
+		return nil, fmt.Errorf("unexpected result type")
+	}
+
+	return locations, nil
+}
+
+// CreateWorld creates a world node in Neo4j
+func (n *Neo4jClient) CreateWorld(worldID string, worldData map[string]interface{}) error {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	payloadJSON, err := json.Marshal(worldData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal world data: %w", err)
+	}
+
+	var x, y, z float64
+	if pos, ok := worldData["position"].(map[string]interface{}); ok {
+		if xVal, ok := pos["x"].(float64); ok {
+			x = xVal
+		}
+		if yVal, ok := pos["y"].(float64); ok {
+			y = yVal
+		}
+		if zVal, ok := pos["z"].(float64); ok {
+			z = zVal
+		}
+	}
+
+	query := `
+	MERGE (w:World {id: $world_id})
+	SET w.type = $type,
+	    w.payload = $payload_json,
+	    w.x = $x,
+	    w.y = $y,
+	    w.z = $z
+	RETURN w
+	`
+
+	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"world_id":     worldID,
+			"type":         "world",
+			"payload_json": string(payloadJSON),
+			"x":            x,
+			"y":            y,
+			"z":            z,
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
+	})
+
+	return err
+}
+
+// CreateWorldRelationship creates a WORLD_OF relationship between a region/location and a world
+func (n *Neo4jClient) CreateWorldRelationship(regionOrLocationID, worldID string) error {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+	MATCH (r:Region {id: $region_id})
+	MATCH (w:World {id: $world_id})
+	MERGE (r)-[rel:WORLD_OF]->(w)
+	RETURN rel
+	`
+
+	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"region_id": regionOrLocationID,
+			"world_id":  worldID,
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
+	})
+
+	return err
 }

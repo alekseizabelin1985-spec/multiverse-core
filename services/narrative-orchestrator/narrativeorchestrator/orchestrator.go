@@ -1158,16 +1158,11 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 
 	// Copy data under per-GM lock
 	gm.mu.Lock()
-	entityIDs := make([]string, len(gm.FocusEntities))
-	copy(entityIDs, gm.FocusEntities)
+	focusEntities := make([]string, len(gm.FocusEntities))
+	copy(focusEntities, gm.FocusEntities)
 	historyCopy := make([]HistoryEntry, len(gm.History))
 	copy(historyCopy, gm.History)
 	gm.mu.Unlock()
-
-	if len(entityIDs) == 0 {
-		warnLog(gm.ScopeID, gm.WorldID, "No entity IDs for GM, skipping", map[string]interface{}{})
-		return
-	}
 
 	if no.semantic == nil {
 		warnLog(gm.ScopeID, gm.WorldID, "SemanticMemoryClient is nil", map[string]interface{}{})
@@ -1176,6 +1171,8 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 
 	// All network calls happen outside any lock
 	eventTypes := []string{}
+	// Include world entity ID in context to ensure world data is loaded
+	entityIDs := append([]string{gm.WorldID}, focusEntities...)
 	contexts, err := no.semantic.GetContextWithEvents(context.Background(), entityIDs, eventTypes, 2)
 	if err != nil {
 		warnLog(gm.ScopeID, gm.WorldID, "Failed to get context with events, continuing without", map[string]interface{}{
