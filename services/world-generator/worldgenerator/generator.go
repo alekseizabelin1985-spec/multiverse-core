@@ -3,14 +3,42 @@ package worldgenerator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
 
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/oracle"
 
 	"github.com/google/uuid"
 )
+
+// WorldGenerationRequest структура запроса из payload события world.generation.requested
+type WorldGenerationRequest struct {
+	Seed        string                 `json:"seed"`                   // обязательное
+	Mode        string                 `json:"mode"`                   // "contextual" | "random"; default "random"
+	UserContext *UserWorldContext       `json:"user_context,omitempty"` // заполняется только для mode="contextual"
+	Constraints map[string]interface{} `json:"constraints,omitempty"`
+}
+
+// UserWorldContext пользовательское описание желаемого мира
+type UserWorldContext struct {
+	Description  string   `json:"description"`            // свободное описание
+	Theme        string   `json:"theme,omitempty"`        // "cultivation", "steampunk", "dark_fantasy", "sci-fi", "mythology", etc.
+	KeyElements  []string `json:"key_elements,omitempty"` // ключевые элементы мира
+	Scale        string   `json:"scale,omitempty"`        // "small" | "medium" | "large"; default "medium"
+	Restrictions []string `json:"restrictions,omitempty"` // чего НЕ должно быть
+}
+
+// WorldConcept промежуточный результат первого этапа генерации (концепция мира)
+type WorldConcept struct {
+	Core         string   `json:"core"`          // ядро мира (2-3 предложения)
+	Theme        string   `json:"theme"`         // определённая тема
+	Era          string   `json:"era"`           // эпоха / временной период
+	UniqueTraits []string `json:"unique_traits"` // 3-5 уникальных черт этого мира
+	Scale        string   `json:"scale"`         // итоговый масштаб
+}
 
 // WorldGeography представляет полную географическую структуру мира
 type WorldGeography struct {
@@ -20,11 +48,13 @@ type WorldGeography struct {
 	Mythology string        `json:"mythology"`
 }
 
-// WorldOntology представляет онтологию культивации мира
+// WorldOntology представляет онтологию (систему силы/прогрессии) мира
 type WorldOntology struct {
-	Carriers  []string `json:"carriers"`
-	Paths     []string `json:"paths"`
-	Forbidden []string `json:"forbidden"`
+	System    string   `json:"system"`    // тип системы: "cultivation", "magic", "technology", "divine", "nature" и т.д.
+	Carriers  []string `json:"carriers"`  // носители силы (ци, мана, эфир, нанороботы...)
+	Paths     []string `json:"paths"`     // пути развития
+	Forbidden []string `json:"forbidden"` // запреты / табу
+	Hierarchy []string `json:"hierarchy"` // уровни/ранги прогрессии (опционально)
 }
 
 // Geography представляет географическую структуру мира
@@ -74,6 +104,7 @@ type Point struct {
 type WorldGenerator struct {
 	bus       *eventbus.EventBus
 	archivist ArchivistClient
+	oracle    *oracle.Client
 }
 
 // NewWorldGenerator creates a new WorldGenerator.
@@ -81,7 +112,74 @@ func NewWorldGenerator(bus *eventbus.EventBus) *WorldGenerator {
 	return &WorldGenerator{
 		bus:       bus,
 		archivist: *NewArchivistClient(),
+		oracle:    oracle.NewClient(),
 	}
+}
+
+// getScale возвращает масштаб из запроса (с дефолтом "medium")
+func (r *WorldGenerationRequest) getScale() string {
+	if r.UserContext != nil && r.UserContext.Scale != "" {
+		return r.UserContext.Scale
+	}
+	return "medium"
+}
+
+// scaleParams возвращает параметры количества элементов по масштабу
+func scaleParams(scale string) (minRegions, maxRegions, minWater, maxWater, minCities, maxCities int) {
+	switch scale {
+	case "small":
+		return 2, 3, 1, 2, 1, 2
+	case "large":
+		return 5, 8, 4, 7, 4, 8
+	default: // "medium"
+		return 3, 5, 2, 4, 2, 4
+	}
+}
+
+// defaultIfEmpty возвращает значение по умолчанию, если строка пустая
+func defaultIfEmpty(s, def string) string {
+	if s == "" {
+		return def
+	}
+	return s
+}
+
+// parseGenerationRequest парсит payload события в структурированный запрос
+func parseGenerationRequest(payload map[string]interface{}) (*WorldGenerationRequest, error) {
+	// Сериализовать payload в JSON
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Десериализовать в WorldGenerationRequest
+	var request WorldGenerationRequest
+	err = json.Unmarshal(data, &request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal request: %w", err)
+	}
+
+	// Валидация: seed обязателен
+	if request.Seed == "" {
+		return nil, fmt.Errorf("seed is required")
+	}
+
+	// Если mode пустой — установить "random"
+	if request.Mode == "" {
+		request.Mode = "random"
+	}
+
+	// Если mode="contextual" и user_context=nil — вернуть ошибку
+	if request.Mode == "contextual" && request.UserContext == nil {
+		return nil, fmt.Errorf("mode=contextual requires user_context")
+	}
+
+	// Если scale пустой — установить "medium" (будет установлено позже через getScale())
+	if request.Mode == "contextual" && request.UserContext != nil && request.UserContext.Scale == "" {
+		request.UserContext.Scale = "medium"
+	}
+
+	return &request, nil
 }
 
 // HandleEvent processes world generation requests.
@@ -90,17 +188,46 @@ func (wg *WorldGenerator) HandleEvent(ev eventbus.Event) {
 		return
 	}
 
-	worldSeed, _ := ev.Payload["seed"].(string)
-	if worldSeed == "" {
-		log.Printf("Invalid world generation request: missing seed")
+	ctx := context.Background()
+
+	// 1. Парсинг запроса
+	request, err := parseGenerationRequest(ev.Payload)
+	if err != nil {
+		log.Printf("Invalid world generation request: %v", err)
 		return
 	}
 
-	log.Printf("Starting world generation: %s", worldSeed)
+	log.Printf("Starting world generation: seed=%s, mode=%s", request.Seed, request.Mode)
 
+	// 2. Генерация концепции (этап A)
+	concept, err := wg.generateWorldConcept(ctx, request)
+	if err != nil {
+		log.Printf("World concept generation failed: %v", err)
+		return
+	}
 
-	// Create world entity
+	// 3. Создание world entity (теперь с концепцией)
 	worldID := "world-" + uuid.New().String()[:8]
+	wg.publishWorldCreated(ctx, worldID, request, concept)
+
+	// 4. Генерация деталей (этап B)
+	geography, err := wg.generateWorldDetails(ctx, worldID, concept, request.getScale())
+	if err != nil {
+		log.Printf("World details generation failed: %v", err)
+		return
+	}
+
+	// 5. Создание geographic entities
+	wg.createGeographicEntities(ctx, worldID, *geography)
+
+	// 6. Финальное событие
+	wg.publishWorldGenerated(ctx, worldID, request, concept)
+
+	log.Printf("World %s generated successfully (mode=%s, theme=%s)", worldID, request.Mode, concept.Theme)
+}
+
+// publishWorldCreated публикует entity.created для мира с концепцией
+func (wg *WorldGenerator) publishWorldCreated(ctx context.Context, worldID string, req *WorldGenerationRequest, concept *WorldConcept) {
 	worldEvent := eventbus.Event{
 		EventID:   "world-gen-" + uuid.New().String()[:8],
 		EventType: "entity.created",
@@ -110,20 +237,24 @@ func (wg *WorldGenerator) HandleEvent(ev eventbus.Event) {
 			"entity_id":   worldID,
 			"entity_type": "world",
 			"payload": map[string]interface{}{
-				"seed":        worldSeed,
-				"plan":        0,
-				"core":        "",
-				"constraints": ev.Payload["constraints"],
+				"seed":           req.Seed,
+				"mode":           req.Mode,
+				"theme":          concept.Theme,
+				"core":           concept.Core,
+				"era":            concept.Era,
+				"unique_traits":  concept.UniqueTraits,
+				"plan":           0,
+				"constraints":    req.Constraints,
 			},
 		},
 		Timestamp: time.Now(),
 	}
-	wg.bus.Publish(context.Background(), eventbus.TopicSystemEvents, worldEvent)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, worldEvent)
+	log.Printf("Published world.created event: %s (theme=%s)", worldID, concept.Theme)
+}
 
-	// Generate world details via Oracle
-	wg.generateEnhancedWorldDetails(context.Background(), worldID, worldSeed)
-
-	// Publish world generated event
+// publishWorldGenerated публикует финальное событие world.generated
+func (wg *WorldGenerator) publishWorldGenerated(ctx context.Context, worldID string, req *WorldGenerationRequest, concept *WorldConcept) {
 	finalEvent := eventbus.Event{
 		EventID:   "world-gen-final-" + uuid.New().String()[:8],
 		EventType: "world.generated",
@@ -131,92 +262,14 @@ func (wg *WorldGenerator) HandleEvent(ev eventbus.Event) {
 		WorldID:   worldID,
 		Payload: map[string]interface{}{
 			"world_id": worldID,
-			"seed":     worldSeed,
+			"seed":     req.Seed,
+			"mode":     req.Mode,
+			"theme":    concept.Theme,
 		},
 		Timestamp: time.Now(),
 	}
-	wg.bus.Publish(context.Background(), eventbus.TopicSystemEvents, finalEvent)
-
-	log.Printf("World %s generated successfully", worldID)
-}
-
-// generateEnhancedWorldDetails generates enhanced world details via Ascension Oracle.
-func (wg *WorldGenerator) generateEnhancedWorldDetails(ctx context.Context, worldID, worldSeed string) {
-	prompt := fmt.Sprintf(`
-Создай детали мира с семенем "%s".
-
-Требуется сгенерировать:
-1. Ядро Мира (1-2 предложения)
-2. Онтологию культивации (носители, пути, запреты)
-3. Географию:
-   - 3-5 регионов с уникальными биомами (леса, горы, поля, пустыни, болота)
-   - Водные объекты (2-4 реки, 1-2 моря, 1-3 озера)
-   - 2-4 города с основными характеристиками
-4. Мифологию (краткий миф)
-
-Верни строго в JSON:
-{
-  "core": "string",
-  "ontology": {
-    "carriers": ["string"],
-    "paths": ["string"],
-    "forbidden": ["string"]
-  },
-  "geography": {
-    "regions": [
-      {
-        "name": "string",
-        "biome": "string",
-        "coordinates": {"x": 0.0, "y": 0.0},
-        "size": 0.0
-      }
-    ],
-    "water_bodies": [
-      {
-        "name": "string",
-        "type": "river|sea|lake",
-        "coordinates": {"x": 0.0, "y": 0.0},
-        "size": 0.0
-      }
-    ],
-    "cities": [
-      {
-        "name": "string",
-        "population": 0,
-        "type": "major|minor",
-        "location": {
-          "region": "string",
-          "coordinates": {"x": 0.0, "y": 0.0}
-        }
-      }
-    ]
-  },
-  "mythology": "string"
-}
-`, worldSeed)
-
-	// resp, err := CallOracle(ctx, prompt)
-	// if err != nil {
-	// 	log.Printf("Oracle world details failed: %v", err)
-	// 	return
-	// }
-
-	// Parse the response
-	var geography WorldGeography
-
-	err := CallOracleAndUnmarshal(ctx, prompt, &geography)
-
-	if err != nil {
-		log.Printf("Oracle world details failed: %v", err)
-		return
-	}
-
-	// Oracle returns JSON with "narrative" field containing the actual JSON data
-	// First, we need to unmarshal the narrative field to get the actual JSON
-	// Clean up potential markdown formatting
-
-	// Create geographic entities and publish events
-	wg.createGeographicEntities(ctx, worldID, geography)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, finalEvent)
+	log.Printf("Published world.generated event: %s", worldID)
 }
 
 // createGeographicEntities creates entities for geographic objects

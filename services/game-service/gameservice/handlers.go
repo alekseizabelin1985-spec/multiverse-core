@@ -237,7 +237,10 @@ func (s *Service) RunTestHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	worldID := "pain-realm"
+	worldID := r.URL.Query().Get("world_id")
+	if worldID == "" {
+		worldID = "pain-realm"
+	}
 	scopePlayer := "player:kain-777"
 	scopeLocation := "location:dark_alley"
 	results := make([]map[string]interface{}, 0)

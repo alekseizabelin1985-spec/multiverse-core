@@ -391,7 +391,7 @@ func (s *Service) Run(ctx context.Context) error {
 	go s.bus.Subscribe(ctx, eventbus.TopicPlayerEvents, "semantic-memory-player-group", s.indexer.HandleEvent)
 	go s.bus.Subscribe(ctx, eventbus.TopicWorldEvents, "semantic-memory-world-group", s.indexer.HandleEvent)
 	go s.bus.Subscribe(ctx, eventbus.TopicGameEvents, "semantic-memory-game-group", s.indexer.HandleEvent)
-	//go s.bus.Subscribe(ctx, eventbus.TopicSystemEvents, "semantic-memory-system-group", s.indexer.HandleEvent)
+	go s.bus.Subscribe(ctx, eventbus.TopicSystemEvents, "semantic-memory-system-group", s.indexer.HandleEvent)
 	go s.bus.Subscribe(ctx, eventbus.TopicScopeManagement, "semantic-memory-scope-group", s.indexer.HandleEvent)
 	go s.bus.Subscribe(ctx, eventbus.TopicNarrativeOutput, "semantic-memory-narrative-group", s.indexer.HandleEvent)
 

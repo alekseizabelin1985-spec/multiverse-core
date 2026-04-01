@@ -30,6 +30,17 @@ type EntityInfo struct {
 	Coordinates *Coordinates `json:"coordinates,omitempty"`
 }
 
+// WorldInfo содержит расширенную информацию о мире
+type WorldInfo struct {
+	ID          string                 `json:"id"`
+	Type        string                 `json:"type"`
+	WorldID     string                 `json:"world_id"`
+	Description string                 `json:"description,omitempty"`
+	Payload     map[string]interface{} `json:"payload,omitempty"`
+	// Coordinates хранит position объект из payload: {x: float, y: float, z: float}
+	Coordinates *Coordinates `json:"coordinates,omitempty"`
+}
+
 // Coordinates представляет координаты сущности в пространстве
 type Coordinates struct {
 	X float64 `json:"x"`
