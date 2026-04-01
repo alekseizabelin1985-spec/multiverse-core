@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/oracle"
@@ -228,47 +227,39 @@ func (wg *WorldGenerator) HandleEvent(ev eventbus.Event) {
 
 // publishWorldCreated публикует entity.created для мира с концепцией
 func (wg *WorldGenerator) publishWorldCreated(ctx context.Context, worldID string, req *WorldGenerationRequest, concept *WorldConcept) {
-	worldEvent := eventbus.Event{
-		EventID:   "world-gen-" + uuid.New().String()[:8],
-		EventType: "entity.created",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"entity_id":   worldID,
-			"entity_type": "world",
-			"payload": map[string]interface{}{
-				"seed":           req.Seed,
-				"mode":           req.Mode,
-				"theme":          concept.Theme,
-				"core":           concept.Core,
-				"era":            concept.Era,
-				"unique_traits":  concept.UniqueTraits,
-				"plan":           0,
-				"constraints":    req.Constraints,
-			},
-		},
-		Timestamp: time.Now(),
+	payload := eventbus.NewEventPayload().
+		WithEntity(worldID, "world", "").
+		WithWorld(worldID)
+
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "payload.seed", req.Seed)
+	eventbus.SetNested(payload.GetCustom(), "payload.mode", req.Mode)
+	eventbus.SetNested(payload.GetCustom(), "payload.theme", concept.Theme)
+	eventbus.SetNested(payload.GetCustom(), "payload.core", concept.Core)
+	eventbus.SetNested(payload.GetCustom(), "payload.era", concept.Era)
+	eventbus.SetNested(payload.GetCustom(), "payload.unique_traits", concept.UniqueTraits)
+	eventbus.SetNested(payload.GetCustom(), "payload.plan", 0)
+	if req.Constraints != nil {
+		eventbus.SetNested(payload.GetCustom(), "payload.constraints", req.Constraints)
 	}
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, worldEvent)
+
+	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Published world.created event: %s (theme=%s)", worldID, concept.Theme)
 }
 
 // publishWorldGenerated публикует финальное событие world.generated
 func (wg *WorldGenerator) publishWorldGenerated(ctx context.Context, worldID string, req *WorldGenerationRequest, concept *WorldConcept) {
-	finalEvent := eventbus.Event{
-		EventID:   "world-gen-final-" + uuid.New().String()[:8],
-		EventType: "world.generated",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"world_id": worldID,
-			"seed":     req.Seed,
-			"mode":     req.Mode,
-			"theme":    concept.Theme,
-		},
-		Timestamp: time.Now(),
-	}
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, finalEvent)
+	payload := eventbus.NewEventPayload().
+		WithWorld(worldID)
+
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "seed", req.Seed)
+	eventbus.SetNested(payload.GetCustom(), "mode", req.Mode)
+	eventbus.SetNested(payload.GetCustom(), "theme", concept.Theme)
+
+	event := eventbus.NewStructuredEvent("world.generated", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Published world.generated event: %s", worldID)
 }
 
@@ -297,25 +288,18 @@ func (wg *WorldGenerator) createGeographicEntities(ctx context.Context, worldID 
 func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string, region Region) {
 	regionID := "region-" + uuid.New().String()[:8]
 
-	regionEvent := eventbus.Event{
-		EventID:   "region-create-" + uuid.New().String()[:8],
-		EventType: "entity.created",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"entity_id":   regionID,
-			"entity_type": "region",
-			"payload": map[string]interface{}{
-				"name":        region.Name,
-				"biome":       region.Biome,
-				"coordinates": region.Coordinates,
-				"size":        region.Size,
-			},
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithEntity(regionID, "region", region.Name).
+		WithWorld(worldID)
 
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, regionEvent)
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "payload.name", region.Name)
+	eventbus.SetNested(payload.GetCustom(), "payload.biome", region.Biome)
+	eventbus.SetNested(payload.GetCustom(), "payload.coordinates", region.Coordinates)
+	eventbus.SetNested(payload.GetCustom(), "payload.size", region.Size)
+
+	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created region entity: %s (%s)", region.Name, region.Biome)
 }
 
@@ -323,25 +307,18 @@ func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string
 func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string, water WaterBody) {
 	waterID := "water-" + uuid.New().String()[:8]
 
-	waterEvent := eventbus.Event{
-		EventID:   "water-create-" + uuid.New().String()[:8],
-		EventType: "entity.created",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"entity_id":   waterID,
-			"entity_type": "water_body",
-			"payload": map[string]interface{}{
-				"name":        water.Name,
-				"type":        water.Type,
-				"coordinates": water.Coordinates,
-				"size":        water.Size,
-			},
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithEntity(waterID, "water_body", water.Name).
+		WithWorld(worldID)
 
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, waterEvent)
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "payload.name", water.Name)
+	eventbus.SetNested(payload.GetCustom(), "payload.type", water.Type)
+	eventbus.SetNested(payload.GetCustom(), "payload.coordinates", water.Coordinates)
+	eventbus.SetNested(payload.GetCustom(), "payload.size", water.Size)
+
+	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created water entity: %s (%s)", water.Name, water.Type)
 }
 
@@ -349,44 +326,32 @@ func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string,
 func (wg *WorldGenerator) createCityEntity(ctx context.Context, worldID string, city City) {
 	cityID := "city-" + uuid.New().String()[:8]
 
-	cityEvent := eventbus.Event{
-		EventID:   "city-create-" + uuid.New().String()[:8],
-		EventType: "entity.created",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"entity_id":   cityID,
-			"entity_type": "city",
-			"payload": map[string]interface{}{
-				"name":       city.Name,
-				"population": city.Population,
-				"type":       city.Type,
-				"location":   city.Location,
-			},
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithEntity(cityID, "city", city.Name).
+		WithWorld(worldID)
 
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, cityEvent)
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "payload.name", city.Name)
+	eventbus.SetNested(payload.GetCustom(), "payload.population", city.Population)
+	eventbus.SetNested(payload.GetCustom(), "payload.type", city.Type)
+	eventbus.SetNested(payload.GetCustom(), "payload.location", city.Location)
+
+	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created city entity: %s (population: %d)", city.Name, city.Population)
 }
 
 // publishGeographyGeneratedEvent publishes an event when geography is generated
 func (wg *WorldGenerator) publishGeographyGeneratedEvent(ctx context.Context, worldID string, geography WorldGeography) {
-	geographyEvent := eventbus.Event{
-		EventID:   "geography-generated-" + uuid.New().String()[:8],
-		EventType: "world.geography.generated",
-		Source:    "world-generator",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
-			"world_id":     worldID,
-			"regions":      len(geography.Geography.Regions),
-			"water_bodies": len(geography.Geography.WaterBodies),
-			"cities":       len(geography.Geography.Cities),
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithWorld(worldID)
 
-	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, geographyEvent)
+	// Добавляем дополнительные поля через dot notation
+	eventbus.SetNested(payload.GetCustom(), "regions", len(geography.Geography.Regions))
+	eventbus.SetNested(payload.GetCustom(), "water_bodies", len(geography.Geography.WaterBodies))
+	eventbus.SetNested(payload.GetCustom(), "cities", len(geography.Geography.Cities))
+
+	event := eventbus.NewStructuredEvent("world.geography.generated", "world-generator", worldID, payload)
+	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Published geography generated event for world: %s", worldID)
 }

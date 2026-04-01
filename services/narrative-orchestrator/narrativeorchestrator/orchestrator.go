@@ -1602,7 +1602,7 @@ func formatEventDescription(ev eventbus.Event) string {
 	if targetID, ok := ev.Payload["target_id"].(string); ok && targetID != "" {
 		parts = append(parts, fmt.Sprintf("к %s", targetID))
 	}
-	if to, ok := ev.Payload["to"].(map[string]interface{}); ok {
+	if to, ok := ev.Payload["to"].(map[string]any); ok {
 		if toID, ok := to["id"].(string); ok && toID != "" {
 			parts = append(parts, fmt.Sprintf("к %s", toID))
 		}
@@ -1638,7 +1638,7 @@ func (no *NarrativeOrchestrator) extractEventPoint(ev eventbus.Event) (spatial.P
 			}
 		}
 	}
-	if to, ok := ev.Payload["to"].(map[string]interface{}); ok {
+	if to, ok := ev.Payload["to"].(map[string]any); ok {
 		if x, ok := to["x"].(float64); ok {
 			if y, ok := to["y"].(float64); ok {
 				point := spatial.Point{X: x, Y: y}

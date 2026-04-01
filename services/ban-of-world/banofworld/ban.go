@@ -42,7 +42,15 @@ func (b *BanOfWorld) HandlePlayerEvent(ev eventbus.Event) {
 // checkSkillUsage checks if a skill usage violates world integrity.
 func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 	skill, _ := ev.Payload["skill"].(string)
-	playerID, _ := ev.Payload["player_id"].(string)
+
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 
 	if playerID == "" {
 		log.Printf("Skill usage missing player_id")
@@ -55,21 +63,19 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 	if violationType != "" {
 		log.Printf("Violation detected in %s: %s used %s", ev.WorldID, playerID, skill)
 
-		// Publish violation event
-		violationEvent := eventbus.Event{
-			EventID:   "violation-" + uuid.New().String()[:8],
-			EventType: "violation.detected",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			ScopeID:   ev.ScopeID,
-			Payload: map[string]interface{}{
-				"player_id":      playerID,
-				"skill":          skill,
-				"violation_type": violationType,
-				"original_event": ev.EventID,
-			},
-			Timestamp: ev.Timestamp,
-		}
+		// Publish violation event с поддержкой нового формата
+		payload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(payload.GetCustom(), "skill", skill)
+		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
+		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
+		violationEvent.Timestamp = ev.Timestamp
+		violationEvent.ScopeID = ev.ScopeID
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 
 		// Apply transformation or punishment
@@ -80,7 +86,15 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 // checkItemUsage checks if an item usage violates world integrity.
 func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 	item, _ := ev.Payload["item"].(string)
-	playerID, _ := ev.Payload["player_id"].(string)
+
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 
 	if playerID == "" {
 		return
@@ -91,20 +105,18 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 	if violationType != "" {
 		log.Printf("Item violation detected in %s: %s used %s", ev.WorldID, playerID, item)
 
-		violationEvent := eventbus.Event{
-			EventID:   "violation-" + uuid.New().String()[:8],
-			EventType: "violation.detected",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			ScopeID:   ev.ScopeID,
-			Payload: map[string]interface{}{
-				"player_id":      playerID,
-				"item":           item,
-				"violation_type": violationType,
-				"original_event": ev.EventID,
-			},
-			Timestamp: ev.Timestamp,
-		}
+		payload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(payload.GetCustom(), "item", item)
+		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
+		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
+		violationEvent.Timestamp = ev.Timestamp
+		violationEvent.ScopeID = ev.ScopeID
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 
 		b.applyConsequence(ev, violationType)
@@ -114,7 +126,15 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 // checkMovement checks if movement violates world boundaries.
 func (b *BanOfWorld) checkMovement(ev eventbus.Event) {
 	destination, _ := ev.Payload["destination"].(string)
-	playerID, _ := ev.Payload["player_id"].(string)
+
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 
 	if playerID == "" || destination == "" {
 		return
@@ -124,20 +144,18 @@ func (b *BanOfWorld) checkMovement(ev eventbus.Event) {
 	if ev.WorldID == "prison-realm" && destination != ev.WorldID {
 		log.Printf("Movement violation in %s: %s tried to leave", ev.WorldID, playerID)
 
-		violationEvent := eventbus.Event{
-			EventID:   "violation-" + uuid.New().String()[:8],
-			EventType: "violation.detected",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			ScopeID:   ev.ScopeID,
-			Payload: map[string]interface{}{
-				"player_id":             playerID,
-				"attempted_destination": destination,
-				"violation_type":        "forbidden_movement",
-				"original_event":        ev.EventID,
-			},
-			Timestamp: ev.Timestamp,
-		}
+		payload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(payload.GetCustom(), "attempted_destination", destination)
+		eventbus.SetNested(payload.GetCustom(), "violation_type", "forbidden_movement")
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
+		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
+		violationEvent.ScopeID = ev.ScopeID
+		violationEvent.Timestamp = ev.Timestamp
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 
 		// Teleport back or apply punishment
@@ -168,58 +186,59 @@ func (b *BanOfWorld) getViolationType(worldID, action string) string {
 
 // applyConsequence applies the appropriate consequence for a violation.
 func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 
 	switch violationType {
 	case "elemental_conflict":
 		// Transform fire breath to scream of pain
-		transformEvent := eventbus.Event{
-			EventID:   "transform-" + uuid.New().String()[:8],
-			EventType: "skill.transformed",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"entity_id":   playerID,
-				"original":    ev.Payload["skill"],
-				"transformed": "scream_of_pain",
-				"reason":      "resonance_with_core",
-			},
-			Timestamp: time.Now(),
-		}
+		transformPayload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(transformPayload.GetCustom(), "original", ev.Payload["skill"])
+		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "scream_of_pain")
+		eventbus.SetNested(transformPayload.GetCustom(), "reason", "resonance_with_core")
+
+		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", ev.WorldID, transformPayload)
+		transformEvent.EventID = "transform-" + uuid.New().String()[:8]
+		transformEvent.Timestamp = time.Now()
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, transformEvent)
 
 	case "memory_violation":
 		// Apply memory corruption punishment
-		punishEvent := eventbus.Event{
-			EventID:   "punish-" + uuid.New().String()[:8],
-			EventType: "player.punished",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"player_id":  playerID,
-				"punishment": "memory_corruption",
-				"duration":   "1h",
-				"reason":     "violation_of_memory_laws",
-			},
-			Timestamp: time.Now(),
-		}
+		punishPayload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(punishPayload.GetCustom(), "punishment", "memory_corruption")
+		eventbus.SetNested(punishPayload.GetCustom(), "duration", "1h")
+		eventbus.SetNested(punishPayload.GetCustom(), "reason", "violation_of_memory_laws")
+
+		punishEvent := eventbus.NewStructuredEvent("player.punished", "ban-of-world", ev.WorldID, punishPayload)
+		punishEvent.EventID = "punish-" + uuid.New().String()[:8]
+		punishEvent.Timestamp = time.Now()
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, punishEvent)
 
 	case "mechanical_purity":
 		// Transform organic skill to mechanical equivalent
-		transformEvent := eventbus.Event{
-			EventID:   "transform-" + uuid.New().String()[:8],
-			EventType: "skill.transformed",
-			Source:    "ban-of-world",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"entity_id":   playerID,
-				"original":    ev.Payload["skill"],
-				"transformed": "mechanical_equivalent",
-				"reason":      "mechanical_world_integrity",
-			},
-			Timestamp: time.Now(),
-		}
+		transformPayload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(transformPayload.GetCustom(), "original", ev.Payload["skill"])
+		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "mechanical_equivalent")
+		eventbus.SetNested(transformPayload.GetCustom(), "reason", "mechanical_world_integrity")
+
+		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", ev.WorldID, transformPayload)
+		transformEvent.EventID = "transform-" + uuid.New().String()[:8]
+		transformEvent.Timestamp = time.Now()
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, transformEvent)
 	}
 }

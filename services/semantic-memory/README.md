@@ -11,6 +11,43 @@
 - Хранение всех событий системы для контекста и воспроизведения
 - Графовые запросы по связям событий и сущностей
 
+## 📝 Новая структура событий (Structured IDs)
+
+Система поддерживает как **старый плоский формат**, так и **новый структурированный формат**:
+
+### Старый формат (поддерживается)
+```json
+{
+  "entity_id": "player-123",
+  "entity_type": "player",
+  "target_id": "region-456",
+  "world_id": "world-789"
+}
+```
+
+### Новый формат (рекомендуемый)
+```json
+{
+  "entity": {
+    "id": "player-123",
+    "type": "player",
+    "name": "Вася",
+    "world": {
+      "id": "world-789"
+    }
+  },
+  "target": {
+    "entity": {
+      "id": "region-456",
+      "type": "region",
+      "name": "Темный Лес"
+    }
+  }
+}
+```
+
+**Backward Compatibility**: Все функции извлечения ID поддерживают оба формата!
+
 ## 🔄 Жизненный цикл
 
 Система работает как **stateless сервис**:
@@ -44,13 +81,97 @@
 
 3. **Графовое сохранение в Neo4j:**
    - Создаёт узел `:Event` с метаданными события
-   - Извлекает entity IDs из payload: `entity_id`, `player_id`, `target_id`, `source_id`, `actor_id`
+   - Извлекает entity IDs из payload (поддержка нового формата `entity.id` и старого `entity_id`):
+     - `entity_id` → `entity.id`
+     - `player_id` → `entity.id`
+     - `target_id` → `target.entity.id`
+     - `source_id` → `source.entity.id`
+     - `npc_id`, `item_id`, `region_id` → fallback keys
    - Создаёт связи `[:RELATED_TO]` между событиями и сущностями
    - Сохраняет payload как JSON строку для совместимости с Neo4j
 
-4. Сохраняет все события для контекста и воспроизведения
+4. **Structured Context для AI:**
+   - Форматирование событий для LLM: `{entity.id:type:name} {timestamp} {action} {target.entity.id:type:name}`
+   - Пример: `{player-123:player:Вася} {14:30} {вошел в} {region-456:region:Темный Лес}`
 
-5. Обновляет контекст для других сервисов
+5. Сохраняет все события для контекста и воспроизведения
+
+6. Обновляет контекст для других сервисов
+
+## 📊 Примеры событий для Semantic Memory
+
+### Player Action (входящее)
+```json
+{
+  "entity": {
+    "id": "player-123",
+    "type": "player",
+    "name": "Вася"
+  },
+  "target": {
+    "entity": {
+      "id": "npc-456",
+      "type": "npc",
+      "name": "Старейшина"
+    }
+  },
+  "action": "talked_to",
+  "dialogue": {
+    "topic": "ancient_tales",
+    "mood": "mysterious"
+  }
+}
+```
+
+### Entity Moved (входящее)
+```json
+{
+  "entity": {
+    "id": "player-123",
+    "type": "player",
+    "name": "Вася"
+  },
+  "from": {
+    "x": 45.0,
+    "y": 67.0
+  },
+  "to": {
+    "x": 48.5,
+    "y": 70.2
+  },
+  "world": {
+    "id": "world-789"
+  }
+}
+```
+
+### Weather Change (входящее с вложенной структурой)
+```json
+{
+  "entity": {
+    "id": "world-789",
+    "type": "world"
+  },
+  "weather": {
+    "change": {
+      "to": "шторм",
+      "in": {
+        "region": {
+          "id": "region-456",
+          "type": "region"
+        }
+      }
+    },
+    "previous": {
+      "condition": "ясно",
+      "temperature": {
+        "value": 25.5,
+        "unit": "celsius"
+      }
+    }
+  }
+}
+```
 
 ## 🌐 Графовая модель Neo4j
 

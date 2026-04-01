@@ -8,6 +8,51 @@
 
 ---
 
+## 📝 Новая структура событий (Structured IDs & LLM Prompts)
+
+### Поддержка структурированных ID
+
+NarrativeOrchestrator полностью поддерживает **новый формат событий** с вложенной структурой `entity.id` и обновлён для работы с **LLM-ready JSON**.
+
+#### Новый формат (рекомендуемый)
+```json
+{
+  "entity": {
+    "id": "player-123",
+    "type": "player",
+    "name": "Вася",
+    "world": {
+      "id": "world-789"
+    }
+  },
+  "action": "entered_region",
+  "target": {
+    "entity": {
+      "id": "region-456",
+      "type": "region",
+      "name": "Темный Лес"
+    }
+  }
+}
+```
+
+#### LLM Context Format (Semantic Memory)
+```
+{player-123:player:Вася} {14:30} {вошел в} {region-456:region:Темный Лес}
+```
+
+#### Старый формат (поддерживается через fallback)
+```json
+{
+  "entity_id": "player-123",
+  "entity_type": "player",
+  "target_id": "region-456",
+  "target_type": "region"
+}
+```
+
+---
+
 ## 🎯 Назначение
 
 - Генерирует иммерсивное повествование для любой области (`scope_id`)
@@ -90,7 +135,61 @@
 
 ---
 
-## 📝 Формирование промта
+## 📝 Формирование промта для LLM
+
+### Обновлённый формат событий в промтах
+
+События теперь передаются в **полном JSON формате** с новой структурой `entity.id`:
+
+```json
+{
+  "entity": {
+    "id": "player-123",
+    "type": "player",
+    "name": "Вася"
+  },
+  "action": "entered_region",
+  "target": {
+    "entity": {
+      "id": "region-456",
+      "type": "region",
+      "name": "Темный Лес"
+    }
+  }
+}
+```
+
+### Структура промта
+
+**System prompt**:
+- `<role>` — роль повествователя
+- `<rules>` — правила генерации и ограничения
+- `<canon>` — канонические факты мира (если есть)
+- `<schema>` — JSON schema для валидации ответа
+
+**User prompt**:
+- `<facts>` — факты о мире и сущностях
+- `<situation>` — текущая ситуация в области
+- `<events>` — **полные JSON события** с structured IDs
+- `<task>` — задача для LLM
+
+### Пример событий в промте (обновлённый)
+
+```
+<events>
+[ через секунду ]:
+{
+  "entity": {"id": "player-123", "type": "player", "name": "Вася"},
+  "action": "entered_region",
+  "target": {"entity": {"id": "region-456", "type": "region", "name": "Темный Лес"}}
+}
+```
+
+### LLM Context Format (из Semantic Memory)
+
+```
+{player-123:player:Вася} {14:30} {вошел в} {region-456:region:Темный Лес}
+```
 
 ### Структура промта
 

@@ -245,15 +245,19 @@ func (s *Service) handleEvent(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handleEntityCreated(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling entity created event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
-	entityType, _ := ev.Payload["entity_type"].(string)
-	worldID, _ := ev.Payload["world_id"].(string)
-
-	if entityID == "" || entityType == "" {
-		s.logger.Printf("Warning: entity_id or entity_type missing in entity.created event")
+	// Извлекаем entity с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	if entity == nil {
+		s.logger.Printf("Warning: entity missing in entity.created event")
 		return
 	}
 
+	entityID := entity.ID
+	entityType := entity.Type
+	worldID := entity.World
+	if worldID == "" {
+		worldID = eventbus.ExtractWorldID(ev.Payload)
+	}
 	if worldID == "" {
 		worldID = "global"
 	}
@@ -268,17 +272,18 @@ func (s *Service) handleEntityCreated(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handleEntityDeleted(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling entity deleted event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
-	if entityID == "" {
+	// Извлекаем entity ID с поддержкой новой структуры
+	entityID := eventbus.ExtractEntityID(ev.Payload)
+	if entityID == nil || entityID.ID == "" {
 		s.logger.Printf("Warning: entity_id missing in entity.deleted event")
 		return
 	}
 
 	// Находим актора по entity_id и уничтожаем
-	_, err := s.manager.GetActor(entityID)
+	_, err := s.manager.GetActor(entityID.ID)
 	if err == nil {
-		if err := s.manager.DestroyActor(ctx, entityID); err != nil {
-			s.logger.Printf("Failed to destroy actor %s: %v", entityID, err)
+		if err := s.manager.DestroyActor(ctx, entityID.ID); err != nil {
+			s.logger.Printf("Failed to destroy actor %s: %v", entityID.ID, err)
 		}
 	}
 }
@@ -312,6 +317,13 @@ func (s *Service) handleEntityTravelled(ctx context.Context, ev eventbus.Event) 
 // handleEntityStateChanged обрабатывает изменение состояния
 func (s *Service) handleEntityStateChanged(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling entity state changed event")
+
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	if entity == nil || entity.ID == "" {
+		s.logger.Printf("Warning: entity_id missing in entity.state_changed event")
+		return
+	}
 
 	if changes, ok := ev.Payload["state_changes"].([]interface{}); ok {
 		for _, change := range changes {
@@ -368,13 +380,14 @@ func (s *Service) handleEntitySnapshot(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handlePlayerAction(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling player action event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
-	playerText, _ := ev.Payload["player_text"].(string)
-
-	if entityID == "" {
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	if entity == nil || entity.ID == "" {
 		s.logger.Printf("Warning: entity_id missing in player.action event")
 		return
 	}
+	entityID := entity.ID
+	playerText, _ := ev.Payload["player_text"].(string)
 
 	// Проверяем наличие актора
 	_, err := s.manager.GetActor(entityID)
@@ -391,7 +404,16 @@ func (s *Service) handlePlayerAction(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handlePlayerMoved(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling player moved event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var entityID string
+	if entity != nil {
+		entityID = entity.ID
+	} else {
+		// Fallback для старого формата
+		entityID, _ = ev.Payload["entity_id"].(string)
+	}
+
 	fromX, _ := ev.Payload["from_x"].(float64)
 	fromY, _ := ev.Payload["from_y"].(float64)
 	toX, _ := ev.Payload["to_x"].(float64)
@@ -405,9 +427,25 @@ func (s *Service) handlePlayerMoved(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handlePlayerUsedSkill(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling player used skill event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var entityID string
+	if entity != nil {
+		entityID = entity.ID
+	} else {
+		entityID, _ = ev.Payload["entity_id"].(string)
+	}
+
 	skillID, _ := ev.Payload["skill_id"].(string)
-	targetID, _ := ev.Payload["target_id"].(string)
+
+	// Извлекаем target ID с поддержкой новой структуры (target.entity.id) и fallback (target_id)
+	target := eventbus.ExtractTargetEntityID(ev.Payload)
+	var targetID string
+	if target != nil {
+		targetID = target.ID
+	} else {
+		targetID, _ = ev.Payload["target_id"].(string)
+	}
 
 	s.logger.Printf("Player %s used skill %s on target %s", entityID, skillID, targetID)
 	// В production: применить эффект навыка
@@ -417,7 +455,15 @@ func (s *Service) handlePlayerUsedSkill(ctx context.Context, ev eventbus.Event) 
 func (s *Service) handlePlayerUsedItem(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling player used item event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var entityID string
+	if entity != nil {
+		entityID = entity.ID
+	} else {
+		entityID, _ = ev.Payload["entity_id"].(string)
+	}
+
 	itemID, _ := ev.Payload["item_id"].(string)
 
 	s.logger.Printf("Player %s used item %s", entityID, itemID)
@@ -428,8 +474,24 @@ func (s *Service) handlePlayerUsedItem(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handlePlayerInteracted(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling player interacted event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
-	targetID, _ := ev.Payload["target_id"].(string)
+	// Извлекаем entity ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var entityID string
+	if entity != nil {
+		entityID = entity.ID
+	} else {
+		entityID, _ = ev.Payload["entity_id"].(string)
+	}
+
+	// Извлекаем target ID с поддержкой новой структуры (target.entity.id) и fallback (target_id)
+	target := eventbus.ExtractTargetEntityID(ev.Payload)
+	var targetID string
+	if target != nil {
+		targetID = target.ID
+	} else {
+		targetID, _ = ev.Payload["target_id"].(string)
+	}
+
 	interactionType, _ := ev.Payload["interaction_type"].(string)
 
 	s.logger.Printf("Player %s interacted with %s via %s", entityID, targetID, interactionType)
@@ -462,8 +524,24 @@ func (s *Service) handleCombatEnded(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handleCombatDamageDealt(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling combat damage dealt event")
 
-	attackerID, _ := ev.Payload["attacker_id"].(string)
-	targetID, _ := ev.Payload["target_id"].(string)
+	// Извлекаем attacker ID с поддержкой новой структуры (entity.id) и fallback (entity_id)
+	attacker := eventbus.ExtractEntityID(ev.Payload)
+	var attackerID string
+	if attacker != nil {
+		attackerID = attacker.ID
+	} else {
+		attackerID, _ = ev.Payload["attacker_id"].(string)
+	}
+
+	// Извлекаем target ID с поддержкой новой структуры (target.entity.id) и fallback (target_id)
+	target := eventbus.ExtractTargetEntityID(ev.Payload)
+	var targetID string
+	if target != nil {
+		targetID = target.ID
+	} else {
+		targetID, _ = ev.Payload["target_id"].(string)
+	}
+
 	damage, _ := ev.Payload["damage"].(float64)
 	damageType, _ := ev.Payload["damage_type"].(string)
 
@@ -475,9 +553,25 @@ func (s *Service) handleCombatDamageDealt(ctx context.Context, ev eventbus.Event
 func (s *Service) handleNPCAction(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling NPC action event")
 
-	npcID, _ := ev.Payload["npc_id"].(string)
+	// Извлекаем npc ID с поддержкой новой структуры (entity.id) и fallback (npc_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var npcID string
+	if entity != nil {
+		npcID = entity.ID
+	} else {
+		npcID, _ = ev.Payload["npc_id"].(string)
+	}
+
 	action, _ := ev.Payload["action"].(string)
-	targetID, _ := ev.Payload["target_id"].(string)
+
+	// Извлекаем target ID с поддержкой новой структуры (target.entity.id) и fallback (target_id)
+	target := eventbus.ExtractTargetEntityID(ev.Payload)
+	var targetID string
+	if target != nil {
+		targetID = target.ID
+	} else {
+		targetID, _ = ev.Payload["target_id"].(string)
+	}
 
 	s.logger.Printf("NPC %s performed action %s on %s", npcID, action, targetID)
 	// В production: обработать действие NPC

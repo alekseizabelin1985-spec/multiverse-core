@@ -43,7 +43,14 @@ func (cg *CityGovernor) HandleEvent(ev eventbus.Event) {
 
 // handlePlayerEntry handles player entry into a city.
 func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 	cityID := *ev.ScopeID
 
 	if playerID == "" {
@@ -81,7 +88,15 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 // handleViolation handles world integrity violations in the city.
 func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 	cityID := *ev.ScopeID
-	playerID, _ := ev.Payload["player_id"].(string)
+
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 	violationType, _ := ev.Payload["violation_type"].(string)
 
 	if playerID == "" {
@@ -115,7 +130,14 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 
 // handleQuestCompletion handles quest completion events.
 func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 	questID, _ := ev.Payload["quest_id"].(string)
 	cityID := *ev.ScopeID
 

@@ -38,7 +38,15 @@ func (cm *CultivationModule) HandleEvent(ev eventbus.Event) {
 // processSkillUsage processes skill usage for cultivation progression.
 func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 	skill, _ := ev.Payload["skill"].(string)
-	playerID, _ := ev.Payload["player_id"].(string)
+
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
 
 	if playerID == "" {
 		log.Printf("Skill usage missing player_id")
@@ -46,24 +54,30 @@ func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 	}
 
 	// Update cultivation progress based on skill usage
-	progressEvent := eventbus.Event{
-		EventID:   "cult-progress-" + uuid.New().String()[:8],
-		EventType: "cultivation.progress.updated",
-		Source:    "cultivation-module",
-		WorldID:   ev.WorldID,
-		Payload: map[string]interface{}{
-			"player_id":       playerID,
-			"skill_used":      skill,
-			"progress_gained": cm.calculateProgress(skill, ev.WorldID),
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "")
+
+	eventbus.SetNested(payload.GetCustom(), "skill_used", skill)
+	eventbus.SetNested(payload.GetCustom(), "progress_gained", cm.calculateProgress(skill, ev.WorldID))
+
+	progressEvent := eventbus.NewStructuredEvent("cultivation.progress.updated", "cultivation-module", ev.WorldID, payload)
+	progressEvent.EventID = "cult-progress-" + uuid.New().String()[:8]
+	progressEvent.Timestamp = time.Now()
+
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, progressEvent)
 }
 
 // handleAscension handles post-ascension cultivation changes.
 func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
+
 	fromPlan, _ := ev.Payload["from_plan"].(float64)
 	toPlan, _ := ev.Payload["to_plan"].(float64)
 
@@ -78,18 +92,16 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 	}
 
 	// Update cultivation system for new plan
-	updateEvent := eventbus.Event{
-		EventID:   "cult-update-" + uuid.New().String()[:8],
-		EventType: "cultivation.system.updated",
-		Source:    "cultivation-module",
-		WorldID:   ev.WorldID,
-		Payload: map[string]interface{}{
-			"player_id":   playerID,
-			"new_plan":    toPlan,
-			"system_type": cm.getSystemTypeForPlan(int(toPlan)),
-		},
-		Timestamp: time.Now(),
-	}
+	payload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "")
+
+	eventbus.SetNested(payload.GetCustom(), "new_plan", toPlan)
+	eventbus.SetNested(payload.GetCustom(), "system_type", cm.getSystemTypeForPlan(int(toPlan)))
+
+	updateEvent := eventbus.NewStructuredEvent("cultivation.system.updated", "cultivation-module", ev.WorldID, payload)
+	updateEvent.EventID = "cult-update-" + uuid.New().String()[:8]
+	updateEvent.Timestamp = time.Now()
+
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, updateEvent)
 
 	log.Printf("Cultivation system updated for %s at Plan %d", playerID, int(toPlan))
@@ -97,7 +109,15 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 
 // handleDaoInteraction handles attempts to interact with other daos.
 func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
+
 	targetDao, _ := ev.Payload["target_dao"].(string)
 	interactionType, _ := ev.Payload["interaction_type"].(string)
 
@@ -108,35 +128,30 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 
 	// Check if interaction is allowed
 	if cm.isDaoInteractionAllowed(playerID, targetDao, interactionType, ev.WorldID) {
-		successEvent := eventbus.Event{
-			EventID:   "dao-success-" + uuid.New().String()[:8],
-			EventType: "dao.interaction.success",
-			Source:    "cultivation-module",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"player_id":        playerID,
-				"target_dao":       targetDao,
-				"interaction_type": interactionType,
-				"result":           "harmony_achieved",
-			},
-			Timestamp: time.Now(),
-		}
+		successPayload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(successPayload.GetCustom(), "target_dao", targetDao)
+		eventbus.SetNested(successPayload.GetCustom(), "interaction_type", interactionType)
+		eventbus.SetNested(successPayload.GetCustom(), "result", "harmony_achieved")
+
+		successEvent := eventbus.NewStructuredEvent("dao.interaction.success", "cultivation-module", ev.WorldID, successPayload)
+		successEvent.EventID = "dao-success-" + uuid.New().String()[:8]
+		successEvent.Timestamp = time.Now()
+
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, successEvent)
 	} else {
-		conflictEvent := eventbus.Event{
-			EventID:   "dao-conflict-" + uuid.New().String()[:8],
-			EventType: "dao.interaction.conflict",
-			Source:    "cultivation-module",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"player_id":        playerID,
-				"target_dao":       targetDao,
-				"interaction_type": interactionType,
-				"result":           "dao_conflict",
-				"consequences":     []string{"spiritual_damage", "path_instability"},
-			},
-			Timestamp: time.Now(),
-		}
+		conflictPayload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "")
+
+		eventbus.SetNested(conflictPayload.GetCustom(), "target_dao", targetDao)
+		eventbus.SetNested(conflictPayload.GetCustom(), "interaction_type", interactionType)
+		eventbus.SetNested(conflictPayload.GetCustom(), "result", "dao_conflict")
+
+		conflictEvent := eventbus.NewStructuredEvent("dao.interaction.conflict", "cultivation-module", ev.WorldID, conflictPayload)
+		conflictEvent.EventID = "dao-conflict-" + uuid.New().String()[:8]
+		conflictEvent.Timestamp = time.Now()
+		eventbus.SetNested(conflictPayload.GetCustom(), "consequences", []string{"spiritual_damage", "path_instability"})
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, conflictEvent)
 	}
 }
