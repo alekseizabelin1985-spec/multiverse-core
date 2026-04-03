@@ -126,8 +126,8 @@ SET e.type = $entity_type,
 RETURN e
 `
 
-	// Use transaction to guarantee the data is committed
-	_, err = session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+	// Use WriteTransaction for MERGE operation (write)
+	_, err = session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
 		result, runErr := tx.Run(query, map[string]any{
 			"entity_id":    entityID,
 			"entity_type":  entityType,
@@ -158,8 +158,8 @@ MERGE (a)-[r:%s]->(b)
 RETURN r
 `, relType)
 
-	// Use transaction to guarantee the data is committed
-	_, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+	// Use WriteTransaction for MERGE operation (write)
+	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
 		result, runErr := tx.Run(query, map[string]any{
 			"from_id": fromID,
 			"to_id":   toID,

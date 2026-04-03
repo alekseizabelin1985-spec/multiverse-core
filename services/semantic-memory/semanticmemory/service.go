@@ -353,9 +353,10 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 	r.HandleFunc("/v1/relations/metrics", func(w http.ResponseWriter, r *http.Request) {
 		metrics := indexer.GetRelationsMetrics()
 		response := map[string]int64{
-			"relations_explicit_count":    metrics.ExplicitCount,
-			"relations_fallback_count":    metrics.FallbackCount,
-			"relations_validation_errors": metrics.ValidationErrs,
+			"relations_explicit_count":        metrics.ExplicitCount,
+			"relations_fallback_count":        metrics.FallbackCount,
+			"relations_entities_auto_created": metrics.EntityCreated,
+			"relations_validation_errors":     metrics.ValidationErrs,
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		json.NewEncoder(w).Encode(response)
