@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go *)",
+      "Bash(docker-compose *)",
+      "Bash(select-string *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "mcp__MCP_DOCKER__create_pull_request",
+      "Bash(git reset *)"
+    ]
+  },
+  "$version": 3
+}
