@@ -1666,3 +1666,110 @@ func (n *Neo4jClient) CreateWorldRelationship(regionOrLocationID, worldID string
 
 	return err
 }
+
+// =============================================================================
+// Explicit Relations — Этап 2: Явные связи для knowledge graph
+// =============================================================================
+
+// CreateRelation создаёт семантическую связь между двумя Entity в графе.
+// Использует MERGE для идемпотентности. Directed=false создаёт ненаправленную связь.
+// Metadata сериализуется в свойства связи.
+func (n *Neo4jClient) CreateRelation(fromID, toID, relType string, directed bool, metadata map[string]any) error {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	arrow := "->"
+	if !directed {
+		arrow = "-"
+	}
+
+	// Безопасный relType: только alphanumeric + underscore
+	safeRelType := sanitizeRelType(relType)
+
+	query := fmt.Sprintf(`
+		MATCH (a {id: $from_id})
+		MATCH (b {id: $to_id})
+		MERGE (a)-[r:%s]%s(b)
+		SET r += $metadata
+		RETURN r
+	`, safeRelType, arrow)
+
+	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+		result, runErr := tx.Run(query, map[string]any{
+			"from_id":  fromID,
+			"to_id":    toID,
+			"metadata": metadata,
+		})
+		if runErr != nil {
+			return nil, runErr
+		}
+		_, consumeErr := result.Consume()
+		return nil, consumeErr
+	})
+	return err
+}
+
+// EntityExists проверяет существует ли Entity с указанным ID.
+func (n *Neo4jClient) EntityExists(entityID string) (bool, error) {
+	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
+	defer session.Close()
+
+	query := `
+		MATCH (e:Entity {id: $entity_id})
+		RETURN count(e) > 0 AS exists
+	`
+
+	result, err := session.ReadTransaction(func(tx neo4j.Transaction) (any, error) {
+		res, runErr := tx.Run(query, map[string]any{
+			"entity_id": entityID,
+		})
+		if runErr != nil {
+			return false, runErr
+		}
+		if res.Next() {
+			return res.Record().Values[0].(bool), nil
+		}
+		return false, nil
+	})
+	if err != nil {
+		return false, err
+	}
+	exists, _ := result.(bool)
+	return exists, nil
+}
+
+// EnsureEntity создаёт Entity-заглушку если её ещё нет.
+// Если Entity уже существует — ничего не делает.
+func (n *Neo4jClient) EnsureEntity(entityID, entityType, worldID string, payload map[string]any) error {
+	exists, err := n.EntityExists(entityID)
+	if err != nil {
+		return fmt.Errorf("check entity existence: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	// Создаём сущность-заглушку
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+	payload["stub"] = true
+	payload["world_id"] = worldID
+
+	return n.UpsertEntity(entityID, entityType, payload)
+}
+
+// sanitizeRelType очищает тип связи от потенциально опасных символов.
+// Допускаются только alphanumeric и underscore.
+func sanitizeRelType(relType string) string {
+	var result []rune
+	for _, r := range relType {
+		if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			result = append(result, r)
+		}
+	}
+	if len(result) == 0 {
+		return "RELATED"
+	}
+	return string(result)
+}
