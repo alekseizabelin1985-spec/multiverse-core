@@ -1564,18 +1564,9 @@ func formatEventDescription(ev eventbus.Event) string {
 	// Извлекаем ключевые поля из payload для формирования описания
 	var parts []string
 
-	// Источник (если есть)
-	if sourceID, ok := ev.Payload["entity_id"].(string); ok && sourceID != "" {
-		parts = append(parts, sourceID)
-	}
-	// Также проверяем player_id, actor_id, character_id
-	for _, key := range []string{"player_id", "actor_id", "character_id", "npc_id"} {
-		if id, ok := ev.Payload[key].(string); ok && id != "" {
-			if len(parts) == 0 {
-				parts = append(parts, id)
-			}
-			break
-		}
+	// Источник (если есть) — используем ExtractEntityID для поддержки нового формата
+	if entity := eventbus.ExtractEntityID(ev.Payload); entity != nil && entity.ID != "" {
+		parts = append(parts, entity.ID)
 	}
 
 	// Действие (на основе типа события или explicit action)
@@ -1675,10 +1666,10 @@ func extractEntityIDs(payload map[string]interface{}) []string {
 			}
 		}
 	}
-	if entityID, ok := payload["entity_id"].(string); ok {
-		ids = append(ids, entityID)
+	if entity := eventbus.ExtractEntityID(payload); entity != nil && entity.ID != "" {
+		ids = append(ids, entity.ID)
 		debugLog("", "", "Found entity ID in payload", map[string]interface{}{
-			"entity_id": entityID,
+			"entity_id": entity.ID,
 		})
 	}
 	if target, ok := payload["target"].(string); ok {

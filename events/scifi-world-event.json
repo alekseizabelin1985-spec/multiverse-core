@@ -1,0 +1,28 @@
+{
+  "id": "evt-scifi-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "cyber-empire-3024",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Космическая цивилизация с ИИ, киборгами и межпланетными войнами",
+      "theme": "sci-fi",
+      "key_elements": [
+        "cyborgs",
+        "artificial_intelligence",
+        "space_fleets",
+        "quantum_tech",
+        "alien_planets",
+        "digital_consciousness"
+      ],
+      "scale": "large",
+      "restrictions": [
+        "no_magic",
+        "no_monsters",
+        "no_medieval_tech"
+      ]
+    }
+  }
+}

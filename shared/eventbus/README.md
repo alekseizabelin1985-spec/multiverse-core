@@ -100,10 +100,10 @@ eventbus.PublishActionEvent(
 )
 ```
 
-### Извлечение ID сущностей
+### Извлечение данных: сущности, скоупы, мир, универсальный доступор
 
 ```go
-// Новая структура с fallback на старую
+// Извлечение entity с поддержкой новой структуры и fallback
 entity := eventbus.ExtractEntityID(payload)
 if entity != nil {
     fmt.Println("Entity ID:", entity.ID)
@@ -118,8 +118,85 @@ if target != nil {
     fmt.Println("Target ID:", target.ID)
 }
 
-// Извлечение world ID
+// Извлечение world ID (новая: world.id, старая: world_id)
 worldID := eventbus.ExtractWorldID(payload)
+
+// Извлечение scope (новая: scope: {id, type}, старая: scope_id, scope_type)
+scope := eventbus.ExtractScope(payload)
+if scope != nil {
+    fmt.Println("Scope ID:", scope.ID)
+    fmt.Println("Scope Type:", scope.Type)  // solo, group, city, region, quest
+}
+```
+
+### Универсальный доступ по dot-путям (через jsonpath)
+
+> 💡 `eventbus.PathAccessor` — это type alias на `jsonpath.Accessor` из универсального пакета `shared/jsonpath`.
+> Все методы делегируются к нему — можно использовать любые фичи jsonpath.
+
+```go
+// Создаём аксессор для payload:
+accessor := eventbus.NewPathAccessor(payload)  // alias на jsonpath.New()
+// Или через метод события (рекомендуется):
+accessor := event.Path()  // возвращает *jsonpath.Accessor
+
+// Извлечение примитивных типов по пути:
+entityID, ok := accessor.GetString("entity.id")           // "player-123"
+scopeType, ok := accessor.GetString("scope.type")         // "group"
+worldID, ok := accessor.GetString("world.id")             // "world-789"
+level, ok := accessor.GetInt("entity.metadata.level")     // 15
+temperature, ok := accessor.GetFloat("weather.temp.value") // 25.5
+isActive, ok := accessor.GetBool("entity.active")         // true
+
+// Извлечение сложных типов:
+metadata, ok := accessor.GetMap("entity.metadata")        // map[string]any
+inventory, ok := accessor.GetSlice("player.inventory")    // []any
+
+// Быстрая проверка существования:
+if accessor.Has("quest.objectives") {
+    // Обработка квеста...
+}
+```
+
+### Примеры использования в хендлерах событий с полной иерархией:
+```go
+func handlePlayerAction(event eventbus.Event) {
+    // Универсальный доступ через встроенный PathAccessor:
+    pa := event.Path()
+    
+    // Извлечение данных по иерархическим путям:
+    entityID, _ := pa.GetString("entity.id")
+    entityType, _ := pa.GetString("entity.type")
+    scopeID, _ := pa.GetString("scope.id")
+    scopeType, _ := pa.GetString("scope.type")  // solo/group/city/region/quest
+    worldID, _ := pa.GetString("world.id")
+    
+    // Кастомные поля через dot-notation:
+    action, _ := pa.GetString("action")
+    skillID, _ := pa.GetString("skill.id")
+    targetID, _ := pa.GetString("target.entity.id")
+    
+    // Метрики/статы:
+    damage, _ := pa.GetFloat("combat.damage.value")
+    cooldown, _ := pa.GetInt("skill.cooldown")
+    
+    // Логика обработки...
+}
+
+// Создание события с полной иерархией:
+event := eventbus.NewStructuredEvent(
+    "player.entered_region",
+    "entity-actor",
+    "world-789",
+    eventbus.NewEventPayload().
+        WithEntity("player-123", "player", "Вася").
+        WithTarget("region-456", "region", "Темный лес").
+        WithWorld("world-789").
+        WithScope("solo-abc", "solo"),  // Новый метод для scope!
+).WithCustom(map[string]any{
+    "entry.reason": "quest_trigger",
+    "weather.change.to": "шторм",  // dot-notation в custom полях!
+})
 ```
 
 ### Dot notation helpers

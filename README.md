@@ -26,6 +26,42 @@ The system consists of multiple interconnected services that follow key architec
 - **Generativity over Scripting**: Qwen3 creates unique outcomes instead of choosing from presets
 - **Ontological Awareness**: Knowledge about the world affects logic through ontological profiles
 
+### 🔀 Hierarchical Event Architecture (NEW)
+
+> 📦 **Universal Data Access via `shared/jsonpath`**
+
+All events now support **hierarchical data structures** with dot-notation paths for robust, LLM-friendly data access:
+
+```json
+// ✅ NEW: Hierarchical format (preferred)
+{
+  "entity": { "id": "player-123", "type": "player", "name": "Вася" },
+  "world": { "id": "world-abc" },
+  "scope": { "id": "city-xyz", "type": "city" },
+  "target": { "entity": { "id": "npc-456", "type": "npc" } },
+  "payload": { "action": "talk", "dialogue": "Hello!" }
+}
+
+// ✅ OLD: Flat format (still supported for backward compatibility)
+{
+  "entity_id": "player-123",
+  "entity_type": "player",
+  "world_id": "world-abc",
+  "scope_id": "city-xyz"
+}
+```
+
+**Key Benefits**:
+- 🧠 **LLM-Friendly**: Clear semantic structure improves AI context understanding
+- 🔍 **Universal Access**: `jsonpath.Accessor` works with ANY nested data, not just events
+- ♻️ **Backward Compatible**: Old flat-key events continue to work seamlessly
+- 🛡️ **Type-Safe**: Builder pattern prevents malformed events
+
+**Read More**:
+- [📦 `shared/jsonpath` Package](shared/jsonpath/README.md) — Universal dot-path access
+- [🔀 Event Migration Guide](Docs/EVENTS-MIGRATION.md) — Full migration patterns
+- [🎭 Narrative Prompts](services/narrative-orchestrator/narrativeorchestrator/prompt_builder.go) — Updated LLM schemas
+
 ### Core Services
 
 #### Entity Manager
@@ -241,6 +277,46 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 🆘 Support
 
 For support, please open an issue in the GitHub repository or contact the maintainers.
+
+---
+
+## 📚 Quick Reference: Hierarchical Events
+
+### Reading Event Data
+```go
+pa := event.Path()
+entityID, _ := pa.GetString("entity.id")           // Fallback: entity_id
+worldID := eventbus.GetWorldIDFromEvent(event)     // Fallback: world_id  
+scope := eventbus.GetScopeFromEvent(event)         // Fallback: scope_id
+level, _ := pa.GetInt("entity.stats.level")
+active, _ := pa.GetBool("entity.active")
+if pa.Has("quest.objectives") { /* ... */ }
+```
+
+### Creating Events
+```go
+payload := eventbus.NewEventPayload().
+    WithEntity(id, entityType, name).
+    WithScope(scopeID, scopeType).  // solo/group/city/region/quest
+    WithWorld(worldID)
+eventbus.SetNested(payload.GetCustom(), "custom.field", value)
+event := eventbus.NewStructuredEvent(type, source, worldID, payload)
+```
+
+### JSON Structure
+```json
+{
+  "entity": {"id": "x", "type": "player", "name": "Вася"},
+  "world": {"id": "w"},
+  "scope": {"id": "s", "type": "city"},
+  "payload": {"action": "talk"}
+}
+```
+
+### Documentation
+- 📦 [`shared/jsonpath/README.md`](shared/jsonpath/README.md) — Universal accessor API
+- 🔀 [`Docs/EVENTS-MIGRATION.md`](Docs/EVENTS-MIGRATION.md) — Full migration guide
+- 🎭 [`shared/eventbus/README.md`](shared/eventbus/README.md) — Event patterns
 
 ## 🙏 Acknowledgments
 

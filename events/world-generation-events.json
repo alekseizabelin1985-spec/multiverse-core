@@ -1,0 +1,296 @@
+{
+  "description": "JSON события для генерации мира - разные вариации для отправки в шину событий Redpanda",
+  "topic": "system_events",
+  "event_type": "world.generation.requested",
+  "scenarios": [
+    {
+      "name": "Культивационный мир с магическими реками",
+      "description": "Контекстная генерация для cultivation мира с летающими островами",
+      "event": {
+        "id": "evt-001",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "cultivation-world-2026",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мир для культивации с магическими реками и летающими островами",
+            "theme": "cultivation",
+            "key_elements": [
+              "magical_rivers",
+              "floating_islands",
+              "ancient_temples",
+              "spirit_beasts",
+              "sect_system"
+            ],
+            "scale": "large",
+            "restrictions": [
+              "no_modern_technology",
+              "no_guns_or_firearms"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Steampunk мир с паровыми машинами",
+      "description": "Контекстная генерация для steampunk тематики",
+      "event": {
+        "id": "evt-002",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "steampunk-empire-1893",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мир Victorian эпохи с паровыми машинами и механическими големами",
+            "theme": "steampunk",
+            "key_elements": [
+              "steam_engine",
+              "clockwork_golems",
+              "aerial_ships",
+              "coal_mines",
+              "goggles_technology",
+              "industrial_cities"
+            ],
+            "scale": "medium",
+            "restrictions": [
+              "no_magic",
+              "no_electricity",
+              "no_modern_computing"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Dark Fantasy мир с демонами",
+      "description": "Контекстная генерация для мрачного фэнтези",
+      "event": {
+        "id": "evt-003",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "dark-lands-hellgate",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Тёмный мир, пропитанный демонической энергией после открытия врат преисподней",
+            "theme": "dark_fantasy",
+            "key_elements": [
+              "demon_portal",
+              "corrupted_forests",
+              "cursed_kingdoms",
+              "soul_eaters",
+              "dark_cults",
+              "forbidden_magic"
+            ],
+            "scale": "large",
+            "restrictions": [
+              "no_great_good",
+              "no_pacific_resolution",
+              "no_low_stakes"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Sci-Fi мир с киборгами",
+      "description": "Контекстная генерация для космической оперы",
+      "event": {
+        "id": "evt-004",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "cyber-empire-3024",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Космическая цивилизация с ИИ, киборгами и межпланетными войнами",
+            "theme": "sci-fi",
+            "key_elements": [
+              "cyborgs",
+              "artificial_intelligence",
+              "space_fleets",
+              "quantum_tech",
+              "alien_planets",
+              "digital_consciousness"
+            ],
+            "scale": "large",
+            "restrictions": [
+              "no_magic",
+              "no_monsters",
+              "no_medieval_tech"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Мифологический мир с богами",
+      "description": "Контекстная генерация на основе древней мифологии",
+      "event": {
+        "id": "evt-005",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "asgard-legacy-9999",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мир, где божества мифологии реальны и периодически вмешиваются в дела смертных",
+            "theme": "mythology",
+            "key_elements": [
+              "living_gods",
+              "divine_bloodlines",
+              "prophecies",
+              "mythical_creatures",
+              "sacred_relics",
+              "god_wars"
+            ],
+            "scale": "medium",
+            "restrictions": [
+              "no_scientific_explanation",
+              "no_modern_world"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Случайный малый мир",
+      "description": "Рандомная генерация небольшого мира",
+      "event": {
+        "id": "evt-006",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "system",
+        "payload": {
+          "seed": "random-small-world-abc123",
+          "mode": "random"
+        }
+      }
+    },
+    {
+      "name": "Случайный большой мир",
+      "description": "Рандомная генерация большого детализированного мира",
+      "event": {
+        "id": "evt-007",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "system",
+        "payload": {
+          "seed": "random-epic-world-xyz789",
+          "mode": "random",
+          "constraints": {
+            "max_regions": 10,
+            "max_water_bodies": 8,
+            "max_cities": 12,
+            "include_dungeons": true,
+            "include_dragon_hoards": true
+          }
+        }
+      }
+    },
+    {
+      "name": "Киберпанк мир с корпорациями",
+      "description": "Контекстная генерация для киберпанка",
+      "event": {
+        "id": "evt-008",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "neon-city-2099",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мрачный киберпанк мир доминируемых мега-корпорациями ночных городов",
+            "theme": "cyberpunk",
+            "key_elements": [
+              "mega_corporations",
+              "neon_lights",
+              "hackers",
+              "neural_interfaces",
+              "underground_cyber_clinics",
+              "synthetic_emotions",
+              "data_theft"
+            ],
+            "scale": "medium",
+            "restrictions": [
+              "no_heroic_resolution",
+              "no_corporate_reform",
+              "no_easy_escape"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Экологичный фэнтези мир",
+      "description": "Контекстная генерация для природно-ориентированного мира",
+      "event": {
+        "id": "evt-009",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "nature-first-world",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мир где природа и магия в гармонии, цивилизация минимальна",
+            "theme": "nature_fantasy",
+            "key_elements": [
+              "ancient_trees",
+              "druid_circles",
+              "shapeshifters",
+              "spirit_animals",
+              "seasonal_magic",
+              "ecological_balance"
+            ],
+            "scale": "small",
+            "restrictions": [
+              "no_large_cities",
+              "no_industry",
+              "no_warfare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "Пост-апокалиптический мир",
+      "description": "Контекстная генерация для выживания после катастрофы",
+      "event": {
+        "id": "evt-010",
+        "event_type": "world.generation.requested",
+        "timestamp": "2026-04-01T00:00:00Z",
+        "source": "player",
+        "payload": {
+          "seed": "wasteland-survivors-10y",
+          "mode": "contextual",
+          "user_context": {
+            "description": "Мир после ядерной или экологической катастрофы, человечество выживает",
+            "theme": "post_apocalyptic",
+            "key_elements": [
+              "radiation_zones",
+              "scrap_tech",
+              "mutant_creatures",
+              "resource_scarcity",
+              "nomad_tribes",
+              "fortified_enclaves"
+            ],
+            "scale": "large",
+            "restrictions": [
+              "no_easy_solutions",
+              "no_great_resurrection",
+              "no_world_recovery"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

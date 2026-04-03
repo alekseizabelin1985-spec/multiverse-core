@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"multiverse-core.io/shared/jsonpath"
 )
 
 // SetNested устанавливает значение по dot-пути в map
@@ -193,6 +195,50 @@ func ExtractWorldID(payload map[string]any) string {
 	}
 
 	return ""
+}
+
+// ExtractScope извлекает информацию о скоупе из payload (новая и старая структура)
+func ExtractScope(payload map[string]any) *ScopeRef {
+	// Используем универсальный jsonpath для извлечения с fallback
+	acc := jsonpath.New(payload)
+	
+	// Новая структура: scope: { id, type }
+	if scopeMap, ok := acc.GetMap("scope"); ok {
+		ref := &ScopeRef{}
+		if id, ok := scopeMap["id"].(string); ok && id != "" {
+			ref.ID = id
+		}
+		if typ, ok := scopeMap["type"].(string); ok && typ != "" {
+			ref.Type = typ
+		}
+		if ref.ID != "" || ref.Type != "" {
+			return ref
+		}
+	}
+
+	// Fallback: плоские ключи scope_id, scope_type
+	ref := &ScopeRef{}
+	if id, ok := payload["scope_id"].(string); ok && id != "" {
+		ref.ID = id
+	}
+	if typ, ok := payload["scope_type"].(string); ok && typ != "" {
+		ref.Type = typ
+	}
+
+	if ref.ID != "" || ref.Type != "" {
+		return ref
+	}
+
+	return nil
+}
+
+// Type aliases для удобства — делегируют к универсальному jsonpath.Accessor
+// Это сохраняет обратную совместимость кода, использующего eventbus.PathAccessor
+type PathAccessor = jsonpath.Accessor
+
+// NewPathAccessor создает аксессор для работы с payload (алиас на jsonpath.New)
+func NewPathAccessor(data map[string]any) *PathAccessor {
+	return jsonpath.New(data)
 }
 
 // Helper функции

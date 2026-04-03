@@ -136,22 +136,117 @@ KAFKA_BROKERS=localhost:9092 MINIO_ENDPOINT=localhost:9000 go run services/narra
 
 ## Code Patterns & Conventions
 
-### Entity Management
+### 🔀 Hierarchical Event Access (NEW — PREFERRED)
 
-- **Path-based payload access**: Use dot notation (`payload.health.current`)
-- **Storage**: MinIO buckets `entities-{world_id}`
-- **Events**: `entity.created`, `entity.updated`, `entity.history.appended`
-
-### Event Structure
+**Always use `event.Path()` for reading event data** — it provides universal, type-safe access with fallback support:
 
 ```go
-type Event struct {
-    ID        uuid.UUID
-    Type      string  // e.g., "entity.create"
-    Timestamp time.Time
-    Payload   map[string]interface{}
+// ✅ PREFERRED: Universal access via jsonpath
+func handler(event eventbus.Event) {
+    pa := event.Path()  // *jsonpath.Accessor
+    
+    // Extract with fallback: new structure → old structure → default
+    entityID, _ := pa.GetString("entity.id")
+    if entityID == "" {
+        entityID, _ = pa.GetString("entity_id")  // fallback
+    }
+    
+    // World/Scope: use helper functions for both structures
+    worldID := eventbus.GetWorldIDFromEvent(event)  // payload.world.id OR world_id
+    scope := eventbus.GetScopeFromEvent(event)      // payload.scope:{id,type} OR scope_id
+    
+    // Type-safe getters for any depth
+    level, _ := pa.GetInt("entity.stats.level")
+    active, _ := pa.GetBool("entity.active")
+    tags, _ := pa.GetSlice("entity.tags")
+    
+    // Array access by index
+    firstTag, _ := pa.GetString("entity.tags[0]")
+    
+    // Quick existence check
+    if pa.Has("quest.objectives") { /* ... */ }
 }
 ```
+
+### 📝 Creating Events with Hierarchical Structure
+
+**Use the builder pattern for new events** — ensures consistent, LLM-friendly structure:
+
+```go
+// ✅ PREFERRED: Builder + hierarchical structure
+payload := eventbus.NewEventPayload().
+    WithEntity("player-123", "player", "Вася").
+    WithScope("city-xyz", "city").        // solo/group/city/region/quest
+    WithWorld("world-abc")
+
+// Add custom fields with dot-notation for flexibility
+eventbus.SetNested(payload.GetCustom(), "action", "talk")
+eventbus.SetNested(payload.GetCustom(), "dialogue.text", "Hello!")
+
+// Optional: add hierarchical paths explicitly for LLM clarity
+eventbus.SetNested(payload.GetCustom(), "entity.id", "player-123")
+eventbus.SetNested(payload.GetCustom(), "world.id", "world-abc")
+
+event := eventbus.NewStructuredEvent("player.talked", "entity-actor", "world-abc", payload)
+bus.Publish(ctx, eventbus.TopicWorldEvents, event)
+```
+
+### ⚠️ Deprecated Patterns (Still Supported, But Avoid in New Code)
+
+```go
+// ❌ AVOID in new code (still works for backward compatibility):
+entityID := event.Payload["entity_id"].(string)  // panics if missing/wrong type!
+worldID := event.WorldID                          // top-level field, not in payload
+
+// ✅ USE instead:
+pa := event.Path()
+entityID, _ := pa.GetString("entity.id")  // safe + fallback support
+worldID := eventbus.GetWorldIDFromEvent(event)  // unified access
+```
+
+### 🎭 LLM Prompt Generation (Narrative Orchestrator)
+
+**Prompts must use hierarchical JSON schema** — see `prompt_builder.go` for exact format:
+
+```json
+{
+  "event_type": "player.entered_region",
+  "world": {"id": "world-abc"},
+  "scope": {"id": "solo-xyz", "type": "solo"},
+  "entity": {"id": "player-123", "type": "player", "name": "Вася"},
+  "target": {"entity": {"id": "region-456", "type": "region", "name": "Тёмный лес"}},
+  "payload": {"description": "...", "weather": "пасмурно"}
+}
+```
+
+**Rules for AI-generated events**:
+- `world.id` is REQUIRED (not `world_id`)
+- `scope:{id,type}` is OPTIONAL but preferred over `scope_id`
+- `entity:{id,type,name}` is OPTIONAL but improves context
+- Always validate JSON structure before publishing
+
+### 📦 Universal `jsonpath` Package
+
+The `shared/jsonpath` package works with ANY `map[string]any` data, not just events:
+
+```go
+import "multiverse-core.io/shared/jsonpath"
+
+// Works with configs, API responses, any JSON-like data
+acc := jsonpath.New(anyData)
+
+// All the same getters:
+val, _ := acc.GetString("config.db.host")
+port, _ := acc.GetInt("server.ports[0]")
+meta, _ := acc.GetMap("user.profile")
+
+// Debug: list all available paths
+for _, path := range acc.GetAllPaths() {
+    fmt.Println(path)  // config, config.db, config.db.host, ...
+}
+```
+
+**Read**: [`shared/jsonpath/README.md`](shared/jsonpath/README.md) for full API reference.
 
 ### Oracle Integration
 

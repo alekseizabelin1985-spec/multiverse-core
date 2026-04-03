@@ -1,0 +1,28 @@
+{
+  "id": "evt-darkfantasy-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "dark-lands-hellgate",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Тёмный мир, пропитанный демонической энергией после открытия врат преисподней",
+      "theme": "dark_fantasy",
+      "key_elements": [
+        "demon_portal",
+        "corrupted_forests",
+        "cursed_kingdoms",
+        "soul_eaters",
+        "dark_cults",
+        "forbidden_magic"
+      ],
+      "scale": "large",
+      "restrictions": [
+        "no_great_good",
+        "no_pacific_resolution",
+        "no_low_stakes"
+      ]
+    }
+  }
+}

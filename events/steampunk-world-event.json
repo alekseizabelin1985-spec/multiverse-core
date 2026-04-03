@@ -1,0 +1,28 @@
+{
+  "id": "evt-steampunk-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "steampunk-empire-1893",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир Victorian эпохи с паровыми машинами и механическими големами",
+      "theme": "steampunk",
+      "key_elements": [
+        "steam_engine",
+        "clockwork_golems",
+        "aerial_ships",
+        "coal_mines",
+        "goggles_technology",
+        "industrial_cities"
+      ],
+      "scale": "medium",
+      "restrictions": [
+        "no_magic",
+        "no_electricity",
+        "no_modern_computing"
+      ]
+    }
+  }
+}

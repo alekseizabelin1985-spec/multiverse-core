@@ -1,0 +1,28 @@
+{
+  "id": "evt-nature-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "nature-first-world",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир где природа и магия в гармонии, цивилизация минимальна",
+      "theme": "nature_fantasy",
+      "key_elements": [
+        "ancient_trees",
+        "druid_circles",
+        "shapeshifters",
+        "spirit_animals",
+        "seasonal_magic",
+        "ecological_balance"
+      ],
+      "scale": "small",
+      "restrictions": [
+        "no_large_cities",
+        "no_industry",
+        "no_warfare"
+      ]
+    }
+  }
+}

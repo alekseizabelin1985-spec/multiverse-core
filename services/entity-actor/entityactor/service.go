@@ -654,7 +654,12 @@ func (s *Service) handleItemCrafted(ctx context.Context, ev eventbus.Event) {
 func (s *Service) handleCurrencyChanged(ctx context.Context, ev eventbus.Event) {
 	s.logger.Printf("Handling currency changed event")
 
-	entityID, _ := ev.Payload["entity_id"].(string)
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	if entity == nil {
+		s.logger.Printf("Entity not found in currency changed event")
+		return
+	}
+	entityID := entity.ID
 	currencyType, _ := ev.Payload["currency_type"].(string)
 	amount, _ := ev.Payload["amount"].(float64)
 	reason, _ := ev.Payload["reason"].(string)

@@ -11,6 +11,12 @@ type WorldRef struct {
 	ID string `json:"id"`
 }
 
+// ScopeRef представляет ссылку на скоуп
+type ScopeRef struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
+}
+
 // Entity представляет сущность с полной информацией
 type Entity struct {
 	ID        string     `json:"id"`
@@ -30,6 +36,7 @@ type EventPayload struct {
 	Target *Entity          `json:"target,omitempty"`
 	Source *Entity          `json:"source,omitempty"`
 	World  *WorldRef        `json:"world,omitempty"`
+	Scope  *ScopeRef        `json:"scope,omitempty"`
 	Custom map[string]any   `json:"-"` // Для произвольных полей с dot-notation
 }
 
@@ -78,6 +85,15 @@ func (p *EventPayload) WithWorld(worldID string) *EventPayload {
 	return p
 }
 
+// WithScope устанавливает скоуп события (solo, group, city, region, quest)
+func (p *EventPayload) WithScope(scopeID, scopeType string) *EventPayload {
+	p.Scope = &ScopeRef{
+		ID:   scopeID,
+		Type: scopeType,
+	}
+	return p
+}
+
 // GetCustom возвращает map для произвольных полей
 func (p *EventPayload) GetCustom() map[string]any {
 	if p.Custom == nil {
@@ -101,6 +117,9 @@ func (p *EventPayload) ToMap() map[string]any {
 	}
 	if p.World != nil {
 		result["world"] = worldRefToMap(p.World)
+	}
+	if p.Scope != nil {
+		result["scope"] = scopeRefToMap(p.Scope)
 	}
 
 	if p.Custom != nil {
@@ -140,4 +159,13 @@ func entityToMap(e *Entity) map[string]any {
 // worldRefToMap конвертирует WorldRef в map[string]any
 func worldRefToMap(w *WorldRef) map[string]any {
 	return map[string]any{"id": w.ID}
+}
+
+// scopeRefToMap конвертирует ScopeRef в map[string]any
+func scopeRefToMap(s *ScopeRef) map[string]any {
+	result := map[string]any{
+		"id":   s.ID,
+		"type": s.Type,
+	}
+	return result
 }

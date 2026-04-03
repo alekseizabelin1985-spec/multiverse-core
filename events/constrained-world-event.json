@@ -1,0 +1,33 @@
+{
+  "id": "evt-constrained-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "custom-world-with-limits",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир с пользовательскими ограничениями на количество объектов",
+      "theme": "fantasy",
+      "key_elements": [
+        "magic_forest",
+        "mountain_castle",
+        "hidden_village",
+        "dragon_lair"
+      ],
+      "scale": "medium",
+      "restrictions": [
+        "no_seas",
+        "no_deserts"
+      ]
+    },
+    "constraints": {
+      "max_regions": 4,
+      "max_water_bodies": 2,
+      "max_cities": 3,
+      "include_dungeons": false,
+      "include_dragons": true,
+      "focus_on_interior": true
+    }
+  }
+}

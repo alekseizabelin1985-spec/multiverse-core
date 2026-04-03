@@ -181,42 +181,22 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 	}
 }
 
-// extractStructuredEntityID извлекает ID сущности из новой структуры (entity.id)
-// с fallback на старую структуру (entity_id)
+// extractStructuredEntityID извлекает ID сущности
+// Поддерживает новый формат (entity.id) и старый (entity_id, player_id, actor_id)
 func extractStructuredEntityID(ev eventbus.Event) string {
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	if entity != nil {
 		return entity.ID
 	}
-	// Fallback на старый формат
-	if val, ok := ev.Payload["entity_id"].(string); ok {
-		return val
-	}
-	if val, ok := ev.Payload["player_id"].(string); ok {
-		return val
-	}
-	if val, ok := ev.Payload["actor_id"].(string); ok {
-		return val
-	}
 	return ""
 }
 
-// extractStructuredTargetEntityID извлекает ID целевой сущности из новой структуры
-// с fallback на старую структуру
+// extractStructuredTargetEntityID извлекает ID целевой сущности
+// Поддерживает новый формат (target.entity.id) и старый (target_id, npc_id, item_id)
 func extractStructuredTargetEntityID(ev eventbus.Event) string {
 	entity := eventbus.ExtractTargetEntityID(ev.Payload)
 	if entity != nil {
 		return entity.ID
-	}
-	// Fallback на старый формат
-	if val, ok := ev.Payload["target_id"].(string); ok {
-		return val
-	}
-	if val, ok := ev.Payload["npc_id"].(string); ok {
-		return val
-	}
-	if val, ok := ev.Payload["item_id"].(string); ok {
-		return val
 	}
 	return ""
 }
