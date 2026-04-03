@@ -41,22 +41,35 @@ func (cg *CityGovernor) HandleEvent(ev eventbus.Event) {
 	}
 }
 
-// handlePlayerEntry handles player entry into a city.
+// handlePlayerEntry handles player entry into a city — с универсальным доступом и иерархическими событиями:
 func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	pa := ev.Path()
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
-	cityID := *ev.ScopeID
 
-	if playerID == "" {
-		log.Printf("Player entry missing player_id")
+	// Извлечение city_id: новая структура scope.id → старая scope_id
+	var cityID string
+	if scope := eventbus.GetScopeFromEvent(ev); scope != nil && scope.Type == "city" {
+		cityID = scope.ID
+	} else if ev.ScopeID != nil {
+		cityID = *ev.ScopeID
+	} else {
+		cityID, _ = pa.GetString("city_id")
+	}
+
+	if playerID == "" || cityID == "" {
+		log.Printf("Player entry missing player_id or city_id")
 		return
 	}
+
+	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	// Generate welcome quest if player is new
 	if cg.isNewPlayerInCity(playerID, cityID) {
@@ -66,60 +79,88 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 	// Update city population
 	cg.updateCityPopulation(cityID, 1)
 
-	// Notify NPCs of new arrival
-	npcEvent := eventbus.Event{
-		EventID:   "npc-notify-" + uuid.New().String()[:8],
-		EventType: "citizen.event",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"event_type": "new_arrival",
-			"player_id":  playerID,
-			"city_id":    cityID,
-		},
-		Timestamp: time.Now(),
-	}
+	// Notify NPCs of new arrival — с иерархической структурой событий:
+	npcPayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(worldID)
+
+	eventbus.SetNested(npcPayload.GetCustom(), "event_type", "new_arrival")
+	eventbus.SetNested(npcPayload.GetCustom(), "city.id", cityID)
+
+	// Иерархические пути для LLM:
+	eventbus.SetNested(npcPayload.GetCustom(), "entity.id", playerID)
+	eventbus.SetNested(npcPayload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(npcPayload.GetCustom(), "scope.id", cityID)
+	eventbus.SetNested(npcPayload.GetCustom(), "scope.type", "city")
+
+	npcEvent := eventbus.NewStructuredEvent("citizen.event", "city-governor", worldID, npcPayload)
+	npcEvent.EventID = "npc-notify-" + uuid.New().String()[:8]
+	npcEvent.Timestamp = time.Now()
+
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, npcEvent)
 
 	log.Printf("Player %s entered city %s", playerID, cityID)
 }
 
-// handleViolation handles world integrity violations in the city.
+// handleViolation handles world integrity violations in the city — с универсальным доступом и иерархическими событиями:
 func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
-	cityID := *ev.ScopeID
+	pa := ev.Path()
 
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	// Извлечение city_id: новая структура scope.id → старая scope_id
+	var cityID string
+	if scope := eventbus.GetScopeFromEvent(ev); scope != nil && scope.Type == "city" {
+		cityID = scope.ID
+	} else if ev.ScopeID != nil {
+		cityID = *ev.ScopeID
+	} else {
+		cityID, _ = pa.GetString("city_id")
+	}
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
-	violationType, _ := ev.Payload["violation_type"].(string)
 
-	if playerID == "" {
+	violationType, _ := pa.GetString("violation_type")
+	if violationType == "" {
+		violationType, _ = pa.GetString("violation.type") // fallback на вложенную структуру
+	}
+
+	if playerID == "" || cityID == "" {
 		return
 	}
+
+	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	// Apply city-specific consequences
 	consequence := cg.getCityConsequence(violationType, cityID)
 
-	consequenceEvent := eventbus.Event{
-		EventID:   "city-conseq-" + uuid.New().String()[:8],
-		EventType: "city.violation.consequence",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"player_id":      playerID,
-			"violation_type": violationType,
-			"consequence":    consequence,
-			"city_id":        cityID,
-		},
-		Timestamp: time.Now(),
-	}
+	// Создаём событие с иерархической структурой:
+	consequencePayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(worldID)
+
+	eventbus.SetNested(consequencePayload.GetCustom(), "violation_type", violationType)
+	eventbus.SetNested(consequencePayload.GetCustom(), "consequence", consequence)
+	eventbus.SetNested(consequencePayload.GetCustom(), "city.id", cityID)
+
+	// Иерархические пути для LLM:
+	eventbus.SetNested(consequencePayload.GetCustom(), "entity.id", playerID)
+	eventbus.SetNested(consequencePayload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(consequencePayload.GetCustom(), "scope.id", cityID)
+	eventbus.SetNested(consequencePayload.GetCustom(), "scope.type", "city")
+	eventbus.SetNested(consequencePayload.GetCustom(), "violation.type", violationType)
+
+	consequenceEvent := eventbus.NewStructuredEvent("city.violation.consequence", "city-governor", worldID, consequencePayload)
+	consequenceEvent.EventID = "city-conseq-" + uuid.New().String()[:8]
+	consequenceEvent.Timestamp = time.Now()
+
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, consequenceEvent)
 
 	// Update city reputation
@@ -190,8 +231,24 @@ func (cg *CityGovernor) handleReputationChange(ev eventbus.Event) {
 
 // handleNPCInteraction handles NPC interaction events.
 func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
-	npcID, _ := ev.Payload["npc_id"].(string)
+	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	playerEntity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if playerEntity != nil && playerEntity.ID != "" {
+		playerID = playerEntity.ID
+	} else {
+		playerID, _ = ev.Payload["player_id"].(string)
+	}
+
+	// Извлекаем npcID с поддержкой новой структуры (target.entity.id) и fallback (npc_id)
+	npcEntity := eventbus.ExtractTargetEntityID(ev.Payload)
+	var npcID string
+	if npcEntity != nil && npcEntity.ID != "" {
+		npcID = npcEntity.ID
+	} else {
+		npcID, _ = ev.Payload["npc_id"].(string)
+	}
+
 	interactionType, _ := ev.Payload["interaction_type"].(string)
 	cityID := *ev.ScopeID
 

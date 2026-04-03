@@ -35,17 +35,23 @@ func (cm *CultivationModule) HandleEvent(ev eventbus.Event) {
 	}
 }
 
-// processSkillUsage processes skill usage for cultivation progression.
+// processSkillUsage processes skill usage for cultivation progression — с универсальным доступом через jsonpath
 func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
-	skill, _ := ev.Payload["skill"].(string)
+	pa := ev.Path()
 
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	// Извлечение skill с поддержкой вложенной структуры и fallback
+	skill, _ := pa.GetString("skill")
+	if skill == "" {
+		skill, _ = pa.GetString("action.skill") // fallback на вложенную структуру
+	}
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id") // fallback на плоский ключ
 	}
 
 	if playerID == "" {
@@ -53,52 +59,73 @@ func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 		return
 	}
 
-	// Update cultivation progress based on skill usage
+	// Извлечение world_id с поддержкой обеих структур:
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
+	// Update cultivation progress based on skill usage — с иерархической структурой событий:
 	payload := eventbus.NewEventPayload().
-		WithEntity(playerID, "player", "")
+		WithEntity(playerID, "player", "").
+		WithWorld(worldID)
 
+	// Добавляем данные через dot-notation для гибкости:
 	eventbus.SetNested(payload.GetCustom(), "skill_used", skill)
-	eventbus.SetNested(payload.GetCustom(), "progress_gained", cm.calculateProgress(skill, ev.WorldID))
+	eventbus.SetNested(payload.GetCustom(), "progress_gained", cm.calculateProgress(skill, worldID))
 
-	progressEvent := eventbus.NewStructuredEvent("cultivation.progress.updated", "cultivation-module", ev.WorldID, payload)
+	// Сохраняем также иерархические пути для совместимости с LLM:
+	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+
+	progressEvent := eventbus.NewStructuredEvent("cultivation.progress.updated", "cultivation-module", worldID, payload)
 	progressEvent.EventID = "cult-progress-" + uuid.New().String()[:8]
 	progressEvent.Timestamp = time.Now()
 
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, progressEvent)
 }
 
-// handleAscension handles post-ascension cultivation changes.
+// handleAscension handles post-ascension cultivation changes — с универсальным доступом и иерархическими событиями:
 func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	pa := ev.Path()
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
-	fromPlan, _ := ev.Payload["from_plan"].(float64)
-	toPlan, _ := ev.Payload["to_plan"].(float64)
+	// Извлечение числовых параметров с типобезопасным преобразованием:
+	fromPlan, _ := pa.GetFloat("from_plan")
+	toPlan, _ := pa.GetFloat("to_plan")
 
 	if playerID == "" {
 		log.Printf("Ascension missing player_id")
 		return
 	}
 
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
 	// Handle dao merging on higher plans
 	if toPlan > fromPlan && toPlan >= 1 {
 		cm.mergeDaoPaths(ev, int(toPlan))
 	}
 
-	// Update cultivation system for new plan
+	// Update cultivation system for new plan — с иерархической структурой:
 	payload := eventbus.NewEventPayload().
-		WithEntity(playerID, "player", "")
+		WithEntity(playerID, "player", "").
+		WithWorld(worldID)
 
 	eventbus.SetNested(payload.GetCustom(), "new_plan", toPlan)
 	eventbus.SetNested(payload.GetCustom(), "system_type", cm.getSystemTypeForPlan(int(toPlan)))
 
-	updateEvent := eventbus.NewStructuredEvent("cultivation.system.updated", "cultivation-module", ev.WorldID, payload)
+	// Иерархические пути для LLM-совместимости:
+	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(payload.GetCustom(), "ascension.from_plan", fromPlan)
+	eventbus.SetNested(payload.GetCustom(), "ascension.to_plan", toPlan)
+
+	updateEvent := eventbus.NewStructuredEvent("cultivation.system.updated", "cultivation-module", worldID, payload)
 	updateEvent.EventID = "cult-update-" + uuid.New().String()[:8]
 	updateEvent.Timestamp = time.Now()
 
@@ -107,119 +134,209 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 	log.Printf("Cultivation system updated for %s at Plan %d", playerID, int(toPlan))
 }
 
-// handleDaoInteraction handles attempts to interact with other daos.
+// handleDaoInteraction handles attempts to interact with other daos — с универсальным доступом и иерархическими событиями:
 func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	pa := ev.Path()
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
-	targetDao, _ := ev.Payload["target_dao"].(string)
-	interactionType, _ := ev.Payload["interaction_type"].(string)
+	// Извлечение параметров с поддержкой вложенной структуры:
+	targetDao, _ := pa.GetString("target_dao")
+	if targetDao == "" {
+		targetDao, _ = pa.GetString("dao.target.id") // fallback на вложенную структуру
+	}
+
+	interactionType, _ := pa.GetString("interaction_type")
+	if interactionType == "" {
+		interactionType, _ = pa.GetString("action.type") // fallback
+	}
 
 	if playerID == "" || targetDao == "" {
 		log.Printf("Dao interaction missing required fields")
 		return
 	}
 
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
 	// Check if interaction is allowed
-	if cm.isDaoInteractionAllowed(playerID, targetDao, interactionType, ev.WorldID) {
+	if cm.isDaoInteractionAllowed(playerID, targetDao, interactionType, worldID) {
 		successPayload := eventbus.NewEventPayload().
-			WithEntity(playerID, "player", "")
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
 
 		eventbus.SetNested(successPayload.GetCustom(), "target_dao", targetDao)
 		eventbus.SetNested(successPayload.GetCustom(), "interaction_type", interactionType)
 		eventbus.SetNested(successPayload.GetCustom(), "result", "harmony_achieved")
 
-		successEvent := eventbus.NewStructuredEvent("dao.interaction.success", "cultivation-module", ev.WorldID, successPayload)
+		// Иерархические пути для LLM:
+		eventbus.SetNested(successPayload.GetCustom(), "entity.id", playerID)
+		eventbus.SetNested(successPayload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(successPayload.GetCustom(), "dao.interaction.target", targetDao)
+		eventbus.SetNested(successPayload.GetCustom(), "dao.interaction.type", interactionType)
+
+		successEvent := eventbus.NewStructuredEvent("dao.interaction.success", "cultivation-module", worldID, successPayload)
 		successEvent.EventID = "dao-success-" + uuid.New().String()[:8]
 		successEvent.Timestamp = time.Now()
 
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, successEvent)
 	} else {
 		conflictPayload := eventbus.NewEventPayload().
-			WithEntity(playerID, "player", "")
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
 
 		eventbus.SetNested(conflictPayload.GetCustom(), "target_dao", targetDao)
 		eventbus.SetNested(conflictPayload.GetCustom(), "interaction_type", interactionType)
 		eventbus.SetNested(conflictPayload.GetCustom(), "result", "dao_conflict")
 
-		conflictEvent := eventbus.NewStructuredEvent("dao.interaction.conflict", "cultivation-module", ev.WorldID, conflictPayload)
+		// Иерархические пути для LLM:
+		eventbus.SetNested(conflictPayload.GetCustom(), "entity.id", playerID)
+		eventbus.SetNested(conflictPayload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(conflictPayload.GetCustom(), "dao.conflict.target", targetDao)
+		eventbus.SetNested(conflictPayload.GetCustom(), "dao.conflict.type", interactionType)
+		eventbus.SetNested(conflictPayload.GetCustom(), "consequences", []string{"spiritual_damage", "path_instability"})
+
+		conflictEvent := eventbus.NewStructuredEvent("dao.interaction.conflict", "cultivation-module", worldID, conflictPayload)
 		conflictEvent.EventID = "dao-conflict-" + uuid.New().String()[:8]
 		conflictEvent.Timestamp = time.Now()
-		eventbus.SetNested(conflictPayload.GetCustom(), "consequences", []string{"spiritual_damage", "path_instability"})
+
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, conflictEvent)
 	}
 }
 
-// handleCultivationForm handles creation of new cultivation forms.
+// handleCultivationForm handles creation of new cultivation forms — с иерархической структурой событий:
 func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
-	formID, _ := ev.Payload["form_id"].(string)
-	playerID, _ := ev.Payload["player_id"].(string)
-	formType, _ := ev.Payload["form_type"].(string)
+	pa := ev.Path()
+
+	// Извлечение с поддержкой вложенной структуры и fallback:
+	formID, _ := pa.GetString("form_id")
+	if formID == "" {
+		formID, _ = pa.GetString("cultivation.form.id")
+	}
+
+	playerID, _ := pa.GetString("player_id")
+	if playerID == "" {
+		entity := eventbus.ExtractEntityID(ev.Payload)
+		if entity != nil {
+			playerID = entity.ID
+		}
+	}
+
+	formType, _ := pa.GetString("form_type")
+	if formType == "" {
+		formType, _ = pa.GetString("cultivation.form.type")
+	}
 
 	if formID == "" || playerID == "" {
 		log.Printf("Cultivation form missing required fields")
 		return
 	}
 
-	// Validate form against world ontology
-	if cm.isFormValid(formType, ev.WorldID) {
-		validateEvent := eventbus.Event{
-			EventID:   "form-valid-" + uuid.New().String()[:8],
-			EventType: "cultivation.form.validated",
-			Source:    "cultivation-module",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"form_id":   formID,
-				"player_id": playerID,
-				"form_type": formType,
-				"status":    "approved",
-			},
-			Timestamp: time.Now(),
-		}
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
+	// Validate form against world ontology — с иерархической структурой:
+	if cm.isFormValid(formType, worldID) {
+		payload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
+
+		eventbus.SetNested(payload.GetCustom(), "form_id", formID)
+		eventbus.SetNested(payload.GetCustom(), "form_type", formType)
+		eventbus.SetNested(payload.GetCustom(), "validation.status", "approved")
+
+		// Иерархические пути для LLM:
+		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "cultivation.form.id", formID)
+		eventbus.SetNested(payload.GetCustom(), "cultivation.form.type", formType)
+
+		validateEvent := eventbus.NewStructuredEvent("cultivation.form.validated", "cultivation-module", worldID, payload)
+		validateEvent.EventID = "form-valid-" + uuid.New().String()[:8]
+		validateEvent.Timestamp = time.Now()
+
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, validateEvent)
 	} else {
-		rejectEvent := eventbus.Event{
-			EventID:   "form-reject-" + uuid.New().String()[:8],
-			EventType: "cultivation.form.rejected",
-			Source:    "cultivation-module",
-			WorldID:   ev.WorldID,
-			Payload: map[string]interface{}{
-				"form_id":   formID,
-				"player_id": playerID,
-				"form_type": formType,
-				"status":    "rejected",
-				"reason":    "ontology_violation",
-			},
-			Timestamp: time.Now(),
-		}
+		payload := eventbus.NewEventPayload().
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
+
+		eventbus.SetNested(payload.GetCustom(), "form_id", formID)
+		eventbus.SetNested(payload.GetCustom(), "form_type", formType)
+		eventbus.SetNested(payload.GetCustom(), "validation.status", "rejected")
+		eventbus.SetNested(payload.GetCustom(), "validation.reason", "ontology_violation")
+
+		// Иерархические пути для LLM:
+		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "cultivation.form.id", formID)
+		eventbus.SetNested(payload.GetCustom(), "cultivation.form.type", formType)
+		eventbus.SetNested(payload.GetCustom(), "cultivation.form.violation", "ontology_mismatch")
+
+		rejectEvent := eventbus.NewStructuredEvent("cultivation.form.rejected", "cultivation-module", worldID, payload)
+		rejectEvent.EventID = "form-reject-" + uuid.New().String()[:8]
+		rejectEvent.Timestamp = time.Now()
+
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, rejectEvent)
 	}
 }
 
-// mergeDaoPaths handles dao merging on higher plans.
+// mergeDaoPaths handles dao merging on higher plans — с иерархической структурой событий:
 func (cm *CultivationModule) mergeDaoPaths(ev eventbus.Event, targetPlan int) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	pa := ev.Path()
 
-	mergeEvent := eventbus.Event{
-		EventID:   "dao-merge-" + uuid.New().String()[:8],
-		EventType: "dao.hybrid_formed",
-		Source:    "cultivation-module",
-		WorldID:   ev.WorldID,
-		Payload: map[string]interface{}{
-			"player_id":      playerID,
-			"plan_level":     targetPlan,
-			"original_paths": ev.Payload["original_paths"],
-			"hybrid_path":    cm.generateHybridPath(ev.Payload["original_paths"], targetPlan),
-			"stability":      "unstable", // Requires further cultivation
-		},
-		Timestamp: time.Now(),
+	// Извлечение playerID с fallback:
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	var playerID string
+	if entity != nil && entity.ID != "" {
+		playerID = entity.ID
+	} else {
+		playerID, _ = pa.GetString("player_id")
 	}
+
+	if playerID == "" {
+		return
+	}
+
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
+	// Извлечение original_paths с поддержкой вложенной структуры:
+	var originalPaths interface{}
+	if paths, ok := pa.GetSlice("original_paths"); ok {
+		originalPaths = paths
+	} else if paths, ok := pa.GetSlice("dao.original_paths"); ok {
+		originalPaths = paths
+	} else {
+		originalPaths = ev.Payload["original_paths"] // fallback на плоский доступ
+	}
+
+	hybridPath := cm.generateHybridPath(originalPaths, targetPlan)
+
+	// Создаём событие с иерархической структурой:
+	payload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithWorld(worldID)
+
+	eventbus.SetNested(payload.GetCustom(), "plan_level", targetPlan)
+	eventbus.SetNested(payload.GetCustom(), "original_paths", originalPaths)
+	eventbus.SetNested(payload.GetCustom(), "hybrid_path", hybridPath)
+	eventbus.SetNested(payload.GetCustom(), "dao.merger.stability", "unstable")
+
+	// Иерархические пути для LLM:
+	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(payload.GetCustom(), "dao.merger.plan", targetPlan)
+	eventbus.SetNested(payload.GetCustom(), "dao.merger.result", "hybrid_formed")
+
+	mergeEvent := eventbus.NewStructuredEvent("dao.hybrid_formed", "cultivation-module", worldID, payload)
+	mergeEvent.EventID = "dao-merge-" + uuid.New().String()[:8]
+	mergeEvent.Timestamp = time.Now()
+
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, mergeEvent)
 
 	log.Printf("Hybrid dao formed for %s at Plan %d", playerID, targetPlan)

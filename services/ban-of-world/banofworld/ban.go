@@ -39,17 +39,23 @@ func (b *BanOfWorld) HandlePlayerEvent(ev eventbus.Event) {
 	}
 }
 
-// checkSkillUsage checks if a skill usage violates world integrity.
+// checkSkillUsage checks if a skill usage violates world integrity — с универсальным доступом и иерархическими событиями:
 func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
-	skill, _ := ev.Payload["skill"].(string)
+	pa := ev.Path()
 
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	// Извлечение skill с поддержкой вложенной структуры и fallback
+	skill, _ := pa.GetString("skill")
+	if skill == "" {
+		skill, _ = pa.GetString("action.skill")
+	}
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
 	if playerID == "" {
@@ -57,24 +63,38 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 		return
 	}
 
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
 	// Get world core violations
-	violationType := b.getViolationType(ev.WorldID, skill)
+	violationType := b.getViolationType(worldID, skill)
 
 	if violationType != "" {
-		log.Printf("Violation detected in %s: %s used %s", ev.WorldID, playerID, skill)
+		log.Printf("Violation detected in %s: %s used %s", worldID, playerID, skill)
 
-		// Publish violation event с поддержкой нового формата
+		// Publish violation event с иерархической структурой:
 		payload := eventbus.NewEventPayload().
-			WithEntity(playerID, "player", "")
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
 
 		eventbus.SetNested(payload.GetCustom(), "skill", skill)
 		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
 		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
 
-		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
+		// Иерархические пути для LLM:
+		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
+		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "violation.skill", skill)
+		eventbus.SetNested(payload.GetCustom(), "violation.type", violationType)
+
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", worldID, payload)
 		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
 		violationEvent.Timestamp = ev.Timestamp
-		violationEvent.ScopeID = ev.ScopeID
+		// ScopeID is set via WithScope if needed, or use ev.ScopeID for fallback
+		if scope := eventbus.GetScopeFromEvent(ev); scope != nil {
+			violationEvent.ScopeID = &scope.ID
+		} else {
+			violationEvent.ScopeID = ev.ScopeID
+		}
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 
@@ -83,17 +103,23 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 	}
 }
 
-// checkItemUsage checks if an item usage violates world integrity.
+// checkItemUsage checks if an item usage violates world integrity — с универсальным доступом:
 func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
-	item, _ := ev.Payload["item"].(string)
+	pa := ev.Path()
 
-	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
+	// Извлечение item с поддержкой вложенной структуры: item или action.item
+	item, _ := pa.GetString("item")
+	if item == "" {
+		item, _ = pa.GetString("action.item")
+	}
+
+	// Извлечение playerID: новая структура entity.id → старая player_id
 	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
 	if entity != nil && entity.ID != "" {
 		playerID = entity.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
 	if playerID == "" {
