@@ -13,9 +13,6 @@ func TestRelationsMetrics(t *testing.T) {
 	if m.FallbackCount != 0 {
 		t.Error("Expected FallbackCount = 0")
 	}
-	if m.EntityCreated != 0 {
-		t.Error("Expected EntityCreated = 0")
-	}
 	if m.ValidationErrs != 0 {
 		t.Error("Expected ValidationErrs = 0")
 	}

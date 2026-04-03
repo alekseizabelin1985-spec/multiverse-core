@@ -72,7 +72,6 @@ func BuildTextContext(entityID, entityType string, payload map[string]interface{
 type RelationsMetrics struct {
 	ExplicitCount  int64 // events with explicit Relations[]
 	FallbackCount  int64 // events using legacy LinkEventToEntities
-	EntityCreated  int64 // stub entities auto-created from relations
 	ValidationErrs int64 // relations validation failures
 }
 
@@ -286,7 +285,8 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 }
 
 // applyExplicitRelations создаёт семантические связи из ev.Relations.
-// Автоматически создаёт stub-Entity для сущностей которых ещё нет в графе.
+// Связи создаются через MERGE — если Entity ещё нет, связь будет создана позже
+// когда Entity появится через processEntityEvent.
 func (i *Indexer) applyExplicitRelations(ev eventbus.Event) error {
 	// Валидация
 	if err := eventbus.ValidateEventRelations(ev); err != nil {
@@ -294,45 +294,16 @@ func (i *Indexer) applyExplicitRelations(ev eventbus.Event) error {
 		return fmt.Errorf("validate relations: %w", err)
 	}
 
-	// Создаём stub-Entity для всех участников связей
-	seen := make(map[string]bool)
 	for _, rel := range ev.Relations {
-		for _, entityID := range []string{rel.From, rel.To} {
-			if !seen[entityID] {
-				i.ensureEntityFromRelation(entityID, ev.WorldID)
-				seen[entityID] = true
-			}
-		}
-
-		// Создаём семантическую связь
+		// Создаём семантическую связь (MERGE — идемпотентно)
 		if err := i.neo4j.CreateRelation(
 			rel.From, rel.To, rel.Type, rel.Directed, rel.Metadata,
 		); err != nil {
-			log.Printf("Failed to create relation %s-[%s]->%s: %v", rel.From, rel.Type, rel.To, err)
+			// Не критично — Entity может ещё не существовать
+			log.Printf("Relation %s-[%s]->%s: %v (will retry on next event)", rel.From, rel.Type, rel.To, err)
 		}
 	}
 	return nil
-}
-
-// ensureEntityFromRelation создаёт stub-Entity если его ещё нет.
-// Извлекает тип из ID формата "type:id" (например "player:p1" → type="player").
-func (i *Indexer) ensureEntityFromRelation(entityID, worldID string) {
-	exists, err := i.neo4j.EntityExists(entityID)
-	if err != nil || exists {
-		return
-	}
-
-	// Извлекаем тип из ID формата "type:id"
-	entityType := "unknown"
-	if idx := strings.Index(entityID, ":"); idx > 0 {
-		entityType = entityID[:idx]
-	}
-
-	if err := i.neo4j.EnsureEntity(entityID, entityType, worldID, nil); err != nil {
-		log.Printf("Failed to ensure stub entity %s: %v", entityID, err)
-		return
-	}
-	i.Metrics.EntityCreated++
 }
 
 // GetRelationsMetrics returns a copy of the current relations processing metrics.
