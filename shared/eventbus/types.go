@@ -19,6 +19,9 @@ type Event struct {
 	// Deprecated: используйте payload.scope: {id, type} вместо scope_id в топ-уровне
 	ScopeID *string        `json:"scope_id,omitempty"`
 	Payload map[string]any `json:"payload"`
+	// Relations declares explicit semantic edges for the knowledge graph (optional).
+	// Produced by Oracle/GM/WorldGenerator, consumed by semantic-memory → Neo4j.
+	Relations []Relation `json:"relations,omitempty"`
 }
 
 func NewEvent(eventType, source, worldID string, payload map[string]any) Event {
