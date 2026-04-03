@@ -1200,11 +1200,11 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 			fullEvents = make([]eventbus.Event, len(historyCopy))
 			for i, he := range historyCopy {
 				fullEvents[i] = eventbus.Event{
-					EventID:     he.EventID,
-					EventType:   "history.fallback",
-					Timestamp:   he.Timestamp,
-					WorldID:     gm.WorldID,
-					ScopeID:     &gm.ScopeID,
+					EventID:   he.EventID,
+					EventType: "history.fallback",
+					Timestamp: he.Timestamp,
+					WorldID:   gm.WorldID,
+					ScopeID:   &gm.ScopeID,
 					Payload: map[string]interface{}{
 						"description": he.Description,
 					},
@@ -1389,6 +1389,21 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		// 	// Fallback to gm.ScopeID if no scope_id in evMap
 		// 	outputEvent.ScopeID = &gm.ScopeID
 		// }
+
+		// ✨ Этап 4.1: Извлекаем явные связи из ответа Oracle
+		if relationsRaw, ok := evMap["relations"]; ok {
+			outputEvent.Relations = extractRelations(relationsRaw)
+			// Валидация перед публикацией
+			if err := eventbus.ValidateEventRelations(outputEvent); err != nil {
+				warnLog(gm.ScopeID, gm.WorldID, "Invalid relations in Oracle event", map[string]interface{}{
+					"error":       err.Error(),
+					"event_type":  eventType,
+					"event_index": i,
+				})
+				// Очищаем невалидные relations
+				outputEvent.Relations = nil
+			}
+		}
 
 		// Запоминаем event_id чтобы не реагировать на своё же событие
 		gm.mu.Lock()
@@ -1714,4 +1729,59 @@ func toStringSlice(v []interface{}) []string {
 	})
 
 	return res
+}
+
+// extractRelations извлекает массив Relations из сырого ответа Oracle.
+// Формат: [{"from": "player:p1", "to": "item:sword", "type": "FOUND", "directed": true, "metadata": {...}}]
+func extractRelations(raw interface{}) []eventbus.Relation {
+	relationsSlice, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	var relations []eventbus.Relation
+	for _, item := range relationsSlice {
+		relMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		rel := eventbus.Relation{
+			From:     getSafeString(relMap, "from"),
+			To:       getSafeString(relMap, "to"),
+			Type:     getSafeString(relMap, "type"),
+			Directed: getSafeBool(relMap, "directed"),
+		}
+
+		// Извлекаем metadata если есть
+		if meta, ok := relMap["metadata"].(map[string]interface{}); ok {
+			rel.Metadata = meta
+		}
+
+		// Пропускаем невалидные связи
+		if rel.From == "" || rel.To == "" || rel.Type == "" {
+			continue
+		}
+
+		relations = append(relations, rel)
+	}
+
+	return relations
+}
+
+// getSafeString безопасно извлекает строку из map
+func getSafeString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+// getSafeBool безопасно извлекает bool из map
+func getSafeBool(m map[string]interface{}, key string) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	// Default: relations are directed by default
+	return key != "directed" || true
 }
