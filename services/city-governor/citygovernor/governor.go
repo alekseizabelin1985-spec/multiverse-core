@@ -98,6 +98,16 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 	npcEvent.EventID = "npc-notify-" + uuid.New().String()[:8]
 	npcEvent.Timestamp = time.Now()
 
+	// ✨ Этап 6: Явные связи — игрок вошёл в город
+	npcEvent.Relations = []eventbus.Relation{
+		{
+			From:     playerID,
+			To:       cityID,
+			Type:     eventbus.RelLocatedIn,
+			Directed: true,
+		},
+	}
+
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, npcEvent)
 
 	log.Printf("Player %s entered city %s", playerID, cityID)
@@ -160,6 +170,20 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 	consequenceEvent := eventbus.NewStructuredEvent("city.violation.consequence", "city-governor", worldID, consequencePayload)
 	consequenceEvent.EventID = "city-conseq-" + uuid.New().String()[:8]
 	consequenceEvent.Timestamp = time.Now()
+
+	// ✨ Этап 6: Явные связи — город наказал игрока за нарушение
+	consequenceEvent.Relations = []eventbus.Relation{
+		{
+			From:     cityID,
+			To:       playerID,
+			Type:     eventbus.RelActedOn,
+			Directed: true,
+			Metadata: map[string]any{
+				"violation_type": violationType,
+				"consequence":    consequence,
+			},
+		},
+	}
 
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, consequenceEvent)
 

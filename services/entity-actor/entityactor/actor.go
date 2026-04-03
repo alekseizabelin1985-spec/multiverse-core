@@ -430,6 +430,40 @@ func (a *Actor) publishResult(result *rules.RuleResult, intent *intent.IntentRes
 		payload,
 	)
 
+	// ✨ Этап 6: Явные связи для knowledge graph
+	if intent.TargetEntity != "" {
+		relType := eventbus.RelActedOn
+		// Определяем более специфичный тип связи по действию
+		action := strings.ToLower(intent.BaseAction)
+		if strings.Contains(action, "attack") || strings.Contains(action, "hit") {
+			relType = eventbus.RelAttacked
+		} else if strings.Contains(action, "talk") || strings.Contains(action, "speak") {
+			relType = eventbus.RelTalkedTo
+		} else if strings.Contains(action, "find") || strings.Contains(action, "pick") {
+			relType = eventbus.RelFound
+		} else if strings.Contains(action, "move") || strings.Contains(action, "go") {
+			relType = eventbus.RelMovedTo
+		}
+
+		publishEvent.Relations = []eventbus.Relation{
+			{
+				From:     a.EntityID,
+				To:       intent.TargetEntity,
+				Type:     relType,
+				Directed: true,
+				Metadata: map[string]any{
+					"intent":      intent.Intent,
+					"base_action": intent.BaseAction,
+				},
+			},
+		}
+
+		if err := eventbus.ValidateEventRelations(publishEvent); err != nil {
+			log.Printf("Invalid relations in entity-actor publishResult: %v", err)
+			publishEvent.Relations = nil
+		}
+	}
+
 	return a.EventBus.Publish(a.ctx, eventbus.TopicWorldEvents, publishEvent)
 }
 
