@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/jsonpath"
 
 	minio "github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -153,18 +154,36 @@ func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 	// Create a text representation of the event for ChromaDB
 	eventText := i.buildEventTextContext(ev)
 
-	// Metadata for ChromaDB
+	// Metadata for ChromaDB — используем универсальные функции с fallback на старую структуру
+	pa := ev.Path()
+	
 	metadata := map[string]interface{}{
 		"event_id":   ev.EventID,
 		"event_type": ev.EventType,
-		"world_id":   ev.WorldID,
+		"world_id":   eventbus.GetWorldIDFromEvent(ev), // новая: payload.world.id / старая: world_id
 		"source":     ev.Source,
 		"timestamp":  ev.Timestamp,
 	}
 
-	// Add scope_id to metadata if present
-	if ev.ScopeID != nil {
+	// Scope: новая структура scope:{id,type} или старая scope_id (fallback)
+	if scope := eventbus.GetScopeFromEvent(ev); scope != nil {
+		if scope.ID != "" {
+			metadata["scope_id"] = scope.ID
+		}
+		if scope.Type != "" {
+			metadata["scope_type"] = scope.Type
+		}
+	} else if ev.ScopeID != nil {
+		// Fallback на топ-уровень
 		metadata["scope_id"] = *ev.ScopeID
+	}
+
+	// Сохраняем также иерархические пути для совместимости с LLM
+	if entityID, ok := pa.GetString("entity.id"); ok {
+		metadata["entity.id"] = entityID
+	}
+	if entityType, ok := pa.GetString("entity.type"); ok {
+		metadata["entity.type"] = entityType
 	}
 
 	// Save to ChromaDB
@@ -183,33 +202,37 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 	parts = append(parts, fmt.Sprintf("Event Type: %s", ev.EventType))
 	parts = append(parts, fmt.Sprintf("Timestamp: %s", ev.Timestamp.Format("2006-01-02 15:04:05")))
 	parts = append(parts, fmt.Sprintf("Source: %s", ev.Source))
-	parts = append(parts, fmt.Sprintf("World ID: %s", ev.WorldID))
 
-	if ev.ScopeID != nil {
+	// World: используем универсальное извлечение (новая/старая структура)
+	parts = append(parts, fmt.Sprintf("World ID: %s", eventbus.GetWorldIDFromEvent(ev)))
+
+	// Scope: новая структура scope:{id,type} или старая scope_id
+	if scope := eventbus.GetScopeFromEvent(ev); scope != nil {
+		if scope.ID != "" && scope.Type != "" {
+			parts = append(parts, fmt.Sprintf("Scope: %s (%s)", scope.ID, scope.Type))
+		} else if scope.ID != "" {
+			parts = append(parts, fmt.Sprintf("Scope ID: %s", scope.ID))
+		}
+	} else if ev.ScopeID != nil {
 		parts = append(parts, fmt.Sprintf("Scope ID: %s", *ev.ScopeID))
 	}
 
-	// Add payload information
+	// Add payload information — используем jsonpath для упорядоченного вывода ключей (для стабильности LLM-контекста)
+	pa := jsonpath.New(ev.Payload)
 	if len(ev.Payload) > 0 {
 		parts = append(parts, "Payload:")
-		for key, value := range ev.Payload {
-			// Convert value to string representation
-			valueStr := ""
-			switch v := value.(type) {
-			case string:
-				valueStr = v
-			case []string:
-				valueStr = strings.Join(v, ", ")
-			case []interface{}:
-				var items []string
-				for _, item := range v {
-					items = append(items, fmt.Sprintf("%v", item))
+		// Сортируем пути для детерминированного вывода (важно для эмбеддингов!)
+		paths := pa.GetAllPaths()
+		for _, path := range paths {
+			if val, ok := pa.GetAny(path); ok {
+				// Пропускаем вложенные мапы/слайсы — они уже будут в своих под-путях
+				switch val.(type) {
+				case map[string]any, []any:
+					continue
 				}
-				valueStr = strings.Join(items, ", ")
-			default:
-				valueStr = fmt.Sprintf("%v", v)
+				valueStr := fmt.Sprintf("%v", val)
+				parts = append(parts, fmt.Sprintf("  %s: %s", path, valueStr))
 			}
-			parts = append(parts, fmt.Sprintf("  %s: %s", key, valueStr))
 		}
 	}
 
@@ -236,14 +259,39 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 
 // processEntityEvent handles entity-related events for backward compatibility
 func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
-	entityID, ok := ev.Payload["entity_id"].(string)
+	// Используем универсальное извлечение с поддержкой новой и старой структуры:
+	pa := ev.Path()
+	
+	entityID, ok := pa.GetString("entity.id")
 	if !ok {
-		log.Printf("Invalid entity event: missing entity_id")
+		// Fallback на старую структуру
+		entityID, ok = pa.GetString("entity_id")
+	}
+	if !ok || entityID == "" {
+		log.Printf("Invalid entity event: missing entity.id or entity_id")
 		return
 	}
 
-	entityType, _ := ev.Payload["entity_type"].(string)
-	payload, _ := ev.Payload["payload"].(map[string]interface{})
+	entityType, _ := pa.GetString("entity.type")
+	if entityType == "" {
+		entityType, _ = pa.GetString("entity_type")
+	}
+
+	// Извлекаем payload: может быть в payload.payload (вложенный) или в корне
+	var payload map[string]interface{}
+	if p, ok := pa.GetMap("payload"); ok {
+		payload = p
+	} else if p, ok := ev.Payload["payload"].(map[string]interface{}); ok {
+		payload = p
+	} else {
+		// Если payload нет — используем весь payload события кроме служебных полей
+		payload = make(map[string]interface{})
+		for k, v := range ev.Payload {
+			if k != "entity" && k != "entity_id" && k != "entity_type" && k != "world" && k != "world_id" {
+				payload[k] = v
+			}
+		}
+	}
 
 	// Build text context
 	textContext := BuildTextContext(entityID, entityType, payload)

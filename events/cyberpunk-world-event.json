@@ -1,0 +1,29 @@
+{
+  "id": "evt-cyberpunk-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "neon-city-2099",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мрачный киберпанк мир доминируемых мега-корпорациями ночных городов",
+      "theme": "cyberpunk",
+      "key_elements": [
+        "mega_corporations",
+        "neon_lights",
+        "hackers",
+        "neural_interfaces",
+        "underground_cyber_clinics",
+        "synthetic_emotions",
+        "data_theft"
+      ],
+      "scale": "medium",
+      "restrictions": [
+        "no_heroic_resolution",
+        "no_corporate_reform",
+        "no_easy_escape"
+      ]
+    }
+  }
+}

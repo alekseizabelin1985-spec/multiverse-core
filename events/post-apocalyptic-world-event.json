@@ -1,0 +1,28 @@
+{
+  "id": "evt-postapoc-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "wasteland-survivors-10y",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир после ядерной или экологической катастрофы, человечество выживает",
+      "theme": "post_apocalyptic",
+      "key_elements": [
+        "radiation_zones",
+        "scrap_tech",
+        "mutant_creatures",
+        "resource_scarcity",
+        "nomad_tribes",
+        "fortified_enclaves"
+      ],
+      "scale": "large",
+      "restrictions": [
+        "no_easy_solutions",
+        "no_great_resurrection",
+        "no_world_recovery"
+      ]
+    }
+  }
+}

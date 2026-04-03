@@ -167,10 +167,11 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 		if changes, ok := changesRaw.([]interface{}); ok {
 			for _, changeRaw := range changes {
 				if changeMap, ok := changeRaw.(map[string]interface{}); ok {
-					entityID, ok := changeMap["entity_id"].(string)
-					if !ok {
+					entityInfo := eventbus.ExtractEntityID(changeMap)
+					if entityInfo == nil {
 						continue
 					}
+					entityID := entityInfo.ID
 
 					// Load existing entity (from world or global)
 					ent, err := m.loadEntityFromMinIO(ctx, entityID, ev.WorldID)
@@ -221,8 +222,15 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 	// 3. Process entity.created events (for new entities)
 	if ev.EventType == "entity.created" {
 		// Extract entity data from event payload
-		entityID, idExists := ev.Payload["entity_id"].(string)
-		entityType, typeExists := ev.Payload["entity_type"].(string)
+		entityInfo := eventbus.ExtractEntityID(ev.Payload)
+		entityID := ""
+		entityType := ""
+		if entityInfo != nil {
+			entityID = entityInfo.ID
+			entityType = entityInfo.Type
+		}
+		idExists := entityID != ""
+		typeExists := entityType != ""
 		payloadRaw, payloadExists := ev.Payload["payload"]
 
 		if idExists && typeExists && payloadExists {

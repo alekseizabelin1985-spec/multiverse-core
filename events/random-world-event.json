@@ -1,0 +1,10 @@
+{
+  "id": "evt-random-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "system",
+  "payload": {
+    "seed": "random-world-7f3a9b2c",
+    "mode": "random"
+  }
+}

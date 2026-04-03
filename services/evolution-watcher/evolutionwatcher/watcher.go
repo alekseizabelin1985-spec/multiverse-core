@@ -328,9 +328,10 @@ func (w *Watcher) handleEvent(event eventbus.Event) {
 		ReceivedAt: time.Now(),
 	}
 
-	// Извлекаем entity_id если есть
-	if entityID, ok := event.Payload["entity_id"].(string); ok {
-		stored.EntityID = entityID
+	// Извлекаем entity_id с поддержкой нового формата (entity.id)
+	entity := eventbus.ExtractEntityID(event.Payload)
+	if entity != nil && entity.ID != "" {
+		stored.EntityID = entity.ID
 	}
 
 	// Добавляем в иерархическую память

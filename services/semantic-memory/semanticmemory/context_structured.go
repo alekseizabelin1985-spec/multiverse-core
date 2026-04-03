@@ -11,21 +11,22 @@ import (
 )
 
 // StructuredContext представляет контекст с встроенными ID для AI
+// Формат контекста: "{entity.id:name} {action} {target.entity.id:name}"
 type StructuredContext struct {
-	Context  string                `json:"context"`  // "{player_123:Вася} {event_456:вошел в} {region_forest123:Темный лес}"
-	Entities map[string]EntityInfo `json:"entities"` // Детали сущностей
-	Timeline []TimelineEvent       `json:"timeline"` // Хронология событий
-	Metadata ContextMetadata       `json:"metadata"` // Метаданные запроса
+	Context  string                `json:"context"`
+	Entities map[string]EntityInfo `json:"entities"`
+	Timeline []TimelineEvent       `json:"timeline"`
+	Metadata ContextMetadata       `json:"metadata"`
 }
 
 // EntityInfo содержит информацию о сущности
 type EntityInfo struct {
 	ID          string                 `json:"id"`
-	Name        string                 `json:"name"`
 	Type        string                 `json:"type"`
+	Name        string                 `json:"name"`
 	WorldID     string                 `json:"world_id"`
 	Description string                 `json:"description,omitempty"`
-	Payload     map[string]interface{} `json:"payload,omitempty"`
+	Payload     map[string]any         `json:"payload,omitempty"`
 	// Coordinates хранит position объект из payload: {x: float, y: float, z: float}
 	Coordinates *Coordinates `json:"coordinates,omitempty"`
 }
@@ -49,12 +50,13 @@ type Coordinates struct {
 }
 
 // TimelineEvent представляет событие в хронологии
+// Формат: "{entity.id:name} {event_type:time} {action} {target.entity.id:name}"
 type TimelineEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	EventID   string    `json:"event_id"`
 	Type      string    `json:"type"`
-	Format    string    `json:"format"`   // "{event_id:time} {source_id:name} {event_id:action} {target_id:name}"
-	Entities  []string  `json:"entities"` // IDs всех участвующих сущностей
+	Format    string    `json:"format"`
+	Entities  []string  `json:"entities"` // Все entity.id участников события
 }
 
 // ContextMetadata содержит метаданные контекста
@@ -67,14 +69,18 @@ type ContextMetadata struct {
 	SourceIndexes []string `json:"source_indexes"` // ["chroma:world_memory", "neo4j:entity_graph"]
 }
 
-// FormatWithIDs форматирует событие в строку с встроенными ID
-func FormatWithIDs(sourceID, sourceName, eventID, action, targetID, targetName string, timestamp time.Time) string {
+// FormatWithIDs форматирует событие в строку с встроенными ID для LLM
+// Формат: "{entity.id:type:name} {timestamp} {action} {target.entity.id:type:name}"
+// Пример: "{player-123:player:Вася} {14:30} {вошел в} {region-456:region:Темный лес}"
+func FormatWithIDs(sourceID, sourceType, sourceName, eventID, action, targetID, targetType, targetName string, timestamp time.Time) string {
 	timeStr := timestamp.Format("15:04")
-	return fmt.Sprintf("{%s:%s} {%s:%s} {%s:%s} {%s:%s}",
-		eventID, timeStr,
-		sourceID, sourceName,
-		eventID, action,
-		targetID, targetName)
+
+	// Форматирование с типом сущности для явной семантики
+	sourceFormat := fmt.Sprintf("{%s:%s:%s}", sourceID, sourceType, sourceName)
+	targetFormat := fmt.Sprintf("{%s:%s:%s}", targetID, targetType, targetName)
+
+	return fmt.Sprintf("%s {%s:%s} {%s} %s",
+		sourceFormat, eventID, timeStr, action, targetFormat)
 }
 
 // BuildStructuredContext строит контекст из событий с ID
@@ -89,30 +95,49 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 	entitySet := make(map[string]bool)
 
 	for _, ev := range events {
-		// Извлекаем участников события
-		sourceID := extractEntityID(ev, "entity_id")
-		targetID := extractTargetEntityID(ev)
+		// Извлекаем участников события с поддержкой новой структуры (entity.id) и fallback
+		sourceEntityID := extractStructuredEntityID(ev)
+		targetEntityID := extractStructuredTargetEntityID(ev)
 
-		if sourceID == "" {
+		if sourceEntityID == "" {
 			continue
 		}
 
-		// Получаем имена из кэша или fallback на ID
-		sourceName := getEntityName(entityCache, sourceID)
-		targetName := getEntityName(entityCache, targetID)
+		// Получаем информацию о сущности из кэша
+		sourceInfo, hasSource := entityCache[sourceEntityID]
+		if !hasSource {
+			sourceInfo = EntityInfo{ID: sourceEntityID, Name: sourceEntityID}
+		}
+
+		var targetInfo EntityInfo
+		if targetEntityID != "" {
+			targetInfo, _ = entityCache[targetEntityID]
+		}
 
 		// Определяем действие на основе типа события
 		action := getActionFromEventType(ev.EventType)
 
-		// Форматируем строку с ID
+		// Форматируем строку с ID для LLM
+		// Формат: "{entity.id:type:name} {timestamp} {action} {target.entity.id:type:name}"
+		sourceName := sourceInfo.Name
+		sourceType := sourceInfo.Type
+		if sourceType == "" {
+			sourceType = "unknown"
+		}
+
 		formatted := ""
-		if targetID != "" && targetName != "" {
-			formatted = FormatWithIDs(sourceID, sourceName, ev.EventID, action, targetID, targetName, ev.Timestamp)
+		if targetEntityID != "" && targetInfo.Name != "" {
+			targetName := targetInfo.Name
+			targetType := targetInfo.Type
+			if targetType == "" {
+				targetType = "unknown"
+			}
+			formatted = FormatWithIDs(sourceEntityID, sourceType, sourceName, ev.EventID, action, targetEntityID, targetType, targetName, ev.Timestamp)
 		} else {
 			// Формат без цели (например, для world events)
-			formatted = fmt.Sprintf("{%s:%s} {%s:%s} {%s:%s}",
+			formatted = fmt.Sprintf("{%s:%s:%s} {%s:%s} {%s:%s}",
+				sourceEntityID, sourceType, sourceName,
 				ev.EventID, ev.Timestamp.Format("15:04"),
-				sourceID, sourceName,
 				ev.EventID, action)
 		}
 
@@ -124,13 +149,13 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 			EventID:   ev.EventID,
 			Type:      ev.EventType,
 			Format:    formatted,
-			Entities:  []string{sourceID, targetID},
+			Entities:  []string{sourceEntityID, targetEntityID},
 		})
 
 		// Отмечаем сущности
-		entitySet[sourceID] = true
-		if targetID != "" {
-			entitySet[targetID] = true
+		entitySet[sourceEntityID] = true
+		if targetEntityID != "" {
+			entitySet[targetEntityID] = true
 		}
 	}
 
@@ -156,35 +181,24 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 	}
 }
 
-// extractEntityID извлекает ID сущности из payload по ключу
-func extractEntityID(ev eventbus.Event, key string) string {
-	if val, ok := ev.Payload[key].(string); ok {
-		return val
+// extractStructuredEntityID извлекает ID сущности
+// Поддерживает новый формат (entity.id) и старый (entity_id, player_id, actor_id)
+func extractStructuredEntityID(ev eventbus.Event) string {
+	entity := eventbus.ExtractEntityID(ev.Payload)
+	if entity != nil {
+		return entity.ID
 	}
 	return ""
 }
 
-// extractTargetEntityID извлекает ID целевой сущности из события
-func extractTargetEntityID(ev eventbus.Event) string {
-	// Пробуем разные возможные ключи для целевой сущности
-	keys := []string{"target_entity_id", "npc_id", "item_id", "region_id", "location_id", "quest_id"}
-	for _, key := range keys {
-		if val, ok := ev.Payload[key].(string); ok && val != "" {
-			return val
-		}
+// extractStructuredTargetEntityID извлекает ID целевой сущности
+// Поддерживает новый формат (target.entity.id) и старый (target_id, npc_id, item_id)
+func extractStructuredTargetEntityID(ev eventbus.Event) string {
+	entity := eventbus.ExtractTargetEntityID(ev.Payload)
+	if entity != nil {
+		return entity.ID
 	}
 	return ""
-}
-
-// getEntityName получает имя сущности из кэша или возвращает ID
-func getEntityName(cache map[string]EntityInfo, entityID string) string {
-	if entityID == "" {
-		return "unknown"
-	}
-	if info, ok := cache[entityID]; ok && info.Name != "" {
-		return info.Name
-	}
-	return entityID // fallback на ID
 }
 
 // getActionFromEventType определяет действие на основе типа события

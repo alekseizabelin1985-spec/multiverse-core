@@ -1,0 +1,26 @@
+{
+  "id": "evt-cultivation-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "cultivation-world-2026",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир для культивации с магическими реками и летающими островами",
+      "theme": "cultivation",
+      "key_elements": [
+        "magical_rivers",
+        "floating_islands",
+        "ancient_temples",
+        "spirit_beasts",
+        "sect_system"
+      ],
+      "scale": "large",
+      "restrictions": [
+        "no_modern_technology",
+        "no_guns_or_firearms"
+      ]
+    }
+  }
+}

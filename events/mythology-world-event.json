@@ -1,0 +1,27 @@
+{
+  "id": "evt-mythology-001",
+  "event_type": "world.generation.requested",
+  "timestamp": "2026-04-01T00:00:00Z",
+  "source": "player",
+  "payload": {
+    "seed": "asgard-legacy-9999",
+    "mode": "contextual",
+    "user_context": {
+      "description": "Мир, где божества мифологии реальны и периодически вмешиваются в дела смертных",
+      "theme": "mythology",
+      "key_elements": [
+        "living_gods",
+        "divine_bloodlines",
+        "prophecies",
+        "mythical_creatures",
+        "sacred_relics",
+        "god_wars"
+      ],
+      "scale": "medium",
+      "restrictions": [
+        "no_scientific_explanation",
+        "no_modern_world"
+      ]
+    }
+  }
+}

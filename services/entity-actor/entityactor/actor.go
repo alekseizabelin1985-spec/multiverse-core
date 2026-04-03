@@ -13,6 +13,8 @@ import (
 	"multiverse-core.io/shared/redis"
 	"multiverse-core.io/shared/rules"
 	"multiverse-core.io/shared/tinyml"
+
+	"strings"
 )
 
 // Actor представляет собой актор сущности с буферизацией и состоянием
@@ -215,14 +217,30 @@ func (a *Actor) processSingleEvent(event eventbus.Event) error {
 	}
 }
 
-// handlePlayerAction обрабатывает действие игрока
+// handlePlayerAction обрабатывает действие игрока — использует универсальный jsonpath
 func (a *Actor) handlePlayerAction(event eventbus.Event) error {
-	// Пытаемся распознать намерение
+	// Используем универсальный доступ через PathAccessor
+	pa := event.Path()
+
+	// Извлечение player_text с поддержкой вложенной структуры:
+	// Новая: payload.player_text или payload.action.text
+	// Старая: плоский ключ player_text
+	playerText, _ := pa.GetString("player_text")
+	if playerText == "" {
+		playerText, _ = pa.GetString("action.text")
+	}
+
+	// Извлечение world_id (новая: payload.world.id / старая: world_id или event.WorldID)
+	worldContext := eventbus.GetWorldIDFromEvent(event)
+	if worldContext == "" {
+		worldContext = a.WorldID
+	}
+
 	intentReq := intent.IntentRequest{
-		PlayerText:   getString(event.Payload, "player_text", ""),
+		PlayerText:   playerText,
 		EntityID:     a.EntityID,
 		EntityType:   a.EntityType,
-		WorldContext: a.WorldID,
+		WorldContext: worldContext,
 		State:        a.State,
 	}
 
@@ -265,10 +283,17 @@ func (a *Actor) applyIntent(intent *intent.IntentResponse, event eventbus.Event)
 	return a.updateStateFromEvent(event)
 }
 
-// handleStateChanged обрабатывает изменение состояния
+// handleStateChanged обрабатывает изменение состояния — с поддержкой новой иерархической структуры
 func (a *Actor) handleStateChanged(event eventbus.Event) error {
-	changes, ok := event.Payload["state_changes"].([]interface{})
-	if !ok {
+	pa := event.Path()
+
+	// Извлекаем state_changes: может быть в payload.state_changes или payload.payload.state_changes
+	var changes []interface{}
+	if c, ok := pa.GetSlice("state_changes"); ok {
+		changes = c
+	} else if c, ok := pa.GetSlice("payload.state_changes"); ok {
+		changes = c
+	} else {
 		return nil
 	}
 
@@ -278,7 +303,12 @@ func (a *Actor) handleStateChanged(event eventbus.Event) error {
 			continue
 		}
 
-		entityID, _ := changeMap["entity_id"].(string)
+		// Используем универсальное извлечение entity с fallback на старую структуру:
+		entity := eventbus.ExtractEntityID(changeMap)
+		if entity == nil {
+			continue
+		}
+		entityID := entity.ID
 		if entityID != a.EntityID {
 			continue
 		}
@@ -314,10 +344,11 @@ func (a *Actor) handleStateChanged(event eventbus.Event) error {
 	return nil
 }
 
-// handleTravelled обрабатывает путешествие сущности
+// handleTravelled обрабатывает путешествие сущности — с поддержкой иерархического world.id
 func (a *Actor) handleTravelled(event eventbus.Event) error {
-	newWorldID, ok := event.Payload["world_id"].(string)
-	if !ok {
+	// Извлекаем world_id: новая структура payload.world.id или старая payload.world_id / event.WorldID
+	newWorldID := eventbus.GetWorldIDFromEvent(event)
+	if newWorldID == "" {
 		return nil
 	}
 
@@ -327,39 +358,82 @@ func (a *Actor) handleTravelled(event eventbus.Event) error {
 	return nil
 }
 
-// updateStateFromEvent обновляет состояние из события
+// updateStateFromEvent обновляет состояние из события — универсальная версия через jsonpath
 func (a *Actor) updateStateFromEvent(event eventbus.Event) error {
-	// Простое обновление состояния из payload
-	for key, value := range event.Payload {
-		if val, ok := value.(float64); ok {
+	pa := event.Path()
+
+	// Получаем все доступные пути в payload
+	paths := pa.GetAllPaths()
+
+	// Обновляем состояние только для числовых значений на верхнем уровне или в payload.*
+	for _, path := range paths {
+		// Пропускаем служебные иерархические ключи (entity, scope, world, target)
+		if isHierarchicalKey(path) {
+			continue
+		}
+
+		if val, ok := pa.GetFloat(path); ok {
+			// Используем последний сегмент пути как ключ состояния (stats.hp -> hp)
+			key := getLastPathSegment(path)
 			a.State[key] = float32(val)
 		}
 	}
 	return nil
 }
 
-// publishResult публикует результат применения правила
-func (a *Actor) publishResult(result *rules.RuleResult, intent *intent.IntentResponse) error {
-	publishEvent := eventbus.Event{
-		EventID:   eventbus.NewEvent("entity.action.result", a.EntityID, a.WorldID, nil).EventID,
-		EventType: "entity.action.result",
-		WorldID:   a.WorldID,
-		Payload: map[string]interface{}{
-			"actor_id":      a.ID,
-			"entity_id":     a.EntityID,
-			"rule_result":   result,
-			"intent":        intent.Intent,
-			"base_action":   intent.BaseAction,
-			"target_entity": intent.TargetEntity,
-			"timestamp":     time.Now(),
-		},
-		Timestamp: time.Now(),
+// isHierarchicalKey проверяет является ли путь иерархическим служебным ключом
+func isHierarchicalKey(path string) bool {
+	segments := []string{"entity", "scope", "world", "target", "source"}
+	for _, seg := range segments {
+		if path == seg || path == seg+".id" || path == seg+".type" {
+			return true
+		}
 	}
+	return false
+}
+
+// getLastPathSegment возвращает последний сегмент пути (entity.stats.hp -> hp)
+func getLastPathSegment(path string) string {
+	// Обрабатываем индексы массивов: items[0].name -> name
+	if idx := strings.LastIndex(path, "."); idx != -1 {
+		return path[idx+1:]
+	}
+	// Убираем индекс массива если это корневой элемент: items[0] -> items
+	if idx := strings.Index(path, "["); idx != -1 {
+		return path[:idx]
+	}
+	return path
+}
+
+// publishResult публикует результат применения правила — с иерархической структурой событий
+func (a *Actor) publishResult(result *rules.RuleResult, intent *intent.IntentResponse) error {
+	// Создаём payload с иерархической структурой через builder
+	payload := eventbus.NewEventPayload().
+		WithEntity(a.EntityID, a.EntityType, "").
+		WithWorld(a.WorldID)
+
+	// Добавляем результат правила и намерение через кастомные поля с dot-notation
+	eventbus.SetNested(payload.GetCustom(), "rule_result", result)
+	eventbus.SetNested(payload.GetCustom(), "intent", intent.Intent)
+	eventbus.SetNested(payload.GetCustom(), "base_action", intent.BaseAction)
+
+	// Если есть целевая сущность — добавляем в иерархической структуре:
+	if intent.TargetEntity != "" {
+		eventbus.SetNested(payload.GetCustom(), "target.entity.id", intent.TargetEntity)
+	}
+
+	// Создаём событие с типобезопасным builder
+	publishEvent := eventbus.NewStructuredEvent(
+		"entity.action.result",
+		"entity-actor",
+		a.WorldID,
+		payload,
+	)
 
 	return a.EventBus.Publish(a.ctx, eventbus.TopicWorldEvents, publishEvent)
 }
 
-// saveToRedis сохраняет состояние в Redis
+// saveToRedis сохраняет состояние в Redis — с иерархическим world.id
 func (a *Actor) saveToRedis() error {
 	if a.RedisClient == nil {
 		return nil
@@ -372,7 +446,8 @@ func (a *Actor) saveToRedis() error {
 		ModelVersion: a.Model.GetVersion(),
 		LastUpdated:  time.Now(),
 		Metadata: map[string]interface{}{
-			"world_id": a.WorldID,
+			"world":    map[string]string{"id": a.WorldID}, // иерархическая структура для совместимости с future
+			"world_id": a.WorldID,                          // плоский ключ для обратной совместимости
 			"actor_id": a.ID,
 		},
 	}
@@ -486,10 +561,22 @@ func (a *Actor) Stop() {
 	a.saveToRedis()
 }
 
-// Вспомогательные функции
+// Вспомогательные функции для совместимости со старым кодом и jsonpath
+
+// getString извлекает строку из map с fallback — устаревшая, используйте jsonpath.Accessor
+// Deprecated: используйте event.Path().GetString(path) вместо этого
 func getString(m map[string]interface{}, key, fallback string) string {
 	if v, ok := m[key].(string); ok {
 		return v
+	}
+	return fallback
+}
+
+// getStringFromEvent извлекает строку из события с поддержкой новой и старой структуры — универсальная версия
+func getStringFromEvent(event eventbus.Event, path string, fallback string) string {
+	pa := event.Path()
+	if val, ok := pa.GetString(path); ok {
+		return val
 	}
 	return fallback
 }

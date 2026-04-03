@@ -28,10 +28,73 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 - Services communicate through events in the event bus (topics: player_events, world_events, game_events, system_events, scope_management, narrative_output)
 - Entity management uses MinIO for storage with bucket naming pattern: `entities-{world_id}`
 - All services are stateful and support recovery via snapshots and event replay
-- Use entity paths with dot notation for nested payload access (e.g., `payload.health.current`)
+- **Use `event.Path()` (jsonpath.Accessor) for ALL event data access** — provides type-safe, fallback-compatible access
+- **Use hierarchical event structure** (`entity:{id,type}`, `world:{id}`, `scope:{id,type}`) for NEW events; flat keys still supported for backward compatibility
 - All services must be built with CGO disabled for cross-platform compatibility (`CGO_ENABLED=0`)
 - Use UUIDs for event IDs and entity IDs
 - All services must be containerized with Docker using multi-stage builds
+
+### 🔀 Event Access Patterns (MANDATORY)
+
+```go
+// ✅ ALWAYS use for reading event data:
+pa := event.Path()  // *jsonpath.Accessor
+
+// Extract with fallback chain:
+entityID, _ := pa.GetString("entity.id")
+if entityID == "" {
+    entityID, _ = pa.GetString("entity_id")  // fallback to old format
+}
+
+// World/Scope: use unified helpers
+worldID := eventbus.GetWorldIDFromEvent(event)  // handles both structures
+scope := eventbus.GetScopeFromEvent(event)      // returns *ScopeRef{ID, Type}
+
+// Type-safe getters for any depth:
+level, _ := pa.GetInt("entity.stats.level")
+active, _ := pa.GetBool("entity.active")
+items, _ := pa.GetSlice("entity.inventory")
+
+// Array access by index:
+firstItem, _ := pa.GetString("entity.inventory[0].name")
+
+// Quick existence check:
+if pa.Has("quest.objectives") { /* ... */ }
+```
+
+### 📝 Creating Events (MANDATORY)
+
+```go
+// ✅ ALWAYS use builder for new events:
+payload := eventbus.NewEventPayload().
+    WithEntity(id, entityType, name).
+    WithScope(scopeID, scopeType).  // solo/group/city/region/quest
+    WithWorld(worldID)
+
+// Add custom fields with dot-notation:
+eventbus.SetNested(payload.GetCustom(), "action", "talk")
+eventbus.SetNested(payload.GetCustom(), "dialogue.text", "Hello!")
+
+// Optional: explicit hierarchical paths for LLM clarity:
+eventbus.SetNested(payload.GetCustom(), "entity.id", id)
+eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+
+event := eventbus.NewStructuredEvent(type, source, worldID, payload)
+bus.Publish(ctx, topic, event)
+```
+
+### ⚠️ Deprecated Patterns (AVOID in new code)
+
+```go
+// ❌ DON'T use direct map access (panics on missing/wrong type):
+entityID := event.Payload["entity_id"].(string)
+worldID := event.WorldID
+
+// ❌ DON'T create events with manual maps:
+event := eventbus.Event{Payload: map[string]interface{}{...}}
+
+// ✅ USE the patterns above instead
+```
 
 ## Custom utilities and patterns
 
