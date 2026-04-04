@@ -312,20 +312,25 @@ func (i *Indexer) applyExplicitRelations(ev eventbus.Event) error {
 
 // ensureEntityFromRelation создаёт stub-Entity если его ещё нет.
 // Извлекает тип из ID формата "type:id" (например "player:p1" → type="player").
+// ВАЖНО: если entityID имеет формат "type:realId", используется realId как фактический ID сущности.
+// Это предотвращает дублирование: "world:world-xxx" и "world-xxx" — одна и та же сущность.
 func (i *Indexer) ensureEntityFromRelation(entityID, worldID string) {
-	exists, err := i.neo4j.EntityExists(entityID)
+	// Нормализуем ID: извлекаем реальную часть из "type:realId"
+	realEntityID := entityID
+	entityType := "unknown"
+	if idx := strings.Index(entityID, ":"); idx > 0 {
+		entityType = entityID[:idx]
+		realEntityID = entityID[idx+1:]
+	}
+
+	// Проверяем существование по реальному ID
+	exists, err := i.neo4j.EntityExists(realEntityID)
 	if err != nil || exists {
 		return
 	}
 
-	// Извлекаем тип из ID формата "type:id"
-	entityType := "unknown"
-	if idx := strings.Index(entityID, ":"); idx > 0 {
-		entityType = entityID[:idx]
-	}
-
-	if err := i.neo4j.EnsureEntity(entityID, entityType, worldID, nil); err != nil {
-		log.Printf("Failed to ensure stub entity %s: %v", entityID, err)
+	if err := i.neo4j.EnsureEntity(realEntityID, entityType, worldID, nil); err != nil {
+		log.Printf("Failed to ensure stub entity %s: %v", realEntityID, err)
 		return
 	}
 	i.Metrics.EntityCreated++
