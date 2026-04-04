@@ -7,12 +7,18 @@ import (
 )
 
 type Entity struct {
-	EntityID   string                 `json:"entity_id"`
-	EntityType string                 `json:"entity_type"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  time.Time              `json:"updated_at"`
-	Payload    map[string]interface{} `json:"payload"`
-	History    []HistoryEntry         `json:"history"`
+	ID        string                 `json:"id"`
+	Type      string                 `json:"type"`
+	CreatedAt time.Time              `json:"created_at"`
+	UpdatedAt time.Time              `json:"updated_at"`
+	Payload   map[string]interface{} `json:"payload"`
+	History   []HistoryEntry         `json:"history"`
+	World     *WorldRef              `json:"world,omitempty"`
+}
+
+type WorldRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
 }
 
 type HistoryEntry struct {
@@ -26,12 +32,12 @@ func NewEntity(entityID, entityType string, payload map[string]interface{}) *Ent
 	}
 	now := time.Now().UTC()
 	return &Entity{
-		EntityID:   entityID,
-		EntityType: entityType,
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		Payload:    payload,
-		History:    make([]HistoryEntry, 0),
+		ID:        entityID,
+		Type:      entityType,
+		CreatedAt: now,
+		UpdatedAt: now,
+		Payload:   payload,
+		History:   make([]HistoryEntry, 0),
 	}
 }
 

@@ -26,24 +26,24 @@ func TestValidateEventRelations_EmptyIsOK(t *testing.T) {
 
 func TestValidateEventRelations_Invalid(t *testing.T) {
 	tests := []struct {
-		name     string
+		name      string
 		relations []Relation
-		wantErr  string
+		wantErr   string
 	}{
 		{
-			name:     "empty From",
+			name:      "empty From",
 			relations: []Relation{{From: "", To: "item:sword", Type: RelFound}},
-			wantErr:  "relation[0]: 'from' must not be empty",
+			wantErr:   "relation[0]: 'from' must not be empty",
 		},
 		{
-			name:     "empty To",
+			name:      "empty To",
 			relations: []Relation{{From: "player:p1", To: "", Type: RelFound}},
-			wantErr:  "relation[0]: 'to' must not be empty",
+			wantErr:   "relation[0]: 'to' must not be empty",
 		},
 		{
-			name:     "empty Type",
+			name:      "empty Type",
 			relations: []Relation{{From: "player:p1", To: "item:sword", Type: ""}},
-			wantErr:  "relation[0]: 'type' must not be empty",
+			wantErr:   "relation[0]: 'type' must not be empty",
 		},
 		{
 			name: "second relation invalid",
@@ -95,7 +95,7 @@ func TestWithRelations_Builder(t *testing.T) {
 			Metadata: map[string]any{"action": "pick_up"}},
 	})
 
-	if wrapper.Event.EventID != ev.EventID {
+	if wrapper.Event.ID != ev.ID {
 		t.Error("EventWithRelations should preserve original event")
 	}
 	if len(wrapper.Relations) != 1 {

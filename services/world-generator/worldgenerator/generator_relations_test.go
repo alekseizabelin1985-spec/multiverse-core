@@ -14,16 +14,14 @@ func TestWorldGenerator_RelationsCreation(t *testing.T) {
 	waterID := "water-ghi789"
 
 	// Тест region relations
-	regionEvent := eventbus.Event{
-		EventType: "entity.created",
-		Relations: []eventbus.Relation{
-			{
-				From:     "world:" + worldID,
-				To:       regionID,
-				Type:     eventbus.RelContains,
-				Directed: true,
-				Metadata: map[string]any{"biome": "forest"},
-			},
+	regionEvent := eventbus.NewEvent("entity.created", "world-generator", "test-world-123", nil)
+	regionEvent.Relations = []eventbus.Relation{
+		{
+			From:     "world:" + worldID,
+			To:       regionID,
+			Type:     eventbus.RelContains,
+			Directed: true,
+			Metadata: map[string]any{"biome": "forest"},
 		},
 	}
 
@@ -35,16 +33,14 @@ func TestWorldGenerator_RelationsCreation(t *testing.T) {
 	}
 
 	// Тест city relations
-	cityEvent := eventbus.Event{
-		EventType: "entity.created",
-		Relations: []eventbus.Relation{
-			{
-				From:     cityID,
-				To:       "world:" + worldID,
-				Type:     eventbus.RelWorldOf,
-				Directed: true,
-				Metadata: map[string]any{"city_type": "major", "population": 50000},
-			},
+	cityEvent := eventbus.NewEvent("entity.created", "world-generator", "test-world-123", nil)
+	cityEvent.Relations = []eventbus.Relation{
+		{
+			From:     cityID,
+			To:       "world:" + worldID,
+			Type:     eventbus.RelWorldOf,
+			Directed: true,
+			Metadata: map[string]any{"city_type": "major", "population": 50000},
 		},
 	}
 
@@ -56,16 +52,14 @@ func TestWorldGenerator_RelationsCreation(t *testing.T) {
 	}
 
 	// Тест water relations
-	waterEvent := eventbus.Event{
-		EventType: "entity.created",
-		Relations: []eventbus.Relation{
-			{
-				From:     "world:" + worldID,
-				To:       waterID,
-				Type:     eventbus.RelContains,
-				Directed: true,
-				Metadata: map[string]any{"water_type": "river"},
-			},
+	waterEvent := eventbus.NewEvent("entity.created", "world-generator", "test-world-123", nil)
+	waterEvent.Relations = []eventbus.Relation{
+		{
+			From:     "world:" + worldID,
+			To:       waterID,
+			Type:     eventbus.RelContains,
+			Directed: true,
+			Metadata: map[string]any{"water_type": "river"},
 		},
 	}
 

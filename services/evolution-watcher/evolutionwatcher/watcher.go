@@ -315,23 +315,23 @@ func (w *Watcher) Stop(ctx context.Context) error {
 
 // handleEvent обрабатывает событие
 func (w *Watcher) handleEvent(event eventbus.Event) {
-	eventID := event.EventID
-	w.logger.Debug("Processing event", "event_id", eventID, "event_type", event.EventType)
+	eventID := event.ID
+	w.logger.Debug("Processing event", "event_id", eventID, "event_type", event.Type)
 
 	// Создаем StoredEvent
 	stored := StoredEvent{
 		EventID:    eventID,
-		EventType:  event.EventType,
-		WorldID:    event.WorldID,
+		EventType:  event.Type,
+		WorldID:    eventbus.GetWorldIDFromEvent(event),
 		Timestamp:  event.Timestamp,
 		Payload:    event.Payload,
 		ReceivedAt: time.Now(),
 	}
 
 	// Извлекаем entity_id с поддержкой нового формата (entity.id)
-	entity := eventbus.ExtractEntityID(event.Payload)
-	if entity != nil && entity.ID != "" {
-		stored.EntityID = entity.ID
+	entityInfo := eventbus.ExtractEntityID(event.Payload)
+	if entityInfo != nil && entityInfo.ID != "" {
+		stored.EntityID = entityInfo.ID
 	}
 
 	// Добавляем в иерархическую память
@@ -359,19 +359,18 @@ func (w *Watcher) handleEvent(event eventbus.Event) {
 
 // publishViolation публикует событие о нарушении
 func (w *Watcher) publishViolation(eventID, entityID, anomalyType string, severity float32) {
-	violationEvent := eventbus.Event{
-		EventID:   eventbus.NewEvent("violation.integrity", "evolution-watcher", w.worldID, nil).EventID,
-		EventType: "violation.integrity",
-		WorldID:   w.worldID,
-		Payload: map[string]interface{}{
+	violationEvent := eventbus.NewEvent(
+		"violation.integrity",
+		"evolution-watcher",
+		w.worldID,
+		map[string]interface{}{
 			"entity_id":     entityID,
 			"anomaly_type":  anomalyType,
 			"severity":      severity,
 			"trigger_event": eventID,
 			"timestamp":     time.Now().Unix(),
 		},
-		Timestamp: time.Now(),
-	}
+	)
 
 	w.eventBus.Publish(context.Background(), eventbus.TopicSystemEvents, violationEvent)
 }

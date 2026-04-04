@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"multiverse-core.io/shared/eventbus"
 )
@@ -20,19 +19,14 @@ func TestIndexer_HandleEvent(t *testing.T) {
 	defer indexer.neo4j.Close()
 
 	// Create a test event
-	event := eventbus.Event{
-		EventID:   "test-event-1",
-		EventType: "player.action.move",
-		Timestamp: time.Now(),
-		Source:    "player-1",
-		WorldID:   "test-world",
-		ScopeID:   stringPtr("test-scope"),
-		Payload: map[string]interface{}{
-			"action": "move",
-			"from":   "location-a",
-			"to":     "location-b",
-		},
-	}
+	event := eventbus.NewEvent("player.action.move", "player-1", "test-world", map[string]interface{}{
+		"action": "move",
+		"from":   "location-a",
+		"to":     "location-b",
+		"scope":  map[string]interface{}{"id": "test-scope"},
+	})
+	event.ID = "test-event-1"
+	event.Scope = &eventbus.ScopeRef{ID: "test-scope"}
 
 	// Handle the event
 	indexer.HandleEvent(event)
@@ -58,22 +52,17 @@ func TestNeo4jGraphMode(t *testing.T) {
 	defer indexer.neo4j.Close()
 
 	// Create a test event with entity references
-	event := eventbus.Event{
-		EventID:   "neo4j-test-event-1",
-		EventType: "player.action.attack",
-		Timestamp: time.Now(),
-		Source:    "player-1",
-		WorldID:   "test-world",
-		ScopeID:   stringPtr("test-scope"),
-		Payload: map[string]interface{}{
-			"action":    "attack",
-			"player_id": "player-1",
-			"target_id": "enemy-1",
-			"source_id": "hero-2",
-			"damage":    10,
-			"inventory": []string{"sword-1", "shield-2"},
-		},
-	}
+	event := eventbus.NewEvent("player.action.attack", "player-1", "test-world", map[string]interface{}{
+		"action":    "attack",
+		"player_id": "player-1",
+		"target_id": "enemy-1",
+		"source_id": "hero-2",
+		"damage":    10,
+		"inventory": []string{"sword-1", "shield-2"},
+		"scope":     map[string]interface{}{"id": "test-scope"},
+	})
+	event.ID = "neo4j-test-event-1"
+	event.Scope = &eventbus.ScopeRef{ID: "test-scope"}
 
 	// Handle the event
 	indexer.HandleEvent(event)
@@ -103,11 +92,11 @@ func TestNeo4jGraphMode(t *testing.T) {
 	}
 	if eventData == nil {
 		t.Error("Event not found in Neo4j")
-	} else if eventData.EventType != "player.action.attack" {
-		t.Errorf("Expected event type 'player.action.attack', got '%s'", eventData.EventType)
+	} else if eventData.Type != "player.action.attack" {
+		t.Errorf("Expected event type 'player.action.attack', got '%s'", eventData.Type)
 	}
-	if eventData.WorldID != "test-world" {
-		t.Errorf("Expected world_id 'test-world', got '%s'", eventData.WorldID)
+	if eventData.World == nil || eventData.World.ID != "test-world" {
+		t.Errorf("Expected world_id 'test-world', got '%v'", eventData.World)
 	}
 
 	// Test: Get entities by type
@@ -141,19 +130,12 @@ func TestIndexer_GetContextWithEvents(t *testing.T) {
 	defer indexer.neo4j.Close()
 
 	// Create a test event
-	event := eventbus.Event{
-		EventID:   "test-event-2",
-		EventType: "player.action.attack",
-		Timestamp: time.Now(),
-		Source:    "player-1",
-		WorldID:   "test-world",
-		ScopeID:   stringPtr("test-scope"),
-		Payload: map[string]interface{}{
-			"action": "attack",
-			"target": "enemy-1",
-			"damage": 10,
-		},
-	}
+	event := eventbus.NewEvent("player.action.attack", "player-1", "test-world", map[string]interface{}{
+		"action": "attack",
+		"target": "enemy-1",
+		"damage": 10,
+	})
+	event.ID = "test-event-2"
 
 	// Handle the event
 	indexer.HandleEvent(event)

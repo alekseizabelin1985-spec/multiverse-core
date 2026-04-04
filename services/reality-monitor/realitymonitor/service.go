@@ -11,10 +11,10 @@ import (
 
 // Service represents the Reality Monitor service
 type Service struct {
-	eventBus     *eventbus.EventBus
-	state        *State
-	ctx          context.Context
-	cancel       context.CancelFunc
+	eventBus *eventbus.EventBus
+	state    *State
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 // State holds the current state of the reality monitor
@@ -24,20 +24,20 @@ type State struct {
 
 // WorldMetrics holds aggregated metrics for a world
 type WorldMetrics struct {
-	WorldID           string
-	LastUpdated       time.Time
-	SpatialIntegrity  float64
-	KarmaEntropy      float64
-	CoreResonance     float64
-	AnomalyDetected   bool
-	AnomalyType       string
-	AnomalyTimestamp  time.Time
+	WorldID          string
+	LastUpdated      time.Time
+	SpatialIntegrity float64
+	KarmaEntropy     float64
+	CoreResonance    float64
+	AnomalyDetected  bool
+	AnomalyType      string
+	AnomalyTimestamp time.Time
 }
 
 // NewService creates a new Reality Monitor service
 func NewService(eventBus *eventbus.EventBus) *Service {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &Service{
 		eventBus: eventBus,
 		state: &State{
@@ -51,15 +51,15 @@ func NewService(eventBus *eventbus.EventBus) *Service {
 // Start starts the Reality Monitor service
 func (s *Service) Start() error {
 	log.Println("Starting Reality Monitor service...")
-	
+
 	// Subscribe to world metrics events
 	go s.eventBus.Subscribe(s.ctx, "world.metrics.*", "reality-monitor-group", s.handleWorldMetricsEvent)
-	
+
 	// Subscribe to system events for anomaly detection
 	go s.eventBus.Subscribe(s.ctx, "reality.anomaly.detected", "reality-monitor-group", s.handleAnomalyEvent)
-	
+
 	go s.run()
-	
+
 	log.Println("Reality Monitor service started successfully")
 	return nil
 }
@@ -75,7 +75,7 @@ func (s *Service) Stop() error {
 func (s *Service) run() {
 	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-s.ctx.Done():
@@ -89,31 +89,31 @@ func (s *Service) run() {
 // handleWorldMetricsEvent handles incoming world metrics events
 func (s *Service) handleWorldMetricsEvent(event eventbus.Event) {
 	var metrics WorldMetrics
-	
+
 	// Convert payload to JSON bytes then back to map for proper parsing
 	payloadBytes, err := json.Marshal(event.Payload)
 	if err != nil {
 		log.Printf("Error marshaling event payload: %v", err)
 		return
 	}
-	
+
 	// Parse the event payload
 	if err := json.Unmarshal(payloadBytes, &metrics); err != nil {
 		log.Printf("Error parsing world metrics event: %v", err)
 		return
 	}
-	
+
 	// Update metrics in state
 	s.state.Metrics[metrics.WorldID] = &metrics
-	
-	log.Printf("Updated metrics for world %s: spatial=%f, karma=%f, resonance=%f", 
+
+	log.Printf("Updated metrics for world %s: spatial=%f, karma=%f, resonance=%f",
 		metrics.WorldID, metrics.SpatialIntegrity, metrics.KarmaEntropy, metrics.CoreResonance)
 }
 
 // handleAnomalyEvent handles anomaly detection events
 func (s *Service) handleAnomalyEvent(event eventbus.Event) {
-	log.Printf("Received anomaly detection event: %s", event.EventType)
-	
+	log.Printf("Received anomaly detection event: %s", event.Type)
+
 	// Process anomaly event
 	// This could trigger alerts, notifications, or other actions
 }
@@ -121,7 +121,7 @@ func (s *Service) handleAnomalyEvent(event eventbus.Event) {
 // checkForAnomalies performs periodic anomaly detection
 func (s *Service) checkForAnomalies() {
 	log.Println("Checking for anomalies...")
-	
+
 	for worldID, metrics := range s.state.Metrics {
 		if s.isAnomaly(metrics) {
 			// Prepare anomaly data as map for payload
@@ -130,17 +130,10 @@ func (s *Service) checkForAnomalies() {
 				"anomaly_type": metrics.AnomalyType,
 				"timestamp":    time.Now().Format(time.RFC3339),
 			}
-			
+
 			// Publish anomaly detected event
-			anomalyEvent := eventbus.Event{
-				EventID:   "anomaly-" + time.Now().Format("20060102150405"),
-				EventType: "reality.anomaly.detected",
-				Source:    "reality-monitor",
-				WorldID:   worldID,
-				Payload:   anomalyData,
-				Timestamp: time.Now(),
-			}
-			
+			anomalyEvent := eventbus.NewEvent("reality.anomaly.detected", "reality-monitor", worldID, anomalyData)
+
 			if err := s.eventBus.PublishSystemEvent(s.ctx, anomalyEvent); err != nil {
 				log.Printf("Failed to publish anomaly event: %v", err)
 			} else {
@@ -159,7 +152,7 @@ func (s *Service) isAnomaly(metrics *WorldMetrics) bool {
 		metrics.AnomalyTimestamp = time.Now()
 		return true
 	}
-	
+
 	// Check for karma entropy anomalies
 	if metrics.KarmaEntropy > 0.9 {
 		metrics.AnomalyType = "karma_entropy"
@@ -167,7 +160,7 @@ func (s *Service) isAnomaly(metrics *WorldMetrics) bool {
 		metrics.AnomalyTimestamp = time.Now()
 		return true
 	}
-	
+
 	// Check for core resonance anomalies
 	if metrics.CoreResonance < 0.3 || metrics.CoreResonance > 1.0 {
 		metrics.AnomalyType = "core_resonance"
@@ -175,11 +168,11 @@ func (s *Service) isAnomaly(metrics *WorldMetrics) bool {
 		metrics.AnomalyTimestamp = time.Now()
 		return true
 	}
-	
+
 	// Reset anomaly flag if no issues
 	metrics.AnomalyDetected = false
 	metrics.AnomalyType = ""
-	
+
 	return false
 }
 

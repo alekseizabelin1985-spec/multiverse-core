@@ -189,7 +189,7 @@ func (a *Actor) processEventBatch(events []eventbus.Event) error {
 	// Для каждого события
 	for _, event := range events {
 		if err := a.processSingleEvent(event); err != nil {
-			a.Logger.Printf("Actor %s: Error processing event %s: %v", a.ID, event.EventID, err)
+			a.Logger.Printf("Actor %s: Error processing event %s: %v", a.ID, event.ID, err)
 		}
 	}
 
@@ -204,7 +204,7 @@ func (a *Actor) processEventBatch(events []eventbus.Event) error {
 // processSingleEvent обрабатывает одно событие
 func (a *Actor) processSingleEvent(event eventbus.Event) error {
 	// Проверяем тип события
-	switch event.EventType {
+	switch event.Type {
 	case "player.action":
 		return a.handlePlayerAction(event)
 	case "entity.state_changed":

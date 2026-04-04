@@ -183,7 +183,7 @@ func parseGenerationRequest(payload map[string]interface{}) (*WorldGenerationReq
 
 // HandleEvent processes world generation requests.
 func (wg *WorldGenerator) HandleEvent(ev eventbus.Event) {
-	if ev.EventType != "world.generation.requested" {
+	if ev.Type != "world.generation.requested" {
 		return
 	}
 

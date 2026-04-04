@@ -62,10 +62,13 @@ func TestExtractRelations(t *testing.T) {
 	}
 
 	// Тест валидации через eventbus
-	ev := eventbus.Event{
-		EventType: "player.action",
-		Relations: relations,
-	}
+	ev := eventbus.NewEvent(
+		"player.action",
+		"test",
+		"",
+		map[string]interface{}{},
+	)
+	ev.Relations = relations
 	if err := eventbus.ValidateEventRelations(ev); err != nil {
 		t.Errorf("Expected valid relations, got error: %v", err)
 	}

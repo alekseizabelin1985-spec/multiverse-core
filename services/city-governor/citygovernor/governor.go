@@ -23,11 +23,11 @@ func NewCityGovernor(bus *eventbus.EventBus) *CityGovernor {
 
 // HandleEvent processes events for city management.
 func (cg *CityGovernor) HandleEvent(ev eventbus.Event) {
-	if ev.ScopeID == nil {
+	if eventbus.GetScopeFromEvent(ev) == nil {
 		return // Not a city-scoped event
 	}
 
-	switch ev.EventType {
+	switch ev.Type {
 	case "player.entered":
 		cg.handlePlayerEntry(ev)
 	case "violation.detected":
@@ -58,8 +58,6 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 	var cityID string
 	if scope := eventbus.GetScopeFromEvent(ev); scope != nil && scope.Type == "city" {
 		cityID = scope.ID
-	} else if ev.ScopeID != nil {
-		cityID = *ev.ScopeID
 	} else {
 		cityID, _ = pa.GetString("city_id")
 	}
@@ -95,7 +93,7 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 	eventbus.SetNested(npcPayload.GetCustom(), "scope.type", "city")
 
 	npcEvent := eventbus.NewStructuredEvent("citizen.event", "city-governor", worldID, npcPayload)
-	npcEvent.EventID = "npc-notify-" + uuid.New().String()[:8]
+	npcEvent.ID = "npc-notify-" + uuid.New().String()[:8]
 	npcEvent.Timestamp = time.Now()
 
 	// ✨ Этап 6: Явные связи — игрок вошёл в город
@@ -121,8 +119,6 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 	var cityID string
 	if scope := eventbus.GetScopeFromEvent(ev); scope != nil && scope.Type == "city" {
 		cityID = scope.ID
-	} else if ev.ScopeID != nil {
-		cityID = *ev.ScopeID
 	} else {
 		cityID, _ = pa.GetString("city_id")
 	}
@@ -168,7 +164,7 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 	eventbus.SetNested(consequencePayload.GetCustom(), "violation.type", violationType)
 
 	consequenceEvent := eventbus.NewStructuredEvent("city.violation.consequence", "city-governor", worldID, consequencePayload)
-	consequenceEvent.EventID = "city-conseq-" + uuid.New().String()[:8]
+	consequenceEvent.ID = "city-conseq-" + uuid.New().String()[:8]
 	consequenceEvent.Timestamp = time.Now()
 
 	// ✨ Этап 6: Явные связи — город наказал игрока за нарушение
@@ -204,29 +200,33 @@ func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
 		playerID, _ = ev.Payload["player_id"].(string)
 	}
 	questID, _ := ev.Payload["quest_id"].(string)
-	cityID := *ev.ScopeID
+	scope := eventbus.GetScopeFromEvent(ev)
+	if scope == nil {
+		return
+	}
+	cityID := scope.ID
 
 	if playerID == "" || questID == "" {
 		return
 	}
 
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+
 	// Generate reward
 	reward := cg.generateQuestReward(questID, cityID)
 
-	rewardEvent := eventbus.Event{
-		EventID:   "quest-reward-" + uuid.New().String()[:8],
-		EventType: "quest.reward.granted",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"player_id": playerID,
-			"quest_id":  questID,
-			"reward":    reward,
-			"city_id":   cityID,
-		},
-		Timestamp: time.Now(),
-	}
+	rewardPayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(worldID)
+
+	eventbus.SetNested(rewardPayload.GetCustom(), "quest_id", questID)
+	eventbus.SetNested(rewardPayload.GetCustom(), "reward", reward)
+	eventbus.SetNested(rewardPayload.GetCustom(), "city.id", cityID)
+
+	rewardEvent := eventbus.NewStructuredEvent("quest.reward.granted", "city-governor", worldID, rewardPayload)
+	rewardEvent.ID = "quest-reward-" + uuid.New().String()[:8]
+	rewardEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, rewardEvent)
 
 	// Update reputation based on quest type
@@ -242,7 +242,11 @@ func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
 
 // handleReputationChange handles reputation changes.
 func (cg *CityGovernor) handleReputationChange(ev eventbus.Event) {
-	cityID := *ev.ScopeID
+	scope := eventbus.GetScopeFromEvent(ev)
+	if scope == nil {
+		return
+	}
+	cityID := scope.ID
 	change, _ := ev.Payload["change"].(float64)
 
 	newReputation := cg.getCurrentReputation(cityID) + int(change)
@@ -274,7 +278,11 @@ func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
 	}
 
 	interactionType, _ := ev.Payload["interaction_type"].(string)
-	cityID := *ev.ScopeID
+	scope := eventbus.GetScopeFromEvent(ev)
+	if scope == nil {
+		return
+	}
+	cityID := scope.ID
 
 	if playerID == "" || npcID == "" {
 		return
@@ -283,21 +291,19 @@ func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
 	// Generate interaction response
 	response := cg.generateNPCResponse(npcID, interactionType, cityID)
 
-	responseEvent := eventbus.Event{
-		EventID:   "npc-response-" + uuid.New().String()[:8],
-		EventType: "npc.response.generated",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"player_id":        playerID,
-			"npc_id":           npcID,
-			"interaction_type": interactionType,
-			"response":         response,
-			"city_id":          cityID,
-		},
-		Timestamp: time.Now(),
-	}
+	responsePayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(eventbus.GetWorldIDFromEvent(ev))
+
+	eventbus.SetNested(responsePayload.GetCustom(), "npc_id", npcID)
+	eventbus.SetNested(responsePayload.GetCustom(), "interaction_type", interactionType)
+	eventbus.SetNested(responsePayload.GetCustom(), "response", response)
+	eventbus.SetNested(responsePayload.GetCustom(), "city.id", cityID)
+
+	responseEvent := eventbus.NewStructuredEvent("npc.response.generated", "city-governor", eventbus.GetWorldIDFromEvent(ev), responsePayload)
+	responseEvent.ID = "npc-response-" + uuid.New().String()[:8]
+	responseEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, responseEvent)
 
 	log.Printf("Generated NPC response for %s -> %s in city %s", playerID, npcID, cityID)
@@ -306,57 +312,63 @@ func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
 // generateWelcomeQuest generates a welcome quest for new players.
 func (cg *CityGovernor) generateWelcomeQuest(ev eventbus.Event) {
 	playerID, _ := ev.Payload["player_id"].(string)
-	cityID := *ev.ScopeID
+	scope := eventbus.GetScopeFromEvent(ev)
+	if scope == nil {
+		return
+	}
+	cityID := scope.ID
+	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	questID := "welcome-" + uuid.New().String()[:8]
 
-	questEvent := eventbus.Event{
-		EventID:   "quest-welcome-" + uuid.New().String()[:8],
-		EventType: "quest.assigned",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"quest_id":    questID,
-			"player_id":   playerID,
-			"city_id":     cityID,
-			"title":       "Добро пожаловать в " + cg.getCityName(cityID),
-			"description": "Старейшина просит вас принести ему Слёзы Памяти из ближайшего леса.",
-			"reward":      "50 золотых и репутация +10",
-			"quest_type":  "welcome",
-		},
-		Timestamp: time.Now(),
-	}
+	questPayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(worldID)
+
+	eventbus.SetNested(questPayload.GetCustom(), "quest_id", questID)
+	eventbus.SetNested(questPayload.GetCustom(), "title", "Добро пожаловать в "+cg.getCityName(cityID))
+	eventbus.SetNested(questPayload.GetCustom(), "description", "Старейшина просит вас принести ему Слёзы Памяти из ближайшего леса.")
+	eventbus.SetNested(questPayload.GetCustom(), "reward", "50 золотых и репутация +10")
+	eventbus.SetNested(questPayload.GetCustom(), "quest_type", "welcome")
+	eventbus.SetNested(questPayload.GetCustom(), "city.id", cityID)
+
+	questEvent := eventbus.NewStructuredEvent("quest.assigned", "city-governor", worldID, questPayload)
+	questEvent.ID = "quest-welcome-" + uuid.New().String()[:8]
+	questEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, questEvent)
 }
 
 // generateNewQuest generates a new quest after completion.
 func (cg *CityGovernor) generateNewQuest(ev eventbus.Event) {
 	playerID, _ := ev.Payload["player_id"].(string)
-	cityID := *ev.ScopeID
+	scope := eventbus.GetScopeFromEvent(ev)
+	if scope == nil {
+		return
+	}
+	cityID := scope.ID
+	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	// Determine quest type based on player history and city state
 	questType := cg.determineNextQuestType(playerID, cityID)
 
 	questID := "quest-" + uuid.New().String()[:8]
 
-	questEvent := eventbus.Event{
-		EventID:   "quest-new-" + uuid.New().String()[:8],
-		EventType: "quest.assigned",
-		Source:    "city-governor",
-		WorldID:   ev.WorldID,
-		ScopeID:   &cityID,
-		Payload: map[string]interface{}{
-			"quest_id":    questID,
-			"player_id":   playerID,
-			"city_id":     cityID,
-			"title":       cg.generateQuestTitle(questType, cityID),
-			"description": cg.generateQuestDescription(questType, cityID),
-			"reward":      cg.generateQuestReward(questID, cityID),
-			"quest_type":  questType,
-		},
-		Timestamp: time.Now(),
-	}
+	questPayload := eventbus.NewEventPayload().
+		WithEntity(playerID, "player", "").
+		WithScope(cityID, "city").
+		WithWorld(worldID)
+
+	eventbus.SetNested(questPayload.GetCustom(), "quest_id", questID)
+	eventbus.SetNested(questPayload.GetCustom(), "title", cg.generateQuestTitle(questType, cityID))
+	eventbus.SetNested(questPayload.GetCustom(), "description", cg.generateQuestDescription(questType, cityID))
+	eventbus.SetNested(questPayload.GetCustom(), "reward", cg.generateQuestReward(questID, cityID))
+	eventbus.SetNested(questPayload.GetCustom(), "quest_type", questType)
+	eventbus.SetNested(questPayload.GetCustom(), "city.id", cityID)
+
+	questEvent := eventbus.NewStructuredEvent("quest.assigned", "city-governor", worldID, questPayload)
+	questEvent.ID = "quest-new-" + uuid.New().String()[:8]
+	questEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, questEvent)
 }
 
@@ -369,17 +381,16 @@ func (cg *CityGovernor) isNewPlayerInCity(playerID, cityID string) bool {
 
 func (cg *CityGovernor) updateCityPopulation(cityID string, delta int) {
 	// Publish population update event
-	popEvent := eventbus.Event{
-		EventID:   "pop-update-" + uuid.New().String()[:8],
-		EventType: "city.population.changed",
-		Source:    "city-governor",
-		WorldID:   "global", // Population affects world state
-		Payload: map[string]interface{}{
-			"city_id": cityID,
-			"delta":   delta,
-		},
-		Timestamp: time.Now(),
-	}
+	popPayload := eventbus.NewEventPayload().
+		WithScope(cityID, "city").
+		WithWorld("global")
+
+	eventbus.SetNested(popPayload.GetCustom(), "delta", delta)
+	eventbus.SetNested(popPayload.GetCustom(), "city.id", cityID)
+
+	popEvent := eventbus.NewStructuredEvent("city.population.changed", "city-governor", "global", popPayload)
+	popEvent.ID = "pop-update-" + uuid.New().String()[:8]
+	popEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, popEvent)
 }
 
@@ -396,17 +407,16 @@ func (cg *CityGovernor) getCityConsequence(violationType, cityID string) string 
 }
 
 func (cg *CityGovernor) updateCityReputation(cityID string, delta int) {
-	repEvent := eventbus.Event{
-		EventID:   "rep-update-" + uuid.New().String()[:8],
-		EventType: "city.reputation.changed",
-		Source:    "city-governor",
-		WorldID:   "global",
-		Payload: map[string]interface{}{
-			"city_id": cityID,
-			"change":  delta,
-		},
-		Timestamp: time.Now(),
-	}
+	repPayload := eventbus.NewEventPayload().
+		WithScope(cityID, "city").
+		WithWorld("global")
+
+	eventbus.SetNested(repPayload.GetCustom(), "change", delta)
+	eventbus.SetNested(repPayload.GetCustom(), "city.id", cityID)
+
+	repEvent := eventbus.NewStructuredEvent("city.reputation.changed", "city-governor", "global", repPayload)
+	repEvent.ID = "rep-update-" + uuid.New().String()[:8]
+	repEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, repEvent)
 }
 
@@ -444,18 +454,17 @@ func (cg *CityGovernor) applyReputationEffects(cityID string, reputation int) {
 		effect = "stability" // Normal state
 	}
 
-	effectEvent := eventbus.Event{
-		EventID:   "rep-effect-" + uuid.New().String()[:8],
-		EventType: "city.reputation.effect",
-		Source:    "city-governor",
-		WorldID:   "global",
-		Payload: map[string]interface{}{
-			"city_id": cityID,
-			"effect":  effect,
-			"level":   reputation,
-		},
-		Timestamp: time.Now(),
-	}
+	effectPayload := eventbus.NewEventPayload().
+		WithScope(cityID, "city").
+		WithWorld("global")
+
+	eventbus.SetNested(effectPayload.GetCustom(), "effect", effect)
+	eventbus.SetNested(effectPayload.GetCustom(), "level", reputation)
+	eventbus.SetNested(effectPayload.GetCustom(), "city.id", cityID)
+
+	effectEvent := eventbus.NewStructuredEvent("city.reputation.effect", "city-governor", "global", effectPayload)
+	effectEvent.ID = "rep-effect-" + uuid.New().String()[:8]
+	effectEvent.Timestamp = time.Now()
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, effectEvent)
 }
 

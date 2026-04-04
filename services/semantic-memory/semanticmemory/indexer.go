@@ -134,8 +134,8 @@ func NewIndexer() (*Indexer, error) {
 // HandleEvent processes all events and indexes them.
 func (i *Indexer) HandleEvent(ev eventbus.Event) {
 	// Validate input event
-	if ev.EventID == "" {
-		log.Printf("Invalid event: missing EventID")
+	if ev.ID == "" {
+		log.Printf("Invalid event: missing ID")
 		return
 	}
 
@@ -147,7 +147,7 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 	i.saveEventToNeo4j(ctx, ev)
 
 	// Process entity-related events for both ChromaDB and Neo4j
-	if ev.EventType == "entity.created" || ev.EventType == "entity.updated" {
+	if ev.Type == "entity.created" || ev.Type == "entity.updated" {
 		i.processEntityEvent(ctx, ev)
 	}
 }
@@ -155,8 +155,8 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 // saveEventToChroma saves an event to ChromaDB
 func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 	// Validate input event
-	if ev.EventID == "" {
-		log.Printf("Invalid event: missing EventID for ChromaDB")
+	if ev.ID == "" {
+		log.Printf("Invalid event: missing ID for ChromaDB")
 		return
 	}
 
@@ -167,8 +167,8 @@ func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 	pa := ev.Path()
 
 	metadata := map[string]interface{}{
-		"event_id":   ev.EventID,
-		"event_type": ev.EventType,
+		"event_id":   ev.ID,
+		"event_type": ev.Type,
 		"world_id":   eventbus.GetWorldIDFromEvent(ev), // новая: payload.world.id / старая: world_id
 		"source":     ev.Source,
 		"timestamp":  ev.Timestamp,
@@ -182,9 +182,6 @@ func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 		if scope.Type != "" {
 			metadata["scope_type"] = scope.Type
 		}
-	} else if ev.ScopeID != nil {
-		// Fallback на топ-уровень
-		metadata["scope_id"] = *ev.ScopeID
 	}
 
 	// Сохраняем также иерархические пути для совместимости с LLM
@@ -196,19 +193,19 @@ func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 	}
 
 	// Save to ChromaDB
-	eventID := fmt.Sprintf("event_%s", ev.EventID)
+	eventID := fmt.Sprintf("event_%s", ev.ID)
 	if err := i.chroma.UpsertDocument(ctx, eventID, eventText, metadata); err != nil {
-		log.Printf("ChromaDB upsert failed for event %s: %v", ev.EventID, err)
+		log.Printf("ChromaDB upsert failed for event %s: %v", ev.ID, err)
 	} else {
-		log.Printf("Saved event %s to ChromaDB", ev.EventID)
+		log.Printf("Saved event %s to ChromaDB", ev.ID)
 	}
 }
 
 // buildEventTextContext creates a human-readable context string from an event
 func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("Event ID: %s", ev.EventID))
-	parts = append(parts, fmt.Sprintf("Event Type: %s", ev.EventType))
+	parts = append(parts, fmt.Sprintf("Event ID: %s", ev.ID))
+	parts = append(parts, fmt.Sprintf("Event Type: %s", ev.Type))
 	parts = append(parts, fmt.Sprintf("Timestamp: %s", ev.Timestamp.Format("2006-01-02 15:04:05")))
 	parts = append(parts, fmt.Sprintf("Source: %s", ev.Source))
 
@@ -222,8 +219,6 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 		} else if scope.ID != "" {
 			parts = append(parts, fmt.Sprintf("Scope ID: %s", scope.ID))
 		}
-	} else if ev.ScopeID != nil {
-		parts = append(parts, fmt.Sprintf("Scope ID: %s", *ev.ScopeID))
 	}
 
 	// Add payload information — используем jsonpath для упорядоченного вывода ключей (для стабильности LLM-контекста)
@@ -260,26 +255,26 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 
 	// Save event node itself
 	if err := i.neo4j.SaveEventAsGraph(ev, string(payloadJSON)); err != nil {
-		log.Printf("Neo4j SaveEventAsGraph failed for event %s: %v", ev.EventID, err)
-		return fmt.Errorf("saveEventAsGraph failed for event %s: %w", ev.EventID, err)
+		log.Printf("Neo4j SaveEventAsGraph failed for event %s: %v", ev.ID, err)
+		return fmt.Errorf("saveEventAsGraph failed for event %s: %w", ev.ID, err)
 	}
 
 	// ✨ Этап 3: Если есть явные связи — применяем их
 	if len(ev.Relations) > 0 {
 		i.Metrics.ExplicitCount++
 		if err := i.applyExplicitRelations(ev); err != nil {
-			log.Printf("Explicit relations apply failed for event %s: %v", ev.EventID, err)
+			log.Printf("Explicit relations apply failed for event %s: %v", ev.ID, err)
 			// Fallback — не блокируем сохранение события
 		} else {
-			log.Printf("Applied %d explicit relations for event %s (total: %d)", len(ev.Relations), ev.EventID, i.Metrics.ExplicitCount)
+			log.Printf("Applied %d explicit relations for event %s (total: %d)", len(ev.Relations), ev.ID, i.Metrics.ExplicitCount)
 			return nil
 		}
 	}
 
 	// Fallback: старая логика для обратной совместимости (события без relations)
 	i.Metrics.FallbackCount++
-	if err := i.neo4j.LinkEventToEntities(ev.EventID, ev.Payload); err != nil {
-		log.Printf("Neo4j LinkEventToEntities fallback failed for event %s: %v", ev.EventID, err)
+	if err := i.neo4j.LinkEventToEntities(ev.ID, ev.Payload); err != nil {
+		log.Printf("Neo4j LinkEventToEntities fallback failed for event %s: %v", ev.ID, err)
 	}
 
 	return nil
@@ -300,7 +295,7 @@ func (i *Indexer) applyExplicitRelations(ev eventbus.Event) error {
 	for _, rel := range ev.Relations {
 		for _, entityID := range []string{rel.From, rel.To} {
 			if !seen[entityID] {
-				i.ensureEntityFromRelation(entityID, ev.WorldID)
+				i.ensureEntityFromRelation(entityID, eventbus.GetWorldIDFromEvent(ev))
 				seen[entityID] = true
 			}
 		}
@@ -389,7 +384,7 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	metadata := map[string]interface{}{
 		"entity_id":   entityID,
 		"entity_type": entityType,
-		"world_id":    ev.WorldID,
+		"world_id":    eventbus.GetWorldIDFromEvent(ev),
 	}
 
 	// Index in ChromaDB
@@ -402,7 +397,7 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	for k, v := range payload {
 		neo4jPayload[k] = v
 	}
-	neo4jPayload["world_id"] = ev.WorldID
+	neo4jPayload["world_id"] = eventbus.GetWorldIDFromEvent(ev)
 
 	// Index in Neo4j
 	if err := i.neo4j.UpsertEntity(entityID, entityType, neo4jPayload); err != nil {

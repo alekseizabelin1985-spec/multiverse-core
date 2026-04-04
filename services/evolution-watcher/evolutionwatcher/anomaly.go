@@ -5,6 +5,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"multiverse-core.io/shared/eventbus"
 )
 
 // AnomalyModel нейронная модель для обнаружения аномалий
@@ -43,6 +45,11 @@ type AnomalyWeights struct {
 	Contextual  float32 // Вес контекстных аномалий
 }
 
+// extractEntityIDFromStoredEvent извлекает entity ID из StoredEvent payload
+func extractEntityIDFromStoredEvent(event StoredEvent) *eventbus.EntityInfo {
+	return eventbus.ExtractEntityID(event.Payload)
+}
+
 // NewAnomalyModel создает новую модель аномалий
 func NewAnomalyModel() *AnomalyModel {
 	return &AnomalyModel{
@@ -69,32 +76,38 @@ func (m *AnomalyModel) CheckAnomaly(event StoredEvent) (bool, string, float32) {
 
 	m.checksCount++
 
+	// Извлекаем entity ID из payload
+	entityID := ""
+	if entityInfo := extractEntityIDFromStoredEvent(event); entityInfo != nil {
+		entityID = entityInfo.ID
+	}
+
 	// Проверяем различные типы аномалий
 	anomalies := make(map[string]float32)
 
 	// 1. Аномалии состояния
-	if score := m.checkStateAnomaly(event); score > 0 {
+	if score := m.checkStateAnomaly(event, entityID); score > 0 {
 		anomalies["state_change"] = score
 	}
 
 	// 2. Поведенческие аномалии
-	if score := m.checkBehavioralAnomaly(event); score > 0 {
+	if score := m.checkBehavioralAnomaly(event, entityID); score > 0 {
 		anomalies["behavioral"] = score
 	}
 
 	// 3. Временные аномалии
-	if score := m.checkTemporalAnomaly(event); score > 0 {
+	if score := m.checkTemporalAnomaly(event, entityID); score > 0 {
 		anomalies["temporal"] = score
 	}
 
 	// 4. Контекстные аномалии
-	if score := m.checkContextualAnomaly(event); score > 0 {
+	if score := m.checkContextualAnomaly(event, entityID); score > 0 {
 		anomalies["contextual"] = score
 	}
 
 	// Если нет аномалий - обновляем паттерн нормального поведения
-	if len(anomalies) == 0 && event.EntityID != "" {
-		m.updateNormalPattern(event)
+	if len(anomalies) == 0 && entityID != "" {
+		m.updateNormalPattern(event, entityID)
 		return false, "", 0
 	}
 
@@ -125,7 +138,7 @@ func (m *AnomalyModel) CheckAnomaly(event StoredEvent) (bool, string, float32) {
 }
 
 // checkStateAnomaly проверяет аномалии состояния
-func (m *AnomalyModel) checkStateAnomaly(event StoredEvent) float32 {
+func (m *AnomalyModel) checkStateAnomaly(event StoredEvent, entityID string) float32 {
 	// Проверяем state_changes
 	operations, ok := event.Payload["operations"].([]interface{})
 	if !ok {
@@ -147,7 +160,7 @@ func (m *AnomalyModel) checkStateAnomaly(event StoredEvent) float32 {
 		}
 
 		// Проверяем отклонение от нормального паттерна
-		if pattern, exists := m.normalPatterns[event.EntityID]; exists {
+		if pattern, exists := m.normalPatterns[entityID]; exists {
 			if mean, ok := pattern.Mean[path]; ok {
 				if stddev, ok := pattern.StdDev[path]; ok && stddev > 0 {
 					deviation := math.Abs(value-mean) / stddev
@@ -165,11 +178,11 @@ func (m *AnomalyModel) checkStateAnomaly(event StoredEvent) float32 {
 }
 
 // checkBehavioralAnomaly проверяет поведенческие аномалии
-func (m *AnomalyModel) checkBehavioralAnomaly(event StoredEvent) float32 {
+func (m *AnomalyModel) checkBehavioralAnomaly(event StoredEvent, entityID string) float32 {
 	// Проверяем частоту событий
 	eventType := event.EventType
 
-	if pattern, exists := m.normalPatterns[event.EntityID]; exists {
+	if pattern, exists := m.normalPatterns[entityID]; exists {
 		key := "event_rate:" + eventType
 		if mean, ok := pattern.Mean[key]; ok {
 			if stddev, ok := pattern.StdDev[key]; ok && stddev > 0 {
@@ -187,9 +200,9 @@ func (m *AnomalyModel) checkBehavioralAnomaly(event StoredEvent) float32 {
 }
 
 // checkTemporalAnomaly проверяет временные аномалии
-func (m *AnomalyModel) checkTemporalAnomaly(event StoredEvent) float32 {
+func (m *AnomalyModel) checkTemporalAnomaly(event StoredEvent, entityID string) float32 {
 	// Проверяем время между событиями
-	if pattern, exists := m.normalPatterns[event.EntityID]; exists {
+	if pattern, exists := m.normalPatterns[entityID]; exists {
 		key := "time_delta"
 		if mean, ok := pattern.Mean[key]; ok {
 			if stddev, ok := pattern.StdDev[key]; ok && stddev > 0 {
@@ -207,7 +220,7 @@ func (m *AnomalyModel) checkTemporalAnomaly(event StoredEvent) float32 {
 }
 
 // checkContextualAnomaly проверяет контекстные аномалии
-func (m *AnomalyModel) checkContextualAnomaly(event StoredEvent) float32 {
+func (m *AnomalyModel) checkContextualAnomaly(event StoredEvent, entityID string) float32 {
 	// Проверяем необычные комбинации событий/состояний
 	// В production здесь будет более сложная логика
 
@@ -221,7 +234,7 @@ func (m *AnomalyModel) checkContextualAnomaly(event StoredEvent) float32 {
 				}
 
 				// Проверяем относительно паттерна
-				if pattern, exists := m.normalPatterns[event.EntityID]; exists {
+				if pattern, exists := m.normalPatterns[entityID]; exists {
 					if mean, ok := pattern.Mean[key]; ok {
 						if stddev, ok := pattern.StdDev[key]; ok && stddev > 0 {
 							deviation := math.Abs(val-mean) / stddev
@@ -239,20 +252,20 @@ func (m *AnomalyModel) checkContextualAnomaly(event StoredEvent) float32 {
 }
 
 // updateNormalPattern обновляет паттерн нормального поведения
-func (m *AnomalyModel) updateNormalPattern(event StoredEvent) {
-	if event.EntityID == "" {
+func (m *AnomalyModel) updateNormalPattern(event StoredEvent, entityID string) {
+	if entityID == "" {
 		return
 	}
 
-	pattern, exists := m.normalPatterns[event.EntityID]
+	pattern, exists := m.normalPatterns[entityID]
 	if !exists {
 		pattern = &BehaviorPattern{
-			EntityID:    event.EntityID,
+			EntityID:    entityID,
 			Mean:        make(map[string]float64),
 			StdDev:      make(map[string]float64),
 			SampleCount: 0,
 		}
-		m.normalPatterns[event.EntityID] = pattern
+		m.normalPatterns[entityID] = pattern
 	}
 
 	// Обновляем статистику с помощью онлайн-алгоритма (Welford's algorithm)

@@ -39,11 +39,11 @@ func NewManager() (*Manager, error) {
 
 // getBucketForEntity determines the MinIO bucket for an entity.
 func (m *Manager) getBucketForEntity(ent *entity.Entity, evt *eventbus.Event) string {
-	return "entities-" + evt.WorldID
-	//if worldID, exists := evt.WorldID; exists && worldID != "" {
-	//	return "entities-" + worldID
-	//}
-	//return "entities-global"
+	worldID := eventbus.GetWorldIDFromEvent(*evt)
+	if worldID == "" {
+		return "entities-global"
+	}
+	return "entities-" + worldID
 }
 
 // ensureBucket creates a bucket if it doesn't exist.
@@ -100,7 +100,7 @@ func (m *Manager) saveSnapshotToMinIO(ctx context.Context, ent *entity.Entity, e
 		return err
 	}
 
-	_, err = m.minio.PutObject(ctx, bucket, ent.EntityID+".json",
+	_, err = m.minio.PutObject(ctx, bucket, ent.ID+".json",
 		bytes.NewReader(data), int64(len(data)),
 		minio.PutObjectOptions{ContentType: "application/json; charset=utf-8"})
 	return err
@@ -126,14 +126,23 @@ func (m *Manager) DestroyEntityActor(entityID string) error {
 func (m *Manager) SubscribeToEvents(ctx context.Context, bus *eventbus.EventBus) {
 	// Create Entity-Actor when entity is created
 	bus.Subscribe(ctx, "entity.created", "entity-actor-group", func(ev eventbus.Event) {
-		entityID, _ := ev.Payload["entity_id"].(string)
-		entityType, _ := ev.Payload["entity_type"].(string)
+		entityInfo := eventbus.ExtractEntityID(ev.Payload)
+		entityID := ""
+		entityType := ""
+		if entityInfo != nil {
+			entityID = entityInfo.ID
+			entityType = entityInfo.Type
+		}
 		m.CreateEntityActor(entityID, entityType)
 	})
 
 	// Destroy Entity-Actor when entity is deleted
 	bus.Subscribe(ctx, "entity.deleted", "entity-actor-group", func(ev eventbus.Event) {
-		entityID, _ := ev.Payload["entity_id"].(string)
+		entityInfo := eventbus.ExtractEntityID(ev.Payload)
+		entityID := ""
+		if entityInfo != nil {
+			entityID = entityInfo.ID
+		}
 		m.DestroyEntityActor(entityID)
 	})
 }
@@ -153,9 +162,9 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 					json.Unmarshal(data, &ent)
 
 					if err := m.saveSnapshotToMinIO(ctx, &ent, &ev); err != nil {
-						log.Printf("Failed to save snapshot for %s: %v", ent.EntityID, err)
+						log.Printf("Failed to save snapshot for %s: %v", ent.ID, err)
 					} else {
-						log.Printf("Saved entity %s to bucket %s", ent.EntityID, m.getBucketForEntity(&ent, &ev))
+						log.Printf("Saved entity %s to bucket %s", ent.ID, m.getBucketForEntity(&ent, &ev))
 					}
 				}
 			}
@@ -174,7 +183,8 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 					entityID := entityInfo.ID
 
 					// Load existing entity (from world or global)
-					ent, err := m.loadEntityFromMinIO(ctx, entityID, ev.WorldID)
+					worldID := eventbus.GetWorldIDFromEvent(ev)
+					ent, err := m.loadEntityFromMinIO(ctx, entityID, worldID)
 					if err != nil {
 						// Create new entity if not found
 						ent = entity.NewEntity(entityID, "unknown", nil)
@@ -208,7 +218,7 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 					}
 
 					// Add to history and save
-					ent.AddHistoryEntry(ev.EventID, ev.Timestamp)
+					ent.AddHistoryEntry(ev.ID, ev.Timestamp)
 					if err := m.saveSnapshotToMinIO(ctx, ent, &ev); err != nil {
 						log.Printf("Failed to update entity %s: %v", entityID, err)
 					} else {
@@ -220,7 +230,7 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 	}
 
 	// 3. Process entity.created events (for new entities)
-	if ev.EventType == "entity.created" {
+	if ev.Type == "entity.created" {
 		// Extract entity data from event payload
 		entityInfo := eventbus.ExtractEntityID(ev.Payload)
 		entityID := ""
@@ -255,7 +265,7 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 			ent := entity.NewEntity(entityID, entityType, payload)
 
 			// Add history entry
-			ent.AddHistoryEntry(ev.EventID, ev.Timestamp)
+			ent.AddHistoryEntry(ev.ID, ev.Timestamp)
 
 			// Save to MinIO
 			if err := m.saveSnapshotToMinIO(ctx, ent, &ev); err != nil {

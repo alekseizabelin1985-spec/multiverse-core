@@ -24,17 +24,17 @@ func NewBanOfWorld(bus *eventbus.EventBus) *BanOfWorld {
 // HandlePlayerEvent processes player events for world integrity checks.
 func (b *BanOfWorld) HandlePlayerEvent(ev eventbus.Event) {
 	// Check for skill usage violations
-	if ev.EventType == "player.used_skill" {
+	if ev.Type == "player.used_skill" {
 		b.checkSkillUsage(ev)
 	}
 
 	// Check for item usage violations
-	if ev.EventType == "player.used_item" {
+	if ev.Type == "player.used_item" {
 		b.checkItemUsage(ev)
 	}
 
 	// Check for movement violations
-	if ev.EventType == "player.moved" {
+	if ev.Type == "player.moved" {
 		b.checkMovement(ev)
 	}
 }
@@ -78,7 +78,7 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 
 		eventbus.SetNested(payload.GetCustom(), "skill", skill)
 		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
-		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.ID)
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
@@ -87,13 +87,10 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 		eventbus.SetNested(payload.GetCustom(), "violation.type", violationType)
 
 		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", worldID, payload)
-		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
+		violationEvent.ID = "violation-" + uuid.New().String()[:8]
 		violationEvent.Timestamp = ev.Timestamp
-		// ScopeID is set via WithScope if needed, or use ev.ScopeID for fallback
 		if scope := eventbus.GetScopeFromEvent(ev); scope != nil {
-			violationEvent.ScopeID = &scope.ID
-		} else {
-			violationEvent.ScopeID = ev.ScopeID
+			violationEvent.Scope = scope
 		}
 
 		// ✨ Этап 6: Явные связи — игрок нарушил правила мира
@@ -106,7 +103,7 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 				Metadata: map[string]any{
 					"violation_type": violationType,
 					"skill":          skill,
-					"original_event": ev.EventID,
+					"original_event": ev.ID,
 				},
 			},
 		}
@@ -141,7 +138,7 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 		return
 	}
 
-	violationType := b.getViolationType(ev.WorldID, "item:"+item)
+	violationType := b.getViolationType(eventbus.GetWorldIDFromEvent(ev), "item:"+item)
 
 	if violationType != "" {
 		worldID := eventbus.GetWorldIDFromEvent(ev)
@@ -153,12 +150,12 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 
 		eventbus.SetNested(payload.GetCustom(), "item", item)
 		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
-		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.ID)
 
 		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", worldID, payload)
-		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
+		violationEvent.ID = "violation-" + uuid.New().String()[:8]
 		violationEvent.Timestamp = ev.Timestamp
-		violationEvent.ScopeID = ev.ScopeID
+		violationEvent.Scope = eventbus.GetScopeFromEvent(ev)
 
 		// ✨ Этап 6: Явные связи — игрок нарушил правила мира через предмет
 		violationEvent.Relations = []eventbus.Relation{
@@ -170,7 +167,7 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 				Metadata: map[string]any{
 					"violation_type": violationType,
 					"item":           item,
-					"original_event": ev.EventID,
+					"original_event": ev.ID,
 				},
 			},
 		}
@@ -199,19 +196,20 @@ func (b *BanOfWorld) checkMovement(ev eventbus.Event) {
 	}
 
 	// Example: players cannot leave certain worlds
-	if ev.WorldID == "prison-realm" && destination != ev.WorldID {
-		log.Printf("Movement violation in %s: %s tried to leave", ev.WorldID, playerID)
+	worldID := eventbus.GetWorldIDFromEvent(ev)
+	if worldID == "prison-realm" && destination != worldID {
+		log.Printf("Movement violation in %s: %s tried to leave", worldID, playerID)
 
 		payload := eventbus.NewEventPayload().
 			WithEntity(playerID, "player", "")
 
 		eventbus.SetNested(payload.GetCustom(), "attempted_destination", destination)
 		eventbus.SetNested(payload.GetCustom(), "violation_type", "forbidden_movement")
-		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
+		eventbus.SetNested(payload.GetCustom(), "original_event", ev.ID)
 
-		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
-		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
-		violationEvent.ScopeID = ev.ScopeID
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", worldID, payload)
+		violationEvent.ID = "violation-" + uuid.New().String()[:8]
+		violationEvent.Scope = eventbus.GetScopeFromEvent(ev)
 		violationEvent.Timestamp = ev.Timestamp
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
@@ -263,8 +261,8 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "scream_of_pain")
 		eventbus.SetNested(transformPayload.GetCustom(), "reason", "resonance_with_core")
 
-		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", ev.WorldID, transformPayload)
-		transformEvent.EventID = "transform-" + uuid.New().String()[:8]
+		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", eventbus.GetWorldIDFromEvent(ev), transformPayload)
+		transformEvent.ID = "transform-" + uuid.New().String()[:8]
 		transformEvent.Timestamp = time.Now()
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, transformEvent)
@@ -278,8 +276,8 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 		eventbus.SetNested(punishPayload.GetCustom(), "duration", "1h")
 		eventbus.SetNested(punishPayload.GetCustom(), "reason", "violation_of_memory_laws")
 
-		punishEvent := eventbus.NewStructuredEvent("player.punished", "ban-of-world", ev.WorldID, punishPayload)
-		punishEvent.EventID = "punish-" + uuid.New().String()[:8]
+		punishEvent := eventbus.NewStructuredEvent("player.punished", "ban-of-world", eventbus.GetWorldIDFromEvent(ev), punishPayload)
+		punishEvent.ID = "punish-" + uuid.New().String()[:8]
 		punishEvent.Timestamp = time.Now()
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, punishEvent)
@@ -293,8 +291,8 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "mechanical_equivalent")
 		eventbus.SetNested(transformPayload.GetCustom(), "reason", "mechanical_world_integrity")
 
-		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", ev.WorldID, transformPayload)
-		transformEvent.EventID = "transform-" + uuid.New().String()[:8]
+		transformEvent := eventbus.NewStructuredEvent("skill.transformed", "ban-of-world", eventbus.GetWorldIDFromEvent(ev), transformPayload)
+		transformEvent.ID = "transform-" + uuid.New().String()[:8]
 		transformEvent.Timestamp = time.Now()
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, transformEvent)
@@ -304,16 +302,17 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 // applyMovementConsequence handles movement violations.
 func (b *BanOfWorld) applyMovementConsequence(ev eventbus.Event) {
 	playerID, _ := ev.Payload["player_id"].(string)
+	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	// Teleport back to original location
 	teleportEvent := eventbus.Event{
-		EventID:   "teleport-" + uuid.New().String()[:8],
-		EventType: "player.teleported",
-		Source:    "ban-of-world",
-		WorldID:   ev.WorldID,
+		ID:     "teleport-" + uuid.New().String()[:8],
+		Type:   "player.teleported",
+		Source: "ban-of-world",
+		World:  &eventbus.WorldRef{ID: worldID},
 		Payload: map[string]interface{}{
 			"player_id":   playerID,
-			"destination": ev.WorldID, // Back to original world
+			"destination": worldID, // Back to original world
 			"reason":      "forbidden_movement",
 		},
 		Timestamp: time.Now(),
