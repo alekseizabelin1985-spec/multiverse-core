@@ -29,7 +29,7 @@ func NewEvent(eventType, source, worldID string, payload map[string]any) Event {
 
 	var worldRef *WorldRef
 	if worldID != "" {
-		worldRef = &WorldRef{ID: worldID}
+		worldRef = &WorldRef{Entity: EntityRef{ID: worldID, Type: "world"}}
 	}
 
 	return Event{
@@ -96,13 +96,13 @@ func PublishActionEvent(bus *EventBus, worldID, entityID, action string, targetI
 	bus.Publish(context.TODO(), TopicPlayerEvents, event)
 }
 
-// GetWorldIDFromEvent извлекает world.id из события
+// GetWorldIDFromEvent извлекает world.entity.id из события
 func GetWorldIDFromEvent(event Event) string {
-	// Сначала пробуем топ-уровень World
+	// Топ-уровень World
 	if event.World != nil {
-		return event.World.ID
+		return event.World.Entity.ID
 	}
-	// Fallback на payload.world.id
+	// Fallback на payload.world.entity.id
 	if worldID := ExtractWorldID(event.Payload); worldID != "" {
 		return worldID
 	}

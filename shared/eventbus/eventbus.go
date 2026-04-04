@@ -46,10 +46,10 @@ func (eb *EventBus) Publish(ctx context.Context, topic string, event Event) erro
 			event.ID, event.Type)
 	}
 
-	// Ключ для Kafka — world.id или "global"
+	// Ключ для Kafka — world.entity.id или "global"
 	worldKey := "global"
-	if event.World != nil && event.World.ID != "" {
-		worldKey = event.World.ID
+	if event.World != nil && event.World.Entity.ID != "" {
+		worldKey = event.World.Entity.ID
 	}
 
 	msg, err := json.Marshal(event)

@@ -6,21 +6,29 @@ import (
 	"time"
 )
 
-// WorldRef представляет ссылку на мир
-type WorldRef struct {
-	ID string `json:"id"`
+// EntityRef — усечённая ссылка на сущность (только id + type).
+// Используется для всех ссылочных полей в payload: world, entity, target, source, location и т.д.
+// Формат: {"entity":{"id":"xxx","type":"world"}}
+type EntityRef struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
 }
 
-// ScopeRef представляет ссылку на скоуп
+// WorldRef представляет ссылку на мир
+type WorldRef struct {
+	Entity EntityRef `json:"entity"`
+}
+
+// ScopeRef представляет ссылку на скоуп — отдельная концепция, не Entity
 type ScopeRef struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
 }
 
-// Entity представляет сущность с полной информацией
+// Entity представляет сущность с полной информацией.
+// ID и Type обёрнуты в EntityRef для единообразия со всеми ссылками.
 type Entity struct {
-	ID        string     `json:"id"`
-	Type      string     `json:"type"`
+	Entity    EntityRef  `json:"entity"`
 	Name      string     `json:"name,omitempty"`
 	Version   string     `json:"version,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
@@ -32,12 +40,12 @@ type Entity struct {
 
 // EventPayload представляет типобезопасный payload события
 type EventPayload struct {
-	Entity *Entity          `json:"entity,omitempty"`
-	Target *Entity          `json:"target,omitempty"`
-	Source *Entity          `json:"source,omitempty"`
-	World  *WorldRef        `json:"world,omitempty"`
-	Scope  *ScopeRef        `json:"scope,omitempty"`
-	Custom map[string]any   `json:"-"` // Для произвольных полей с dot-notation
+	Entity *Entity        `json:"entity,omitempty"`
+	Target *Entity        `json:"target,omitempty"`
+	Source *Entity        `json:"source,omitempty"`
+	World  *WorldRef      `json:"world,omitempty"`
+	Scope  *ScopeRef      `json:"scope,omitempty"`
+	Custom map[string]any `json:"-"` // Для произвольных полей с dot-notation
 }
 
 // NewEventPayload создает новый empty payload
@@ -50,8 +58,7 @@ func NewEventPayload() *EventPayload {
 // WithEntity устанавливает основную сущность события
 func (p *EventPayload) WithEntity(id, entityType, name string) *EventPayload {
 	p.Entity = &Entity{
-		ID:     id,
-		Type:   entityType,
+		Entity: EntityRef{ID: id, Type: entityType},
 		Name:   name,
 	}
 	return p
@@ -60,8 +67,7 @@ func (p *EventPayload) WithEntity(id, entityType, name string) *EventPayload {
 // WithTarget устанавливает целевую сущность
 func (p *EventPayload) WithTarget(id, entityType, name string) *EventPayload {
 	p.Target = &Entity{
-		ID:     id,
-		Type:   entityType,
+		Entity: EntityRef{ID: id, Type: entityType},
 		Name:   name,
 	}
 	return p
@@ -70,8 +76,7 @@ func (p *EventPayload) WithTarget(id, entityType, name string) *EventPayload {
 // WithSource устанавливает источник события
 func (p *EventPayload) WithSource(id, entityType, name string) *EventPayload {
 	p.Source = &Entity{
-		ID:     id,
-		Type:   entityType,
+		Entity: EntityRef{ID: id, Type: entityType},
 		Name:   name,
 	}
 	return p
@@ -80,7 +85,7 @@ func (p *EventPayload) WithSource(id, entityType, name string) *EventPayload {
 // WithWorld устанавливает мир
 func (p *EventPayload) WithWorld(worldID string) *EventPayload {
 	p.World = &WorldRef{
-		ID: worldID,
+		Entity: EntityRef{ID: worldID, Type: "world"},
 	}
 	return p
 }
@@ -132,8 +137,10 @@ func (p *EventPayload) ToMap() map[string]any {
 // entityToMap конвертирует Entity в map[string]any
 func entityToMap(e *Entity) map[string]any {
 	result := map[string]any{
-		"id":     e.ID,
-		"type":   e.Type,
+		"entity": map[string]any{
+			"id":   e.Entity.ID,
+			"type": e.Entity.Type,
+		},
 	}
 	if e.Name != "" {
 		result["name"] = e.Name
@@ -158,7 +165,12 @@ func entityToMap(e *Entity) map[string]any {
 
 // worldRefToMap конвертирует WorldRef в map[string]any
 func worldRefToMap(w *WorldRef) map[string]any {
-	return map[string]any{"id": w.ID}
+	return map[string]any{
+		"entity": map[string]any{
+			"id":   w.Entity.ID,
+			"type": "world",
+		},
+	}
 }
 
 // scopeRefToMap конвертирует ScopeRef в map[string]any

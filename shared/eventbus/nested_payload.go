@@ -93,10 +93,22 @@ type EntityInfo struct {
 }
 
 // ExtractEntityID извлекает ID сущности из payload
-// Поддержка как новой структуры (entity.id), так и старой (entity_id)
+// Поддержка новой структуры (entity.entity.id) и старой (entity_id)
 func ExtractEntityID(payload map[string]any) *EntityInfo {
-	// Проверяем новую структуру: entity.id
+	// Проверяем новую структуру: entity.entity.id
 	if entity, ok := payload["entity"].(map[string]any); ok {
+		// Полная Entity: entity: {entity: {id, type}, name, ...}
+		if innerEntity, ok := entity["entity"].(map[string]any); ok {
+			if id, ok := innerEntity["id"].(string); ok && id != "" {
+				return &EntityInfo{
+					ID:    id,
+					Type:  getSafeString(innerEntity, "type"),
+					Name:  getSafeString(entity, "name"),
+					World: getWorldIDFromNestedEntity(entity),
+				}
+			}
+		}
+		// Усечённая Entity: entity: {id, type} (без вложенного entity)
 		if id, ok := entity["id"].(string); ok && id != "" {
 			return &EntityInfo{
 				ID:    id,
@@ -141,9 +153,9 @@ func ExtractTargetEntityID(payload map[string]any) *EntityInfo {
 		// Fallback внутри target: target.id
 		if id, ok := target["id"].(string); ok && id != "" {
 			return &EntityInfo{
-				ID:    id,
-				Type:  getSafeString(target, "type"),
-				Name:  getSafeString(target, "name"),
+				ID:   id,
+				Type: getSafeString(target, "type"),
+				Name: getSafeString(target, "name"),
 			}
 		}
 	}
@@ -182,10 +194,12 @@ func ExtractSourceEntityID(payload map[string]any) *EntityInfo {
 
 // ExtractWorldID извлекает ID мира из payload
 func ExtractWorldID(payload map[string]any) string {
-	// Новая структура: world.id
+	// Новая структура: world.entity.id
 	if world, ok := payload["world"].(map[string]any); ok {
-		if id, ok := world["id"].(string); ok && id != "" {
-			return id
+		if entity, ok := world["entity"].(map[string]any); ok {
+			if id, ok := entity["id"].(string); ok && id != "" {
+				return id
+			}
 		}
 	}
 
@@ -201,7 +215,7 @@ func ExtractWorldID(payload map[string]any) string {
 func ExtractScope(payload map[string]any) *ScopeRef {
 	// Используем универсальный jsonpath для извлечения с fallback
 	acc := jsonpath.New(payload)
-	
+
 	// Новая структура: scope: { id, type }
 	if scopeMap, ok := acc.GetMap("scope"); ok {
 		ref := &ScopeRef{}
@@ -255,6 +269,27 @@ func getWorldID(entity map[string]any) string {
 		if id, ok := world["id"].(string); ok {
 			return id
 		}
+		// Новая структура: world.entity.id
+		if entityRef, ok := world["entity"].(map[string]any); ok {
+			if id, ok := entityRef["id"].(string); ok {
+				return id
+			}
+		}
+	}
+	return ""
+}
+
+// getWorldIDFromNestedEntity извлекает world ID из полной Entity с world внутри
+func getWorldIDFromNestedEntity(entity map[string]any) string {
+	if world, ok := entity["world"].(map[string]any); ok {
+		if entityRef, ok := world["entity"].(map[string]any); ok {
+			if id, ok := entityRef["id"].(string); ok {
+				return id
+			}
+		}
+		if id, ok := world["id"].(string); ok {
+			return id
+		}
 	}
 	return ""
 }
@@ -263,9 +298,9 @@ func getWorldID(entity map[string]any) string {
 func ToMapWithEntity(entityID, entityType, worldID string, customFields map[string]any) map[string]interface{} {
 	result := map[string]interface{}{
 		"entity": map[string]interface{}{
-			"id":     entityID,
-			"type":   entityType,
-			"world":  map[string]interface{}{"id": worldID},
+			"id":    entityID,
+			"type":  entityType,
+			"world": map[string]interface{}{"id": worldID},
 		},
 	}
 

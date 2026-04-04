@@ -22,19 +22,19 @@ func TestEventPayloadWithEntity(t *testing.T) {
 		t.Fatal("Entity should not be nil")
 	}
 
-	if payload.Entity.ID != "player-123" {
-		t.Errorf("Expected entity ID 'player-123', got '%s'", payload.Entity.ID)
+	if payload.Entity.Entity.ID != "player-123" {
+		t.Errorf("Expected entity ID 'player-123', got '%s'", payload.Entity.Entity.ID)
 	}
 
-	if payload.Entity.Type != "player" {
-		t.Errorf("Expected entity type 'player', got '%s'", payload.Entity.Type)
+	if payload.Entity.Entity.Type != "player" {
+		t.Errorf("Expected entity type 'player', got '%s'", payload.Entity.Entity.Type)
 	}
 
 	if payload.Entity.Name != "Вася" {
 		t.Errorf("Expected entity name 'Вася', got '%s'", payload.Entity.Name)
 	}
 
-	if payload.World == nil || payload.World.ID != "world-789" {
+	if payload.World == nil || payload.World.Entity.ID != "world-789" {
 		t.Error("World should be set correctly")
 	}
 }
@@ -48,8 +48,8 @@ func TestEventPayloadWithTarget(t *testing.T) {
 		t.Fatal("Target should not be nil")
 	}
 
-	if payload.Target.ID != "region-456" {
-		t.Errorf("Expected target ID 'region-456', got '%s'", payload.Target.ID)
+	if payload.Target.Entity.ID != "region-456" {
+		t.Errorf("Expected target ID 'region-456', got '%s'", payload.Target.Entity.ID)
 	}
 
 	if payload.Target.Name != "Темный лес" {
@@ -73,8 +73,13 @@ func TestEventPayloadToMap(t *testing.T) {
 		t.Fatal("entity should be map[string]any")
 	}
 
-	if entity["id"] != "player-123" {
-		t.Errorf("Expected entity.id 'player-123', got '%v'", entity["id"])
+	entityInner, ok := entity["entity"].(map[string]any)
+	if !ok {
+		t.Fatal("entity.entity should be map[string]any")
+	}
+
+	if entityInner["id"] != "player-123" {
+		t.Errorf("Expected entity.entity.id 'player-123', got '%v'", entityInner["id"])
 	}
 
 	// Проверяем target
@@ -83,8 +88,13 @@ func TestEventPayloadToMap(t *testing.T) {
 		t.Fatal("target should be map[string]any")
 	}
 
-	if target["id"] != "region-456" {
-		t.Errorf("Expected target.id 'region-456', got '%v'", target["id"])
+	targetInner, ok := target["entity"].(map[string]any)
+	if !ok {
+		t.Fatal("target.entity should be map[string]any")
+	}
+
+	if targetInner["id"] != "region-456" {
+		t.Errorf("Expected target.entity.id 'region-456', got '%v'", targetInner["id"])
 	}
 
 	// Проверяем world
@@ -93,8 +103,13 @@ func TestEventPayloadToMap(t *testing.T) {
 		t.Fatal("world should be map[string]any")
 	}
 
-	if world["id"] != "world-789" {
-		t.Errorf("Expected world.id 'world-789', got '%v'", world["id"])
+	worldInner, ok := world["entity"].(map[string]any)
+	if !ok {
+		t.Fatal("world.entity should be map[string]any")
+	}
+
+	if worldInner["id"] != "world-789" {
+		t.Errorf("Expected world.entity.id 'world-789', got '%v'", worldInner["id"])
 	}
 
 	// Проверяем кастомное поле
@@ -294,7 +309,9 @@ func TestExtractWorldID(t *testing.T) {
 	// Тест с новой структурой
 	newStructPayload := map[string]any{
 		"world": map[string]any{
-			"id": "world-123",
+			"entity": map[string]any{
+				"id": "world-123",
+			},
 		},
 	}
 
@@ -804,7 +821,7 @@ func TestGetWorldIDFromEvent(t *testing.T) {
 
 	// Тест с пустым миром, но world в payload
 	eventPayloadWorld := NewEvent("test", "src", "", map[string]any{
-		"world": map[string]any{"id": "world-456"},
+		"world": map[string]any{"entity": map[string]any{"id": "world-456"}},
 	})
 
 	worldID = GetWorldIDFromEvent(eventPayloadWorld)
@@ -815,7 +832,7 @@ func TestGetWorldIDFromEvent(t *testing.T) {
 
 	// Тест с World на топ-уровне (ручная структура)
 	eventWithWorldDirect := Event{
-		World:   &WorldRef{ID: "world-789"},
+		World:   &WorldRef{Entity: EntityRef{ID: "world-789", Type: "world"}},
 		Payload: map[string]any{},
 	}
 
