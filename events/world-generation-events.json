@@ -1,14 +1,14 @@
 {
   "description": "JSON события для генерации мира - разные вариации для отправки в шину событий Redpanda",
   "topic": "system_events",
-  "event_type": "world.generation.requested",
+  "type": "world.generation.requested",
   "scenarios": [
     {
       "name": "Культивационный мир с магическими реками",
       "description": "Контекстная генерация для cultivation мира с летающими островами",
       "event": {
         "id": "evt-001",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -38,7 +38,7 @@
       "description": "Контекстная генерация для steampunk тематики",
       "event": {
         "id": "evt-002",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -70,7 +70,7 @@
       "description": "Контекстная генерация для мрачного фэнтези",
       "event": {
         "id": "evt-003",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -102,7 +102,7 @@
       "description": "Контекстная генерация для космической оперы",
       "event": {
         "id": "evt-004",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -134,7 +134,7 @@
       "description": "Контекстная генерация на основе древней мифологии",
       "event": {
         "id": "evt-005",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -165,7 +165,7 @@
       "description": "Рандомная генерация небольшого мира",
       "event": {
         "id": "evt-006",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "system",
         "payload": {
@@ -179,7 +179,7 @@
       "description": "Рандомная генерация большого детализированного мира",
       "event": {
         "id": "evt-007",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "system",
         "payload": {
@@ -200,7 +200,7 @@
       "description": "Контекстная генерация для киберпанка",
       "event": {
         "id": "evt-008",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -233,7 +233,7 @@
       "description": "Контекстная генерация для природно-ориентированного мира",
       "event": {
         "id": "evt-009",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {
@@ -265,7 +265,7 @@
       "description": "Контекстная генерация для выживания после катастрофы",
       "event": {
         "id": "evt-010",
-        "event_type": "world.generation.requested",
+        "type": "world.generation.requested",
         "timestamp": "2026-04-01T00:00:00Z",
         "source": "player",
         "payload": {

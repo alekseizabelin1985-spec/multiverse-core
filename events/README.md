@@ -58,7 +58,7 @@ bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 ```json
 {
   "id": "уникальный-идентификатор",
-  "event_type": "world.generation.requested",
+  "type": "world.generation.requested",
   "timestamp": "ISO-8601",
   "source": "player | system",
   "payload": {
