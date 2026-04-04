@@ -287,7 +287,6 @@ func (wg *WorldGenerator) createGeographicEntities(ctx context.Context, worldID 
 // createRegionEntity creates a region entity with explicit relations
 func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string, region Region) {
 	regionID := "region-" + uuid.New().String()[:8]
-	worldEntityID := "world:" + worldID
 	regionEntityID := regionID
 
 	payload := eventbus.NewEventPayload().
@@ -305,7 +304,7 @@ func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string
 	// ✨ Этап 4: Явные связи для knowledge graph
 	event.Relations = []eventbus.Relation{
 		{
-			From:     worldEntityID,
+			From:     worldID,
 			To:       regionEntityID,
 			Type:     eventbus.RelContains,
 			Directed: true,
@@ -325,7 +324,6 @@ func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string
 // createWaterEntity creates a water body entity with explicit relations
 func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string, water WaterBody) {
 	waterID := "water-" + uuid.New().String()[:8]
-	worldEntityID := "world:" + worldID
 	waterEntityID := waterID
 
 	payload := eventbus.NewEventPayload().
@@ -343,7 +341,7 @@ func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string,
 	// ✨ Этап 4: Явные связи для knowledge graph
 	event.Relations = []eventbus.Relation{
 		{
-			From:     worldEntityID,
+			From:     worldID,
 			To:       waterEntityID,
 			Type:     eventbus.RelContains,
 			Directed: true,
@@ -362,7 +360,6 @@ func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string,
 // createCityEntity creates a city entity with explicit relations
 func (wg *WorldGenerator) createCityEntity(ctx context.Context, worldID string, city City) {
 	cityID := "city-" + uuid.New().String()[:8]
-	worldEntityID := "world:" + worldID
 	cityEntityID := cityID
 
 	payload := eventbus.NewEventPayload().
@@ -383,7 +380,7 @@ func (wg *WorldGenerator) createCityEntity(ctx context.Context, worldID string, 
 	// Связь город → мир (WORLD_OF)
 	relations = append(relations, eventbus.Relation{
 		From:     cityEntityID,
-		To:       worldEntityID,
+		To:       worldID,
 		Type:     eventbus.RelWorldOf,
 		Directed: true,
 		Metadata: map[string]any{"city_type": city.Type, "population": city.Population},
