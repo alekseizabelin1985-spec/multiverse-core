@@ -68,11 +68,20 @@ func BuildTextContext(entityID, entityType string, payload map[string]interface{
 	return strings.Join(parts, "\n")
 }
 
+// RelationsMetrics tracks explicit relations processing statistics.
+type RelationsMetrics struct {
+	ExplicitCount  int64 // events with explicit Relations[]
+	FallbackCount  int64 // events using legacy LinkEventToEntities
+	EntityCreated  int64 // stub entities auto-created from relations
+	ValidationErrs int64 // relations validation failures
+}
+
 // Indexer processes entity events and indexes them.
 type Indexer struct {
-	chroma SemanticStorage
-	neo4j  *Neo4jClient
-	minio  *minio.Client
+	chroma  SemanticStorage
+	neo4j   *Neo4jClient
+	minio   *minio.Client
+	Metrics RelationsMetrics
 }
 
 // NewIndexer creates a new Indexer.
@@ -156,7 +165,7 @@ func (i *Indexer) saveEventToChroma(ctx context.Context, ev eventbus.Event) {
 
 	// Metadata for ChromaDB — используем универсальные функции с fallback на старую структуру
 	pa := ev.Path()
-	
+
 	metadata := map[string]interface{}{
 		"event_id":   ev.EventID,
 		"event_type": ev.EventType,
@@ -239,7 +248,9 @@ func (i *Indexer) buildEventTextContext(ev eventbus.Event) string {
 	return strings.Join(parts, "\n")
 }
 
-// saveEventToNeo4j saves an event to Neo4j as a graph node with relationships to entities.
+// saveEventToNeo4j saves an event to Neo4j with explicit relations priority.
+// If event has Relations[] — applies them directly (Этап 3: explicit relations).
+// Falls back to legacy LinkEventToEntities for backward compatibility.
 func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 	// Serialize payload to JSON string
 	payloadJSON, err := json.Marshal(ev.Payload)
@@ -247,21 +258,99 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 		return fmt.Errorf("failed to marshal payload: %w", err)
 	}
 
-	// Save as graph node with proper relationships
+	// Save event node itself
 	if err := i.neo4j.SaveEventAsGraph(ev, string(payloadJSON)); err != nil {
 		log.Printf("Neo4j SaveEventAsGraph failed for event %s: %v", ev.EventID, err)
 		return fmt.Errorf("saveEventAsGraph failed for event %s: %w", ev.EventID, err)
 	}
 
-	log.Printf("Saved event %s to Neo4j (graph mode)", ev.EventID)
+	// ✨ Этап 3: Если есть явные связи — применяем их
+	if len(ev.Relations) > 0 {
+		i.Metrics.ExplicitCount++
+		if err := i.applyExplicitRelations(ev); err != nil {
+			log.Printf("Explicit relations apply failed for event %s: %v", ev.EventID, err)
+			// Fallback — не блокируем сохранение события
+		} else {
+			log.Printf("Applied %d explicit relations for event %s (total: %d)", len(ev.Relations), ev.EventID, i.Metrics.ExplicitCount)
+			return nil
+		}
+	}
+
+	// Fallback: старая логика для обратной совместимости (события без relations)
+	i.Metrics.FallbackCount++
+	if err := i.neo4j.LinkEventToEntities(ev.EventID, ev.Payload); err != nil {
+		log.Printf("Neo4j LinkEventToEntities fallback failed for event %s: %v", ev.EventID, err)
+	}
+
 	return nil
+}
+
+// applyExplicitRelations создаёт семантические связи из ev.Relations.
+// Автоматически создаёт stub-Entity для сущностей которых ещё нет в графе.
+// Это гарантирует что relation будет создана даже если Entity ещё не индексирована.
+func (i *Indexer) applyExplicitRelations(ev eventbus.Event) error {
+	// Валидация
+	if err := eventbus.ValidateEventRelations(ev); err != nil {
+		i.Metrics.ValidationErrs++
+		return fmt.Errorf("validate relations: %w", err)
+	}
+
+	// Создаём stub-Entity для всех участников связей
+	seen := make(map[string]bool)
+	for _, rel := range ev.Relations {
+		for _, entityID := range []string{rel.From, rel.To} {
+			if !seen[entityID] {
+				i.ensureEntityFromRelation(entityID, ev.WorldID)
+				seen[entityID] = true
+			}
+		}
+
+		// Создаём семантическую связь (MERGE — идемпотентно)
+		if err := i.neo4j.CreateRelation(
+			rel.From, rel.To, rel.Type, rel.Directed, rel.Metadata,
+		); err != nil {
+			log.Printf("Failed to create relation %s-[%s]->%s: %v", rel.From, rel.Type, rel.To, err)
+		}
+	}
+	return nil
+}
+
+// ensureEntityFromRelation создаёт stub-Entity если его ещё нет.
+// Извлекает тип из ID формата "type:id" (например "player:p1" → type="player").
+func (i *Indexer) ensureEntityFromRelation(entityID, worldID string) {
+	exists, err := i.neo4j.EntityExists(entityID)
+	if err != nil || exists {
+		return
+	}
+
+	// Извлекаем тип из ID формата "type:id"
+	entityType := "unknown"
+	if idx := strings.Index(entityID, ":"); idx > 0 {
+		entityType = entityID[:idx]
+	}
+
+	if err := i.neo4j.EnsureEntity(entityID, entityType, worldID, nil); err != nil {
+		log.Printf("Failed to ensure stub entity %s: %v", entityID, err)
+		return
+	}
+	i.Metrics.EntityCreated++
+}
+
+// GetRelationsMetrics returns a copy of the current relations processing metrics.
+func (i *Indexer) GetRelationsMetrics() RelationsMetrics {
+	return i.Metrics
+}
+
+// ResetRelationsMetrics resets all metrics counters to zero.
+func (i *Indexer) ResetRelationsMetrics() {
+	i.Metrics = RelationsMetrics{}
 }
 
 // processEntityEvent handles entity-related events for backward compatibility
 func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	// Используем универсальное извлечение с поддержкой новой и старой структуры:
 	pa := ev.Path()
-	
+
 	entityID, ok := pa.GetString("entity.id")
 	if !ok {
 		// Fallback на старую структуру

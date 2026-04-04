@@ -96,6 +96,21 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 			violationEvent.ScopeID = ev.ScopeID
 		}
 
+		// ✨ Этап 6: Явные связи — игрок нарушил правила мира
+		violationEvent.Relations = []eventbus.Relation{
+			{
+				From:     playerID,
+				To:       worldID,
+				Type:     eventbus.RelActedOn,
+				Directed: true,
+				Metadata: map[string]any{
+					"violation_type": violationType,
+					"skill":          skill,
+					"original_event": ev.EventID,
+				},
+			},
+		}
+
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 
 		// Apply transformation or punishment
@@ -129,19 +144,36 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 	violationType := b.getViolationType(ev.WorldID, "item:"+item)
 
 	if violationType != "" {
-		log.Printf("Item violation detected in %s: %s used %s", ev.WorldID, playerID, item)
+		worldID := eventbus.GetWorldIDFromEvent(ev)
+		log.Printf("Item violation detected in %s: %s used %s", worldID, playerID, item)
 
 		payload := eventbus.NewEventPayload().
-			WithEntity(playerID, "player", "")
+			WithEntity(playerID, "player", "").
+			WithWorld(worldID)
 
 		eventbus.SetNested(payload.GetCustom(), "item", item)
 		eventbus.SetNested(payload.GetCustom(), "violation_type", violationType)
 		eventbus.SetNested(payload.GetCustom(), "original_event", ev.EventID)
 
-		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", ev.WorldID, payload)
+		violationEvent := eventbus.NewStructuredEvent("violation.detected", "ban-of-world", worldID, payload)
 		violationEvent.EventID = "violation-" + uuid.New().String()[:8]
 		violationEvent.Timestamp = ev.Timestamp
 		violationEvent.ScopeID = ev.ScopeID
+
+		// ✨ Этап 6: Явные связи — игрок нарушил правила мира через предмет
+		violationEvent.Relations = []eventbus.Relation{
+			{
+				From:     playerID,
+				To:       worldID,
+				Type:     eventbus.RelActedOn,
+				Directed: true,
+				Metadata: map[string]any{
+					"violation_type": violationType,
+					"item":           item,
+					"original_event": ev.EventID,
+				},
+			},
+		}
 
 		b.bus.Publish(context.Background(), eventbus.TopicWorldEvents, violationEvent)
 

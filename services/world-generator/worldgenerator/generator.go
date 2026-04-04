@@ -17,7 +17,7 @@ import (
 type WorldGenerationRequest struct {
 	Seed        string                 `json:"seed"`                   // обязательное
 	Mode        string                 `json:"mode"`                   // "contextual" | "random"; default "random"
-	UserContext *UserWorldContext       `json:"user_context,omitempty"` // заполняется только для mode="contextual"
+	UserContext *UserWorldContext      `json:"user_context,omitempty"` // заполняется только для mode="contextual"
 	Constraints map[string]interface{} `json:"constraints,omitempty"`
 }
 
@@ -284,9 +284,11 @@ func (wg *WorldGenerator) createGeographicEntities(ctx context.Context, worldID 
 	wg.publishGeographyGeneratedEvent(ctx, worldID, geography)
 }
 
-// createRegionEntity creates a region entity
+// createRegionEntity creates a region entity with explicit relations
 func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string, region Region) {
 	regionID := "region-" + uuid.New().String()[:8]
+	worldEntityID := "world:" + worldID
+	regionEntityID := regionID
 
 	payload := eventbus.NewEventPayload().
 		WithEntity(regionID, "region", region.Name).
@@ -299,13 +301,32 @@ func (wg *WorldGenerator) createRegionEntity(ctx context.Context, worldID string
 	eventbus.SetNested(payload.GetCustom(), "payload.size", region.Size)
 
 	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+
+	// ✨ Этап 4: Явные связи для knowledge graph
+	event.Relations = []eventbus.Relation{
+		{
+			From:     worldEntityID,
+			To:       regionEntityID,
+			Type:     eventbus.RelContains,
+			Directed: true,
+			Metadata: map[string]any{"biome": region.Biome},
+		},
+	}
+
+	// Валидация перед публикацией
+	if err := eventbus.ValidateEventRelations(event); err != nil {
+		log.Printf("Invalid relations for region %s: %v", region.Name, err)
+	}
+
 	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created region entity: %s (%s)", region.Name, region.Biome)
 }
 
-// createWaterEntity creates a water body entity
+// createWaterEntity creates a water body entity with explicit relations
 func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string, water WaterBody) {
 	waterID := "water-" + uuid.New().String()[:8]
+	worldEntityID := "world:" + worldID
+	waterEntityID := waterID
 
 	payload := eventbus.NewEventPayload().
 		WithEntity(waterID, "water_body", water.Name).
@@ -318,13 +339,31 @@ func (wg *WorldGenerator) createWaterEntity(ctx context.Context, worldID string,
 	eventbus.SetNested(payload.GetCustom(), "payload.size", water.Size)
 
 	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+
+	// ✨ Этап 4: Явные связи для knowledge graph
+	event.Relations = []eventbus.Relation{
+		{
+			From:     worldEntityID,
+			To:       waterEntityID,
+			Type:     eventbus.RelContains,
+			Directed: true,
+			Metadata: map[string]any{"water_type": water.Type},
+		},
+	}
+
+	if err := eventbus.ValidateEventRelations(event); err != nil {
+		log.Printf("Invalid relations for water %s: %v", water.Name, err)
+	}
+
 	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created water entity: %s (%s)", water.Name, water.Type)
 }
 
-// createCityEntity creates a city entity
+// createCityEntity creates a city entity with explicit relations
 func (wg *WorldGenerator) createCityEntity(ctx context.Context, worldID string, city City) {
 	cityID := "city-" + uuid.New().String()[:8]
+	worldEntityID := "world:" + worldID
+	cityEntityID := cityID
 
 	payload := eventbus.NewEventPayload().
 		WithEntity(cityID, "city", city.Name).
@@ -337,6 +376,25 @@ func (wg *WorldGenerator) createCityEntity(ctx context.Context, worldID string, 
 	eventbus.SetNested(payload.GetCustom(), "payload.location", city.Location)
 
 	event := eventbus.NewStructuredEvent("entity.created", "world-generator", worldID, payload)
+
+	// ✨ Этап 4: Явные связи для knowledge graph
+	var relations []eventbus.Relation
+
+	// Связь город → мир (WORLD_OF)
+	relations = append(relations, eventbus.Relation{
+		From:     cityEntityID,
+		To:       worldEntityID,
+		Type:     eventbus.RelWorldOf,
+		Directed: true,
+		Metadata: map[string]any{"city_type": city.Type, "population": city.Population},
+	})
+
+	event.Relations = relations
+
+	if err := eventbus.ValidateEventRelations(event); err != nil {
+		log.Printf("Invalid relations for city %s: %v", city.Name, err)
+	}
+
 	wg.bus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	log.Printf("Created city entity: %s (population: %d)", city.Name, city.Population)
 }

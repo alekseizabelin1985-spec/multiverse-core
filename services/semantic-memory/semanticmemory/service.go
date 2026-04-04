@@ -349,6 +349,19 @@ func NewService(bus *eventbus.EventBus) (*Service, error) {
 		writeError(w, "no_filter_provided", http.StatusBadRequest)
 	}).Methods("POST")
 
+	// ✨ Этап 5: Relations metrics endpoint
+	r.HandleFunc("/v1/relations/metrics", func(w http.ResponseWriter, r *http.Request) {
+		metrics := indexer.GetRelationsMetrics()
+		response := map[string]int64{
+			"relations_explicit_count":        metrics.ExplicitCount,
+			"relations_fallback_count":        metrics.FallbackCount,
+			"relations_entities_auto_created": metrics.EntityCreated,
+			"relations_validation_errors":     metrics.ValidationErrs,
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		json.NewEncoder(w).Encode(response)
+	}).Methods("GET")
+
 	// Health check endpoint
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{
