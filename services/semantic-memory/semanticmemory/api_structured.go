@@ -132,7 +132,7 @@ func filterEventsByTypes(events []eventbus.Event, types []string) []eventbus.Eve
 
 	var filtered []eventbus.Event
 	for _, ev := range events {
-		if typeSet[ev.EventType] {
+		if typeSet[ev.Type] {
 			filtered = append(filtered, ev)
 		}
 	}

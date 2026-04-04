@@ -140,7 +140,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 		go func(t string, g string) {
 			s.eventBus.Subscribe(ctx, t, g, func(ev eventbus.Event) {
-				if ev.EventType == "" {
+				if ev.Type == "" {
 					s.logger.Printf("Warning: Empty event type in %s", t)
 					return
 				}
@@ -152,7 +152,7 @@ func (s *Service) Start(ctx context.Context) error {
 	// Подписываемся на lifecycle события
 	go func() {
 		s.eventBus.Subscribe(ctx, "entity_actor_events", "entity-actor-lifecycle", func(ev eventbus.Event) {
-			s.logger.Printf("Lifecycle event: %s", ev.EventType)
+			s.logger.Printf("Lifecycle event: %s", ev.Type)
 		})
 	}()
 
@@ -162,11 +162,11 @@ func (s *Service) Start(ctx context.Context) error {
 // handleEvent обрабатывает событие
 func (s *Service) handleEvent(ctx context.Context, ev eventbus.Event) {
 	if ev.Payload == nil {
-		s.logger.Printf("Warning: Empty payload in event %s", ev.EventType)
+		s.logger.Printf("Warning: Empty payload in event %s", ev.Type)
 		return
 	}
 
-	switch ev.EventType {
+	switch ev.Type {
 	// Создание и управление сущностями
 	case "entity.created":
 		s.handleEntityCreated(ctx, ev)
@@ -694,14 +694,14 @@ func (s *Service) handleWorldTimeTick(ctx context.Context, ev eventbus.Event) {
 
 // handleGenericEvent обрабатывает необработанные события
 func (s *Service) handleGenericEvent(ctx context.Context, ev eventbus.Event) {
-	s.logger.Printf("Handling generic event: %s", ev.EventType)
+	s.logger.Printf("Handling generic event: %s", ev.Type)
 
 	// Извлекаем entity_id если есть
 	if entityID, ok := ev.Payload["entity_id"].(string); ok {
 		// Проверяем есть ли актор для этой сущности
 		actor, err := s.manager.GetActor(entityID)
 		if err == nil && actor != nil {
-			s.logger.Printf("Found actor %s for event %s", entityID, ev.EventType)
+			s.logger.Printf("Found actor %s for event %s", entityID, ev.Type)
 			// В production: передать событие актору для обработки
 			// actor.ProcessEvent(ev)
 		}

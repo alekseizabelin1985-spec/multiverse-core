@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
+
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
-	"time"
 )
 
 type Config struct {
@@ -100,11 +101,11 @@ func (s *Service) Stop() {
 func (s *Service) handleEvent(event eventbus.Event) {
 	// Определяем тип события и передаем его соответствующему обработчику
 	switch {
-	case len(event.EventType) >= len(eventbus.TypeEntity) && event.EventType[:len(eventbus.TypeEntity)] == eventbus.TypeEntity:
+	case len(event.Type) >= len(eventbus.TypeEntity) && event.Type[:len(eventbus.TypeEntity)] == eventbus.TypeEntity:
 		// События сущностей
 		entityHandler := NewEntityStreamHandler(s.entityCache, s.broadcast, s.minioClient)
 		entityHandler.HandleEntityEvent(event)
-	case len(event.EventType) >= len(eventbus.TypeNarrative) && event.EventType[:len(eventbus.TypeNarrative)] == eventbus.TypeNarrative:
+	case len(event.Type) >= len(eventbus.TypeNarrative) && event.Type[:len(eventbus.TypeNarrative)] == eventbus.TypeNarrative:
 		// Повествовательные события
 		// TODO: Обработать повествовательные события
 		// message, _ := json.Marshal(map[string]interface{}{

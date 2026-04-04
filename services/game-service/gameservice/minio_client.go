@@ -66,7 +66,7 @@ func (mc *MinioClient) LoadEntity(ctx context.Context, entityID, worldID string)
 
 func (mc *MinioClient) SaveEntity(ctx context.Context, ent *entity.Entity, worldID string) error {
 	bucket := "entities-" + worldID
-	
+
 	// Ensure bucket exists
 	exists, err := mc.client.BucketExists(ctx, bucket)
 	if err != nil {
@@ -84,8 +84,8 @@ func (mc *MinioClient) SaveEntity(ctx context.Context, ent *entity.Entity, world
 		return err
 	}
 
-	_, err = mc.client.PutObject(ctx, bucket, ent.EntityID+".json", 
-		bytes.NewReader(data), int64(len(data)), 
+	_, err = mc.client.PutObject(ctx, bucket, ent.ID+".json",
+		bytes.NewReader(data), int64(len(data)),
 		minio.PutObjectOptions{ContentType: "application/json"})
 	return err
 }

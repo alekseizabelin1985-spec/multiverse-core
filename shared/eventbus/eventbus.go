@@ -41,16 +41,23 @@ func NewEventBus(brokers []string) *EventBus {
 }
 
 func (eb *EventBus) Publish(ctx context.Context, topic string, event Event) error {
-	if event.EventID == "" || event.EventType == "" || event.WorldID == "" {
-		return fmt.Errorf("event missing required fields: event_id=%q, event_type=%q, world_id=%q",
-			event.EventID, event.EventType, event.WorldID)
+	if event.ID == "" || event.Type == "" {
+		return fmt.Errorf("event missing required fields: id=%q, type=%q",
+			event.ID, event.Type)
 	}
+
+	// Ключ для Kafka — world.id или "global"
+	worldKey := "global"
+	if event.World != nil && event.World.ID != "" {
+		worldKey = event.World.ID
+	}
+
 	msg, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
 	}
 	return eb.writers[topic].WriteMessages(ctx, kafka.Message{
-		Key:   []byte(event.WorldID),
+		Key:   []byte(worldKey),
 		Value: msg,
 	})
 }
@@ -66,9 +73,9 @@ func (eb *EventBus) Subscribe(ctx context.Context, topic, groupID string, handle
 		log.Printf("Invalid KAFKA_POLL_FREQUENCY_MS value: %v, using default 1000ms", err)
 		pollFreqMs = 1000
 	}
-	
+
 	maxWait := time.Millisecond * time.Duration(pollFreqMs)
-	
+
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  eb.brokers,
 		Topic:    topic,

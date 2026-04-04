@@ -21,12 +21,12 @@ type StructuredContext struct {
 
 // EntityInfo содержит информацию о сущности
 type EntityInfo struct {
-	ID          string                 `json:"id"`
-	Type        string                 `json:"type"`
-	Name        string                 `json:"name"`
-	WorldID     string                 `json:"world_id"`
-	Description string                 `json:"description,omitempty"`
-	Payload     map[string]any         `json:"payload,omitempty"`
+	ID          string         `json:"id"`
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	WorldID     string         `json:"world_id"`
+	Description string         `json:"description,omitempty"`
+	Payload     map[string]any `json:"payload,omitempty"`
 	// Coordinates хранит position объект из payload: {x: float, y: float, z: float}
 	Coordinates *Coordinates `json:"coordinates,omitempty"`
 }
@@ -115,7 +115,7 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 		}
 
 		// Определяем действие на основе типа события
-		action := getActionFromEventType(ev.EventType)
+		action := getActionFromEventType(ev.Type)
 
 		// Форматируем строку с ID для LLM
 		// Формат: "{entity.id:type:name} {timestamp} {action} {target.entity.id:type:name}"
@@ -132,13 +132,13 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 			if targetType == "" {
 				targetType = "unknown"
 			}
-			formatted = FormatWithIDs(sourceEntityID, sourceType, sourceName, ev.EventID, action, targetEntityID, targetType, targetName, ev.Timestamp)
+			formatted = FormatWithIDs(sourceEntityID, sourceType, sourceName, ev.ID, action, targetEntityID, targetType, targetName, ev.Timestamp)
 		} else {
 			// Формат без цели (например, для world events)
 			formatted = fmt.Sprintf("{%s:%s:%s} {%s:%s} {%s:%s}",
 				sourceEntityID, sourceType, sourceName,
-				ev.EventID, ev.Timestamp.Format("15:04"),
-				ev.EventID, action)
+				ev.ID, ev.Timestamp.Format("15:04"),
+				ev.ID, action)
 		}
 
 		contextParts = append(contextParts, formatted)
@@ -146,8 +146,8 @@ func (i *Indexer) BuildStructuredContext(events []eventbus.Event, entityCache ma
 		// Добавляем в timeline
 		timeline = append(timeline, TimelineEvent{
 			Timestamp: ev.Timestamp,
-			EventID:   ev.EventID,
-			Type:      ev.EventType,
+			EventID:   ev.ID,
+			Type:      ev.Type,
 			Format:    formatted,
 			Entities:  []string{sourceEntityID, targetEntityID},
 		})

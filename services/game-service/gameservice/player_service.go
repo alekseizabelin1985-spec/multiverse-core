@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
-	"time"
 )
 
 // PlayerService управляет регистрацией и входом игроков
@@ -58,17 +58,11 @@ func (ps *PlayerService) RegisterPlayer(ctx context.Context, playerID, playerNam
 	ps.entityCache.Set(playerID, worldID, playerEntity)
 
 	// Публикуем событие о создании игрока
-	event := eventbus.Event{
-		EventID:   fmt.Sprintf("player_created_%d", time.Now().Unix()),
-		EventType: "entity.created",
-		WorldID:   worldID,
-		Timestamp: time.Now().UTC(),
-		Payload: map[string]interface{}{
-			"entity_id":   playerID,
-			"entity_type": "player",
-			"payload":     playerEntity.Payload,
-		},
-	}
+	event := eventbus.NewEvent("entity.created", "game-service", worldID, map[string]any{
+		"entity_id":   playerID,
+		"entity_type": "player",
+		"payload":     playerEntity.Payload,
+	})
 
 	err = ps.eventBus.Publish(ctx, eventbus.TopicSystemEvents, event)
 	if err != nil {
@@ -118,17 +112,11 @@ func (ps *PlayerService) UpdatePlayerLocation(ctx context.Context, playerID, wor
 	ps.entityCache.Set(playerID, worldID, playerEntity)
 
 	// Публикуем событие о перемещении игрока
-	event := eventbus.Event{
-		EventID:   fmt.Sprintf("player_moved_%d", time.Now().Unix()),
-		EventType: "player.moved",
-		WorldID:   worldID,
-		Timestamp: time.Now().UTC(),
-		Payload: map[string]interface{}{
-			"player_id": playerID,
-			"from_world": worldID,
-			"to_world":   newWorldID,
-		},
-	}
+	event := eventbus.NewEvent("player.moved", "game-service", worldID, map[string]any{
+		"player_id":  playerID,
+		"from_world": worldID,
+		"to_world":   newWorldID,
+	})
 
 	err = ps.eventBus.Publish(ctx, eventbus.TopicPlayerEvents, event)
 	if err != nil {

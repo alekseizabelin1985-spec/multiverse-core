@@ -269,10 +269,8 @@ func ToMapWithEntity(entityID, entityType, worldID string, customFields map[stri
 		},
 	}
 
-	if customFields != nil {
-		for k, v := range customFields {
-			result[k] = v
-		}
+	for k, v := range customFields {
+		result[k] = v
 	}
 
 	return result

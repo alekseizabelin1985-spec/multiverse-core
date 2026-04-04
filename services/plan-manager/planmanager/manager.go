@@ -4,11 +4,8 @@ package planmanager
 import (
 	"context"
 	"log"
-	"time"
 
 	"multiverse-core.io/shared/eventbus"
-
-	"github.com/google/uuid"
 )
 
 // PlanManager manages the hierarchy of plans and ascension routing.
@@ -23,7 +20,7 @@ func NewPlanManager(bus *eventbus.EventBus) *PlanManager {
 
 // HandleWorldEvent processes world events for plan management.
 func (pm *PlanManager) HandleWorldEvent(ev eventbus.Event) {
-	switch ev.EventType {
+	switch ev.Type {
 	case "ascension.attempt":
 		pm.routeAscension(ev)
 	case "plan.convergence.requested":
@@ -44,22 +41,20 @@ func (pm *PlanManager) routeAscension(ev eventbus.Event) {
 	}
 
 	targetPlan := int(currentPlan + 1)
-	targetWorld := pm.getTargetWorldForPlan(targetPlan, ev.WorldID)
+	targetWorld := pm.getTargetWorldForPlan(targetPlan, eventbus.GetWorldIDFromEvent(ev))
 
-	routeEvent := eventbus.Event{
-		EventID:   "route-" + uuid.New().String()[:8],
-		EventType: "ascension.routed",
-		Source:    "plan-manager",
-		WorldID:   ev.WorldID,
-		Payload: map[string]interface{}{
+	routeEvent := eventbus.NewEvent(
+		"ascension.routed",
+		"plan-manager",
+		eventbus.GetWorldIDFromEvent(ev),
+		map[string]interface{}{
 			"player_id":    playerID,
 			"from_plan":    currentPlan,
 			"to_plan":      targetPlan,
 			"target_world": targetWorld,
 			"ritual_id":    ev.Payload["ritual_id"],
 		},
-		Timestamp: time.Now(),
-	}
+	)
 
 	pm.bus.Publish(context.Background(), eventbus.TopicSystemEvents, routeEvent)
 	log.Printf("Ascension for %s routed from Plan %d to Plan %d (world: %s)",
@@ -76,19 +71,17 @@ func (pm *PlanManager) activateConvergenceZone(ev eventbus.Event) {
 		return
 	}
 
-	zoneEvent := eventbus.Event{
-		EventID:   "zone-" + uuid.New().String()[:8],
-		EventType: "plan.convergence.activated",
-		Source:    "plan-manager",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
+	zoneEvent := eventbus.NewEvent(
+		"plan.convergence.activated",
+		"plan-manager",
+		worldID,
+		map[string]interface{}{
 			"zone_id":        "convergence-zone-" + worldID,
 			"plan_level":     planLevel,
 			"duration_hours": 24,
 			"participants":   ev.Payload["participants"],
 		},
-		Timestamp: time.Now(),
-	}
+	)
 
 	pm.bus.Publish(context.Background(), eventbus.TopicSystemEvents, zoneEvent)
 	log.Printf("Convergence zone activated for %s at Plan %d", worldID, int(planLevel))
@@ -113,17 +106,15 @@ func (pm *PlanManager) initializeWorldPlan(ev eventbus.Event) {
 		}
 	}
 
-	initEvent := eventbus.Event{
-		EventID:   "plan-init-" + uuid.New().String()[:8],
-		EventType: "plan.initialized",
-		Source:    "plan-manager",
-		WorldID:   worldID,
-		Payload: map[string]interface{}{
+	initEvent := eventbus.NewEvent(
+		"plan.initialized",
+		"plan-manager",
+		worldID,
+		map[string]interface{}{
 			"world_id":   worldID,
 			"plan_level": planLevel,
 		},
-		Timestamp: time.Now(),
-	}
+	)
 
 	pm.bus.Publish(context.Background(), eventbus.TopicSystemEvents, initEvent)
 	log.Printf("World %s initialized at Plan %d", worldID, planLevel)

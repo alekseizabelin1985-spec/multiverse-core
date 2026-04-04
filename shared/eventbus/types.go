@@ -10,15 +10,13 @@ import (
 )
 
 type Event struct {
-	EventID   string    `json:"event_id"`
-	EventType string    `json:"event_type"`
-	Timestamp time.Time `json:"timestamp"`
-	Source    string    `json:"source"`
-	// Deprecated: используйте payload.world.id вместо world_id в топ-уровне
-	WorldID string `json:"world_id,omitempty"`
-	// Deprecated: используйте payload.scope: {id, type} вместо scope_id в топ-уровне
-	ScopeID *string        `json:"scope_id,omitempty"`
-	Payload map[string]any `json:"payload"`
+	ID        string         `json:"id"`
+	Type      string         `json:"type"`
+	Timestamp time.Time      `json:"timestamp"`
+	Source    string         `json:"source"`
+	World     *WorldRef      `json:"world,omitempty"`
+	Scope     *ScopeRef      `json:"scope,omitempty"`
+	Payload   map[string]any `json:"payload"`
 	// Relations declares explicit semantic edges for the knowledge graph (optional).
 	// Produced by Oracle/GM/WorldGenerator, consumed by semantic-memory → Neo4j.
 	Relations []Relation `json:"relations,omitempty"`
@@ -28,18 +26,18 @@ func NewEvent(eventType, source, worldID string, payload map[string]any) Event {
 	if payload == nil {
 		payload = make(map[string]any)
 	}
-	// Если world_id не задан в payload, добавляем его в иерархической структуре
-	if _, hasWorld := payload["world"]; !hasWorld && worldID != "" {
-		if _, hasFlat := payload["world_id"]; !hasFlat {
-			payload["world"] = map[string]any{"id": worldID}
-		}
+
+	var worldRef *WorldRef
+	if worldID != "" {
+		worldRef = &WorldRef{ID: worldID}
 	}
+
 	return Event{
-		EventID:   uuid.NewString(),
-		EventType: eventType,
+		ID:        uuid.NewString(),
+		Type:      eventType,
 		Timestamp: time.Now().UTC(),
 		Source:    source,
-		WorldID:   worldID, // Оставляем для backward compatibility при чтении из топ-уровня
+		World:     worldRef,
 		Payload:   payload,
 	}
 }
@@ -98,25 +96,28 @@ func PublishActionEvent(bus *EventBus, worldID, entityID, action string, targetI
 	bus.Publish(context.TODO(), TopicPlayerEvents, event)
 }
 
-// GetWorldIDFromEvent извлекает world_id из события (поддержка новой и старой структуры)
+// GetWorldIDFromEvent извлекает world.id из события
 func GetWorldIDFromEvent(event Event) string {
-	// Сначала пробуем новую структуру в payload: world.id
+	// Сначала пробуем топ-уровень World
+	if event.World != nil {
+		return event.World.ID
+	}
+	// Fallback на payload.world.id
 	if worldID := ExtractWorldID(event.Payload); worldID != "" {
 		return worldID
 	}
-	// Fallback на топ-уровень
-	return event.WorldID
+	return ""
 }
 
-// GetScopeFromEvent извлекает scope из события (поддержка новой и старой структуры)
+// GetScopeFromEvent извлекает scope из события
 func GetScopeFromEvent(event Event) *ScopeRef {
-	// Пробуем новую структуру в payload: scope: {id, type}
+	// Сначала пробуем топ-уровень Scope
+	if event.Scope != nil {
+		return event.Scope
+	}
+	// Fallback на payload.scope
 	if scope := ExtractScope(event.Payload); scope != nil && (scope.ID != "" || scope.Type != "") {
 		return scope
-	}
-	// Fallback на топ-уровень: scope_id / scope_type
-	if event.ScopeID != nil {
-		return &ScopeRef{ID: *event.ScopeID}
 	}
 	return nil
 }

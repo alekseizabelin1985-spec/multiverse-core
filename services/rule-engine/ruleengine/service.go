@@ -59,10 +59,10 @@ func (s *Service) Start(ctx context.Context) {
 
 	// Subscribe to rule application events
 	go s.bus.Subscribe(ctx, "system_events", "rule-engine-group", func(ev eventbus.Event) {
-		if ev.EventType == "rule.apply" {
+		if ev.Type == "rule.apply" {
 			// Handle rule application event
 			// This would typically involve applying rules to entities
-			s.logger.Printf("Received rule application event: %s", ev.EventType)
+			s.logger.Printf("Received rule application event: %s", ev.Type)
 		}
 	})
 }

@@ -7,7 +7,6 @@ import (
 	"log"
 	"time"
 
-	"github.com/google/uuid"
 	"multiverse-core.io/shared/eventbus"
 )
 
@@ -16,8 +15,8 @@ type Config struct {
 }
 
 type Service struct {
-	orchestrator *NarrativeOrchestrator
-	bus          *eventbus.EventBus
+	orchestrator   *NarrativeOrchestrator
+	bus            *eventbus.EventBus
 	defaultWorldID string
 }
 
@@ -26,8 +25,8 @@ func NewService(cfg Config) (*Service, error) {
 	orchestrator := NewNarrativeOrchestrator(bus)
 
 	return &Service{
-		orchestrator: orchestrator,
-		bus:          bus,
+		orchestrator:   orchestrator,
+		bus:            bus,
 		defaultWorldID: "pain-realm", // Default world for timer events
 	}, nil
 }
@@ -40,7 +39,7 @@ func (s *Service) Start(ctx context.Context) {
 
 	// Системные события: gm.*, time.syncTime
 	go s.bus.Subscribe(ctx, eventbus.TopicSystemEvents, "narrative-scope-group", func(ev eventbus.Event) {
-		switch ev.EventType {
+		switch ev.Type {
 		case "gm.created":
 			s.orchestrator.CreateGM(ev)
 		case "gm.deleted":
@@ -76,22 +75,20 @@ func (s *Service) startTimerTicker(ctx context.Context) {
 			log.Println("Timer ticker stopped")
 			return
 		case <-ticker.C:
-			ev := eventbus.Event{
-				EventID:   "timer-" + uuid.NewString()[:8],
-				EventType: "time.syncTime",
-				Source:    "narrative-orchestrator",
-				WorldID:   s.defaultWorldID,
-				Timestamp: time.Now().UTC(),
-				Payload: map[string]interface{}{
+			ev := eventbus.NewEvent(
+				"time.syncTime",
+				"narrative-orchestrator",
+				s.defaultWorldID,
+				map[string]interface{}{
 					"current_time_unix_ms": time.Now().UnixMilli(),
 				},
-			}
+			)
 
 			// Publish timer event to default world
 			if err := s.bus.PublishSystemEvent(ctx, ev); err != nil {
 				log.Printf("Failed to publish time.syncTime: %v", err)
 			} else {
-				log.Printf("Published time.syncTime event: %s for world %s", ev.EventID, s.defaultWorldID)
+				log.Printf("Published time.syncTime event: %s for world %s", ev.ID, s.defaultWorldID)
 			}
 		}
 	}

@@ -192,10 +192,10 @@ func TestExtractEntityID(t *testing.T) {
 	// Тест с новой структурой
 	newStructPayload := map[string]any{
 		"entity": map[string]any{
-			"id":     "player-123",
-			"type":   "player",
-			"name":   "Вася",
-			"world":  map[string]any{"id": "world-789"},
+			"id":    "player-123",
+			"type":  "player",
+			"name":  "Вася",
+			"world": map[string]any{"id": "world-789"},
 		},
 	}
 
@@ -222,10 +222,10 @@ func TestExtractEntityID(t *testing.T) {
 
 	// Тест со старой структурой (fallback)
 	oldStructPayload := map[string]any{
-		"entity_id":     "npc-456",
-		"entity_type":   "npc",
-		"entity_name":   "Старейшина",
-		"world_id":      "world-789",
+		"entity_id":   "npc-456",
+		"entity_type": "npc",
+		"entity_name": "Старейшина",
+		"world_id":    "world-789",
 	}
 
 	entity = ExtractEntityID(oldStructPayload)
@@ -463,19 +463,19 @@ func TestPathAccessor_GetString(t *testing.T) {
 
 	// Тест извлечения строк по разным путям
 
-tests := []struct {
-	path     string
-	expected string
-	shouldOK bool
-}{
-	{"entity.id", "player-123", true},
-	{"entity.type", "player", true},
-	{"scope.id", "solo-abc", true},
-	{"scope.type", "solo", true},
-	{"world.id", "world-789", true},
-	{"nonexistent.path", "", false},
-	{"entity.metadata", "", false}, // не строка, а map
-}
+	tests := []struct {
+		path     string
+		expected string
+		shouldOK bool
+	}{
+		{"entity.id", "player-123", true},
+		{"entity.type", "player", true},
+		{"scope.id", "solo-abc", true},
+		{"scope.type", "solo", true},
+		{"world.id", "world-789", true},
+		{"nonexistent.path", "", false},
+		{"entity.metadata", "", false}, // не строка, а map
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -507,16 +507,16 @@ func TestPathAccessor_GetInt(t *testing.T) {
 
 	// Тест извлечения int по разным путям с разными типами исходных данных
 
-tests := []struct {
-	path     string
-	expected int
-	shouldOK bool
-}{
-	{"entity.metadata.level", 15, true},
-	{"entity.metadata.xp", 2500, true},
-	{"stats.hp", 100, true}, // float64 -> int
-	{"nonexistent.path", 0, false},
-}
+	tests := []struct {
+		path     string
+		expected int
+		shouldOK bool
+	}{
+		{"entity.metadata.level", 15, true},
+		{"entity.metadata.xp", 2500, true},
+		{"stats.hp", 100, true}, // float64 -> int
+		{"nonexistent.path", 0, false},
+	}
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
@@ -794,51 +794,62 @@ func TestEvent_PathAccessor_JsonPathFeatures(t *testing.T) {
 }
 
 func TestGetWorldIDFromEvent(t *testing.T) {
-	// Тест с новой структурой в payload: world.id
-	eventNew := NewEvent("test", "src", "world-123", map[string]any{
+	// Тест с World на топ-уровне (через NewEvent)
+	eventWithWorld := NewEvent("test", "src", "world-123", map[string]any{})
+
+	worldID := GetWorldIDFromEvent(eventWithWorld)
+	if worldID != "world-123" {
+		t.Errorf("Expected 'world-123' from World, got '%s'", worldID)
+	}
+
+	// Тест с пустым миром, но world в payload
+	eventPayloadWorld := NewEvent("test", "src", "", map[string]any{
 		"world": map[string]any{"id": "world-456"},
 	})
 
-	worldID := GetWorldIDFromEvent(eventNew)
+	worldID = GetWorldIDFromEvent(eventPayloadWorld)
+	// NewEvent с пустым worldID не устанавливает World, хелпер читает из payload
 	if worldID != "world-456" {
 		t.Errorf("Expected 'world-456' from payload.world.id, got '%s'", worldID)
 	}
 
-	// Тест с только топ-уровнем (fallback)
-	eventOld := Event{
-		WorldID: "world-789",
+	// Тест с World на топ-уровне (ручная структура)
+	eventWithWorldDirect := Event{
+		World:   &WorldRef{ID: "world-789"},
 		Payload: map[string]any{},
 	}
 
-	worldID = GetWorldIDFromEvent(eventOld)
+	worldID = GetWorldIDFromEvent(eventWithWorldDirect)
 	if worldID != "world-789" {
-		t.Errorf("Expected 'world-789' from fallback, got '%s'", worldID)
+		t.Errorf("Expected 'world-789' from World, got '%s'", worldID)
 	}
 }
 
 func TestGetScopeFromEvent(t *testing.T) {
-	// Тест с новой структурой в payload: scope: {id, type}
-	eventNew := NewEvent("test", "src", "world-123", map[string]any{
-		"scope": map[string]any{
-			"id":   "city-abc",
-			"type": "city",
-		},
-	})
+	// Тест с Scope через EventPayload
+	payload := NewEventPayload().WithScope("city-abc", "city")
+	eventWithScope := NewStructuredEvent("test", "src", "world-123", payload)
 
-	scope := GetScopeFromEvent(eventNew)
+	scope := GetScopeFromEvent(eventWithScope)
 	if scope == nil || scope.ID != "city-abc" || scope.Type != "city" {
 		t.Errorf("Expected scope={city-abc, city}, got %+v", scope)
 	}
 
-	// Тест с только топ-уровнем (fallback)
-	scopeID := "quest-xyz"
-	eventOld := Event{
-		ScopeID: &scopeID,
+	// Тест с Scope на топ-уровне (ручная структура)
+	eventWithScopeDirect := Event{
+		Scope:   &ScopeRef{ID: "quest-xyz", Type: "quest"},
 		Payload: map[string]any{},
 	}
 
-	scope = GetScopeFromEvent(eventOld)
-	if scope == nil || scope.ID != "quest-xyz" {
-		t.Errorf("Expected scope={quest-xyz, ''} from fallback, got %+v", scope)
+	scope = GetScopeFromEvent(eventWithScopeDirect)
+	if scope == nil || scope.ID != "quest-xyz" || scope.Type != "quest" {
+		t.Errorf("Expected scope={quest-xyz, quest}, got %+v", scope)
+	}
+
+	// Тест без scope
+	eventNoScope := NewEvent("test", "src", "world-123", map[string]any{})
+	scope = GetScopeFromEvent(eventNoScope)
+	if scope != nil {
+		t.Errorf("Expected nil scope, got %+v", scope)
 	}
 }

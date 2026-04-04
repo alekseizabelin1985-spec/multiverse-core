@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"testing"
-	"time"
 
 	"multiverse-core.io/shared/eventbus"
 )
@@ -192,18 +191,11 @@ func TestIndexerIntegration(t *testing.T) {
 	}()
 
 	// Create a test event
-	event := eventbus.Event{
-		EventID:   "integration-test-event",
-		EventType: "integration.test.event",
-		Timestamp: time.Now(),
-		Source:    "integration-tester",
-		WorldID:   "integration-test-world",
-		ScopeID:   stringPtr("integration-test-scope"),
-		Payload: map[string]interface{}{
-			"test_field": "test_value",
-			"number":     42,
-		},
-	}
+	event := eventbus.NewEvent("integration.test.event", "integration-tester", "integration-test-world", map[string]interface{}{
+		"test_field": "test_value",
+		"number":     42,
+	})
+	event.ID = "integration-test-event"
 
 	// Handle the event
 	indexer.HandleEvent(event)

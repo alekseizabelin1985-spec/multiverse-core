@@ -23,7 +23,7 @@ func NewCultivationModule(bus *eventbus.EventBus) *CultivationModule {
 
 // HandleEvent processes events for cultivation management.
 func (cm *CultivationModule) HandleEvent(ev eventbus.Event) {
-	switch ev.EventType {
+	switch ev.Type {
 	case "player.used_skill":
 		cm.processSkillUsage(ev)
 	case "ascension.completed":
@@ -76,7 +76,7 @@ func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
 
 	progressEvent := eventbus.NewStructuredEvent("cultivation.progress.updated", "cultivation-module", worldID, payload)
-	progressEvent.EventID = "cult-progress-" + uuid.New().String()[:8]
+	progressEvent.ID = "cult-progress-" + uuid.New().String()[:8]
 	progressEvent.Timestamp = time.Now()
 
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, progressEvent)
@@ -126,7 +126,7 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 	eventbus.SetNested(payload.GetCustom(), "ascension.to_plan", toPlan)
 
 	updateEvent := eventbus.NewStructuredEvent("cultivation.system.updated", "cultivation-module", worldID, payload)
-	updateEvent.EventID = "cult-update-" + uuid.New().String()[:8]
+	updateEvent.ID = "cult-update-" + uuid.New().String()[:8]
 	updateEvent.Timestamp = time.Now()
 
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, updateEvent)
@@ -182,7 +182,7 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 		eventbus.SetNested(successPayload.GetCustom(), "dao.interaction.type", interactionType)
 
 		successEvent := eventbus.NewStructuredEvent("dao.interaction.success", "cultivation-module", worldID, successPayload)
-		successEvent.EventID = "dao-success-" + uuid.New().String()[:8]
+		successEvent.ID = "dao-success-" + uuid.New().String()[:8]
 		successEvent.Timestamp = time.Now()
 
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, successEvent)
@@ -203,7 +203,7 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 		eventbus.SetNested(conflictPayload.GetCustom(), "consequences", []string{"spiritual_damage", "path_instability"})
 
 		conflictEvent := eventbus.NewStructuredEvent("dao.interaction.conflict", "cultivation-module", worldID, conflictPayload)
-		conflictEvent.EventID = "dao-conflict-" + uuid.New().String()[:8]
+		conflictEvent.ID = "dao-conflict-" + uuid.New().String()[:8]
 		conflictEvent.Timestamp = time.Now()
 
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, conflictEvent)
@@ -257,7 +257,7 @@ func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.type", formType)
 
 		validateEvent := eventbus.NewStructuredEvent("cultivation.form.validated", "cultivation-module", worldID, payload)
-		validateEvent.EventID = "form-valid-" + uuid.New().String()[:8]
+		validateEvent.ID = "form-valid-" + uuid.New().String()[:8]
 		validateEvent.Timestamp = time.Now()
 
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, validateEvent)
@@ -279,7 +279,7 @@ func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.violation", "ontology_mismatch")
 
 		rejectEvent := eventbus.NewStructuredEvent("cultivation.form.rejected", "cultivation-module", worldID, payload)
-		rejectEvent.EventID = "form-reject-" + uuid.New().String()[:8]
+		rejectEvent.ID = "form-reject-" + uuid.New().String()[:8]
 		rejectEvent.Timestamp = time.Now()
 
 		cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, rejectEvent)
@@ -334,7 +334,7 @@ func (cm *CultivationModule) mergeDaoPaths(ev eventbus.Event, targetPlan int) {
 	eventbus.SetNested(payload.GetCustom(), "dao.merger.result", "hybrid_formed")
 
 	mergeEvent := eventbus.NewStructuredEvent("dao.hybrid_formed", "cultivation-module", worldID, payload)
-	mergeEvent.EventID = "dao-merge-" + uuid.New().String()[:8]
+	mergeEvent.ID = "dao-merge-" + uuid.New().String()[:8]
 	mergeEvent.Timestamp = time.Now()
 
 	cm.bus.Publish(context.Background(), eventbus.TopicWorldEvents, mergeEvent)

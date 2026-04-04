@@ -1023,18 +1023,18 @@ SET e.type = $event_type,
     e.raw_data = $raw_data
 `
 		params := map[string]any{
-			"event_id":     ev.EventID,
-			"event_type":   ev.EventType,
+			"event_id":     ev.ID,
+			"event_type":   ev.Type,
 			"timestamp":    ev.Timestamp,
 			"source":       ev.Source,
-			"world_id":     ev.WorldID,
+			"world_id":     eventbus.GetWorldIDFromEvent(ev),
 			"payload_json": payloadJSON,
 			"raw_data":     string(rawData),
 		}
 
 		// Add scope_id if present
-		if ev.ScopeID != nil {
-			params["scope_id"] = *ev.ScopeID
+		if scope := eventbus.GetScopeFromEvent(ev); scope != nil {
+			params["scope_id"] = scope.ID
 			query = `
 MERGE (e:Event {id: $event_id})
 SET e.type = $event_type,
@@ -1059,8 +1059,8 @@ SET e.type = $event_type,
 	}
 
 	// Link event to entities in payload
-	if linkErr := n.LinkEventToEntities(ev.EventID, ev.Payload); linkErr != nil {
-		log.Printf("Warning: failed to link event %s to entities: %v", ev.EventID, linkErr)
+	if linkErr := n.LinkEventToEntities(ev.ID, ev.Payload); linkErr != nil {
+		log.Printf("Warning: failed to link event %s to entities: %v", ev.ID, linkErr)
 	}
 
 	return nil

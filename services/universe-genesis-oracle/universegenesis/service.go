@@ -44,11 +44,11 @@ func (s *Service) Run(ctx context.Context) error {
 
 // handleSystemEvent обрабатывает события из системного топика
 func (s *Service) handleSystemEvent(ctx context.Context, event eventbus.Event) {
-	log.Printf("Received system event: %s from source: %s", event.EventType, event.Source)
+	log.Printf("Received system event: %s from source: %s", event.Type, event.Source)
 
 	// Обработка запроса на генерацию вселенной
-	if event.EventType == "universe.genesis.request" {
-		seed := event.WorldID // Используем WorldID как seed для простоты
+	if event.Type == "universe.genesis.request" {
+		seed := eventbus.GetWorldIDFromEvent(event) // Используем WorldID как seed для простоты
 		if seed == "" {
 			seed = uuid.New().String()
 		}
