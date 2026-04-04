@@ -449,10 +449,21 @@ func extractEntityIDsFromPayload(payload map[string]interface{}) []string {
 	}
 
 	// Новые вложенные структуры: entity, target, source, world
+	// Формат: {"entity": {"entity": {"id": "xxx", "type": "player"}}, "world": {"entity": {"id": "yyy", "type": "world"}}}
 	newKeys := []string{"entity", "target", "source", "world"}
 	for _, key := range newKeys {
 		if nested, ok := payload[key].(map[string]interface{}); ok {
-			if id, ok := nested["id"].(string); ok && id != "" {
+			// Новая структура: {key: {entity: {id, type}}}
+			if entityRef, ok := nested["entity"].(map[string]interface{}); ok {
+				if id, ok := entityRef["id"].(string); ok && id != "" {
+					realID := normalizeEntityID(id)
+					if !seen[realID] {
+						seen[realID] = true
+						entityIDs = append(entityIDs, realID)
+					}
+				}
+			} else if id, ok := nested["id"].(string); ok && id != "" {
+				// Fallback на старую структуру: {key: {id, type}}
 				realID := normalizeEntityID(id)
 				if !seen[realID] {
 					seen[realID] = true
