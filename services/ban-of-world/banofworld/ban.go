@@ -82,7 +82,7 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(payload.GetCustom(), "violation.skill", skill)
 		eventbus.SetNested(payload.GetCustom(), "violation.type", violationType)
 
