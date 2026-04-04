@@ -377,21 +377,10 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 
 // LinkEventToEntities creates RELATED_TO edges from an Event node to Entity nodes
 // whose IDs are found in the event payload. Entity stub nodes are created if missing.
-// Recognised payload keys: entity_id, source_id, target_id, character_id, player_id, npc_id.
+// Поддерживает как старые ключи (entity_id, source_id), так и новые вложенные структуры
+// (entity: {id}, target: {id}, source: {id}, world: {id}).
 func (n *Neo4jClient) LinkEventToEntities(eventID string, payload map[string]interface{}) error {
-	entityKeys := []string{"entity_id", "source_id", "target_id", "character_id", "player_id", "npc_id", "actor_id", "subject_id", "object_id", "focus_entities"}
-
-	var entityIDs []string
-	for _, key := range entityKeys {
-		if val, ok := payload[key].(string); ok && val != "" {
-			entityIDs = append(entityIDs, val)
-		}
-		if val, ok := payload[key].([]string); ok && val != nil {
-			for _, v := range val {
-				entityIDs = append(entityIDs, v)
-			}
-		}
-	}
+	entityIDs := extractEntityIDsFromPayload(payload)
 
 	if len(entityIDs) == 0 {
 		return nil
@@ -423,6 +412,70 @@ MERGE (ev)-[:RELATED_TO]->(en)
 		return fmt.Errorf("LinkEventToEntities: %w", err)
 	}
 	return nil
+}
+
+// extractEntityIDsFromPayload извлекает все entity ID из payload события.
+// Поддерживает старые ключи (entity_id, source_id) и новые вложенные структуры
+// (entity: {id}, target: {id}, source: {id}, world: {id}).
+func extractEntityIDsFromPayload(payload map[string]interface{}) []string {
+	seen := make(map[string]bool)
+	var entityIDs []string
+
+	// Старые ключи для обратной совместимости
+	oldKeys := []string{
+		"entity_id", "source_id", "target_id",
+		"character_id", "player_id", "npc_id",
+		"actor_id", "subject_id", "object_id", "world_id",
+	}
+	for _, key := range oldKeys {
+		if val, ok := payload[key].(string); ok && val != "" {
+			realID := normalizeEntityID(val)
+			if !seen[realID] {
+				seen[realID] = true
+				entityIDs = append(entityIDs, realID)
+			}
+		}
+		if val, ok := payload[key].([]string); ok {
+			for _, v := range val {
+				if v != "" {
+					realID := normalizeEntityID(v)
+					if !seen[realID] {
+						seen[realID] = true
+						entityIDs = append(entityIDs, realID)
+					}
+				}
+			}
+		}
+	}
+
+	// Новые вложенные структуры: entity, target, source, world
+	newKeys := []string{"entity", "target", "source", "world"}
+	for _, key := range newKeys {
+		if nested, ok := payload[key].(map[string]interface{}); ok {
+			if id, ok := nested["id"].(string); ok && id != "" {
+				realID := normalizeEntityID(id)
+				if !seen[realID] {
+					seen[realID] = true
+					entityIDs = append(entityIDs, realID)
+				}
+			}
+		}
+	}
+
+	return entityIDs
+}
+
+// normalizeEntityID нормализует ID сущности, убирая префикс типа если он совпадает с world_id.
+// Например: "world:world-xxx" → "world-xxx"
+// Это предотвращает дублирование сущностей в графе.
+func normalizeEntityID(entityID string) string {
+	// Если ID имеет формат "world:world-xxx" → "world-xxx"
+	if strings.HasPrefix(entityID, "world:") {
+		realID := strings.TrimPrefix(entityID, "world:")
+		return realID
+	}
+	// Для других префиксов (player:p1, npc:n1) оставляем как есть
+	return entityID
 }
 
 // GetEventsForEntities retrieves events related to the given entity IDs from Neo4j.
