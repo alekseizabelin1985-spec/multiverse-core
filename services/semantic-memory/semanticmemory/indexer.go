@@ -267,8 +267,8 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 			// Fallback — не блокируем сохранение события
 		} else {
 			log.Printf("Applied %d explicit relations for event %s (total: %d)", len(ev.Relations), ev.ID, i.Metrics.ExplicitCount)
-			return nil
 		}
+		// Не return — продолжаем к LinkEventToEntities для создания связей Event→Entity
 	}
 
 	// Fallback: старая логика для обратной совместимости (события без relations)
