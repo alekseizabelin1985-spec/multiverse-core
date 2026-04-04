@@ -99,6 +99,16 @@ func (n *Neo4jClient) UpsertEntity(entityID, entityType string, payload map[stri
 	var worldID string
 	if wid, ok := payload["world_id"].(string); ok {
 		worldID = wid
+	} else if world, ok := payload["world"].(map[string]any); ok {
+		// Новая структура: world.entity.id
+		if entityRef, ok := world["entity"].(map[string]any); ok {
+			if id, ok := entityRef["id"].(string); ok {
+				worldID = id
+			}
+		} else if id, ok := world["id"].(string); ok {
+			// Fallback на старую: world.id
+			worldID = id
+		}
 	}
 
 	// Extract coordinates from position field if present

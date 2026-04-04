@@ -351,9 +351,14 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	// Используем универсальное извлечение с поддержкой новой и старой структуры:
 	pa := ev.Path()
 
-	entityID, ok := pa.GetString("entity.id")
-	if !ok {
-		// Fallback на старую структуру
+	// Новая структура: entity: {entity: {id, type}, name, ...}
+	entityID, ok := pa.GetString("entity.entity.id")
+	if !ok || entityID == "" {
+		// Fallback на старую: entity: {id, type}
+		entityID, ok = pa.GetString("entity.id")
+	}
+	if !ok || entityID == "" {
+		// Fallback на legacy: entity_id
 		entityID, ok = pa.GetString("entity_id")
 	}
 	if !ok || entityID == "" {
@@ -361,7 +366,10 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 		return
 	}
 
-	entityType, _ := pa.GetString("entity.type")
+	entityType, _ := pa.GetString("entity.entity.type")
+	if entityType == "" {
+		entityType, _ = pa.GetString("entity.type")
+	}
 	if entityType == "" {
 		entityType, _ = pa.GetString("entity_type")
 	}
