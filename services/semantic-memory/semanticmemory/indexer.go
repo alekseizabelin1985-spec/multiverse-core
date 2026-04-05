@@ -139,6 +139,18 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 		return
 	}
 
+	// Пропускаем технические события narrative-orchestrator
+	skippedTypes := map[string]bool{
+		"time.syncTime": true,
+		"gm.split":      true,
+		"gm.merged":     true,
+		"gm.deleted":    true,
+		"gm.created":    true,
+	}
+	if skippedTypes[ev.Type] {
+		return
+	}
+
 	// Process all events, not just entity-related events
 	ctx := context.Background()
 
