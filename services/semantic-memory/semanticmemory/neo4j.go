@@ -449,7 +449,7 @@ RETURN r
 		relType := sanitizeRelType(link.RelType)
 		query := fmt.Sprintf(`
 MATCH (ev:Event {id: $event_id})
-MATCH (target:Event {id: $target_id})
+MERGE (target:Event {id: $target_id})
 MERGE (ev)-[r:%s]->(target)
 RETURN r
 `, relType)
