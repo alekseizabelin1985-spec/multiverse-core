@@ -40,14 +40,17 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 // ✅ ALWAYS use for reading event data:
 pa := event.Path()  // *jsonpath.Accessor
 
-// Extract with fallback chain:
-entityID, _ := pa.GetString("entity.id")
+// Extract with fallback chain — NEW format: entity.entity.id
+entityID, _ := pa.GetString("entity.entity.id")
 if entityID == "" {
-    entityID, _ = pa.GetString("entity_id")  // fallback to old format
+    entityID, _ = pa.GetString("entity.id")  // fallback previous format
+}
+if entityID == "" {
+    entityID, _ = pa.GetString("entity_id")  // fallback legacy
 }
 
 // World/Scope: use unified helpers
-worldID := eventbus.GetWorldIDFromEvent(event)  // handles both structures
+worldID := eventbus.GetWorldIDFromEvent(event)  // reads event.World.Entity.ID
 scope := eventbus.GetScopeFromEvent(event)      // returns *ScopeRef{ID, Type}
 
 // Type-safe getters for any depth:
@@ -71,17 +74,36 @@ payload := eventbus.NewEventPayload().
     WithScope(scopeID, scopeType).  // solo/group/city/region/quest
     WithWorld(worldID)
 
-// Add custom fields with dot-notation:
-eventbus.SetNested(payload.GetCustom(), "action", "talk")
-eventbus.SetNested(payload.GetCustom(), "dialogue.text", "Hello!")
-
-// Optional: explicit hierarchical paths for LLM clarity:
-eventbus.SetNested(payload.GetCustom(), "entity.id", id)
-eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+// Add custom fields with dot-notation — use entity/event reference format:
+eventbus.SetNested(payload.GetCustom(), "entity.entity.id", entityID)
+eventbus.SetNested(payload.GetCustom(), "entity.entity.type", entityType)
+eventbus.SetNested(payload.GetCustom(), "trigger.event.id", triggerEventID)
+eventbus.SetNested(payload.GetCustom(), "trigger.event.type", "event")
 
 event := eventbus.NewStructuredEvent(type, source, worldID, payload)
 bus.Publish(ctx, topic, event)
 ```
+
+### 🕸️ EntityRef format (ALL references)
+
+All entity/event references in payload use unified format:
+
+```json
+{
+  "entity":  {"entity": {"id": "player-123", "type": "player"}},
+  "target":  {"entity": {"id": "sword-456", "type": "item"}},
+  "world":   {"entity": {"id": "world-789", "type": "world"}},
+  "trigger": {"event":  {"id": "evt-abc", "type": "event"}}
+}
+```
+
+Neo4j automatically creates relationships from payload keys:
+- `(ev)-[:ENTITY]->(player-123:Entity)`
+- `(ev)-[:TARGET]->(sword-456:Entity)`
+- `(ev)-[:WORLD]->(world-789:Entity)`
+- `(ev)-[:TRIGGER]->(evt-abc:Event)`
+
+Entity↔Entity relations created via `relations[]` array.
 
 ### ⚠️ Deprecated Patterns (AVOID in new code)
 
@@ -92,6 +114,10 @@ worldID := event.WorldID
 
 // ❌ DON'T create events with manual maps:
 event := eventbus.Event{Payload: map[string]interface{}{...}}
+
+// ❌ DON'T use flat reference fields:
+payload["entity_id"] = id
+payload["world_id"] = worldID
 
 // ✅ USE the patterns above instead
 ```
