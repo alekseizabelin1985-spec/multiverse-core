@@ -262,7 +262,13 @@ func (s *Service) handleEntityCreated(ctx context.Context, ev eventbus.Event) {
 		worldID = "global"
 	}
 
-	_, err := s.manager.CreateActor(ctx, entityID, entityID, entityType, worldID)
+	// Используем имя из события, если доступно; иначе fallback на ID
+	actorName := entityInfo.Name
+	if actorName == "" {
+		actorName = entityID
+	}
+
+	_, err := s.manager.CreateActor(ctx, entityID, actorName, entityType, worldID)
 	if err != nil {
 		s.logger.Printf("Failed to create actor for entity %s: %v", entityID, err)
 	}
@@ -444,9 +450,9 @@ func (s *Service) handlePlayerUsedSkill(ctx context.Context, ev eventbus.Event) 
 	skillID, _ := pa.GetString("skill_id")
 
 	// Извлекаем target ID с поддержкой новой структуры
-	targetInfo := eventbus.ExtractTargetEntityID(ev.Payload)
+	targetInfo, ok := ev.GetTargetEntityID()
 	var targetID string
-	if targetInfo != nil {
+	if ok && targetInfo != nil {
 		targetID = targetInfo.ID
 	}
 
@@ -484,9 +490,9 @@ func (s *Service) handlePlayerInteracted(ctx context.Context, ev eventbus.Event)
 	}
 
 	// Извлекаем target ID с поддержкой новой структуры
-	targetInfo := eventbus.ExtractTargetEntityID(ev.Payload)
+	targetInfo, ok := ev.GetTargetEntityID()
 	var targetID string
-	if targetInfo != nil {
+	if ok && targetInfo != nil {
 		targetID = targetInfo.ID
 	}
 
@@ -533,9 +539,9 @@ func (s *Service) handleCombatDamageDealt(ctx context.Context, ev eventbus.Event
 	}
 
 	// Извлекаем target ID с поддержкой новой структуры
-	targetInfo := eventbus.ExtractTargetEntityID(ev.Payload)
+	targetInfo, ok := ev.GetTargetEntityID()
 	var targetID string
-	if targetInfo != nil {
+	if ok && targetInfo != nil {
 		targetID = targetInfo.ID
 	}
 
@@ -562,9 +568,9 @@ func (s *Service) handleNPCAction(ctx context.Context, ev eventbus.Event) {
 	action, _ := pa.GetString("action")
 
 	// Извлекаем target ID с поддержкой новой структуры
-	targetInfo := eventbus.ExtractTargetEntityID(ev.Payload)
+	targetInfo, ok := ev.GetTargetEntityID()
 	var targetID string
-	if targetInfo != nil {
+	if ok && targetInfo != nil {
 		targetID = targetInfo.ID
 	}
 
@@ -704,6 +710,12 @@ func (s *Service) handleGenericEvent(ctx context.Context, ev eventbus.Event) {
 	// Извлекаем entity_id если есть через новый helper
 	entityInfo, ok := ev.GetEntityIDWithFallback()
 	if ok && entityInfo != nil {
+		// Пропускаем не-actor сущности (миры, регионы, предметы и т.д.)
+		switch entityInfo.Type {
+		case "world", "region", "location", "city", "item", "quest", "scope":
+			return
+		}
+
 		entityID := entityInfo.ID
 		// Проверяем есть ли актор для этой сущности
 		actor, err := s.manager.GetActor(entityID)
