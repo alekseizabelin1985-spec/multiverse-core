@@ -376,9 +376,9 @@ func (w *Watcher) publishViolation(eventID, entityID, entityType, anomalyType st
 		eventbus.SetNested(payload.GetCustom(), "entity.entity.type", eType)
 	}
 
-	// Trigger event ссылка
-	eventbus.SetNested(payload.GetCustom(), "trigger.entity.id", eventID)
-	eventbus.SetNested(payload.GetCustom(), "trigger.entity.type", "event")
+	// Trigger event ссылка — событие, не entity
+	eventbus.SetNested(payload.GetCustom(), "trigger.event.id", eventID)
+	eventbus.SetNested(payload.GetCustom(), "trigger.event.type", "event")
 
 	// Мета данные аномалии
 	eventbus.SetNested(payload.GetCustom(), "anomaly_type", anomalyType)
