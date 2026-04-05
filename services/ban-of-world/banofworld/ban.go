@@ -50,10 +50,9 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 	}
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -126,10 +125,9 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 	}
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -180,15 +178,15 @@ func (b *BanOfWorld) checkItemUsage(ev eventbus.Event) {
 
 // checkMovement checks if movement violates world boundaries.
 func (b *BanOfWorld) checkMovement(ev eventbus.Event) {
-	destination, _ := ev.Payload["destination"].(string)
+	pa := ev.Path()
+	destination, _ := pa.GetString("destination")
 
 	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
 	if playerID == "" || destination == "" {
@@ -242,22 +240,23 @@ func (b *BanOfWorld) getViolationType(worldID, action string) string {
 
 // applyConsequence applies the appropriate consequence for a violation.
 func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
+	pa := ev.Path()
 	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
 	switch violationType {
 	case "elemental_conflict":
 		// Transform fire breath to scream of pain
+		skill, _ := pa.GetString("skill")
 		transformPayload := eventbus.NewEventPayload().
 			WithEntity(playerID, "player", "")
 
-		eventbus.SetNested(transformPayload.GetCustom(), "original", ev.Payload["skill"])
+		eventbus.SetNested(transformPayload.GetCustom(), "original", skill)
 		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "scream_of_pain")
 		eventbus.SetNested(transformPayload.GetCustom(), "reason", "resonance_with_core")
 
@@ -284,10 +283,11 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 
 	case "mechanical_purity":
 		// Transform organic skill to mechanical equivalent
+		skill, _ := pa.GetString("skill")
 		transformPayload := eventbus.NewEventPayload().
 			WithEntity(playerID, "player", "")
 
-		eventbus.SetNested(transformPayload.GetCustom(), "original", ev.Payload["skill"])
+		eventbus.SetNested(transformPayload.GetCustom(), "original", skill)
 		eventbus.SetNested(transformPayload.GetCustom(), "transformed", "mechanical_equivalent")
 		eventbus.SetNested(transformPayload.GetCustom(), "reason", "mechanical_world_integrity")
 
@@ -301,7 +301,8 @@ func (b *BanOfWorld) applyConsequence(ev eventbus.Event, violationType string) {
 
 // applyMovementConsequence handles movement violations.
 func (b *BanOfWorld) applyMovementConsequence(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	pa := ev.Path()
+	playerID, _ := pa.GetString("player_id")
 	worldID := eventbus.GetWorldIDFromEvent(ev)
 
 	// Teleport back to original location

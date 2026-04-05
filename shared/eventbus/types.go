@@ -127,3 +127,19 @@ func GetScopeFromEvent(event Event) *ScopeRef {
 func (e *Event) Path() *jsonpath.Accessor {
 	return jsonpath.New(e.Payload)
 }
+
+// GetEntityIDWithFallback извлекает entity ID из события с цепочкой fallback.
+// Проверяет: entity.entity.id → entity.id → entity_id/player_id/actor_id/npc_id
+// Возвращает (*EntityInfo, true) если найден или (nil, false) если нет.
+func (e *Event) GetEntityIDWithFallback() (*EntityInfo, bool) {
+	info := ExtractEntityID(e.Payload)
+	return info, info != nil
+}
+
+// GetTargetEntityID извлекает target entity ID из события с цепочкой fallback.
+// Проверяет: target.entity.id → target.id → target_id/npc_id
+// Возвращает (*EntityInfo, true) если найден или (nil, false) если нет.
+func (e *Event) GetTargetEntityID() (*EntityInfo, bool) {
+	info := ExtractTargetEntityID(e.Payload)
+	return info, info != nil
+}

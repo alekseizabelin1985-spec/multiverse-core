@@ -46,10 +46,9 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 	pa := ev.Path()
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -124,10 +123,9 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 	}
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -191,15 +189,15 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 
 // handleQuestCompletion handles quest completion events.
 func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
+	pa := ev.Path()
 	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
-	questID, _ := ev.Payload["quest_id"].(string)
+	questID, _ := pa.GetString("quest_id")
 	scope := eventbus.GetScopeFromEvent(ev)
 	if scope == nil {
 		return
@@ -230,7 +228,7 @@ func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
 	cg.bus.Publish(context.Background(), eventbus.TopicGameEvents, rewardEvent)
 
 	// Update reputation based on quest type
-	questType, _ := ev.Payload["quest_type"].(string)
+	questType, _ := pa.GetString("quest_type")
 	reputationChange := cg.getReputationChangeForQuest(questType)
 	cg.updateCityReputation(cityID, reputationChange)
 
@@ -242,12 +240,13 @@ func (cg *CityGovernor) handleQuestCompletion(ev eventbus.Event) {
 
 // handleReputationChange handles reputation changes.
 func (cg *CityGovernor) handleReputationChange(ev eventbus.Event) {
+	pa := ev.Path()
 	scope := eventbus.GetScopeFromEvent(ev)
 	if scope == nil {
 		return
 	}
 	cityID := scope.ID
-	change, _ := ev.Payload["change"].(float64)
+	change, _ := pa.GetFloat("change")
 
 	newReputation := cg.getCurrentReputation(cityID) + int(change)
 
@@ -259,25 +258,24 @@ func (cg *CityGovernor) handleReputationChange(ev eventbus.Event) {
 
 // handleNPCInteraction handles NPC interaction events.
 func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
+	pa := ev.Path()
 	// Извлекаем playerID с поддержкой новой структуры (entity.id) и fallback (player_id)
-	playerEntity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if playerEntity != nil && playerEntity.ID != "" {
-		playerID = playerEntity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
-		playerID, _ = ev.Payload["player_id"].(string)
+		playerID, _ = pa.GetString("player_id")
 	}
 
 	// Извлекаем npcID с поддержкой новой структуры (target.entity.id) и fallback (npc_id)
-	npcEntity := eventbus.ExtractTargetEntityID(ev.Payload)
 	var npcID string
-	if npcEntity != nil && npcEntity.ID != "" {
-		npcID = npcEntity.ID
+	if targetInfo, ok := ev.GetTargetEntityID(); ok {
+		npcID = targetInfo.ID
 	} else {
-		npcID, _ = ev.Payload["npc_id"].(string)
+		npcID, _ = pa.GetString("npc_id")
 	}
 
-	interactionType, _ := ev.Payload["interaction_type"].(string)
+	interactionType, _ := pa.GetString("interaction_type")
 	scope := eventbus.GetScopeFromEvent(ev)
 	if scope == nil {
 		return
@@ -311,7 +309,8 @@ func (cg *CityGovernor) handleNPCInteraction(ev eventbus.Event) {
 
 // generateWelcomeQuest generates a welcome quest for new players.
 func (cg *CityGovernor) generateWelcomeQuest(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	pa := ev.Path()
+	playerID, _ := pa.GetString("player_id")
 	scope := eventbus.GetScopeFromEvent(ev)
 	if scope == nil {
 		return
@@ -341,7 +340,8 @@ func (cg *CityGovernor) generateWelcomeQuest(ev eventbus.Event) {
 
 // generateNewQuest generates a new quest after completion.
 func (cg *CityGovernor) generateNewQuest(ev eventbus.Event) {
-	playerID, _ := ev.Payload["player_id"].(string)
+	pa := ev.Path()
+	playerID, _ := pa.GetString("player_id")
 	scope := eventbus.GetScopeFromEvent(ev)
 	if scope == nil {
 		return
