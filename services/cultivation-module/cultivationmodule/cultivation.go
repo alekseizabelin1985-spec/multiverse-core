@@ -46,10 +46,9 @@ func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 	}
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id") // fallback на плоский ключ
 	}
@@ -87,10 +86,9 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 	pa := ev.Path()
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -139,10 +137,9 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 	pa := ev.Path()
 
 	// Извлечение playerID: новая структура entity.id → старая player_id
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -222,9 +219,8 @@ func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
 
 	playerID, _ := pa.GetString("player_id")
 	if playerID == "" {
-		entity := eventbus.ExtractEntityID(ev.Payload)
-		if entity != nil {
-			playerID = entity.ID
+		if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+			playerID = entityInfo.ID
 		}
 	}
 
@@ -291,10 +287,9 @@ func (cm *CultivationModule) mergeDaoPaths(ev eventbus.Event, targetPlan int) {
 	pa := ev.Path()
 
 	// Извлечение playerID с fallback:
-	entity := eventbus.ExtractEntityID(ev.Payload)
 	var playerID string
-	if entity != nil && entity.ID != "" {
-		playerID = entity.ID
+	if entityInfo, ok := ev.GetEntityIDWithFallback(); ok {
+		playerID = entityInfo.ID
 	} else {
 		playerID, _ = pa.GetString("player_id")
 	}
@@ -312,7 +307,9 @@ func (cm *CultivationModule) mergeDaoPaths(ev eventbus.Event, targetPlan int) {
 	} else if paths, ok := pa.GetSlice("dao.original_paths"); ok {
 		originalPaths = paths
 	} else {
-		originalPaths = ev.Payload["original_paths"] // fallback на плоский доступ
+		// WHY: fallback на GetAny безопасен — GetSlice уже проверил отсутствие slice,
+		// GetAny возвращает любое значение по пути без паники
+		originalPaths, _ = pa.GetAny("original_paths")
 	}
 
 	hybridPath := cm.generateHybridPath(originalPaths, targetPlan)

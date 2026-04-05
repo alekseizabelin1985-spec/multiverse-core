@@ -41,6 +41,8 @@ services:
           world_events
           game_events
           system_events
+          scope_management
+          narrative_output
           --brokers redpanda:9092
       "
 
