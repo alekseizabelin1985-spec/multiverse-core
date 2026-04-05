@@ -928,6 +928,21 @@ func (no *NarrativeOrchestrator) dispatchEventToGM(ev eventbus.Event, gm *GMInst
 		})
 		return
 	}
+
+	// Игнорируем события от narrative-orchestrator с тем же scope
+	// Это предотвращает циклическую обработку: GM_A создаёт событие → GM_B обрабатывает → создаёт своё → GM_A обрабатывает
+	if ev.Source == "narrative-orchestrator" {
+		eventScope := eventbus.GetScopeFromEvent(ev)
+		if eventScope != nil && eventScope.ID == gm.ScopeID {
+			gm.mu.Unlock()
+			debugLog(gm.ScopeID, gm.WorldID, "Skipping narrative-orchestrator event with same scope", map[string]interface{}{
+				"event_id":   ev.ID,
+				"event_type": ev.Type,
+			})
+			return
+		}
+	}
+
 	triggers := gm.Config["triggers"]
 	gm.mu.Unlock()
 

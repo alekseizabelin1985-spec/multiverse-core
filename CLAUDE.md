@@ -210,19 +210,20 @@ worldID := eventbus.GetWorldIDFromEvent(event)  // unified access
 
 ```json
 {
-  "event_type": "player.entered_region",
-  "world": {"id": "world-abc"},
+  "type": "player.entered_region",
+  "world": {"entity": {"id": "world-abc", "type": "world"}},
   "scope": {"id": "solo-xyz", "type": "solo"},
-  "entity": {"id": "player-123", "type": "player", "name": "Вася"},
-  "target": {"entity": {"id": "region-456", "type": "region", "name": "Тёмный лес"}},
+  "entity": {"entity": {"id": "player-123", "type": "player"}, "name": "Вася"},
+  "target": {"entity": {"id": "region-456", "type": "region"}, "name": "Тёмный лес"},
   "payload": {"description": "...", "weather": "пасмурно"}
 }
 ```
 
 **Rules for AI-generated events**:
-- `world.id` is REQUIRED (not `world_id`)
-- `scope:{id,type}` is OPTIONAL but preferred over `scope_id`
-- `entity:{id,type,name}` is OPTIONAL but improves context
+- `world.entity.id` is REQUIRED (type="world")
+- `scope:{id,type}` is OPTIONAL (separate concept, no entity wrapper)
+- `entity:{entity:{id,type},name}` is the standard entity format
+- `trigger:{event:{id,type}}` for event references
 - Always validate JSON structure before publishing
 
 ### 📦 Universal `jsonpath` Package

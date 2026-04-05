@@ -385,43 +385,162 @@ func (n *Neo4jClient) GetEntityCache(entityIDs []string) (map[string]EntityInfo,
 	return nil, fmt.Errorf("unexpected result type from GetEntityCache")
 }
 
-// LinkEventToEntities creates RELATED_TO edges from an Event node to Entity nodes
-// whose IDs are found in the event payload. Entity stub nodes are created if missing.
-// Поддерживает как старые ключи (entity_id, source_id), так и новые вложенные структуры
-// (entity: {id}, target: {id}, source: {id}, world: {id}).
-func (n *Neo4jClient) LinkEventToEntities(eventID string, payload map[string]interface{}) error {
-	entityIDs := extractEntityIDsFromPayload(payload)
+// LinkRef описывает ссылку из payload: ключ, ID цели и тип (entity/event)
+type LinkRef struct {
+	RelType  string // имя связи (UPPER_SNAKE_CASE)
+	TargetID string // ID целевого узла
+	IsEvent  bool   // true = ссылка на Event, false = ссылка на Entity
+}
 
-	if len(entityIDs) == 0 {
+// LinkEventToEntities создаёт связи от Event к Entity/Event узлам.
+// Извлекает ссылки ТОЛЬКО с верхнего уровня payload:
+//   - entity, target, source → Entity
+//   - world → Entity (type: world)
+//   - trigger → Event
+//
+// Вложенные ссылки (location.region, payload.world) НЕ создают связей Event→X.
+// Entity↔Entity связи создаются отдельно через relations[].
+func (n *Neo4jClient) LinkEventToEntities(eventID string, payload map[string]interface{}) error {
+	links := extractLinksFromPayload(payload)
+	if len(links) == 0 {
 		return nil
 	}
 
 	session := n.driver.NewSession(neo4j.SessionConfig{DatabaseName: "neo4j"})
 	defer session.Close()
 
-	query := `
-MATCH (ev:Event {id: $event_id})
-UNWIND $entity_ids AS eid
-MERGE (en:Entity {id: eid})
-MERGE (ev)-[:RELATED_TO]->(en)
-`
-	// Use transaction to guarantee the data is committed
-	_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
-		result, runErr := tx.Run(query, map[string]any{
-			"event_id":   eventID,
-			"entity_ids": entityIDs,
-		})
-		if runErr != nil {
-			return nil, runErr
+	// Group links by type (entity vs event)
+	var entityLinks []LinkRef
+	var eventLinks []LinkRef
+	for _, link := range links {
+		if link.IsEvent {
+			eventLinks = append(eventLinks, link)
+		} else {
+			entityLinks = append(entityLinks, link)
 		}
-		// Consume result to ensure query executes and transaction commits
-		_, consumeErr := result.Consume()
-		return nil, consumeErr
-	})
-	if err != nil {
-		return fmt.Errorf("LinkEventToEntities: %w", err)
 	}
+
+	// Event → Entity связи
+	for _, link := range entityLinks {
+		relType := sanitizeRelType(link.RelType)
+		query := fmt.Sprintf(`
+MATCH (ev:Event {id: $event_id})
+MERGE (en:Entity {id: $target_id})
+MERGE (ev)-[r:%s]->(en)
+RETURN r
+`, relType)
+
+		_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+			result, runErr := tx.Run(query, map[string]any{
+				"event_id":  eventID,
+				"target_id": link.TargetID,
+			})
+			if runErr != nil {
+				return nil, runErr
+			}
+			_, consumeErr := result.Consume()
+			return nil, consumeErr
+		})
+		if err != nil {
+			log.Printf("Failed to create %s link Event(%s)→Entity(%s): %v", relType, eventID, link.TargetID, err)
+		}
+	}
+
+	// Event → Event связи
+	for _, link := range eventLinks {
+		relType := sanitizeRelType(link.RelType)
+		query := fmt.Sprintf(`
+MATCH (ev:Event {id: $event_id})
+MERGE (target:Event {id: $target_id})
+MERGE (ev)-[r:%s]->(target)
+RETURN r
+`, relType)
+
+		_, err := session.WriteTransaction(func(tx neo4j.Transaction) (any, error) {
+			result, runErr := tx.Run(query, map[string]any{
+				"event_id":  eventID,
+				"target_id": link.TargetID,
+			})
+			if runErr != nil {
+				return nil, runErr
+			}
+			_, consumeErr := result.Consume()
+			return nil, consumeErr
+		})
+		if err != nil {
+			log.Printf("Failed to create %s link Event(%s)→Event(%s): %v", relType, eventID, link.TargetID, err)
+		}
+	}
+
 	return nil
+}
+
+// extractLinksFromPayload рекурсивно извлекает ВСЕ entity/event ссылки из payload.
+// Имя связи = ключ родителя в UPPER_SNAKE_CASE.
+func extractLinksFromPayload(payload map[string]interface{}) []LinkRef {
+	var links []LinkRef
+	collectLinks(payload, "", &links, make(map[string]bool))
+	return links
+}
+
+// collectLinks рекурсивно обходит payload и собирает ссылки.
+func collectLinks(m map[string]interface{}, parentKey string, links *[]LinkRef, seen map[string]bool) {
+	for key, val := range m {
+		nested, ok := val.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if entityRef, ok := nested["entity"].(map[string]interface{}); ok {
+			if id, ok := entityRef["id"].(string); ok && id != "" {
+				lk := key
+				if lk == "" {
+					lk = "RELATED_TO"
+				}
+				lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+				nid := normalizeEntityID(id)
+				ck := "e:" + nid + ":" + lk
+				if !seen[ck] {
+					seen[ck] = true
+					*links = append(*links, LinkRef{lk, nid, false})
+				}
+			}
+		}
+		if eventRef, ok := nested["event"].(map[string]interface{}); ok {
+			if id, ok := eventRef["id"].(string); ok && id != "" {
+				lk := key
+				if lk == "" {
+					lk = "TRIGGER"
+				}
+				lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+				ck := "v:" + id + ":" + lk
+				if !seen[ck] {
+					seen[ck] = true
+					*links = append(*links, LinkRef{lk, id, true})
+				}
+				continue // не проваливаемся в event
+			}
+		}
+		if parentKey != "event" && parentKey != "entity" {
+			if _, he := nested["entity"]; !he {
+				if _, hv := nested["event"]; !hv {
+					if id, ok := nested["id"].(string); ok && id != "" {
+						lk := key
+						if lk == "" {
+							lk = "RELATED_TO"
+						}
+						lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+						nid := normalizeEntityID(id)
+						ck := "f:" + nid + ":" + lk
+						if !seen[ck] {
+							seen[ck] = true
+							*links = append(*links, LinkRef{lk, nid, false})
+						}
+					}
+				}
+			}
+		}
+		collectLinks(nested, key, links, seen)
+	}
 }
 
 // extractEntityIDsFromPayload извлекает все entity ID из payload события.
