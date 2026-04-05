@@ -598,3 +598,7 @@ curl http://localhost:8088/health  # Game Service
 
 > **"Мы не строим миры. Мы создаём условия для того, чтобы миры строили себя сами."**
 > *— Философия Living Worlds, 2026*
+
+## Qwen Added Memories
+- Multiverse-core использует EntityRef формат для всех ссылочных полей в payload событий. Формат: {"entity":{"entity":{"id":"xxx","type":"player"}}, "world":{"entity":{"id":"yyy","type":"world"}}, "trigger":{"event":{"id":"zzz","type":"event"}}}. Neo4j автоматически создаёт связи из payload ключей: (ev)-[:ENTITY]->(entity), (ev)-[:WORLD]->(world), (ev)-[:TRIGGER]->(event). Entity↔Entity связи через relations[]. Ветка: refactor/entity-ref-unification.
+- EntityRef формат — единый стандарт ссылок в payload событий. Все entity ссылки: {"entity":{"entity":{"id":"xxx","type":"player"}}}. Все event ссылки: {"trigger":{"event":{"id":"evt","type":"event"}}}. Типы: EntityRef{id,type}, WorldRef{entity:EntityRef}, Entity{entity:EntityRef,name,...}. Neo4j collectLinks рекурсивно обходит payload, имя связи = ключ родителя в UPPER_SNAKE_CASE. Fallback пропускает parentKey="event"/"entity". Event→Event через MERGE target узла. Entity↔Entity через relations[]. События time.syncTime/gm.split/gm.merged/gm.deleted/gm.created пропускаются индексацией. GM игнорирует narrative-orchestrator события с тем же scope.
