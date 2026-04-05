@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -58,7 +59,8 @@ func (ac *ArchivistClient) SaveSchema(ctx context.Context, schemaType, name, ver
 	}
 
 	// Логируем успешное сохранение с кодом статуса
-	fmt.Printf("DEBUG: Archivist returned status %d for saving schema %s/%s/%s\n", resp.StatusCode, schemaType, name, version)
+	log.Printf("[Archivist] Successfully saved schema %s/%s v%s (status: %d)",
+		schemaType, name, version, resp.StatusCode)
 	return nil
 
 }

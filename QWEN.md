@@ -91,9 +91,21 @@ qdrant:6333/6334     # Alternative vector DB
 | **entity-actor** | - | Нейронные агенты для автономных сущностей (Living Worlds) | ✅ Neural state |
 | **evolution-watcher** | - | Детекция эволюции и аномалий в поведении | ✅ Anomaly models |
 | **rule-engine** | - | Применение универсальных правил к типам сущностей | ✅ Rule sets |
-| **qdrant** | 6333/6334 | Альтернативная векторная база данных | ✅ Vector store |
 
-**Примечание**: `ascension-oracle` отсутствует в main branch — функциональность покрыта через `universe-genesis-oracle` и интеграцию с Qwen3.
+**Примечания**:
+- `ascension-oracle` отсутствует в main branch — функциональность покрыта через `universe-genesis-oracle` и интеграцию с Qwen3
+- **Qdrant** — это инфраструктурный компонент (векторная БД), а не Go-сервис
+
+### Порты сервисов
+
+| Сервис | Порт по умолчанию | Порт в Docker Compose |
+|--------|-------------------|------------------------|
+| semantic-memory | 8080 | 8082 |
+| ontological-archivist | 8081 | 8083 |
+| game-service | 8080 | 8088 |
+| qdrant (infra) | 6333/6334 | 6333/6334 |
+
+**Важно**: Docker Compose переопределяет порты через `HTTP_ADDR` для избежания конфликтов.
 
 ---
 
@@ -136,6 +148,7 @@ make logs-service SERVICE=entity-manager
 |---------|----------|
 | `make build` | Собрать все сервисы (Docker) |
 | `make build-service SERVICE=<name>` | Собрать конкретный сервис (Linux binary) |
+| `make build-all` | Собрать все сервисы локально (Linux binaries) |
 | `make up` | Запустить все сервисы через Docker Compose |
 | `make run SERVICE=<name>` | Запустить конкретный сервис |
 | `make down` | Остановить все сервисы |
@@ -144,6 +157,9 @@ make logs-service SERVICE=entity-manager
 | `make clean` | Очистить артефакты сборки |
 | `make test` | Запустить все тесты |
 | `make test-service SERVICE=<name>` | Тесты конкретного сервиса |
+| `make test-shared` | Тестировать только shared модули |
+| `make sync` | Синхронизировать go workspace |
+| `make help` | Показать справу по всем командам |
 
 ### Local Development
 

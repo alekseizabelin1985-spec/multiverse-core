@@ -583,7 +583,22 @@ func (no *NarrativeOrchestrator) HandleTimerEvent(ev eventbus.Event) {
 		})
 		return
 	}
-	currentTimeMs := int64(currentTimeMsRaw.(float64))
+	
+	var currentTimeMs int64
+	switch v := currentTimeMsRaw.(type) {
+	case float64:
+		currentTimeMs = int64(v)
+	case int:
+		currentTimeMs = int64(v)
+	case int64:
+		currentTimeMs = v
+	default:
+		warnLog("", worldID, "Timer event has invalid current_time_unix_ms type", map[string]interface{}{
+			"event_id": ev.ID,
+			"type":     fmt.Sprintf("%T", currentTimeMsRaw),
+		})
+		return
+	}
 
 	no.mu.RLock()
 	gms := make([]*GMInstance, 0, len(no.gms))

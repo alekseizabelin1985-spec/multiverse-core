@@ -157,9 +157,17 @@ func (m *Manager) HandleEvent(ev eventbus.Event) {
 			for _, snapRaw := range snapshots {
 				if snapMap, ok := snapRaw.(map[string]interface{}); ok {
 					// Convert map to Entity
-					data, _ := json.Marshal(snapMap)
+					data, err := json.Marshal(snapMap)
+					if err != nil {
+						log.Printf("Failed to marshal snapshot for entity: %v", err)
+						continue
+					}
+					
 					var ent entity.Entity
-					json.Unmarshal(data, &ent)
+					if err := json.Unmarshal(data, &ent); err != nil {
+						log.Printf("Failed to unmarshal entity: %v", err)
+						continue
+					}
 
 					if err := m.saveSnapshotToMinIO(ctx, &ent, &ev); err != nil {
 						log.Printf("Failed to save snapshot for %s: %v", ent.ID, err)
