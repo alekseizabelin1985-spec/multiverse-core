@@ -401,7 +401,7 @@ type LinkRef struct {
 // Вложенные ссылки (location.region, payload.world) НЕ создают связей Event→X.
 // Entity↔Entity связи создаются отдельно через relations[].
 func (n *Neo4jClient) LinkEventToEntities(eventID string, payload map[string]interface{}) error {
-	links := extractTopLevelLinks(payload)
+	links := extractLinksFromPayload(payload)
 	if len(links) == 0 {
 		return nil
 	}
@@ -475,68 +475,72 @@ RETURN r
 	return nil
 }
 
-// extractTopLevelLinks извлекает ссылки ТОЛЬКО с верхнего уровня payload.
-// Поддерживаемые ключи: entity, target, source, world, trigger.
-// Вложенные ссылки (location.region, payload.world) игнорируются.
-func extractTopLevelLinks(payload map[string]interface{}) []LinkRef {
+// extractLinksFromPayload рекурсивно извлекает ВСЕ entity/event ссылки из payload.
+// Имя связи = ключ родителя в UPPER_SNAKE_CASE.
+func extractLinksFromPayload(payload map[string]interface{}) []LinkRef {
 	var links []LinkRef
-	seen := make(map[string]bool)
-
-	// Ключи верхнего уровня для Entity ссылок
-	entityKeys := []string{"entity", "target", "source", "world"}
-	for _, key := range entityKeys {
-		if nested, ok := payload[key].(map[string]interface{}); ok {
-			// Новая структура: {key: {entity: {id, type}}}
-			if entityRef, ok := nested["entity"].(map[string]interface{}); ok {
-				if id, ok := entityRef["id"].(string); ok && id != "" {
-					normalizedID := normalizeEntityID(id)
-					cacheKey := "entity:" + normalizedID + ":" + key
-					if !seen[cacheKey] {
-						seen[cacheKey] = true
-						links = append(links, LinkRef{
-							RelType:  strings.ToUpper(key),
-							TargetID: normalizedID,
-							IsEvent:  false,
-						})
-					}
-				}
-			} else if id, ok := nested["id"].(string); ok && id != "" {
-				// Fallback: {key: {id, type}}
-				normalizedID := normalizeEntityID(id)
-				cacheKey := "entity_fallback:" + normalizedID + ":" + key
-				if !seen[cacheKey] {
-					seen[cacheKey] = true
-					links = append(links, LinkRef{
-						RelType:  strings.ToUpper(key),
-						TargetID: normalizedID,
-						IsEvent:  false,
-					})
-				}
-			}
-		}
-	}
-
-	// Ключи верхнего уровня для Event ссылок
-	eventKeys := []string{"trigger", "source_event", "parent_event"}
-	for _, key := range eventKeys {
-		if nested, ok := payload[key].(map[string]interface{}); ok {
-			if eventRef, ok := nested["event"].(map[string]interface{}); ok {
-				if id, ok := eventRef["id"].(string); ok && id != "" {
-					cacheKey := "event:" + id + ":" + key
-					if !seen[cacheKey] {
-						seen[cacheKey] = true
-						links = append(links, LinkRef{
-							RelType:  strings.ToUpper(key),
-							TargetID: id,
-							IsEvent:  true,
-						})
-					}
-				}
-			}
-		}
-	}
-
+	collectLinks(payload, "", &links, make(map[string]bool))
 	return links
+}
+
+// collectLinks рекурсивно обходит payload и собирает ссылки.
+func collectLinks(m map[string]interface{}, parentKey string, links *[]LinkRef, seen map[string]bool) {
+	for key, val := range m {
+		nested, ok := val.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if entityRef, ok := nested["entity"].(map[string]interface{}); ok {
+			if id, ok := entityRef["id"].(string); ok && id != "" {
+				lk := key
+				if lk == "" {
+					lk = "RELATED_TO"
+				}
+				lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+				nid := normalizeEntityID(id)
+				ck := "e:" + nid + ":" + lk
+				if !seen[ck] {
+					seen[ck] = true
+					*links = append(*links, LinkRef{lk, nid, false})
+				}
+			}
+		}
+		if eventRef, ok := nested["event"].(map[string]interface{}); ok {
+			if id, ok := eventRef["id"].(string); ok && id != "" {
+				lk := key
+				if lk == "" {
+					lk = "TRIGGER"
+				}
+				lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+				ck := "v:" + id + ":" + lk
+				if !seen[ck] {
+					seen[ck] = true
+					*links = append(*links, LinkRef{lk, id, true})
+				}
+				continue // не проваливаемся в event
+			}
+		}
+		if parentKey != "event" && parentKey != "entity" {
+			if _, he := nested["entity"]; !he {
+				if _, hv := nested["event"]; !hv {
+					if id, ok := nested["id"].(string); ok && id != "" {
+						lk := key
+						if lk == "" {
+							lk = "RELATED_TO"
+						}
+						lk = strings.ToUpper(strings.ReplaceAll(lk, ".", "_"))
+						nid := normalizeEntityID(id)
+						ck := "f:" + nid + ":" + lk
+						if !seen[ck] {
+							seen[ck] = true
+							*links = append(*links, LinkRef{lk, nid, false})
+						}
+					}
+				}
+			}
+		}
+		collectLinks(nested, key, links, seen)
+	}
 }
 
 // extractEntityIDsFromPayload извлекает все entity ID из payload события.
