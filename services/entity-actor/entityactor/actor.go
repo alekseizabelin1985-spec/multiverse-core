@@ -594,23 +594,3 @@ func (a *Actor) Stop() {
 	a.saveSnapshot()
 	a.saveToRedis()
 }
-
-// Вспомогательные функции для совместимости со старым кодом и jsonpath
-
-// getString извлекает строку из map с fallback — устаревшая, используйте jsonpath.Accessor
-// Deprecated: используйте event.Path().GetString(path) вместо этого
-func getString(m map[string]interface{}, key, fallback string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return fallback
-}
-
-// getStringFromEvent извлекает строку из события с поддержкой новой и старой структуры — универсальная версия
-func getStringFromEvent(event eventbus.Event, path string, fallback string) string {
-	pa := event.Path()
-	if val, ok := pa.GetString(path); ok {
-		return val
-	}
-	return fallback
-}
