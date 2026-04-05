@@ -350,26 +350,46 @@ func (w *Watcher) handleEvent(event eventbus.Event) {
 			"severity", severity)
 
 		// Создаем событие о нарушении
-		w.publishViolation(eventID, stored.EntityID, anomalyType, severity)
+		entityType := ""
+		if entityInfo := eventbus.ExtractEntityID(event.Payload); entityInfo != nil {
+			entityType = entityInfo.Type
+		}
+		w.publishViolation(eventID, stored.EntityID, entityType, anomalyType, severity)
 
 		// Отправляем контекст в Oracle для генерации правила
 		w.sendToOracle(stored)
 	}
 }
 
-// publishViolation публикует событие о нарушении
-func (w *Watcher) publishViolation(eventID, entityID, anomalyType string, severity float32) {
-	violationEvent := eventbus.NewEvent(
+// publishViolation публикует событие о нарушении в новом формате EntityRef
+func (w *Watcher) publishViolation(eventID, entityID, entityType, anomalyType string, severity float32) {
+	payload := eventbus.NewEventPayload().
+		WithWorld(w.worldID)
+
+	// Entity ссылка в новом формате
+	if entityID != "" {
+		eType := entityType
+		if eType == "" {
+			eType = "unknown"
+		}
+		eventbus.SetNested(payload.GetCustom(), "entity.entity.id", entityID)
+		eventbus.SetNested(payload.GetCustom(), "entity.entity.type", eType)
+	}
+
+	// Trigger event ссылка
+	eventbus.SetNested(payload.GetCustom(), "trigger.entity.id", eventID)
+	eventbus.SetNested(payload.GetCustom(), "trigger.entity.type", "event")
+
+	// Мета данные аномалии
+	eventbus.SetNested(payload.GetCustom(), "anomaly_type", anomalyType)
+	eventbus.SetNested(payload.GetCustom(), "severity", severity)
+	eventbus.SetNested(payload.GetCustom(), "timestamp", time.Now().Unix())
+
+	violationEvent := eventbus.NewStructuredEvent(
 		"violation.integrity",
 		"evolution-watcher",
 		w.worldID,
-		map[string]interface{}{
-			"entity_id":     entityID,
-			"anomaly_type":  anomalyType,
-			"severity":      severity,
-			"trigger_event": eventID,
-			"timestamp":     time.Now().Unix(),
-		},
+		payload,
 	)
 
 	w.eventBus.Publish(context.Background(), eventbus.TopicSystemEvents, violationEvent)
