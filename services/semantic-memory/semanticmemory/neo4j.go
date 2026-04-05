@@ -530,22 +530,25 @@ func collectLinks(m map[string]interface{}, parentKey string, links *[]LinkRef, 
 		}
 
 		// Fallback для старых форматов: {key: {id, type}} без обёртки entity/event
-		if _, hasEntity := nested["entity"]; !hasEntity {
-			if _, hasEvent := nested["event"]; !hasEvent {
-				if id, ok := nested["id"].(string); ok && id != "" {
-					linkKey := key
-					if linkKey == "" {
-						linkKey = "RELATED_TO"
-					}
-					linkKey = strings.ToUpper(strings.ReplaceAll(linkKey, ".", "_"))
-					cacheKey := "entity_fallback:" + id + ":" + linkKey
-					if !seen[cacheKey] {
-						seen[cacheKey] = true
-						*links = append(*links, LinkRef{
-							RelType:  linkKey,
-							TargetID: normalizeEntityID(id),
-							IsEvent:  false,
-						})
+		// Пропускаем если parentKey = "event" или "entity" — мы уже обработали это выше
+		if parentKey != "event" && parentKey != "entity" {
+			if _, hasEntity := nested["entity"]; !hasEntity {
+				if _, hasEvent := nested["event"]; !hasEvent {
+					if id, ok := nested["id"].(string); ok && id != "" {
+						linkKey := key
+						if linkKey == "" {
+							linkKey = "RELATED_TO"
+						}
+						linkKey = strings.ToUpper(strings.ReplaceAll(linkKey, ".", "_"))
+						cacheKey := "entity_fallback:" + id + ":" + linkKey
+						if !seen[cacheKey] {
+							seen[cacheKey] = true
+							*links = append(*links, LinkRef{
+								RelType:  linkKey,
+								TargetID: normalizeEntityID(id),
+								IsEvent:  false,
+							})
+						}
 					}
 				}
 			}
