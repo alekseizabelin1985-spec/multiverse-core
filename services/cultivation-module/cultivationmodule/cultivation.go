@@ -73,7 +73,7 @@ func (cm *CultivationModule) processSkillUsage(ev eventbus.Event) {
 
 	// Сохраняем также иерархические пути для совместимости с LLM:
 	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 
 	progressEvent := eventbus.NewStructuredEvent("cultivation.progress.updated", "cultivation-module", worldID, payload)
 	progressEvent.ID = "cult-progress-" + uuid.New().String()[:8]
@@ -121,7 +121,7 @@ func (cm *CultivationModule) handleAscension(ev eventbus.Event) {
 
 	// Иерархические пути для LLM-совместимости:
 	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 	eventbus.SetNested(payload.GetCustom(), "ascension.from_plan", fromPlan)
 	eventbus.SetNested(payload.GetCustom(), "ascension.to_plan", toPlan)
 
@@ -177,7 +177,7 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(successPayload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(successPayload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(successPayload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(successPayload.GetCustom(), "dao.interaction.target", targetDao)
 		eventbus.SetNested(successPayload.GetCustom(), "dao.interaction.type", interactionType)
 
@@ -197,7 +197,7 @@ func (cm *CultivationModule) handleDaoInteraction(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(conflictPayload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(conflictPayload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(conflictPayload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(conflictPayload.GetCustom(), "dao.conflict.target", targetDao)
 		eventbus.SetNested(conflictPayload.GetCustom(), "dao.conflict.type", interactionType)
 		eventbus.SetNested(conflictPayload.GetCustom(), "consequences", []string{"spiritual_damage", "path_instability"})
@@ -252,7 +252,7 @@ func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.id", formID)
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.type", formType)
 
@@ -273,7 +273,7 @@ func (cm *CultivationModule) handleCultivationForm(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.id", formID)
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.type", formType)
 		eventbus.SetNested(payload.GetCustom(), "cultivation.form.violation", "ontology_mismatch")
@@ -329,7 +329,7 @@ func (cm *CultivationModule) mergeDaoPaths(ev eventbus.Event, targetPlan int) {
 
 	// Иерархические пути для LLM:
 	eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-	eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 	eventbus.SetNested(payload.GetCustom(), "dao.merger.plan", targetPlan)
 	eventbus.SetNested(payload.GetCustom(), "dao.merger.result", "hybrid_formed")
 

@@ -82,7 +82,7 @@ func (b *BanOfWorld) checkSkillUsage(ev eventbus.Event) {
 
 		// Иерархические пути для LLM:
 		eventbus.SetNested(payload.GetCustom(), "entity.id", playerID)
-		eventbus.SetNested(payload.GetCustom(), "world.id", worldID)
+		eventbus.SetNested(payload.GetCustom(), "world.entity.id", worldID)
 		eventbus.SetNested(payload.GetCustom(), "violation.skill", skill)
 		eventbus.SetNested(payload.GetCustom(), "violation.type", violationType)
 
@@ -309,7 +309,7 @@ func (b *BanOfWorld) applyMovementConsequence(ev eventbus.Event) {
 		ID:     "teleport-" + uuid.New().String()[:8],
 		Type:   "player.teleported",
 		Source: "ban-of-world",
-		World:  &eventbus.WorldRef{ID: worldID},
+		World:  &eventbus.WorldRef{Entity: eventbus.EntityRef{ID: worldID, Type: "world"}},
 		Payload: map[string]interface{}{
 			"player_id":   playerID,
 			"destination": worldID, // Back to original world

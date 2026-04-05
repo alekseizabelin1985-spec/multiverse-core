@@ -139,6 +139,18 @@ func (i *Indexer) HandleEvent(ev eventbus.Event) {
 		return
 	}
 
+	// Пропускаем технические события narrative-orchestrator
+	skippedTypes := map[string]bool{
+		"time.syncTime": true,
+		"gm.split":      true,
+		"gm.merged":     true,
+		"gm.deleted":    true,
+		"gm.created":    true,
+	}
+	if skippedTypes[ev.Type] {
+		return
+	}
+
 	// Process all events, not just entity-related events
 	ctx := context.Background()
 
@@ -267,8 +279,8 @@ func (i *Indexer) saveEventToNeo4j(_ context.Context, ev eventbus.Event) error {
 			// Fallback — не блокируем сохранение события
 		} else {
 			log.Printf("Applied %d explicit relations for event %s (total: %d)", len(ev.Relations), ev.ID, i.Metrics.ExplicitCount)
-			return nil
 		}
+		// Не return — продолжаем к LinkEventToEntities для создания связей Event→Entity
 	}
 
 	// Fallback: старая логика для обратной совместимости (события без relations)
@@ -351,9 +363,14 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 	// Используем универсальное извлечение с поддержкой новой и старой структуры:
 	pa := ev.Path()
 
-	entityID, ok := pa.GetString("entity.id")
-	if !ok {
-		// Fallback на старую структуру
+	// Новая структура: entity: {entity: {id, type}, name, ...}
+	entityID, ok := pa.GetString("entity.entity.id")
+	if !ok || entityID == "" {
+		// Fallback на старую: entity: {id, type}
+		entityID, ok = pa.GetString("entity.id")
+	}
+	if !ok || entityID == "" {
+		// Fallback на legacy: entity_id
 		entityID, ok = pa.GetString("entity_id")
 	}
 	if !ok || entityID == "" {
@@ -361,7 +378,10 @@ func (i *Indexer) processEntityEvent(ctx context.Context, ev eventbus.Event) {
 		return
 	}
 
-	entityType, _ := pa.GetString("entity.type")
+	entityType, _ := pa.GetString("entity.entity.type")
+	if entityType == "" {
+		entityType, _ = pa.GetString("entity.type")
+	}
 	if entityType == "" {
 		entityType, _ = pa.GetString("entity_type")
 	}

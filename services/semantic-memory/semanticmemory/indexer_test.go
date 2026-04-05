@@ -95,7 +95,7 @@ func TestNeo4jGraphMode(t *testing.T) {
 	} else if eventData.Type != "player.action.attack" {
 		t.Errorf("Expected event type 'player.action.attack', got '%s'", eventData.Type)
 	}
-	if eventData.World == nil || eventData.World.ID != "test-world" {
+	if eventData.World == nil || eventData.World.Entity.ID != "test-world" {
 		t.Errorf("Expected world_id 'test-world', got '%v'", eventData.World)
 	}
 

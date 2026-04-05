@@ -88,7 +88,7 @@ func (cg *CityGovernor) handlePlayerEntry(ev eventbus.Event) {
 
 	// Иерархические пути для LLM:
 	eventbus.SetNested(npcPayload.GetCustom(), "entity.id", playerID)
-	eventbus.SetNested(npcPayload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(npcPayload.GetCustom(), "world.entity.id", worldID)
 	eventbus.SetNested(npcPayload.GetCustom(), "scope.id", cityID)
 	eventbus.SetNested(npcPayload.GetCustom(), "scope.type", "city")
 
@@ -158,7 +158,7 @@ func (cg *CityGovernor) handleViolation(ev eventbus.Event) {
 
 	// Иерархические пути для LLM:
 	eventbus.SetNested(consequencePayload.GetCustom(), "entity.id", playerID)
-	eventbus.SetNested(consequencePayload.GetCustom(), "world.id", worldID)
+	eventbus.SetNested(consequencePayload.GetCustom(), "world.entity.id", worldID)
 	eventbus.SetNested(consequencePayload.GetCustom(), "scope.id", cityID)
 	eventbus.SetNested(consequencePayload.GetCustom(), "scope.type", "city")
 	eventbus.SetNested(consequencePayload.GetCustom(), "violation.type", violationType)
