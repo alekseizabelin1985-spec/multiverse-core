@@ -162,7 +162,7 @@ The system implements:
 ## 🛠️ Prerequisites
 
 - Docker and Docker Compose
-- Go 1.25+
+- Go 1.24.0
 - Git
 
 ## 📦 Installation

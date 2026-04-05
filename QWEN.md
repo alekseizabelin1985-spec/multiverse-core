@@ -13,7 +13,7 @@
 | **Event-Driven Architecture (EDA)** | Все взаимодействия происходят через события в единой шине (Redpanda) |
 | **Слабое связывание** | Сервисы знают только о событиях, а не друг о друге |
 | **Stateful Services с восстановлением** | Каждый сервис хранит состояние и восстанавливается через snapshot + replay |
-| **Генеративность над скриптами** | Qwen3 создаёт уникальные исходы вместо预设ленных реакций |
+| **Генеративность над скриптами** | Qwen3 создаёт уникальные исходы вместо preset реакций |
 | **Онтологическая осознанность** | Знания о мире влияют на логику через онтологические профили |
 
 ---
@@ -22,7 +22,7 @@
 
 | Компонент | Технология | Назначение |
 |-----------|------------|------------|
-| **Язык** | Go 1.25 | Основной язык разработки |
+| **Язык** | Go 1.24.0 | Основной язык разработки |
 | **Event Streaming** | Redpanda v24.2.5 | Шина событий (Kafka-совместимая) |
 | **Object Storage** | MinIO | Хранение снапшотов, онтологий, артефактов |
 | **Vector Database** | ChromaDB + Qdrant | Семантическая память, RAG, эмбеддинги |
@@ -34,14 +34,13 @@
 ### Go Dependencies (ключевые)
 
 ```go
-github.com/amikos-tech/chroma-go v0.3.4    // ChromaDB клиент
-github.com/minio/minio-go/v7 v7.0.95       // MinIO клиент
-github.com/neo4j/neo4j-go-driver/v5 v5.28.4 // Neo4j драйвер
-github.com/segmentio/kafka-go v0.4.49      // Kafka/Redpanda клиент
-github.com/gorilla/mux v1.8.1              // HTTP роутинг
 github.com/google/uuid v1.6.0              // UUID генерация
+github.com/minio/minio-go/v7 v7.0.95       // MinIO клиент
+github.com/segmentio/kafka-go v0.4.49      // Kafka/Redpanda клиент
 github.com/xeipuuv/gojsonschema v1.2.0     // JSON Schema валидация
-go.uber.org/zap v1.27.0                    // Структурированное логирование
+github.com/stretchr/testify v1.11.1        // Тестирование
+github.com/yalue/onnxruntime_go v1.22.0    // ONNX Runtime (для ML)
+gopkg.in/yaml.v3 v3.0.1                    // YAML конфигурация
 ```
 
 ---
@@ -85,7 +84,6 @@ qdrant:6333/6334     # Alternative vector DB
 | **cultivation-module** | - | Система культивации: навыки, dao, ascension | ✅ Player profiles |
 | **reality-monitor** | - | Агрегация метрик, публикация аномалий | ✅ Aggregated metrics |
 | **plan-manager** | - | Переходы между планами, fusion zones | ✅ Plane graph (DAG) |
-| **ascension-oracle** | - | AI-оракул для уникальных исходов ascension | ❌ Stateless (HTTP) |
 | **semantic-memory** | 8082 | Векторные эмбеддинги + граф знаний для RAG | ✅ ChromaDB + Neo4j |
 | **ontological-archivist** | 8083 | Хранение и эволюция онтологических схем | ✅ Versioned schemas |
 | **universe-genesis-oracle** | - | Генерация фундаментальной иерархии вселенной | ❌ Stateless/one-time |
@@ -93,6 +91,9 @@ qdrant:6333/6334     # Alternative vector DB
 | **entity-actor** | - | Нейронные агенты для автономных сущностей (Living Worlds) | ✅ Neural state |
 | **evolution-watcher** | - | Детекция эволюции и аномалий в поведении | ✅ Anomaly models |
 | **rule-engine** | - | Применение универсальных правил к типам сущностей | ✅ Rule sets |
+| **qdrant** | 6333/6334 | Альтернативная векторная база данных | ✅ Vector store |
+
+**Примечание**: `ascension-oracle` отсутствует в main branch — функциональность покрыта через `universe-genesis-oracle` и интеграцию с Qwen3.
 
 ---
 
@@ -101,7 +102,7 @@ qdrant:6333/6334     # Alternative vector DB
 ### Prerequisites
 
 - Docker и Docker Compose
-- Go 1.25+
+- Go 1.24.0
 - Git
 - (Опционально) MinIO CLI (`mc`) для отладки
 
@@ -151,7 +152,7 @@ make logs-service SERVICE=entity-manager
 docker-compose up -d redpanda minio chromadb neo4j
 
 # Запустить сервис локально (на примере entity-manager)
-cd cmd/entity-manager
+cd services/entity-manager/cmd/entity-manager
 KAFKA_BROKERS=localhost:9092 \
 MINIO_ENDPOINT=localhost:9000 \
 MINIO_ACCESS_KEY=minioadmin \
@@ -179,7 +180,7 @@ docker build \
 
 ### Код
 
-- **Язык**: Go 1.25
+- **Язык**: Go 1.24.0
 - **CGO**: `CGO_ENABLED=0` для всех сервисов, кроме `semantic-memory`
 - **JSON Schema**: Draft 7 для валидации payload сущностей
 - **UUID**: Использовать `github.com/google/uuid` для event_id и entity_id
@@ -206,6 +207,94 @@ type Event struct {
     Timestamp time.Time              `json:"timestamp"`
     Payload   map[string]interface{} `json:"payload"`  // Динамический!
 }
+```
+
+### 🔀 Event Access Patterns (MANDATORY)
+
+```go
+// ✅ ALWAYS use for reading event data:
+pa := event.Path()  // *jsonpath.Accessor
+
+// Extract with fallback chain — NEW format: entity.entity.id
+entityID, _ := pa.GetString("entity.entity.id")
+if entityID == "" {
+    entityID, _ = pa.GetString("entity.id")  // fallback previous format
+}
+if entityID == "" {
+    entityID, _ = pa.GetString("entity_id")  // fallback legacy
+}
+
+// World/Scope: use unified helpers
+worldID := eventbus.GetWorldIDFromEvent(event)  // reads event.World.Entity.ID
+scope := eventbus.GetScopeFromEvent(event)      // returns *ScopeRef{ID, Type}
+
+// Type-safe getters for any depth:
+level, _ := pa.GetInt("entity.stats.level")
+active, _ := pa.GetBool("entity.active")
+items, _ := pa.GetSlice("entity.inventory")
+
+// Array access by index:
+firstItem, _ := pa.GetString("entity.inventory[0].name")
+
+// Quick existence check:
+if pa.Has("quest.objectives") { /* ... */ }
+```
+
+### 📝 Creating Events (MANDATORY)
+
+```go
+// ✅ ALWAYS use builder for new events:
+payload := eventbus.NewEventPayload().
+    WithEntity(id, entityType, name).
+    WithScope(scopeID, scopeType).  // solo/group/city/region/quest
+    WithWorld(worldID)
+
+// Add custom fields with dot-notation — use entity/event reference format:
+eventbus.SetNested(payload.GetCustom(), "entity.entity.id", entityID)
+eventbus.SetNested(payload.GetCustom(), "entity.entity.type", entityType)
+eventbus.SetNested(payload.GetCustom(), "trigger.event.id", triggerEventID)
+eventbus.SetNested(payload.GetCustom(), "trigger.event.type", "event")
+
+event := eventbus.NewStructuredEvent(type, source, worldID, payload)
+bus.Publish(ctx, topic, event)
+```
+
+### 🕸️ EntityRef Format (ALL References)
+
+Все ссылки на сущности/события в payload используют единый формат:
+
+```json
+{
+  "entity":  {"entity": {"id": "player-123", "type": "player"}},
+  "target":  {"entity": {"id": "sword-456", "type": "item"}},
+  "world":   {"entity": {"id": "world-789", "type": "world"}},
+  "trigger": {"event":  {"id": "evt-abc", "type": "event"}}
+}
+```
+
+Neo4j автоматически создаёт связи из payload ключей:
+- `(ev)-[:ENTITY]->(player-123:Entity)`
+- `(ev)-[:TARGET]->(sword-456:Entity)`
+- `(ev)-[:WORLD]->(world-789:Entity)`
+- `(ev)-[:TRIGGER]->(evt-abc:Event)`
+
+Entity↔Entity связи создаются через `relations[]` массив.
+
+### ⚠️ Deprecated Patterns (AVOID in new code)
+
+```go
+// ❌ DON'T use direct map access (panics on missing/wrong type):
+entityID := event.Payload["entity_id"].(string)
+worldID := event.WorldID
+
+// ❌ DON'T create events with manual maps:
+event := eventbus.Event{Payload: map[string]interface{}{...}}
+
+// ❌ DON'T use flat reference fields:
+payload["entity_id"] = id
+payload["world_id"] = worldID
+
+// ✅ USE the patterns above instead
 ```
 
 ### Entity Paths (dot notation)
@@ -355,37 +444,56 @@ CACHE_TTL=5m
 
 ```
 multiverse-core/
-├── cmd/                          # Точки входа сервисов
+├── services/                     # Все сервисы (16 штук)
 │   ├── entity-manager/
-│   │   └── main.go
+│   │   ├── cmd/
+│   │   │   └── main.go          # Точка входа
+│   │   ├── entitymanager/       # Бизнес-логика
+│   │   │   ├── service.go
+│   │   │   ├── manager.go
+│   │   │   └── operations.go
+│   │   ├── go.mod
+│   │   └── AGENTS.md            # Service-specific guide
 │   ├── narrative-orchestrator/
 │   ├── semantic-memory/
-│   └── ... (15 сервисов)
+│   ├── entity-actor/            # Living Worlds
+│   ├── evolution-watcher/       # Living Worlds
+│   ├── rule-engine/             # Living Worlds
+│   └── ... (16 сервисов всего)
 │
-├── services/                     # Бизнес-логика сервисов
-│   ├── entitymanager/
-│   │   ├── service.go           # Start/Stop, Config
-│   │   ├── manager.go           # HandleEvent, MinIO ops
-│   │   ├── operations.go        # OperationType constants
-│   │   └── AGENTS.md            # Service-specific guide
-│   ├── narrativeorchestrator/
-│   ├── semanticmemory/
-│   └── ... (15 сервисов)
-│
-├── internal/                     # Общие пакеты
+├── shared/                       # Общие пакеты (12 пакетов)
 │   ├── config/                  # Конфигурация
 │   ├── entity/                  # Entity структура
 │   ├── eventbus/                # EventBus, Event types, Topics
+│   ├── intent/                  # Oracle intent recognition
+│   ├── jsonpath/                # Universal dot-path access
 │   ├── minio/                   # MinIO клиенты
 │   ├── oracle/                  # Oracle HTTP клиент
+│   ├── redis/                   # Redis клиенты
+│   ├── rules/                   # Rule engine core
 │   ├── schema/                  # JSON Schema валидация
-│   └── spatial/                 # Пространственные утилиты
+│   ├── spatial/                 # Пространственные утилиты
+│   └── tinyml/                  # TinyML модели
 │
 ├── Docs/                         # Документация
 │   ├── architecture.md          # Общая архитектура
-│   ├── entity-manager.md        # Spec EntityManager
-│   ├── LIVING_WORLDS_*.md       # Living Worlds архитектура
-│   └── ... (20+ документов)
+│   ├── EVENTS-MIGRATION.md      # Миграция на hierarchical events
+│   ├── LIVING_WORLDS_*.md       # Living Worlds документация (8 файлов)
+│   └── ... (15+ документов)
+│
+├── configs/                      # Конфигурационные YAML
+│   ├── gm_defaults.yaml
+│   ├── gm_group.yaml
+│   ├── gm_location.yaml
+│   ├── gm_player.yaml
+│   ├── gm_region.yaml
+│   └── gm_world.yaml
+│
+├── events/                       # Примеры событий (12 JSON)
+├── memory/                       # AI agent memory files
+│   ├── project_state.md
+│   ├── architecture_decisions.md
+│   └── ...
 │
 ├── build/                        # Docker конфигурация
 │   └── Dockerfile               # Мульти-стадия сборка
@@ -397,9 +505,8 @@ multiverse-core/
 ├── docker-compose.yml            # Оркестрация сервисов
 ├── Dockerfile                    # Шаблон сборки
 ├── Makefile                      # Build команды
-├── go.mod / go.sum               # Go модули
-├── .env                          # Переменные окружения
-├── .gitignore                    # Игнорируемые файлы
+├── go.mod / go.sum               # Go модули (Go 1.24.0)
+├── go.work                       # Go workspace (16 сервисов + shared)
 ├── AGENTS.md                     # General agent guide
 └── QWEN.md                       # Этот файл
 ```
@@ -495,17 +602,17 @@ func (m *Manager) saveEntity(ctx context.Context, ent *Entity, worldID string) e
 
 ---
 
-## Living Worlds Architecture (New Feature)
+## Living Worlds Architecture
 
-**Статус**: Design Complete ✅ (Branch: `feat/living-worlds-entity-actor`)
+**Статус**: ✅ **Implementation Complete** (merged to `main`)
 
 ### Компоненты
 
-| Сервис | Назначение |
-|--------|-----------|
-| **entity-actor** | Нейронные агенты (TinyML) для автономных сущностей |
-| **evolution-watcher** | Детекция аномалий в поведении через нейросети |
-| **rule-engine** | Универсальные правила для типов сущностей |
+| Сервис | Назначение | Статус |
+|--------|-----------|--------|
+| **entity-actor** | Нейронные агенты (TinyML) для автономных сущностей | ✅ Реализован + Dockerfile |
+| **evolution-watcher** | Детекция аномалий в поведении через нейросети | ✅ Реализован + Dockerfile |
+| **rule-engine** | Универсальные правила для типов сущностей | ✅ Реализован + Dockerfile |
 
 ### Ключевые инновации
 
@@ -598,7 +705,3 @@ curl http://localhost:8088/health  # Game Service
 
 > **"Мы не строим миры. Мы создаём условия для того, чтобы миры строили себя сами."**
 > *— Философия Living Worlds, 2026*
-
-## Qwen Added Memories
-- Multiverse-core использует EntityRef формат для всех ссылочных полей в payload событий. Формат: {"entity":{"entity":{"id":"xxx","type":"player"}}, "world":{"entity":{"id":"yyy","type":"world"}}, "trigger":{"event":{"id":"zzz","type":"event"}}}. Neo4j автоматически создаёт связи из payload ключей: (ev)-[:ENTITY]->(entity), (ev)-[:WORLD]->(world), (ev)-[:TRIGGER]->(event). Entity↔Entity связи через relations[]. Ветка: refactor/entity-ref-unification.
-- EntityRef формат — единый стандарт ссылок в payload событий. Все entity ссылки: {"entity":{"entity":{"id":"xxx","type":"player"}}}. Все event ссылки: {"trigger":{"event":{"id":"evt","type":"event"}}}. Типы: EntityRef{id,type}, WorldRef{entity:EntityRef}, Entity{entity:EntityRef,name,...}. Neo4j collectLinks рекурсивно обходит payload, имя связи = ключ родителя в UPPER_SNAKE_CASE. Fallback пропускает parentKey="event"/"entity". Event→Event через MERGE target узла. Entity↔Entity через relations[]. События time.syncTime/gm.split/gm.merged/gm.deleted/gm.created пропускаются индексацией. GM игнорирует narrative-orchestrator события с тем же scope.

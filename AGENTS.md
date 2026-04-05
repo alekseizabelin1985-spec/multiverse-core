@@ -22,7 +22,7 @@ Each service has its own AGENTS.md file in its respective directory under `servi
 
 ## Code style guidelines
 
-- All services are written in Go 1.25
+- All services are written in Go 1.24.0
 - Use JSON Schema Draft 7 for entity payload validation
 - Follow event-driven architecture with Kafka/Redpanda as message broker
 - Services communicate through events in the event bus (topics: player_events, world_events, game_events, system_events, scope_management, narrative_output)
@@ -141,11 +141,14 @@ payload["world_id"] = worldID
 ## Non-standard directory structures
 
 - Services are organized in `services/` directory with each service in its own subdirectory
-- Commands are in `cmd/` directory with each command in its own subdirectory
+- **Entry points are INSIDE each service**: `services/<service-name>/cmd/<service-name>/main.go`
 - Internal packages are in `internal/` directory
 - Documentation is in `Docs/` directory
 - Docker configuration in `build/` directory
 - Fake dependencies for CGO issues in `fake_deps/` directory
+- Configuration YAML files in `configs/` directory
+- Example event JSON files in `events/` directory
+- AI agent memory files in `memory/` directory
 
 ## Project-specific conventions
 
@@ -173,16 +176,32 @@ payload["world_id"] = worldID
 
 Each service has detailed guidance in its own AGENTS.md file:
 
-- [EntityManager](services/entitymanager/AGENTS.md) - Manages game entities and their history
-- [NarrativeOrchestrator](services/narrativeorchestrator/AGENTS.md) - Generates dynamic narratives
-- [WorldGenerator](services/worldgenerator/AGENTS.md) - Creates game worlds
-- [BanOfWorld](services/banofworld/AGENTS.md) - Monitors world integrity
-- [CityGovernor](services/citygovernor/AGENTS.md) - Manages city structures
-- [CultivationModule](services/cultivationmodule/AGENTS.md) - Handles player cultivation
-- [RealityMonitor](services/realitymonitor/AGENTS.md) - Monitors game reality state
-- [PlanManager](services/planmanager/AGENTS.md) - Manages player plans
-- [SemanticMemory](services/semanticmemory/AGENTS.md) - Provides semantic context
-- [OntologicalArchivist](services/ontologicalarchivist/AGENTS.md) - Stores schemas
-- [UniverseGenesisOracle](services/universegenesis/AGENTS.md) - Generates universes
-- [GameService](services/gameservice/AGENTS.md) - Handles player interactions
-- [AscensionOracle](services/ascensionoracle/AGENTS.md) - Provides AI generation
+- [EntityManager](services/entity-manager/entitymanager/AGENTS.md) - Manages game entities and their history
+- [NarrativeOrchestrator](services/narrative-orchestrator/narrativeorchestrator/AGENTS.md) - Generates dynamic narratives
+- [WorldGenerator](services/world-generator/worldgenerator/AGENTS.md) - Creates game worlds
+- [BanOfWorld](services/ban-of-world/banofworld/AGENTS.md) - Monitors world integrity
+- [CityGovernor](services/city-governor/citygovernor/AGENTS.md) - Manages city structures
+- [CultivationModule](services/cultivation-module/cultivationmodule/AGENTS.md) - Handles player cultivation
+- [RealityMonitor](services/reality-monitor/realitymonitor/AGENTS.md) - Monitors game reality state
+- [PlanManager](services/plan-manager/planmanager/AGENTS.md) - Manages player plans
+- [SemanticMemory](services/semantic-memory/semanticmemory/AGENTS.md) - Provides semantic context
+- [OntologicalArchivist](services/ontological-archivist/ontologicalarchivist/AGENTS.md) - Stores schemas
+- [UniverseGenesisOracle](services/universe-genesis-oracle/universegenesis/AGENTS.md) - Generates universes
+- [GameService](services/game-service/gameservice/AGENTS.md) - Handles player interactions
+- [EntityActor](services/entity-actor/entityactor/AGENTS.md) - Living Worlds: Neural autonomous entities
+- [EvolutionWatcher](services/evolution-watcher/evolutionwatcher/AGENTS.md) - Living Worlds: Anomaly detection
+- [RuleEngine](services/rule-engine/ruleengine/AGENTS.md) - Living Worlds: Universal mechanics
+
+**Shared packages** (12 total):
+- `config` - Configuration store
+- `entity` - Entity structure and types
+- `eventbus` - Event bus, types, topics, Kafka client
+- `intent` - Oracle intent recognition and prompt builder
+- `jsonpath` - Universal dot-path accessor (critical for hierarchical events)
+- `minio` - MinIO clients (common, factory, HTTP, legacy, official)
+- `oracle` - Oracle HTTP client for AI generation
+- `redis` - Redis client
+- `rules` - Rule engine core (engine, rule)
+- `schema` - JSON Schema validation
+- `spatial` - Spatial utilities (filter, geometry, scope)
+- `tinyml` - TinyML model loader and interface
