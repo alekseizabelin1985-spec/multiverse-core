@@ -55,6 +55,13 @@ type AgentBlueprint struct {
 
 	// TTL для Domain/Task агентов
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty"`
+
+	// Prompt templates
+	Phase1Prompt string `yaml:"phase1_prompt,omitempty" json:"phase1_prompt,omitempty"`
+	Phase2Prompt string `yaml:"phase2_prompt,omitempty" json:"phase2_prompt,omitempty"`
+
+	// Type тип блупринта
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 }
 
 // BlueprintTrigger определяет когда агент должен быть спавнен

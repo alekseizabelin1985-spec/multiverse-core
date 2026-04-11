@@ -1,8 +1,14 @@
 package agent
 
 import (
+	"os"
 	"time"
 )
+
+// readFile helper for reading files
+func readFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
 
 // BlueprintFactory парсит блупринты
 type BlueprintFactory interface {
