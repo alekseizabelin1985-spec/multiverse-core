@@ -10,7 +10,18 @@
       "Bash(git push *)",
       "mcp__MCP_DOCKER__create_pull_request",
       "Bash(git reset *)",
-      "Bash(findstr *)"
+      "Bash(findstr *)",
+      "mcp__MCP_DOCKER__mcp-add",
+      "mcp__MCP_DOCKER__mcp-config-set",
+      "Bash(docker *)",
+      "mcp__MCP_DOCKER__mcp-find",
+      "mcp__MCP_DOCKER__mcp-exec",
+      "mcp__MCP_DOCKER__mcp-remove",
+      "Bash(curl *)",
+      "Bash(python *)",
+      "Bash(uv *)",
+      "Bash(pip install *)",
+      "Bash(mcp-kafka *)"
     ]
   },
   "$version": 3

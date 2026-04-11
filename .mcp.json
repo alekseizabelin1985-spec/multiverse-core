@@ -7,24 +7,19 @@
     "context7": {
       "type": "http",
       "url": "http://localhost:3002/mcp"
-    },
-    "database": {
-      "type": "http",
-      "url": "http://localhost:3003/mcp",
-      "headers": {
-        "Authorization": "Bearer ${DB_MCP_TOKEN}"
-      }
-    },
-    "github": {
-      "type": "http",
-      "url": "http://localhost:3004/mcp",
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
+    },1
     "qdrant": {
       "type": "http",
       "url": "http://localhost:6333"
+    },
+    "kafka": {
+      "command": "mcp-kafka",
+      "env": {
+        "KAFKA_BOOTSTRAP_SERVERS": "localhost:9092",
+        "KAFKA_CLIENT_ID": "multiverse-mcp",
+        "SAFETY_ALLOW_WRITE_OPERATIONS": "true",
+        "SAFETY_MAX_CONSUME_MESSAGES": "50"
+      }
     }
   }
 }
