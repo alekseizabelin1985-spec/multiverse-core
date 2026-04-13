@@ -235,6 +235,60 @@ func (c *Client) CallAndUnmarshal(ctx context.Context, callFunc func() (string, 
 	return json.Unmarshal([]byte(response), target)
 }
 
+// CallMechanical вызывает Oracle для механических решений (Phase1).
+// Оптимизирован для быстрых структурных решений: temp=0.1, max_tokens=256.
+// Ожидает JSON-ответ в формате MechanicalResult.
+func (c *Client) CallMechanical(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"model": c.Model,
+		"messages": []map[string]interface{}{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userPrompt},
+		},
+		"temperature": 0.1,
+		"max_tokens":  256,
+		"extra_body": map[string]interface{}{
+			"chat_template_kwargs": map[string]interface{}{
+				"enable_thinking": false,
+			},
+		},
+		"response_format": map[string]string{
+			"type": "json_object",
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal mechanical prompt: %w", err)
+	}
+	return c.callRaw(ctx, requestBody)
+}
+
+// CallNarrative вызывает Oracle для генерации нарратива (Phase2).
+// Оптимизирован для rich text: temp=0.9, max_tokens=400.
+func (c *Client) CallNarrative(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+	requestBody, err := json.Marshal(map[string]interface{}{
+		"model": c.Model,
+		"messages": []map[string]interface{}{
+			{"role": "system", "content": systemPrompt},
+			{"role": "user", "content": userPrompt},
+		},
+		"temperature": 0.9,
+		"min_p":       0.05,
+		"max_tokens":  400,
+		"extra_body": map[string]interface{}{
+			"chat_template_kwargs": map[string]interface{}{
+				"enable_thinking": false,
+			},
+		},
+		"response_format": map[string]string{
+			"type": "text",
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal narrative prompt: %w", err)
+	}
+	return c.callRaw(ctx, requestBody)
+}
+
 // CallAndLog вызывает Oracle и логирует ошибки (устаревший интерфейс).
 func (c *Client) CallAndLog(ctx context.Context, prompt string) (string, error) {
 	return c.Call(ctx, prompt)

@@ -323,6 +323,28 @@ services:
     env_file:
       - .env
 
+  # ========== Agent Runtime Service ==========
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: ./build/Dockerfile
+      args:
+        - SERVICE=agent-runtime
+    command: ./agent-runtime
+    depends_on:
+      - redpanda
+      - minio
+      - qwen3-service
+    env_file:
+      - .env
+    #environment:
+    #  - KAFKA_BROKERS=redpanda:9092
+    #  - MINIO_ENDPOINT=minio:9000
+    #  - MINIO_ACCESS_KEY=minioadmin
+    #  - MINIO_SECRET_KEY=minioadmin
+    #  - ORACLE_URL=http://qwen3-service:11434/v1/chat/completions
+    #  - ORACLE_MODEL=qwen3
+
   # ========== Rule Engine Service ==========
   rule-engine:
     build:

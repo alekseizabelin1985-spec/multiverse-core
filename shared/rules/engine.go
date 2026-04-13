@@ -477,6 +477,13 @@ func (e *Engine) loadRuleFromStorage(ruleID string) (*Rule, error) {
 	return &rule, nil
 }
 
+// GetRule возвращает правило из кэша или хранилища (публичный метод).
+func (e *Engine) GetRule(ruleID string) (*Rule, error) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.getRule(ruleID)
+}
+
 // SaveRule сохраняет правило в хранилище и кэш
 func (e *Engine) SaveRule(rule *Rule) error {
 	e.mu.Lock()

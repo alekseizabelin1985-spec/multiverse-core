@@ -4,6 +4,7 @@ toolchain go1.24.7
 
 use (
 	.
+	./services/agent-runtime
 	./services/ban-of-world
 	./services/city-governor
 	./services/cultivation-module
