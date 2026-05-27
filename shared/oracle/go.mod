@@ -1,4 +1,4 @@
-module multiverse-core.io/shared/agent
+module multiverse-core.io/shared/oracle
 
 go 1.24
 

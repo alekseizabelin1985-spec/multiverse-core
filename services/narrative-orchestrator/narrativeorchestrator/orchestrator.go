@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"multiverse-core.io/shared/agent"
 	"multiverse-core.io/shared/config"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/minio"
@@ -143,7 +144,14 @@ type StateSnapshot struct {
 }
 
 type NarrativeOrchestrator struct {
-	gms         map[string]*GMInstance
+	// agents — новая архитектура (Фаза 5b): map[scopeID]agent.Agent
+	agents      map[string]agent.Agent
+	agentsMu    sync.RWMutex
+
+	// gms — старая архитектура (для обратной совместимости)
+	gms     map[string]*GMInstance
+	gmsMu   sync.RWMutex
+
 	mu          sync.RWMutex
 	bus         *eventbus.EventBus
 	semantic    *SemanticMemoryClient
@@ -151,6 +159,14 @@ type NarrativeOrchestrator struct {
 	configStore *config.Store
 	geoProvider spatial.GeometryProvider
 	logger      *log.Logger
+
+	// pipeline — TwoPhasePipeline для Agent GM Core интеграции (Фаза 5a)
+	pipeline      *agent.TwoPhasePipeline
+	llmAdapter    *OracleLLMAdapter
+	usePipeline   bool
+
+	// router — Agent GM Core Router для маршрутизации (Фаза 5c)
+	router *agent.Router
 }
 
 func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
@@ -189,6 +205,7 @@ func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
 	})
 
 	return &NarrativeOrchestrator{
+		agents:      make(map[string]agent.Agent),
 		gms:         make(map[string]*GMInstance),
 		bus:         bus,
 		semantic:    &SemanticMemoryClient{BaseURL: semanticURL, logger: logger},
@@ -196,7 +213,135 @@ func NewNarrativeOrchestrator(bus *eventbus.EventBus) *NarrativeOrchestrator {
 		configStore: configStore,
 		geoProvider: geoProvider,
 		logger:      logger,
+		router:      agent.NewRouter(nil), // lifecycle будет установлен позже
 	}
+}
+
+// NewNarrativeOrchestratorWithPipeline создает NarrativeOrchestrator с TwoPhasePipeline
+// Это мост между текущей GMInstance архитектурой и новой Agent GM Core (Фаза 5a)
+func NewNarrativeOrchestratorWithPipeline(bus *eventbus.EventBus) *NarrativeOrchestrator {
+	// Создаем базовый orchestrator
+	orchestrator := NewNarrativeOrchestrator(bus)
+
+	// Инициализируем LLM адаптер
+	orchestrator.llmAdapter = NewOracleLLMAdapter()
+
+	// Создаем TwoPhasePipeline
+	config := agent.DefaultPipelineConfig()
+	config.Phase1Model = "qwen:7b"   // Быстрая модель для механики
+	config.Phase2Model = "qwen:72b"  // Качественная модель для нарратива
+	config.EnableCache = true
+	config.CacheTTL = 1 * time.Hour
+	config.Phase1Timeout = 2 * time.Second
+	config.Phase2Timeout = 10 * time.Second
+
+	orchestrator.pipeline = agent.NewTwoPhasePipeline(orchestrator.llmAdapter, config)
+	orchestrator.usePipeline = true
+
+	infoLog("", "", "Narrative Orchestrator initialized with TwoPhasePipeline", map[string]interface{}{
+		"phase1_model": config.Phase1Model,
+		"phase2_model": config.Phase2Model,
+		"cache_enabled": config.EnableCache,
+	})
+
+	return orchestrator
+}
+
+// IsPipelineEnabled возвращает включен ли TwoPhasePipeline
+func (no *NarrativeOrchestrator) IsPipelineEnabled() bool {
+	return no.usePipeline
+}
+
+// GetPipeline возвращает TwoPhasePipeline
+func (no *NarrativeOrchestrator) GetPipeline() *agent.TwoPhasePipeline {
+	return no.pipeline
+}
+
+// GetRouter возвращает Router
+func (no *NarrativeOrchestrator) GetRouter() *agent.Router {
+	return no.router
+}
+
+// SetRouterLifecycle устанавливает lifecycle для router
+func (no *NarrativeOrchestrator) SetRouterLifecycle(lifecycle agent.Lifecycle) {
+	if no.router != nil {
+		// Обновляем lifecycle через рефлексию или создаем новый router
+		no.router = agent.NewRouter(lifecycle)
+	}
+}
+
+// GetAgent возвращает агента по scopeID (новая архитектура)
+func (no *NarrativeOrchestrator) GetAgent(scopeID string) (agent.Agent, bool) {
+	no.agentsMu.RLock()
+	defer no.agentsMu.RUnlock()
+	agent, exists := no.agents[scopeID]
+	return agent, exists
+}
+
+// ListAgents возвращает всех агентов (новая архитектура)
+func (no *NarrativeOrchestrator) ListAgents() []agent.Agent {
+	no.agentsMu.RLock()
+	defer no.agentsMu.RUnlock()
+	agents := make([]agent.Agent, 0, len(no.agents))
+	for _, a := range no.agents {
+		agents = append(agents, a)
+	}
+	return agents
+}
+
+// GetAgentsCount возвращает количество активных агентов (новая архитектура)
+func (no *NarrativeOrchestrator) GetAgentsCount() int {
+	no.agentsMu.RLock()
+	defer no.agentsMu.RUnlock()
+	return len(no.agents)
+}
+
+// RegisterAgent регистрирует агента в новой архитектуре
+func (no *NarrativeOrchestrator) RegisterAgent(scopeID string, agent agent.Agent) {
+	no.agentsMu.Lock()
+	defer no.agentsMu.Unlock()
+	no.agents[scopeID] = agent
+}
+
+// UnregisterAgent удаляет агента из новой архитектуры
+func (no *NarrativeOrchestrator) UnregisterAgent(scopeID string) {
+	no.agentsMu.Lock()
+	defer no.agentsMu.Unlock()
+	if a, exists := no.agents[scopeID]; exists {
+		a.Shutdown(context.Background())
+		delete(no.agents, scopeID)
+	}
+}
+
+// CreateAgentForScope создает agent.Agent из GMInstance (мост между архитектурами)
+func (no *NarrativeOrchestrator) CreateAgentForScope(gm *GMInstance) agent.Agent {
+	if no.pipeline == nil {
+		no.logger.Printf("[WARN] Pipeline not available, creating agent without pipeline")
+		return nil
+	}
+
+	// Создаем NarrativeAgent из GMInstance
+	narrativeAgent := CreateGMAgent(
+		gm.ScopeID,
+		gm.ScopeType,
+		gm.WorldID,
+		gm.FocusEntities,
+		gm.Config,
+		no.pipeline,
+		no.bus,
+		no.logger,
+	)
+
+	// Регистрируем в новой архитектуре
+	no.RegisterAgent(gm.ScopeID, narrativeAgent)
+
+	infoLog(gm.ScopeID, gm.WorldID, "Created agent.Agent from GMInstance", map[string]interface{}{
+		"scope_id":             gm.ScopeID,
+		"scope_type":           gm.ScopeType,
+		"focus_entities_count": len(gm.FocusEntities),
+	})
+
+	return narrativeAgent
 }
 
 func extractIDFromScope(scopeID string) string {
@@ -814,6 +959,46 @@ func (no *NarrativeOrchestrator) saveSnapshot(scopeID string, gm *GMInstance) er
 	return nil
 }
 
+// saveSnapshotForAgent сохраняет снапшот NarrativeAgent
+func (no *NarrativeOrchestrator) saveSnapshotForAgent(scopeID string, agent *NarrativeAgent) error {
+	debugLog(scopeID, agent.worldID, "Saving NarrativeAgent snapshot", map[string]interface{}{
+		"scope_id": scopeID,
+	})
+
+	if no.minioClient == nil {
+		warnLog(scopeID, agent.worldID, "MinIO client not available, cannot save snapshot", map[string]interface{}{})
+		return fmt.Errorf("minio client not available")
+	}
+
+	data, err := json.Marshal(agent)
+	if err != nil {
+		errorLog(scopeID, agent.worldID, "Failed to marshal NarrativeAgent for snapshot", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(scopeID)))
+	timestamp := time.Now().Unix()
+	key := path.Join("gnue", "agent-snapshots", "v1", hash, fmt.Sprintf("%d_001.json", timestamp))
+
+	err = no.minioClient.PutObject("gnue-snapshots", key, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		errorLog(scopeID, agent.worldID, "Failed to save NarrativeAgent snapshot to MinIO", map[string]interface{}{
+			"error":      err.Error(),
+			"object_key": key,
+		})
+		return err
+	}
+
+	infoLog(scopeID, agent.worldID, "Successfully saved NarrativeAgent snapshot", map[string]interface{}{
+		"object_key":    key,
+		"snapshot_size": len(data),
+	})
+
+	return nil
+}
+
 // findGMsForEvent returns all GMs that should receive this event:
 // 1. Exact scope_id match
 // 2. Spatial match — event point is within GM's VisibilityScope
@@ -916,19 +1101,32 @@ func (no *NarrativeOrchestrator) HandleGameEvent(ev eventbus.Event) {
 		}
 	}
 
-	// 2. Find all GMs that should receive this event (spatial + exact match)
-	targetGMs := no.findGMsForEvent(ev)
-	if len(targetGMs) == 0 {
-		debugLog(localScopeID, worldID, "No GMs matched for event", map[string]interface{}{
-			"event_type": ev.Type,
-		})
-		return
-	}
+	// 2. Используем Router для маршрутизации события (Фаза 5c)
+	if no.router != nil {
+		// Конвертируем eventbus.Event в agent.Event
+		agentEvent := EventBusToAgentEvent(ev)
 
-	// 3. Dispatch event to each matched GM
-	for _, gm := range targetGMs {
-		gm.resetTTL()
-		no.dispatchEventToGM(ev, gm)
+		// Маршрутизируем через router
+		if err := no.router.RouteEvent(context.Background(), agentEvent); err != nil {
+			errorLog(localScopeID, worldID, "Router failed to route event", map[string]interface{}{
+				"error": err.Error(),
+			})
+		}
+	} else {
+		// Fallback: используем старый findGMsForEvent
+		targetGMs := no.findGMsForEvent(ev)
+		if len(targetGMs) == 0 {
+			debugLog(localScopeID, worldID, "No GMs matched for event", map[string]interface{}{
+				"event_type": ev.Type,
+			})
+			return
+		}
+
+		// 3. Dispatch event to each matched GM
+		for _, gm := range targetGMs {
+			gm.resetTTL()
+			no.dispatchEventToGM(ev, gm)
+		}
 	}
 }
 
@@ -1505,6 +1703,310 @@ func (no *NarrativeOrchestrator) processEventForGM(ev eventbus.Event, gm *GMInst
 		"event_type": ev.Type,
 		"event_id":   ev.ID,
 	})
+}
+
+// processWithPipeline — обработка события через TwoPhasePipeline (Фаза 5a/5b: Agent GM Core интеграция)
+// Принимает agent.Agent (новая архитектура) или GMInstance (старая архитектура, для совместимости)
+func (no *NarrativeOrchestrator) processWithPipeline(agent agent.Agent, ev eventbus.Event) {
+	// Получаем scopeID из agent
+	scopeID := ""
+	worldID := ""
+	if agent != nil {
+		scopeID = agent.Context().ScopeID
+		worldID = agent.Context().AgentID
+	} else {
+		warnLog("", "", "Agent is nil in processWithPipeline", map[string]interface{}{})
+		return
+	}
+
+	infoLog(scopeID, worldID, "Processing with TwoPhasePipeline", map[string]interface{}{
+		"event_type": ev.Type,
+		"event_id":   ev.ID,
+	})
+
+	// Проверяем что pipeline включен
+	if !no.usePipeline || no.pipeline == nil {
+		warnLog(scopeID, worldID, "Pipeline not enabled, falling back to Oracle", map[string]interface{}{})
+		// Fallback to old GMInstance processing if needed
+		return
+	}
+
+	// Получаем контекст из Semantic Memory (как раньше)
+	var focusEntities []string
+	var historyCopy []HistoryEntry
+	if narrativeAgent, ok := agent.(*NarrativeAgent); ok {
+		narrativeAgent.mu.Lock()
+		focusEntities = make([]string, len(narrativeAgent.focusEntities))
+		copy(focusEntities, narrativeAgent.focusEntities)
+		historyCopy = make([]HistoryEntry, len(narrativeAgent.history))
+		copy(historyCopy, narrativeAgent.history)
+		narrativeAgent.mu.Unlock()
+	}
+
+	if no.semantic == nil {
+		warnLog(scopeID, worldID, "SemanticMemoryClient is nil", map[string]interface{}{})
+		return
+	}
+
+	// Загружаем контекст сущностей
+	entityIDs := append([]string{worldID}, focusEntities...)
+	contexts, err := no.semantic.GetContextWithEvents(context.Background(), entityIDs, []string{}, 2)
+	if err != nil {
+		warnLog(scopeID, worldID, "Failed to get context with events, continuing without", map[string]interface{}{
+			"error": err.Error(),
+		})
+	}
+
+	// Загружаем полные события
+	var sinceTime time.Time
+	if narrativeAgent, ok := agent.(*NarrativeAgent); ok {
+		narrativeAgent.mu.Lock()
+		if narrativeAgent.lastProcessTime > 0 {
+			sinceTime = time.UnixMilli(narrativeAgent.lastProcessTime)
+		} else {
+			sinceTime = time.Now().Add(-10 * time.Minute)
+		}
+		narrativeAgent.mu.Unlock()
+	} else {
+		sinceTime = time.Now().Add(-10 * time.Minute)
+	}
+
+	var fullEvents []eventbus.Event
+	if len(historyCopy) > 0 {
+		fullEvents, err = no.semantic.GetEventsForEntities(entityIDs, worldID, sinceTime, 50)
+		if err != nil {
+			warnLog(scopeID, worldID, "Failed to get full events, using history fallback", map[string]interface{}{
+				"error": err.Error(),
+			})
+			fullEvents = make([]eventbus.Event, len(historyCopy))
+			for i, he := range historyCopy {
+				fullEvents[i] = eventbus.NewEvent(
+					"history.fallback",
+					"narrative-orchestrator",
+					worldID,
+					map[string]interface{}{
+						"description": he.Description,
+					},
+				)
+				fullEvents[i].ID = he.EventID
+			}
+		}
+
+		// Фильтруем собственные события
+		if narrativeAgent, ok := agent.(*NarrativeAgent); ok {
+			narrativeAgent.mu.Lock()
+			filtered := fullEvents[:0]
+			for _, fe := range fullEvents {
+				if !narrativeAgent.isOwnEvent(fe.ID) {
+					filtered = append(filtered, fe)
+				}
+			}
+			narrativeAgent.mu.Unlock()
+			fullEvents = filtered
+		}
+	}
+
+	// Кластеризуем события
+	clusters := clusterEvents(fullEvents)
+
+	// Формируем контекст для pipeline
+	worldContext := "Нет данных о мире"
+	entitiesContext := "Нет данных"
+	if contexts != nil {
+		if worldRaw, ok := contexts[worldID]; ok {
+			if worldMap, ok := worldRaw.(map[string]interface{}); ok {
+				if wc, ok := worldMap["context"].(string); ok {
+					worldContext = wc
+				}
+			}
+		}
+		for _, id := range focusEntities {
+			if ctxRaw, ok := contexts[id]; ok {
+				if ctxMap, ok := ctxRaw.(map[string]interface{}); ok {
+					if ctxStr, ok := ctxMap["context"].(string); ok {
+						entitiesContext += ctxStr + "\n"
+					}
+				}
+			}
+		}
+	}
+
+	// Формируем trigger event
+	var triggerEvent string
+	if len(fullEvents) > 0 {
+		lastEv := fullEvents[len(fullEvents)-1]
+		triggerEvent = formatEventDescription(lastEv)
+	} else {
+		triggerEvent = "Прошло время. Мир продолжает жить."
+	}
+
+	// Создаем AgentBlueprint из конфигурации GM
+	_ = no.buildBlueprintFromGMWithParams(scopeID, worldContext, entitiesContext, clusters, triggerEvent)
+
+	// Вызываем pipeline.Process() напрямую (новая архитектура)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	result, err := no.pipeline.Process(ctx, EventBusToAgentEvent(ev), agent)
+	if err != nil {
+		errorLog(scopeID, worldID, "Agent processing failed", map[string]interface{}{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	// Обрабатываем результат
+	if result.Decision != nil {
+		infoLog(scopeID, worldID, "Pipeline decision received", map[string]interface{}{
+			"decisions_count": len(result.Decision.Decisions),
+			"next_phase":      result.Decision.NextPhase,
+		})
+
+		// Публикуем решения как события
+		for _, decision := range result.Decision.Decisions {
+			decisionEvent := eventbus.NewEvent(
+				fmt.Sprintf("decision.%s", decision.Type),
+				"narrative-orchestrator",
+				worldID,
+				map[string]interface{}{
+					"decision_type": decision.Type,
+					"target":        decision.Target,
+					"payload":       decision.Payload,
+					"pipeline":      "two-phase",
+				},
+			)
+			eventbus.SetNested(decisionEvent.Payload, "scope.id", scopeID)
+
+			if narrativeAgent, ok := agent.(*NarrativeAgent); ok {
+				narrativeAgent.mu.Lock()
+				narrativeAgent.trackEmitted(decisionEvent.ID)
+				narrativeAgent.mu.Unlock()
+			}
+
+			if err := no.bus.Publish(context.Background(), eventbus.TopicWorldEvents, decisionEvent); err != nil {
+				errorLog(scopeID, worldID, "Failed to publish decision event", map[string]interface{}{
+					"error": err.Error(),
+				})
+			}
+		}
+	}
+
+	if result.Narrative != nil && result.Narrative.Text != "" {
+		narrativePayload := map[string]interface{}{
+			"narrative": result.Narrative.Text,
+			"pipeline":  "two-phase",
+		}
+		narrativeEvent := eventbus.NewEvent(
+			"narrative.generate",
+			"narrative-orchestrator",
+			worldID,
+			narrativePayload,
+		)
+
+		if err := no.bus.Publish(context.Background(), eventbus.TopicNarrativeOutput, narrativeEvent); err != nil {
+			errorLog(scopeID, worldID, "Failed to publish narrative event", map[string]interface{}{
+				"error": err.Error(),
+			})
+		} else {
+			infoLog(scopeID, worldID, "Published narrative event from pipeline", map[string]interface{}{
+				"narrative_length": len(result.Narrative.Text),
+			})
+		}
+	}
+
+	// Сохраняем снапшот (если это NarrativeAgent)
+	if narrativeAgent, ok := agent.(*NarrativeAgent); ok {
+		saveErr := no.saveSnapshotForAgent(narrativeAgent.scopeID, narrativeAgent)
+		if saveErr != nil {
+			errorLog(scopeID, worldID, "Failed to save agent snapshot after pipeline processing", map[string]interface{}{
+				"error": saveErr.Error(),
+			})
+		}
+	}
+
+	infoLog(scopeID, worldID, "Pipeline processing completed", map[string]interface{}{
+		"status": result.Status,
+	})
+}
+
+// buildBlueprintFromGM создает AgentBlueprint из GMInstance конфигурации
+func (no *NarrativeOrchestrator) buildBlueprintFromGM(gm *GMInstance, worldContext, entitiesContext string, clusters []EventCluster, triggerEvent string) *agent.AgentBlueprint {
+	return no.buildBlueprintFromGMWithParams(gm.ScopeID, worldContext, entitiesContext, clusters, triggerEvent)
+}
+
+// buildBlueprintFromGMWithParams создает AgentBlueprint из параметров
+func (no *NarrativeOrchestrator) buildBlueprintFromGMWithParams(scopeID, worldContext, entitiesContext string, clusters []EventCluster, triggerEvent string) *agent.AgentBlueprint {
+	// Формируем Phase1Prompt (механика)
+	phase1Prompt := `Ты — Game Master области: ` + scopeID + `.
+
+### КОНТЕКСТ МИРА
+` + worldContext + `
+
+### ОБЛАСТЬ
+ID: ` + scopeID + `
+Тип: GM
+
+### СУЩНОСТИ
+` + entitiesContext + `
+
+### СОБЫТИЯ
+` + buildEventClusters(clusters) + `
+
+### ТРИГГЕР
+` + triggerEvent + `
+
+Определи механические решения:
+1. Какие события произошли (event_type, timestamp, payload)
+2. Какие эффекты применить
+3. Нужно ли нарративное описание?
+
+Верни ТОЛЬКО JSON:
+{
+  "decisions": [
+    {"type": "event_type", "target": "target_id", "payload": {"key": "value"}}
+  ],
+  "narrative_phase": "narrative"
+}`
+
+	// Формируем Phase2Prompt (нарратив)
+	phase2Prompt := `Опиши событие в атмосферной манере.
+
+### ОБЛАСТЬ
+` + scopeID + ` (GM)
+
+### КОНТЕКСТ
+` + worldContext + `
+
+### СОБЫТИЕ
+` + triggerEvent + `
+
+### МЕХАНИКА
+{phase1_result}
+
+Будь креативным, описывай звуки, запахи, ощущения. 1-3 предложения.`
+
+	return &agent.AgentBlueprint{
+		Name:        "narrative-gm",
+		Version:     "1.0",
+		Description: "Narrative GM agent",
+		Trigger: agent.BlueprintTrigger{
+			Type:      "event",
+			EventName: "batch.process",
+		},
+		Constraints: agent.BlueprintConstraints{
+			MaxInstances: 1,
+			Priority:     50,
+		},
+		LLM: agent.LLMConfig{
+			Model:       "qwen:72b",
+			Temperature: 0.7,
+			MaxTokens:   2048,
+		},
+		TTL:          "1h",
+		Phase1Prompt: phase1Prompt,
+		Phase2Prompt: phase2Prompt,
+		Type:         "narrative-gm",
+	}
 }
 
 // clusterEvents — группировка по времени для полных событий eventbus.Event.

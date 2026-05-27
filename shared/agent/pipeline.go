@@ -2,9 +2,36 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
+
+// Cache интерфейс кэша
+type Cache interface {
+	Get(key string) (interface{}, bool)
+	Set(key string, value interface{}, ttl time.Duration)
+	Delete(key string)
+}
+
+// RuleEngineRouter fallback роутер для правил
+type RuleEngineRouter struct{}
+
+// NewRuleEngineRouter создает новый rule engine router
+func NewRuleEngineRouter() *RuleEngineRouter {
+	return &RuleEngineRouter{}
+}
+
+// Decide принимает решение на основе правил
+func (r *RuleEngineRouter) Decide(ctx context.Context, event Event) *DecisionResult {
+	return &DecisionResult{
+		Decisions:   []Decision{},
+		NextPhase:   "skip",
+		ProcessedAt: time.Now(),
+		Validated:   true,
+	}
+}
 
 // TwoPhasePipeline implements двухфазный LLM-конвейер
 // Фаза 1: Decision (механика) - быстрая, строгий JSON
@@ -12,13 +39,13 @@ import (
 type TwoPhasePipeline struct {
 	// llmClient клиент для вызова LLM
 	llmClient LLMClient
-	
+
 	// cache кэш для оптимизации
 	cache Cache
-	
+
 	// fallbackRouter роутер fallback правил
 	fallbackRouter *RuleEngineRouter
-	
+
 	// config конфигурация конвейера
 	config PipelineConfig
 }
@@ -213,8 +240,8 @@ func (p *TwoPhasePipeline) processPhase2Async(ctx context.Context, event Event, 
 
 // buildPhase1Prompt строит prompt для фазы 1
 func (p *TwoPhasePipeline) buildPhase1Prompt(event Event, agent Agent, bp *AgentBlueprint) string {
-	agentCtx := agent.Context()
-	
+	_ = agent.Context() // Используем для доступа к контексту в будущем
+
 	template := bp.Phase1Prompt
 	if template == "" {
 		template = defaultPhase1PromptTemplate

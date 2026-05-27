@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -11,22 +12,22 @@ import (
 type LifecycleManager struct {
 	// blueprintParser для парсинга блупринтов
 	blueprintParser BlueprintParser
-	
+
 	// agentFactory создает новых агентов
 	agentFactory AgentFactory
-	
+
 	// mu protects concurrent access
 	mu sync.RWMutex
-	
+
 	// ttlManager для управления временем жизни
 	ttlManager *TTLManager
-	
+
 	// registeredFactories хранит фабрики для разных типов агентов
 	registeredFactories map[string]AgentFactory
-	
+
 	// defaultTTL по умолчанию для всех агентов
 	defaultTTL time.Duration
-	
+
 	// checkInterval интервал проверки TTL
 	checkInterval time.Duration
 }
@@ -37,7 +38,7 @@ type AgentFactory interface {
 }
 
 // NewLifecycleManager создает новый менеджер жизненного цикла
-func NewLifecycleManager(parser BlueprintFactory, defaultTTL time.Duration) *LifecycleManager {
+func NewLifecycleManager(parser BlueprintParser, defaultTTL time.Duration) *LifecycleManager {
 	return &LifecycleManager{
 		blueprintParser:     parser,
 		agentFactory:        nil, // Должна быть установлена
@@ -67,36 +68,36 @@ func (lm *LifecycleManager) RegisterFactory(agentType string, factory AgentFacto
 func (lm *LifecycleManager) Create(ctx context.Context, blueprint *AgentBlueprint, context *AgentContext) (Agent, error) {
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
-	
+
 	// Определяем фабрику
 	factory := lm.agentFactory
-	if f, exists := lm.registeredFactories[blueprint.Type()]; exists {
+	if f, exists := lm.registeredFactories[blueprint.Type]; exists {
 		factory = f
 	}
-	
+
 	if factory == nil {
-		return nil, fmt.Errorf("no factory registered for agent type %s", blueprint.Type())
+		return nil, fmt.Errorf("no factory registered for agent type %s", blueprint.Type)
 	}
-	
+
 	// Создаем агента
 	agent, err := factory.CreateAgent(ctx, blueprint, context)
 	if err != nil {
 		return nil, fmt.Errorf("create agent: %w", err)
 	}
-	
+
 	return agent, nil
 }
 
 // Start запускает агента
 func (lm *LifecycleManager) Start(agent Agent) error {
 	agentCtx := agent.Context()
-	
+
 	// Устанавливаем TTL, если указан в блупринте
 	if agentCtx.ExpiresAt == "" && agentCtx.Level != LevelGlobal && agentCtx.Level != LevelMonitor {
 		expiresAt := time.Now().Add(lm.defaultTTL)
 		agentCtx.ExpiresAt = expiresAt.Format(time.RFC3339)
 	}
-	
+
 	// Начальная инициализация
 	return nil
 }
@@ -120,6 +121,30 @@ func (lm *LifecycleManager) Resume(ctx context.Context, agentID string) error {
 	return nil
 }
 
+// StopAgent останавливает агента вызывая Shutdown()
+func (lm *LifecycleManager) StopAgent(ctx context.Context, agent Agent) error {
+	if agent == nil {
+		return fmt.Errorf("agent is nil")
+	}
+	return agent.Shutdown(ctx)
+}
+
+// PauseAgent ставит агента на паузу
+func (lm *LifecycleManager) PauseAgent(ctx context.Context, agent Agent) error {
+	if agent == nil {
+		return fmt.Errorf("agent is nil")
+	}
+	return agent.Pause(ctx)
+}
+
+// ResumeAgent возобновляет работу агента
+func (lm *LifecycleManager) ResumeAgent(ctx context.Context, agent Agent) error {
+	if agent == nil {
+		return fmt.Errorf("agent is nil")
+	}
+	return agent.Resume(ctx)
+}
+
 // TTLManager возвращает менеджер TTL
 func (lm *LifecycleManager) TTLManager() *TTLManager {
 	return lm.ttlManager
@@ -127,14 +152,11 @@ func (lm *LifecycleManager) TTLManager() *TTLManager {
 
 // Cleanup запускает очистку просроченных агентов
 func (lm *LifecycleManager) Cleanup(ctx context.Context) error {
-	now := time.Now()
-	
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
-	
+
 	// TODO: перебрать всех агентов и удалить просроченных
-	// agentCtx.ExpiresAt < now
-	
+
 	return nil
 }
 

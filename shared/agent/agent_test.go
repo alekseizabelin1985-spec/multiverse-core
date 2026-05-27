@@ -214,11 +214,17 @@ func TestAgentLifecycleStateString(t *testing.T) {
 
 func TestWorkerPoolStatistics(t *testing.T) {
 	pool := NewWorkerPool(5)
-	
+
 	stats := pool.Statistics()
-	
-	if stats["workers"] != float64(5) {
-		t.Error("Expected workers to be 5")
+
+	workersCount, ok := stats["workers_count"].(int)
+	if !ok {
+		t.Errorf("workers_count has wrong type: %T", stats["workers_count"])
+		return
+	}
+
+	if workersCount != 5 {
+		t.Errorf("Expected workers_count to be 5, got %d", workersCount)
 	}
 }
 

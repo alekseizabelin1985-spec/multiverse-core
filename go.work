@@ -1,6 +1,4 @@
-go 1.24.0
-
-toolchain go1.24.7
+go 1.24.11
 
 use (
 	.
@@ -19,4 +17,11 @@ use (
 	./services/semantic-memory
 	./services/universe-genesis-oracle
 	./services/world-generator
+	./shared/agent
+	./shared/agent/tools
+	./shared/config
+	./shared/eventbus
+	./shared/minio
+	./shared/oracle
+	./shared/spatial
 )

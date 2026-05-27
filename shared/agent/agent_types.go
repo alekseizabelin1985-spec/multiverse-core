@@ -134,33 +134,36 @@ type ResourceReference struct {
 type AgentContext struct {
 	// AgentID уникальный идентификатор агента
 	AgentID string `json:"agent_id"`
-	
+
 	// AgentType тип агента
 	AgentType string `json:"agent_type"`
-	
+
 	// Level иерархический уровень
 	Level AgentLevel `json:"level"`
-	
+
 	// ParentID ID родителя (если есть)
 	ParentID string `json:"parent_id,omitempty"`
-	
+
 	// ScopeID ID области видимости (region_id, city_id, world_id)
 	ScopeID string `json:"scope_id"`
-	
+
 	// Entities контекстные сущности
 	Entities []EntityRef `json:"entities,omitempty"`
-	
+
 	// MemoryRef ссылка на память (ChromaDB/Neo4j)
 	MemoryRef string `json:"memory_ref,omitempty"`
-	
+
 	// CreatedAt время создания
 	CreatedAt string `json:"created_at"`
-	
+
 	// ExpiresAt время истечения TTL
 	ExpiresAt string `json:"expires_at,omitempty"`
-	
+
 	// LOD уровень детализации (0-3)
 	LOD LODLevel `json:"lod"`
+
+	// Blueprint блупринт агента (для pipeline)
+	Blueprint *AgentBlueprint `json:"blueprint,omitempty"`
 }
 
 // EntityRef ссылка на сущность

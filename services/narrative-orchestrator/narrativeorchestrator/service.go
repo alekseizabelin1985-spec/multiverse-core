@@ -31,6 +31,28 @@ func NewService(cfg Config) (*Service, error) {
 	}, nil
 }
 
+// NewServiceWithPipeline создает Service с TwoPhasePipeline (для Agent GM Core интеграции)
+func NewServiceWithPipeline(cfg Config) (*Service, error) {
+	bus := eventbus.NewEventBus(cfg.KafkaBrokers)
+	orchestrator := NewNarrativeOrchestratorWithPipeline(bus)
+
+	// Загружаем YAML блупринты в router (Фаза 5d/5e)
+	if orchestrator.GetRouter() != nil {
+		converter := NewYAMLBlueprintConverter("configs")
+		if err := converter.LoadBlueprints(orchestrator.GetRouter()); err != nil {
+			log.Printf("[WARN] Failed to load YAML blueprints: %v (continuing without)", err)
+		} else {
+			log.Printf("[INFO] Loaded %d YAML blueprints into router", orchestrator.GetRouter().GetBlueprintsCount())
+		}
+	}
+
+	return &Service{
+		orchestrator:   orchestrator,
+		bus:            bus,
+		defaultWorldID: "pain-realm",
+	}, nil
+}
+
 func (s *Service) Start(ctx context.Context) {
 	log.Println("NarrativeOrchestrator started")
 

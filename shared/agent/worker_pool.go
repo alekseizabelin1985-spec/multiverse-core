@@ -113,9 +113,9 @@ func (wp *WorkerPool) processJob(ctx context.Context, job Job, index int, status
 	// Обновляем статус
 	status.Status = "processing"
 	status.LastEventTime = time.Now()
-	
+
 	// Обработка
-	err := job.Agent.Tick(ctx, job.Event)
+	_, err := job.Agent.Tick(ctx, job.Event)
 	
 	if err != nil {
 		wp.totalErrors.Add(1)

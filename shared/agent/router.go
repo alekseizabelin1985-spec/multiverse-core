@@ -38,6 +38,13 @@ func NewRouter(lifecycle Lifecycle) *Router {
 	}
 }
 
+// SetLifecycle устанавливает lifecycle для router
+func (r *Router) SetLifecycle(lifecycle Lifecycle) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lifecycle = lifecycle
+}
+
 // RegisterBlueprint регистрирует блупринт агента
 func (r *Router) RegisterBlueprint(bp *AgentBlueprint) error {
 	r.mu.Lock()
@@ -105,27 +112,32 @@ func (r *Router) eventMatchesTrigger(event Event, bp *AgentBlueprint) bool {
 func (r *Router) SpawnAgent(ctx context.Context, blueprint *AgentBlueprint, context *AgentContext) (Agent, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
+	// Проверяем что lifecycle установлен
+	if r.lifecycle == nil {
+		return nil, fmt.Errorf("lifecycle not set on router")
+	}
+
 	// Генерируем уникальный ID
 	agentID := uuid.New().String()
-	
+
 	// Обновляем контекст
 	context.AgentID = agentID
-	
+
 	// Создаем агента через lifecycle
 	agent, err := r.lifecycle.Create(ctx, blueprint, context)
 	if err != nil {
 		return nil, fmt.Errorf("create agent: %w", err)
 	}
-	
+
 	// Сохраняем в карте
 	r.agents[agentID] = agent
-	
+
 	// Запускаем агента
 	if err := r.lifecycle.Start(agent); err != nil {
 		return nil, fmt.Errorf("start agent: %w", err)
 	}
-	
+
 	return agent, nil
 }
 
@@ -133,19 +145,19 @@ func (r *Router) SpawnAgent(ctx context.Context, blueprint *AgentBlueprint, cont
 func (r *Router) UnregisterAgent(agentID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
-	agent, exists := r.agents[agentID]
+
+	_, exists := r.agents[agentID]
 	if !exists {
 		return fmt.Errorf("agent %s not found", agentID)
 	}
-	
+
 	// Останавливаем через lifecycle
 	if err := r.lifecycle.Stop(context.Background(), agentID); err != nil {
 		return fmt.Errorf("stop agent: %w", err)
 	}
-	
+
 	delete(r.agents, agentID)
-	
+
 	return nil
 }
 
@@ -173,14 +185,19 @@ func (r *Router) ListAgents() []Agent {
 
 // RouteEvent маршрутизирует событие
 func (r *Router) RouteEvent(ctx context.Context, event Event) error {
+	// Проверяем что lifecycle установлен
+	if r.lifecycle == nil {
+		return fmt.Errorf("lifecycle not set on router, cannot route events")
+	}
+
 	// Находим подходящие блупринты
 	bps := r.MatchEvents(event)
-	
+
 	if len(bps) == 0 {
 		// Нет подходящих агентов, но это не ошибка
 		return nil
 	}
-	
+
 	// Для каждого блупринта создаем агента
 	for _, bp := range bps {
 		// Проверяем, есть ли уже агент для этого события
@@ -192,25 +209,25 @@ func (r *Router) RouteEvent(ctx context.Context, event Event) error {
 			}
 			continue
 		}
-		
+
 		// Создаем нового агента
 		agentCtx := &AgentContext{
 			ScopeID:   event.ScopeID,
 			Level:     r.determineLevel(bp),
 			LOD:       LODBasic, // Начальный уровень детализации
 		}
-		
+
 		agent, err := r.SpawnAgent(ctx, bp, agentCtx)
 		if err != nil {
 			return fmt.Errorf("spawn agent: %w", err)
 		}
-		
+
 		// Обработаем событие новым агентом
 		if err := agent.HandleEvent(ctx, event); err != nil {
 			return fmt.Errorf("handle event for new agent: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
