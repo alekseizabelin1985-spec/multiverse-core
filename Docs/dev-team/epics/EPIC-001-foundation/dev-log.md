@@ -1969,3 +1969,567 @@ compose продолжает страховать через `${VAR:?}`.
   сценария «удалить и посчитать, сколько удалили» понадобится `Stat` и принятая гонка.
 - `Required()` на трёх внешних переменных ничего не проверяет прямо сейчас: проверку выполняет
   `mvctl env check` (T-010), которого ещё нет. До него страховка — `${VAR:?}` в compose.
+
+---
+
+## developer#1 · T-009 · F-4b-2 «Схемы блока «в» и политики топиков» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `0c92f2a` (T-006 + T-007). Параллельно developer#2 ведёт
+T-008 (`docker-compose.yml`, `Makefile`, `scripts/**`, `build/**`, `.github/ci.env`) — файлово
+не пересекаемся. Основание: `tasks.md` §1 и T-009; `architecture/contracts.md` v0.4 §0, C-05 v1.1,
+C-06 v1.1, C-07 v1.2, C-10 v1.1, C-12, C-14, §16 п. 4 и п. 7; `analysis/api-contracts.md` v0.2.1
+§0, §2.0, §2.2, §2.3.6–§2.3.16; `analysis/data-model.md` §7.2, §7.4; `project/metrics.md` §4.2;
+`epics/EPIC-005-memory-ops/design.md` §4.1, §12 п. 2; ADR-005 доп. 3, ADR-007, ADR-014, ADR-016,
+ADR-017.
+
+### 1. Что сделано
+
+**31 схема блока «в»** в `schemas/events/` (стиль T-006: `$schema` 2020-12, `$id` в пространстве
+`https://multiverse-core.io/schemas/events/`, `$ref` в `_common.json`, `additionalProperties: false`
+на верхнем уровне и во вложенных объектах). Владельцы — по `contracts.md` §0:
+
+| Схемы | Владелец |
+|---|---|
+| `combat.decided`, `encounter.started`, `encounter.ended` | EPIC-003 |
+| `world.weather_changed`, `world.time_advanced`, `world.event_occurred`, `region.event_occurred`, `npc.moved`, `npc.spawned` | EPIC-003 |
+| `tick.fired`, `tick.aborted`, `agent.spawned`, `agent.child_resolved`, `agent.stopped`, `agent.spawn_rejected`, `agent.blueprint_reloaded` | EPIC-003 |
+| `llm.output`, `llm.output.rejected`, `content.incident.recorded`, `narrative.output`, `config.cloud_enabled` | EPIC-003 |
+| `world.laws.changed`, `world.law_breach.{proposed,rejected,applied,review_decided,rolled_back}` | EPIC-003 (издатель — E-B) |
+| `analytics.session.started`, `analytics.session.ended`, `analytics.turn.completed` | EPIC-004 |
+| `analytics.consistency.violated` | EPIC-005 (по запросу `EPIC-005/design.md` §12 п. 2) |
+
+**Реестр `shared/contracts/registry.go`** — 31 запись с `Owner`/`Publishers`/`Consumers`/`Policy`
+по карте §2.2. Новые конструкторы: `worldEvent` (топик `world_events`), `swarmEvent` (любой топик +
+`eventbus.SwarmPolicy()`), обёртка `reserved`.
+
+**`shared/contracts/spec.go`** — поле `Spec.Reserved`: машинная форма исключения `contracts.md`
+§16 п. 4 и C-12 «издатель + ≥ 1 потребитель» для семейства `world.law_breach.*`. Это то поле,
+которое `mvctl contracts check` (T-010) читает, чтобы отличить зарезервированный тип от мёртвого;
+`Publishers`/`Consumers` у них заполнены будущим издателем (`core/laws`), а не пусты — чтобы
+проверка `source ∈ Publishers` заработала без правки реестра, когда придёт E-B.
+
+**Тесты** (`shared/contracts/blockv_test.go`):
+- `TestBlockVPayloadExamples` — по одному валидному примеру §2.3 на каждый из 31 типа; полнота
+  таблицы проверяется в `TestPayloadExamples` (сумма примеров обоих блоков = число типов со схемой);
+- `TestBlockVPayloadRejects` — 25 негативных фикстур: лишнее поле (`backgroud_refs`, `api_key` в
+  `config.cloud_enabled`), отсутствие обязательного (`tick.lod_allowed`, `prompt_hash`, `timings`,
+  `detected_by`), значение вне enum (`mode=idle`, `lod=maximum`, `end_reason=bored`,
+  `severity=fatal`, `created_by=operator`, `reason=too_long`, `strategy=guess`);
+- `TestQuarantinedRecordKeepsNoText` — `if/then` схемы `llm.output`: при
+  `validation_status=quarantined` поле `response_raw` запрещено, при `valid` — допустимо;
+- `TestValidationStatusEnum`, `TestRejectionReasonEnum` — «часовые» по ADR-017: шесть значений
+  статуса и десять значений `reason`, плюс равенство `llm.output.reasons[]` тому же enum;
+- `TestEndReasonIncludesForget` — `forget` в `analytics.session.ended` (C-10 v1.1);
+- `TestSwarmTopicsDemandAnAgent` — 20 типов роя: с `meta.agent` политика пропускает, без него
+  возвращает `ErrPolicyViolation`; `TestTopicsWithoutAnAgentRule` — 11 типов, которым агент не
+  нужен; `TestPlayerEventsRejectSystem` — `player_events` отклоняет `actor_kind=system` и
+  принимает `sim`;
+- `TestEveryTopicCarriesAType` — у каждого `TopicSpec` есть хотя бы один `Spec` (исключение —
+  `dead_letters`: обёртку `DeadLetter` пишет сама шина, типа события у неё нет);
+- `TestReservedTypes` — `Reserved` стоит ровно у пяти `world.law_breach.*`;
+- `TestBlockVOwners` — владелец каждого семейства.
+
+В `registry_test.go`: `encounter.started` внесён в таблицу типов с несколькими издателями (снята
+заглушка «регистрируется в T-009»); в `TestTopics` добавлена проверка `dead_letters` (30 дн., не
+читается в replay).
+
+### 2. Решения по ходу
+
+1. **Политики топиков — по списку C-01 §2.0 плюс §0.** `SwarmPolicy` (обязателен `meta.agent`)
+   поставлена на `llm.*`, `tick.*`, `agent.*`, `narrative.output`, `combat.decided` (прямой список
+   §2.0) и на `encounter.*`, `world.weather_changed`, `world.time_advanced`, `world.event_occurred`,
+   `region.event_occurred`, `npc.*`, `content.incident.recorded` — их §0 называет событиями,
+   изданными рантаймом роя, а других издателей у них нет (`FakeEncounter`/`FakeNarrator` тоже
+   пишут `meta.agent` с префиксом `fake-`, C-05). Политика **не** поставлена на
+   `world.laws.changed` (издаёт автор из CLI), `world.law_breach.*` (E-B), `config.cloud_enabled`
+   (публикует контекст `llm` при старте, агента нет) и `analytics.*`.
+2. **Сквозные поля не дублируются в payload.** В `llm.output` нет `correlation_id`, `agent`,
+   `actor_kind`, `replay`, `gm_path` — ADR-007 п. 1 и §2.3.10 прямо говорят «из payload убраны»;
+   ключ записи для replay `(meta.correlation_id, meta.agent.id, phase, attempt)` собирается из
+   конверта. В `analytics.turn.completed` по той же причине нет `correlation_id` и
+   `trigger{event}` (§0: «`payload.trigger{event}` не используется», причина — `meta.causation_*`),
+   хотя `metrics.md` §4.2 их ещё перечисляет.
+3. **`world`/`scope` в аналитике — опциональные.** `metrics.md` §4.2 держит их в обязательных
+   полях payload, §2.1 говорит «дублировать не требуется». Схема принимает оба варианта: издатель
+   (gateway) волен положить копию для CSV-конвейера, а истина — конверт. Жёсткий выбор здесь
+   означал бы либо отклонять законного издателя, либо ломать `metrics.md`; это вопрос владельцу
+   (ОВ-35).
+4. **`tick.fired.agent`/`scope` и `agent.spawned.scope` — опциональные копии.** §2.3.9 и
+   `data-model.md` §7.4 перечисляют их в payload, конверт содержит те же данные. Асимметрия с
+   `llm.output` (п. 2) — из документов, а не из моего решения.
+5. **`response_raw` запрещён только при `quarantined`.** C-07 v1.2 пишет «`quarantined`/
+   `filter_error` — без `response_raw`», а ADR-016 п. 3 — «`error` (фильтр упал) → `filter_error`,
+   `response_raw` **сохраняется**». Взято пересечение: запрет только для `quarantined`
+   (`data-model.md` §7.2 говорит ровно это). Расхождение — ОВ-33.
+6. **`config.cloud_enabled.external_players_ack`** — имя по `api-contracts.md` §2.3.16 (эталон
+   payload по задаче), в C-06 v1.1 то же поле названо `allow_external_players`. Расхождение — ОВ-34.
+7. **`violation{code, layer, severity, detected_by}`** у `analytics.consistency.violated` — вложены
+   в объект `violation` по `metrics.md` §4.2 (DoD T-009 называет поля, но не уровень вложенности).
+   `code` — объединение девяти значений `metrics.md` и `log_gap`/`invariant` из C-10 v0.3; три
+   значения из DoD (`state_divergence`, `log_gap`, `invariant`) присутствуют.
+8. **`combat.decided`: обязательны** `encounter, round, action, attacker, outcome, rolls,
+   rules_version, phase1_mode`; `defender` и `hp` — опциональны, потому что `action=flee`
+   разрешается против порога, а не против цели. `living_enemies` положен внутрь `outcome` рядом с
+   `success`/`threshold` (§2.3.6 перечисляет их одной фразой; чтение — допущение, см. §6).
+9. **`EventRef` не заведён в `_common.json`.** Ссылка `{event:{id,type?}}` повторяется в шести
+   схемах, но `_common.json` меняется только через system-architect (`tasks.md` T-006); формы
+   описаны на месте, как уже сделано в `round.closed`. Предложение — в бэклог.
+10. **`rules.change.*` не зарегистрированы.** T-009 называет их в списке исключений проверки, но
+    их нет ни в карте §2.2, ни в списке схем задачи; C-13 относит их к резерву EPIC-006 (E-A).
+    Механизм для них готов (`Reserved`) — ОВ-36.
+
+### 3. Отклонения от дизайна
+
+- Добавлено поле `Spec.Reserved` (`spec.go`) — задача перечисляет только
+  `schemas/events/*.v1.json` и `registry.go`. Без него исключение §16 п. 4 нельзя выразить иначе,
+  чем пустыми `Publishers`/`Consumers`, что противоречит DoD T-006 («у каждого `Spec` непустой
+  `Publishers`»). Изменение аддитивное, публичный API `shared/contracts` не ломает.
+- Правки в `registry_test.go` (`encounter.started`, `dead_letters`) и в `validate_test.go`
+  (счётчик примеров) — тесты T-006, их нужно было привести в соответствие.
+
+### 4. Результаты DoD
+
+- `go build ./... && go vet ./...` — зелёные.
+- `go test -short -count=1 ./...` — все пакеты `ok` (`-race` в этом окружении недоступен).
+- `go test -short -count=1 -cover ./shared/contracts/...` — **81,5 %** (порог 81 %).
+- `golangci-lint run ./...` — **0 issues**.
+- `gofmt -l shared schemas` — пусто.
+- Все схемы компилируются как JSON Schema 2020-12 (`TestSchemasValid`); «нет фантомов» в обе
+  стороны (`TestNoPhantoms`); каждый пример §2.3 валиден (`TestPayloadExamples` +
+  `TestBlockVPayloadExamples`); у каждого `Spec` непустые `Publishers`/`Consumers`
+  (`TestEveryTypeHasPublisherAndConsumer`); у каждого `TopicSpec` есть тип
+  (`TestEveryTopicCarriesAType`).
+
+### 5. Открытые вопросы
+
+- **ОВ-33.** `response_raw` при `filter_error`: C-07 v1.2 запрещает, ADR-016 п. 3 требует
+  сохранять (fail-closed, текст не доставляется, но запись нужна для разбора). Схема сейчас
+  разрешает. Решение за system-architect; если победит C-07, в `if/then` добавляется второе
+  значение.
+- **ОВ-34.** Имя третьего поля `config.cloud_enabled`: `external_players_ack` (§2.3.16) против
+  `allow_external_players` (C-06 v1.1). Взято первое. Нужна правка одного из документов.
+- **ОВ-35.** `world`/`scope` в payload аналитики — обязательные (`metrics.md` §4.2) или только в
+  конверте (§2.1)? Сейчас опциональны. Вопрос владельцу типов (EPIC-004) и BA.
+- **ОВ-36.** `rules.change.proposed`/`rules.changed` (C-13) — регистрировать в MVP-1 как
+  `Reserved` или отложить до EPIC-006? В карте §2.2 их нет, схем задача не заказывала.
+- **ОВ-37.** `TopicSpec` не выражает `max.message.bytes=4 МиБ` для `llm_records` (§2.2), хотя
+  задуман как единственный источник для `redpanda-init` и `mvctl contracts topics`. Пока значение
+  живёт только в скрипте T-008. Кандидат в T-010 или в бэклог.
+- **ОВ-38.** `tick.aborted.reason` и `narrative.output.fallback_reason` описаны в документах без
+  enum; сделаны строками. Когда EPIC-003 зафиксирует словарь, это совместимое сужение.
+
+### 6. Риски и допущения
+
+- Схемы блока «в» — первая редакция по документам; их владельцы (EPIC-002/003/004/005) ревизуют
+  и дополняют в своих задачах (T-052, T-214/T-215, T-301). Там, где документ давал список полей
+  без пометки «обязательно», в `required` вошёл минимум, при котором событие остаётся осмысленным
+  для потребителя: слишком широкая схема ловит меньше дефектов, слишком узкая отклоняет законного
+  издателя, и в пользу второго риска выбор сделан только там, где документ говорит «обязателен»
+  прямо (`tick.lod_allowed`, поля `llm.output` по `data-model.md` §7.2).
+- `combat.decided.outcome.living_enemies` — допущение о вложенности (§2.3.6 перечисляет
+  `outcome.success`, `outcome.threshold`, `living_enemies` одной фразой). Если EPIC-003 читает
+  его как поле верхнего уровня, правка — одна строка в схеме и в примере.
+- Списки `Consumers` — из колонки «Потребители» §2.2, переведённой в значения `source`. Слова
+  «оператор», «страж», «replay», «`session-report`» отображены на `mvctl`/`core/swarm`; если
+  оператор окажется отдельным процессом, списки придётся расширить.
+
+---
+
+## developer#2 · T-008 · F-6b «Профили compose, `redpanda-init`/`minio-init`, Makefile, `compose-lint`» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation` (база T-008 — `0c92f2a`). Основание: `architecture/infrastructure.md`
+v0.3 §1.3, §1.4, §2.2, §3.1.1, §5.1, §5.2, §5.3, §6.1–§6.3, §9; `epics/EPIC-001-foundation/tasks.md`
+T-008 и §1; ADR-005 доп. 2 п. 1/3/7, ADR-007, ADR-021; threat-model SEC-13/14/15/22/32/33, T-14,
+T-17, T-32; D-3, D-8, D-9, D-10, U-3, U-8. Параллельно developer#1 вёл T-009 в `schemas/events/**`
+и `shared/contracts/**` — эти каталоги не трогал.
+
+### 1. Что сделано
+
+**`docker-compose.yml`** — к ядру T-004 добавлены пять профилей и два init-контейнера.
+
+| Профиль | Сервисы | Порты на хосте |
+|---|---|---|
+| (без профиля) | `redpanda`, **`redpanda-init`**, `minio`, **`minio-init`**, `gateway`, `core` | 19092, 9644, 9000, 8088 |
+| `memory` | `qdrant`, `neo4j`, `memory` | 6333, 6334, 7687, 8082 |
+| `gpu` | `ollama` | 11434 |
+| `dev` | `redpanda-console` | 8092 |
+| `bot` | `telegram-bot` | 8089 |
+| `legacy` | `chromadb`, `semantic-memory`, `narrative-orchestrator` (+ `neo4j`) | 8083 |
+
+Все публикации — `127.0.0.1:` (SEC-13); admin-порт `core` не публикуется, только `expose: 8090`
+(T-14). `neo4j` объявлен с двумя профилями (`memory`, `legacy`) — as-is `semantic-memory` пишет
+свой граф туда же, и держать два сервера незачем. `NEO4J_PLUGINS` не задан (T-17). У `ollama`
+проставлены `OLLAMA_KEEP_ALIVE=-1`, `OLLAMA_MAX_LOADED_MODELS=2`, `OLLAMA_NUM_PARALLEL=1`,
+`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_ORIGINS` со списком loopback-адресов
+(никогда `*`); `OLLAMA_HOST` не переопределяется намеренно — образ и так слушает интерфейс
+контейнера, а запись `0.0.0.0` здесь была бы ровно тем, что запрещает SEC-15. Токен бота — только
+у `telegram-bot`, `env_file` нет ни у одного сервиса (D-10). Логи бота — `10m × 3` через отдельный
+якорь, платформа остаётся на `50m × 5`. Введены якоря `x-platform-env` (общие `MV_*`) и
+`x-depends-on-init`: `gateway` и `core` теперь ждут не `service_healthy` шины и хранилища, а
+`service_completed_successfully` обоих init-контейнеров (§5.1).
+
+**`build/redpanda-init.sh`** — 8 топиков таблицы §5.1 одной таблицей `TOPICS` в шапке скрипта:
+retention 30 дн. (`player_events`, `game_events`, `world_events`, `system_events`,
+`narrative_output`, `dead_letters`), 90 дн. (`llm_records` + `max.message.bytes=4194304`), 180 дн.
+(`analytics_events`); всем — `-p 1 -r 1 -c cleanup.policy=delete -c segment.ms=86400000` (D-9).
+`create` идёт с «уже есть» в ветке отказа, а `alter-config` выполняется **всегда** — иначе
+изменённый retention никогда не доехал бы до существующего кластера. `scope_management` и прочие
+фантомные топики не создаются, Schema Registry не поднимается.
+
+**`build/minio-init.sh`** — `mc alias set` → `mc mb --ignore-existing ops-artifacts` →
+сервисный пользователь + политика `readwrite` (пропускается, если `MV_MINIO_ACCESS_KEY` совпадает
+с root — обычный dev-случай) → по существующим бакетам: `entities-*`/`snapshots-*` — versioning +
+ILM на 30 дн. для неактуальных версий, `prompts-*` — ILM `Expiration 30 дн.` **без** versioning
+(SEC-22), прочие — ничего.
+
+**Сходимость с `objstore.EnsureBucket` (Mi-10 из ревью T-007).** `EnsureBucket` вызывает
+`SetBucketLifecycle`, который *заменяет* всю конфигурацию одним правилом с id
+`multiverse-retention-<bucket>` (`shared/objstore/minio.go`, `lifecycleOf`). Скрипт пишет **то же
+самое единственное правило с тем же id** через `mc ilm rule import`, который тоже заменяет
+конфигурацию целиком. Поэтому порядок запусков не важен и второго, конфликтующего правила не
+появляется ни при каком чередовании. Значения (30 дн.) продублированы в скрипте константой
+`RETENTION_DAYS` со ссылкой на `shared/objstore/buckets.go` — единственное место, где они могут
+разъехаться, и его стережёт integration-тест T-007.
+
+**`scripts/compose-lint.sh`** — шесть правил §3.1.1, один и тот же скрипт для CI и Git Bash.
+Разбор модели — `docker compose config --format json`, дальше встроенная программа на `python3`:
+`jq` на машине владельца нет, а тянуть контейнер ради разбора документа — странная зависимость для
+линтера. Правила 1 и 3 смотрят **исходный текст** файла, а не интерполированную модель: после
+подстановки литеральный пароль и правильный `${VAR:?}` выглядят одинаково.
+
+**`Makefile`** — переписан целиком под §2.2: `SHELL := bash`, `.SHELLFLAGS := -euo pipefail -c`,
+`.ONESHELL`, `include build/versions.env`, `export GOFLAGS=-buildvcs=false`. Цели as-is
+(`SERVICES`, `build-service`, `build-all`, `test-service`, `sync`, `run`) удалены вместе с
+workspace. Добавлены `build lint test test-integration test-e2e contracts secrets-scan vuln
+compose-lint ci ci-full image minio-image up down reset logs health llm-up llm-down llm-health
+models warm bench backup restore archive-legacy legacy-src replay deploy rollback clean help`.
+`make up` LLM не поднимает — только `make health` зовёт `llm-health`. `make clean` больше не делает
+`docker system prune` (он удалял чужие образы). `PROFILES=` переопределяет `COMPOSE_PROFILES` на
+один вызов.
+
+**`scripts/llm-server.ps1` / `.sh`** — старт/стоп/health нативного `llama-server`. Аргументы — по
+таблице §6.2, значения из `.env`; семплинга (`--temp`, `--top-p`, `--top-k`, `--min-p`) нет
+намеренно — его задаёт шлюз на каждый запрос из блупринта фазы (ADR-005 доп. 2 п. 1). `--no-webui`
+по умолчанию, `--tools all`/`--ui-mcp-proxy` — только по явному `-WithUi`/`--with-ui`. `up` ждёт
+`/health = 200` до 180 с (503 = loading — норма), затем делает один короткий
+`/v1/chat/completions` (`max_tokens: 1`, `enable_thinking: false`) и печатает его латентность.
+Повторный `up` при живом процессе — no-op; при «PID есть, порт молчит» — рестарт. `health`
+печатает код `/health`, имена из `/v1/models`, факт билда против пина `LLAMACPP_BUILD`
+(расхождение — предупреждение, не ошибка) и `nvidia-smi`.
+
+**`build/versions.env`** (дополнение): `LEGACY_GO_IMAGE`, `LEGACY_SRC_REF`, `ALPINE_IMAGE`
+(тар-контейнер для `backup`/`restore`/`archive-legacy`; в рецептах Makefile тегов нет).
+**`.github/ci.env`** (дополнение): секция `legacy` — `CHROMA_IMAGE` с заведомо непритягиваемым
+плейсхолдером и три `LEGACY_*`. **`.env.example`**: заполнена секция `legacy`, в блок Ollama
+добавлен `OLLAMA_ORIGINS`. **`.gitignore`**: `/build/.legacy-src/`.
+
+### 2. Решение по жизнеспособности профиля `legacy`
+
+Профиль **жив, но собирается не из рабочего дерева, а из архивного коммита**. Запасной вариант S5
+не потребовался.
+
+Что выяснилось. `build/legacy.Dockerfile` (копия as-is корневого Dockerfile) копировал `go.work`,
+которого больше нет. Простая починка невозможна: замороженные сервисы не компилируются против
+текущего `shared/`. Проверено воспроизведением раскладки вручную (`shared/` из корня + as-is
+`shared/{config,minio,oracle,spatial}` из архива, `go.work` над ними):
+
+```
+narrative_agent.go:38:16: undefined: eventbus.EventBus
+narrative_agent.go:77:19: undefined: tools.WorldTool
+narrative_agent.go:80:20: undefined: tools.EntityTool
+narrative_agent.go:83:23: undefined: tools.NarrativeTool
+```
+
+То есть F-4a (T-005) заменил `shared/eventbus`, F-3 (T-002) увёл `shared/{config,minio,oracle,
+spatial}` в другой модуль и убрал инструменты с побочными эффектами (SEC-18, ADR-001 доп. п. 5), а
+F-2 (T-003) удалил `go.work`. Править замороженный код нельзя по определению заморозки.
+
+Решение: контекст сборки профиля — **последний коммит, на котором этот код собирался**,
+`LEGACY_SRC_REF=e6103e4` в `build/versions.env`. `make legacy-src` делает
+`git archive $(LEGACY_SRC_REF) go.work go.mod go.sum shared services/narrative-orchestrator
+services/semantic-memory | tar -x -C build/.legacy-src`; `make up PROFILES=legacy` вызывает его сам.
+Экспортируются только нужные пути — `.mcp.env` того коммита намеренно остаётся за бортом. Ничего не
+удалено и не разморожено, U-1 соблюдён.
+
+Вторая находка: as-is корневой Dockerfile генерировал `go.work` как `use (. ./services/X)`, а
+`shared/{agent,agent/tools,config,eventbus,minio,oracle,spatial}` в as-is раскладке — **отдельные
+модули**, и без них сборка падает с «no required module provides package
+multiverse-core.io/shared/oracle». `build/legacy.Dockerfile` теперь генерирует `go.work` из
+фактически найденных `shared/**/go.mod`.
+
+Проверено: `docker build -f build/legacy.Dockerfile --build-arg SERVICE=narrative-orchestrator
+build/.legacy-src` — образ собран (exit 0). `semantic-memory` (CGO + ONNX Runtime) не собирался —
+только `docker compose --profile legacy config -q`; это стендовая проверка (ОВ-41).
+
+### 3. Отклонения от дизайна
+
+1. **Консоли MinIO (9001) и Neo4j (7474) не публикуются вообще.** §1.4 просит «только в профиле
+   `dev`», но публикация порта в compose не может зависеть от профиля, а вынести её в отдельный
+   сервис нельзя: Docker запрещает `ports` вместе с `network_mode: service:`. Принято более строгое
+   прочтение SEC-33 — не публиковать; доступ оператора — `docker compose port` или локальный,
+   git-ignored `docker-compose.override.yml`. `redpanda-console` — единственная консоль в файле, и
+   она в профиле `dev` (ОВ-40).
+2. **Пути init-скриптов** — `build/redpanda-init.sh` и `build/minio-init.sh` (как в `tasks.md` и в
+   комментарии `shared/objstore/buckets.go`), а не `scripts/`. `scripts/` остаётся за скриптами,
+   которые запускает оператор и CI.
+3. **`entrypoint` `minio-init` — `/bin/bash`, не `/bin/sh`.** Образ `minio/mc` несёт bash и
+   coreutils и **не несёт** `sed`, `grep`, `awk`: первая версия скрипта на POSIX sh молча
+   отработала вхолостую (`sed: command not found` внутри подстановки, цикл по нулю бакетов). Разбор
+   `mc ls` переписан на builtin'ы bash, а листинг сначала кладётся в переменную — чтобы ошибка
+   листинга роняла контейнер, а не приводила к тихому «ничего не сделано».
+4. **`rpk` вызывается как `-X brokers=...`, а не `--brokers`.** У rpk v26 `rpk cluster health`
+   ходит в admin API на 9644 и флага `--brokers` не имеет вовсе (`Error: unknown flag`). Готовность
+   проверяется через `rpk cluster info -X brokers=...` — тот же Kafka-путь, которым потом идут
+   команды создания топиков. Первая версия скрипта из-за этого падала с «broker not reachable».
+5. **`make llm-*` на Windows без PowerShell 7 падает с понятным сообщением**, а не откатывается на
+   `.sh`: супервизия нативного Windows-процесса MSYS-сигналами хуже, чем честный отказ (ОВ-43).
+6. **`CHROMA_IMAGE` продублирован в `.github/ci.env`** — единственный пин, повторённый вне
+   `versions.env`, и только потому, что там он намеренно пуст (D-3). Иначе `docker compose
+   --profile legacy config -q` невозможен в CI. Значение — заведомо несуществующий тег.
+7. **Изменения за пределами перечня файлов T-008**: `build/versions.env` (+3 переменные),
+   `.gitignore` (+1 строка, каталог артефакта `make legacy-src`), `.env.example` (секции `legacy`
+   и `OLLAMA_ORIGINS`). Все — минимальные и следуют из состава задачи.
+
+### 4. Как проверял
+
+| Проверка | Команда | Результат |
+|---|---|---|
+| Профили compose | `docker compose --env-file build/versions.env --env-file .github/ci.env [--profile P] config -q` для «ядра», `gpu`, `memory`, `dev`, `legacy`, `bot` | 6/6 ok |
+| compose-lint | `bash scripts/compose-lint.sh` | ok, 15 сервисов, 6 правил |
+| compose-lint ловит нарушения | 10 временных копий compose с подложенными нарушениями (latest; порт без `127.0.0.1`; 7474 вне `dev`; литерал `minioadmin`; `${VAR:-minioadmin}`; токен бота у `core`; `NEO4J_PLUGINS`; `OLLAMA_ORIGINS=*` + `OLLAMA_HOST=0.0.0.0`; сервис `llama-server`; `MV_LLM_URL=https://api.openai.com/...`) | 10/10 пойманы, копии удалены |
+| Синтаксис скриптов | `bash -n` (redpanda-init, minio-init, compose-lint, llm-server.sh) | ok |
+| Makefile | разбор GNU make 4.4.1 в контейнере (`make -n` по 23 целям) | все цели разбираются |
+| **redpanda-init на живом брокере** | `COMPOSE_PROJECT_NAME=mvt008check docker compose up -d --wait redpanda redpanda-init`, затем `rpk topic list` / `rpk topic describe -c` | 8 топиков; `retention.ms` 2592000000 / 7776000000 / 15552000000, `segment.ms=86400000`, `cleanup.policy=delete`, `llm_records.max.message.bytes=4194304` |
+| Идемпотентность redpanda-init | повторный запуск контейнера | «exists» + «config is up to date», exit 0 |
+| **minio-init на живом MinIO** | образ собран `docker build -f build/minio.Dockerfile` (164 МБ); бакеты `entities-probeworld`, `snapshots-probeworld`, `prompts-probeworld` созданы вручную, затем init | `entities/snapshots` — `versioning is enabled` + правило `multiverse-retention-<bucket>` с `NoncurrentVersionExpiration.NoncurrentDays=30`; `prompts` — `is un-versioned` + `Expiration.Days=30`; `ops-artifacts` — правил нет |
+| Идемпотентность minio-init | повторный запуск | ровно одно правило на бакет, без дублей |
+| Сервисный пользователь MinIO | запуск с `MV_MINIO_ACCESS_KEY=svc-probe-user` | «service user added» + «policy readwrite attached», повтор — «exists» |
+| **Полный подъём ядра** | `docker compose up -d --wait` (проект `mvt008check`, образ платформы собран) | `redpanda healthy → redpanda-init exited 0 → minio healthy → minio-init exited 0 → core healthy, gateway healthy`; exit 0 |
+| Health | `curl 127.0.0.1:8088/health` = 200; `docker exec core /multiverse health --url http://127.0.0.1:8090/health` = ok | ok |
+| Публикации портов | `docker compose ps` | только `127.0.0.1:` (8088, 9000, 9644, 19092); у `core` — `8090/tcp` без публикации, `docker port core` пуст |
+| Сборка профиля legacy | `docker build -f build/legacy.Dockerfile --build-arg SERVICE=narrative-orchestrator build/.legacy-src` | образ собран (exit 0) |
+| Уборка стенда | `docker compose -p mvt008check down -v` | контейнеры, сеть и тома проекта удалены; as-is тома владельца (`multiverse_*`) не тронуты |
+
+Go-тесты — n/a (задача без Go-кода). `make lint`/`go test` по общему DoD §1 не запускал: Go-файлы
+не менялись.
+
+### 5. Результаты общего DoD §1
+
+- п. 1–3 (`make lint`, `go build/vet/test`, тесты) — **n/a**: изменений в Go-коде нет.
+- п. 4 `make secrets-scan` — `gitleaks git --staged --redact .` и `gitleaks dir` по рабочей копии:
+  0 находок (см. отчёт оркестратору).
+- п. 5 — эта запись.
+- п. 7 — изменения в границах владения (`docker-compose.yml`, `Makefile`, `scripts/**`, `build/**`
+  кроме `Dockerfile`/`minio.Dockerfile`, `.github/ci.env`, `.env.example`, `.gitignore`);
+  `schemas/events/**` и `shared/contracts/**` (T-009, developer#1) не тронуты.
+- п. 8 — CI появится в T-012; локальный эквивалент запускался частями (см. §4).
+
+**Не выполнен один критерий T-008**: «`git grep -i minioadmin` пуст вне `Docs/` и
+`services/_archive/`» — см. ОВ-42.
+
+### 6. Открытые вопросы
+
+- **ОВ-40.** Консоли MinIO (9001) и Neo4j Browser (7474) в профиле `dev` не опубликованы —
+  compose не умеет условную публикацию порта (§3 п. 1). Варианты: (а) оставить как есть, доступ
+  через `docker compose port`; (б) завести `build/compose.dev.yml` как второй `-f`, который
+  добавляет публикации, и научить `compose-lint` линтовать обе комбинации; (в) поправить §1.4.
+  Решение — devops-engineer / tech-lead#1.
+- **ОВ-41.** Профиль `legacy` собирается из `LEGACY_SRC_REF=e6103e4`, а не из рабочего дерева
+  (§2). На стенде остаётся проверить: сборку `semantic-memory` (CGO + ONNX Runtime, тяжёлая),
+  тег `CHROMA_IMAGE` (D-3, сейчас пуст) и фактический старт связки orchestrator → semantic-memory
+  → chroma. Пока это не сделано, `MV_GM_PATH=legacy` считать непроверенным; уведомить tech-lead#2.
+  Побочный эффект решения: при исправлении бага в замороженном сервисе править придётся коммит,
+  а не файл — то есть заводить новый ref. Для профиля, который удаляется в EPIC-003 I2, приемлемо.
+- **ОВ-42.** `git grep -i minioadmin` вне `Docs/` и `services/_archive/` **не пуст**: 20 вхождений
+  — `QWEN.md` (5), `.claude/plugins/multiverse-core-plugins/README.md` (2) и **замороженные as-is
+  сервисы** (`services/{entity-manager,entity-actor,evolution-watcher,ontological-archivist,
+  rule-engine}/cmd/main.go`, `services/entity-manager/entitymanager/manager.go`,
+  `services/semantic-memory/semanticmemory/indexer.go` — дефолт `getEnv("MINIO_ACCESS_KEY",
+  "minioadmin")`). Ни один из этих файлов не в моём владении и не в целевой сборке. `compose-lint`
+  проверяет правило 3 по области целевой платформы (`docker-compose.yml`, `build/`, `scripts/`,
+  `cmd/`, `shared/`, `.github/`, `.env.example`), исключая упоминания вида «не minioadmin» —
+  `.env.example:18` и `shared/env/infra.go:34` именно такие. Значимая часть находки: у
+  `services/semantic-memory` этот дефолт **попадает в рантайм профиля `legacy`**, если
+  `MINIO_ACCESS_KEY` не задан; в compose он задан явно из `MV_MINIO_ACCESS_KEY`, так что дыры нет,
+  но формулировку критерия и судьбу `QWEN.md` (T-019) нужно закрыть решением tech-lead#1.
+- **ОВ-43.** PowerShell 7 на машине **не установлен** (`pwsh` нет ни в `PATH`, ни в
+  `C:\Program Files\PowerShell\`), хотя `infrastructure.md` §1.1 числит его в составе окружения.
+  `scripts/llm-server.ps1` требует `#Requires -Version 7` (`??`, `Set-StrictMode Latest`),
+  проверить его парсером 5.1 нельзя. До установки (`winget install Microsoft.PowerShell`)
+  `make llm-up`, `make llm-down`, `make llm-health` и `make health` на Windows не работают.
+  Проверить скрипт на стенде обязательно до F-8.
+- **ОВ-44.** Сервис `telegram-bot` профиля `bot` объявлен с `entrypoint: ["/telegram-bot"]`, но
+  бинарника ещё нет — `cmd/telegram-bot` появится в EPIC-004. `docker compose --profile bot config
+  -q` проходит, `up` — нет. Это ожидаемо; если tech-lead#1 предпочтёт, чтобы профиль до EPIC-004
+  вообще отсутствовал, сервис легко изъять.
+- **ОВ-45.** `make bench` зовёт `scripts/llm-bench.ps1`/`.sh`, которых ещё нет — они относятся к
+  F-8 (T-013). Цель оставлена по §2.2, чтобы имя не менялось потом.
+
+### 7. Риски и допущения
+
+- `compose-lint` требует `python3` (есть и на машине владельца, и на `ubuntu-latest`). Это
+  сознательная замена `jq`, которого на машине нет. Если CI когда-нибудь останется без Python,
+  правило разбора придётся переписать.
+- Правила 1 и 3 линтера читают исходный YAML построчными регулярками (`^  <service>:`,
+  `^    image:`, `^      KEY: value`). Это работает, пока файл отформатирован так, как сейчас;
+  переход на другой стиль отступов правила ослабит — не сломает громко, а перестанет что-то
+  видеть. Кандидат в бэклог: разбирать исходник YAML-парсером в CI.
+- `mc ilm rule import` заменяет конфигурацию целиком. Если EPIC-005 когда-нибудь захочет второе
+  правило на том же бакете, сходимость с `EnsureBucket` придётся пересматривать вместе — сейчас
+  обе стороны исходят из «ровно одно правило на бакет».
+- `make health` считает сервис отсутствующим, если его нет в `docker compose ps --services`; при
+  неверном `PROFILES` это выглядит как «-», а не как ошибка. Осознанно: выключенный профиль
+  `memory` — это не сбой.
+- `make backup` останавливает `core` и `redpanda` на время `tar`. При большом томе окно простоя
+  растёт линейно; альтернатива без остановки (`mc mirror`) описана в §5.6 и не автоматизирована.
+- Дефолт `LEGACY_SRC_REF=e6103e4` взят из `services/_archive/build/ARCHIVED.md` («последний рабочий
+  коммит»). Если история ветки будет переписана (`git filter-repo`, §4.5), ref нужно обновить.
+
+---
+
+## developer#2 · T-008 · итерация 2 (исправления по ревью #1) · 2026-09-09
+
+Вход: `review.md` «T-008 · ревью #1 · 2026-09-09 · code-reviewer#2» и задание оркестратора.
+Исправлены M-1…M-5, Mi-1, Mi-2, Mi-3, Mi-6. Mi-4 (правило 1 линтера сверяет имя переменной, а не
+значение), Mi-5 (`legacy-src` не подхватывается из `COMPOSE_PROFILES`), Mi-7 (свежесть бэкапа в
+`make reset`) и Nit по решению оркестратора не трогались — они уходят в бэклог (T-012/T-019).
+
+### 1. M-1 — `OLLAMA_ORIGINS` объявлен в манифесте
+
+`shared/env/infra.go` (файл T-007, правка согласована оркестратором) — три строки рядом с
+остальным блоком `OLLAMA_*`, в том же стиле: `DeclareExternal` + `Tooling()` +
+`RequiredWhen("MV_LLM_PROVIDER", "ollama")`. Переменная — вход compose (`docker-compose.yml`
+читает `${OLLAMA_ORIGINS:-…}`), поэтому убирать строку из `.env.example` было бы хуже.
+`go test -short ./shared/env/` — зелёный.
+
+### 2. M-2 — healthcheck `qdrant` на `bash -c`
+
+`CMD-SHELL` — это `/bin/sh -c`, а `/bin/sh` в `qdrant/qdrant:v1.19.1` — `dash`, у которого нет
+`/dev/tcp`. Заменено на `["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]` (§5.3).
+Проверено на стенде отдельным проектом (`-p mvqdranttest`), чтобы не трогать тома владельца:
+`docker compose --profile memory up -d qdrant --wait` → `Container … Healthy`, код 0; затем
+`down -v` этого проекта.
+
+### 3. M-3 — `make up` не падает без LLM
+
+Введена переменная строгости `LLM_STRICT ?= 1` (вариант «б» из ревью). `make health` сам по себе
+остаётся строгим по §2.2; `up`, `deploy` и `rollback` зовут его как `health LLM_STRICT=0`, и тогда
+неуспешный `llm-health` печатает предупреждение из §6.3 дословно
+(`warning: LLM недоступен, нарратив деградирует (FR-080); подними процесс: make llm-up`) и не
+влияет на код возврата. Случай «`pwsh` не установлен» (ОВ-43) закрывается тем же путём: макрос
+`llm` по-прежнему завершается с 1 и объясняет, что делать, но `make up` это больше не роняет.
+
+**Отклонение от языка файла.** Текст предупреждения — русский, единственная такая строка в
+`Makefile`. Он задан §6.3 дословно; менять формулировку значило бы отклоняться от дизайна ради
+единообразия вывода.
+
+### 4. M-4 — правило 3 линтера видит обе раскладки и любой якорь
+
+`scripts/compose-lint.sh`: разбор `environment` по позиции (`^  <service>:` → `^    environment:`
+→ `^      KEY: value`) и отдельная ветка для якоря с зашитым именем `x-platform-env` заменены
+одним проходом по всему тексту файла регуляркой вида
+`^\s*-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(\S.*?)\s*$`.
+Одна регулярка покрывает и отображение (`KEY: value`), и список (`- KEY=value`), и любой якорь.
+Строки-комментарии пропускаются; ближайший объемлющий ключ по-прежнему отслеживается, но только
+чтобы назвать место в сообщении (теперь ещё и с номером строки).
+
+Фикстуры: `testdata/compose-lint/bad-*.yml` — по одной на класс пропуска, плюс `README.md` с
+таблицей. Цель `make compose-lint` после прогона по настоящему `docker-compose.yml` гоняет скрипт
+по каждой фикстуре и падает, если хоть одна прошла. Проверено вручную (make на машине нет):
+настоящий файл — 0; `bad-env-list.yml`, `bad-anchor.yml`, `bad-port.yml`, `bad-latest.yml` — 1,
+каждая на своём правиле (3, 3, 2, 1).
+
+### 5. M-5 — цели LLM читают `.env`
+
+Добавлен макрос `load_dotenv` (`set -a; . ./.env; set +a` по образцу §4.3) — он вызывается из
+макроса `llm` (то есть из `llm-up`/`llm-down`/`llm-health`) и из `models`/`warm`. При отсутствии
+`.env` цель печатает, что делать (`copy .env.example to .env and fill the MV_LLM_* block`), и
+выходит с 1, а не работает с пустыми переменными. В связке с M-3 отсутствие `.env` больше не
+роняет `make up`.
+
+Побочный эффект `source` в bash: незакавыченный путь Windows теряет обратные слэши. В
+`.env.example` над блоком `MV_LLM_*` добавлены две строки с требованием одинарных кавычек —
+compose-парсер их тоже снимает. Прогон `set -a; . ./.env.example; set +a` под
+`bash -euo pipefail` проходит.
+
+### 6. Mi-1 — `health_code()` больше не возвращает `0000`
+
+`curl` при отказе соединения и печатает `000` через `-w`, и выходит с 7, поэтому `|| echo 0`
+дописывал второе значение. Функция переписана: код захватывается отдельной строкой, `|| true`
+гасит статус, `${code:-000}` закрывает пустой ответ. Проверено на закрытом порту — `[000]`.
+Следствия: ветка `up` «PID жив, порт молчит» снова перезапускает сервер, а `health` печатает
+подготовленное «unreachable — the process is not running». Мёртвая альтернатива `| 0` в `case`
+убрана.
+
+### 7. Mi-2 — `minio-init` различает «уже есть» и отказ
+
+`mc admin user add` падает и когда пользователь уже создан, и когда MinIO отверг ключ (access key
+короче 3 символов, secret короче 8). Теперь в ветке отказа факт подтверждается через
+`mc admin user info`: пусто → лог с подсказкой и `exit 1`, непусто → «service user exists». Так же
+для `mc admin policy attach`: политика ищется в выводе `user info` через `case` (в образе `mc` нет
+`grep`), и невозможность применить политику останавливает контейнер.
+
+Проверено на стенде (отдельный проект `-p mvinit`, свой том, снесён после):
+
+| Прогон | Результат |
+|---|---|
+| чистый MinIO | `service user added`, `policy readwrite attached`, код 0 |
+| повтор | то же, код 0 (MinIO перезаписывает существующего пользователя) |
+| секрет короче 8 символов | `cannot create service user … (access key >= 3 and secret >= 8 characters?)`, код 1 |
+
+До правки третий случай давал «service user exists» и код 0.
+
+### 8. Mi-3 — секреты MinIO вне argv
+
+Ключи передаются `mc` через stdin, а не аргументами: `mc alias set ALIAS URL` и
+`mc admin user add ALIAS` обе читают пару «access-key, secret-key» построчно из пайпа
+(документировано в `mc … --help`, пример «piped keys»).
+
+**Отклонение от предложенного в ревью решения.** Вариант с `MC_HOST_local` (URL вида
+`http://user:pass@minio:9000`) пробовался первым и отвергнут по результату проверки на
+закреплённом образе `minio/mc:RELEASE.2025-08-13T08-35-41Z`: `mc` не декодирует percent-encoding
+в userinfo, поэтому percent-encoded пароль даёт `signature does not match`, а сырой пароль с
+`/`, `@` или `#` ломает разбор URL (`security token invalid`). То есть `MC_HOST_*` обменял бы
+видимый секрет на стек, который не стартует при сильном пароле. Пайп решает ту же задачу и
+работает с любым паролем — проверено на пароле со спецсимволами.
+
+### 9. Mi-6 — пины `legacy.Dockerfile`
+
+- `FROM debian:bookworm-slim` → `FROM ${LEGACY_RUNTIME_IMAGE}`; в `build/versions.env` добавлен
+  `LEGACY_RUNTIME_IMAGE` с дайджестом `sha256:8820…4171` (получен `docker pull` 2026-09-09).
+  Правило шапки `versions.env` «no floating tags anywhere» больше не нарушается.
+- Тарбол ONNX Runtime: версия и контрольная сумма вынесены в `versions.env`
+  (`LEGACY_ONNXRUNTIME_VERSION=1.18.0`, `LEGACY_ONNXRUNTIME_SHA256=fa4d…04f0`), URL собирается из
+  версии, после `wget` идёт `sha256sum -c -`. Сумма посчитана с релизного ассета GitHub.
+- `libonnxruntime.so.1.18.0` в стадии рантайма заменён на `…so.${LEGACY_ONNXRUNTIME_VERSION}`,
+  чтобы версия жила в одном месте.
+- Новые аргументы прокинуты в `docker-compose.yml`: `semantic-memory` получает все три,
+  `narrative-orchestrator` — только `LEGACY_RUNTIME_IMAGE` (ONNX ему не нужен, `BUILD_CGO=0`).
+
+Сборка профиля `legacy` не перезапускалась (долгая, по указанию оркестратора): проверено
+`docker compose --profile legacy config -q` и синтаксис Dockerfile.
+
+### 10. Как проверено
+
+| Проверка | Результат |
+|---|---|
+| `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` (ядро + `memory`, `gpu`, `bot`, `dev`, `legacy`) | 6/6 OK |
+| `bash scripts/compose-lint.sh` | `ok — 15 services, 6 rules`, код 0 |
+| `bash scripts/compose-lint.sh -f testdata/compose-lint/bad-*.yml` | 4/4 код 1 |
+| `go test -short -count=1 ./...` | все пакеты `ok`, включая `shared/env` |
+| `golangci-lint run ./...` | `0 issues` |
+| `pre-commit run --files <изменённые>` | 8 хуков Passed |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| `qdrant` healthy на стенде | да (отдельный проект, снесён `down -v`) |
+| `minio-init` на стенде: чисто / повтор / плохой ключ | 0 / 0 / 1 |
+
+### 11. Открытые вопросы и допущения итерации
+
+- **Допущение.** Sha256 тарбола ONNX Runtime посчитан с самого ассета — независимой публикации
+  контрольной суммы у релиза `v1.18.0` нет. Значение фиксирует «то, что скачалось 2026-09-09»;
+  подмена ассета после этой даты сборку остановит, подмена до неё осталась бы незамеченной.
+- **Допущение.** Дайджест `debian:bookworm-slim` придётся обновлять вручную вместе с остальными
+  пинами (§9.5) — Dependabot `versions.env` не видит.
+- Предупреждение M-3 печатается по-русски по §6.3 — см. отклонение в п. 3.
+- Прогон `make` по-прежнему не выполнялся: `make` на машине владельца не установлен (ОВ-42).
+  Рецепты проверены построчно в bash, включая новый самотест `compose-lint`.

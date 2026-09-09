@@ -113,6 +113,7 @@ func TestPublishersOfSharedTypes(t *testing.T) {
 		}},
 		"analytics.replay.completed": {OwnerState, []string{SourceState, SourceMvctl, SourceTestkitState}},
 		"snapshot.created":           {OwnerState, []string{SourceState, SourceSwarm, SourceGateway}},
+		"encounter.started":          {OwnerSwarm, []string{SourceSwarm, SourceTestkitSwarm}},
 	}
 	for typ, want := range cases {
 		spec, ok := Lookup(typ)
@@ -126,11 +127,6 @@ func TestPublishersOfSharedTypes(t *testing.T) {
 		if !slices.Equal(spec.Publishers, want.publishers) {
 			t.Errorf("%s: publishers %v, want %v", typ, spec.Publishers, want.publishers)
 		}
-	}
-	// encounter.started, the fifth type of the list, arrives with block "в"
-	// (T-009) together with the rest of the swarm types.
-	if _, ok := Lookup("encounter.started"); ok {
-		t.Error("encounter.started is registered by T-009, not here: remove the note above")
 	}
 }
 
@@ -176,6 +172,16 @@ func TestTopics(t *testing.T) {
 	}
 	if records := byName[eventbus.TopicLLMRecords]; records.RetentionMS != retention90d {
 		t.Errorf("llm_records retention %d ms, want 90 days", records.RetentionMS)
+	}
+	dead, ok := byName[eventbus.TopicDeadLetters]
+	if !ok {
+		t.Fatal("dead_letters is missing")
+	}
+	if dead.RetentionMS != retention30d {
+		t.Errorf("dead_letters retention %d ms, want 30 days", dead.RetentionMS)
+	}
+	if dead.ReplayRead {
+		t.Error("dead_letters must not be read during a replay")
 	}
 	// Every registered type goes to one of the topics of the map.
 	for _, spec := range All() {

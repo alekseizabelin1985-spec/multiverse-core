@@ -14,6 +14,8 @@
 *.out
 coverage.*
 /backups/
+# as-is sources exported by `make legacy-src` for the `legacy` profile (T-008)
+/build/.legacy-src/
 *.db
 *.db-wal
 *.db-shm

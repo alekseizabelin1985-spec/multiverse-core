@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.law_breach.rejected.v1.json",
+  "title": "world.law_breach.rejected payload",
+  "description": "A breach proposal was refused (api-contracts.md 2.3.13). immutable_touched is the decision of G1: the immutable laws of the universe are not breakable. Reserved in MVP-1, publisher E-B.",
+  "type": "object",
+  "properties": {
+    "breach": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["immutable_touched", "contradiction", "canon_conflict_missing", "formula_change",
+               "unknown_entity", "breach_pending", "llm_unavailable"]
+    }
+  },
+  "required": ["breach", "reason"],
+  "additionalProperties": false
+}

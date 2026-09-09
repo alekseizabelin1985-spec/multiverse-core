@@ -54,4 +54,7 @@ var (
 	OllamaKVCacheType = DeclareExternal("OLLAMA_KV_CACHE_TYPE", "",
 		"KV cache precision of Ollama, f16 or q8_0 (infrastructure.md §6.4)",
 		Tooling(), RequiredWhen("MV_LLM_PROVIDER", "ollama"))
+	OllamaOrigins = DeclareExternal("OLLAMA_ORIGINS", "",
+		"allowed CORS origins of Ollama; never `*` (SEC-15)",
+		Tooling(), RequiredWhen("MV_LLM_PROVIDER", "ollama"))
 )

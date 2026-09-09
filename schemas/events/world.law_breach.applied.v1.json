@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.law_breach.applied.v1.json",
+  "title": "world.law_breach.applied payload",
+  "description": "A breach was applied and the review window opened (api-contracts.md 2.3.13). Reserved in MVP-1, publisher E-B.",
+  "type": "object",
+  "properties": {
+    "breach": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "laws": {
+      "type": "object",
+      "properties": {
+        "version_from": { "type": "string", "minLength": 1 },
+        "version_to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["version_from", "version_to"],
+      "additionalProperties": false
+    },
+    "review": {
+      "type": "object",
+      "properties": { "deadline_at": { "$ref": "_common.json#/$defs/Timestamp" } },
+      "required": ["deadline_at"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["breach", "laws", "review"],
+  "additionalProperties": false
+}

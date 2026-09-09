@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/region.event_occurred.v1.json",
+  "title": "region.event_occurred payload",
+  "description": "A background event of one region told by its domain GM (api-contracts.md 2.3.8). The region itself is the scope of the envelope; the state it changes travels in a separate entity.update.proposed.",
+  "type": "object",
+  "properties": {
+    "kind": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "affects": {
+      "type": "array",
+      "items": { "$ref": "_common.json#/$defs/EntityWithName" }
+    }
+  },
+  "required": ["kind", "summary", "affects"],
+  "additionalProperties": false
+}

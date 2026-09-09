@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.laws.changed.v1.json",
+  "title": "world.laws.changed payload",
+  "description": "The laws of the world moved to a new version (api-contracts.md 2.3.13, contracts.md C-12). Published by the author through mvctl laws bump, and by the breach mechanics of E-B. A change takes effect on a round boundary, never in the middle of one.",
+  "type": "object",
+  "properties": {
+    "laws": {
+      "type": "object",
+      "properties": {
+        "version_from": { "type": "string", "minLength": 1 },
+        "version_to": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "enum": ["approved", "pending_review", "rolled_back"] }
+      },
+      "required": ["version_from", "version_to", "status"],
+      "additionalProperties": false
+    },
+    "created_by": { "type": "string", "enum": ["author", "breach"] },
+    "diff": {
+      "type": "object",
+      "properties": {
+        "added": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "removed": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "required": ["added", "removed"],
+      "additionalProperties": false
+    },
+    "effective_from": {
+      "type": "object",
+      "properties": { "round_boundary": { "type": "boolean" } },
+      "required": ["round_boundary"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["laws", "created_by", "diff", "effective_from"],
+  "additionalProperties": false
+}

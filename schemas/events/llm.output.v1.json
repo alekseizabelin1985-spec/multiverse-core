@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/llm.output.v1.json",
+  "title": "llm.output payload",
+  "description": "One call of the LLM gateway, recorded before the answer is used (data-model.md 7.2, contracts.md C-07 v1.2). The record key for a replay is (meta.correlation_id, meta.agent.id, phase, attempt), so correlation_id, agent, actor_kind, replay and gm_path live in meta and are not repeated here (ADR-007 p. 1). validation_status is the outcome of the pipeline; the reasons of a refusal belong to llm.output.rejected alone (ADR-017 addendum 1).",
+  "type": "object",
+  "properties": {
+    "phase": { "type": "string", "enum": ["decision", "narrative", "tick", "other"] },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "params": {
+      "type": "object",
+      "description": "Sampling of the request (contracts.md C-15 v1.1). Recorded as sent, so that a replay reproduces the call.",
+      "properties": {
+        "temperature": { "type": "number" },
+        "top_p": { "type": "number" },
+        "top_k": { "type": "integer" },
+        "min_p": { "type": "number" },
+        "presence_penalty": { "type": "number" },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "thinking": { "type": "boolean" },
+        "format": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "prompt_hash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The prompt itself is kept in local storage behind a flag; the record carries the hash only (SEC-23)."
+    },
+    "response_raw": { "type": "string" },
+    "response_hash": { "type": "string", "minLength": 1 },
+    "response_len": { "type": "integer", "minimum": 0 },
+    "validation_status": {
+      "type": "string",
+      "enum": ["valid", "partially_rejected", "invalid", "error", "quarantined", "filter_error"]
+    },
+    "reasons": {
+      "type": "array",
+      "description": "Denormalised set of the reasons of the related llm.output.rejected, so that a report needs no join (C-07 v1.2).",
+      "items": {
+        "type": "string",
+        "enum": ["unknown_entity", "player_agency", "level_violation", "schema_invalid", "language",
+                 "filter_blocked", "filter_error", "budget_exceeded", "law_violation", "other"]
+      }
+    },
+    "filter": {
+      "type": "object",
+      "properties": {
+        "applied": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pass", "block", "error"] },
+        "filter_version": { "type": "string", "minLength": 1 }
+      },
+      "required": ["applied", "status", "filter_version"],
+      "additionalProperties": false
+    },
+    "laws_version": { "type": "string", "minLength": 1 },
+    "latency_ms": { "type": "integer", "minimum": 0 },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "prompt": { "type": "integer", "minimum": 0 },
+        "completion": { "type": "integer", "minimum": 0 },
+        "cached": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["prompt", "completion"],
+      "additionalProperties": false
+    },
+    "cost_usd": { "type": "number", "minimum": 0 },
+    "lod": { "type": "string", "enum": ["disabled", "rule-only", "basic", "full"] },
+    "tools_used": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "parse": {
+      "type": "object",
+      "description": "How the parser recovered the JSON of the answer (ADR-016 p. 1, C-07 v1.1).",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["direct", "strip_think", "strip_fence", "balanced_object", "trailing_commas"]
+        },
+        "recovered": { "type": "boolean" }
+      },
+      "required": ["strategy", "recovered"],
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object",
+      "description": "Present when validation_status=error. code=yielded means a background call gave the queue up to a player turn (ADR-014 p. 2).",
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      },
+      "required": ["code"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["phase", "attempt", "provider", "model", "params", "prompt_hash", "response_hash",
+               "response_len", "validation_status", "laws_version", "latency_ms", "tokens", "cost_usd"],
+  "additionalProperties": false,
+  "if": {
+    "properties": { "validation_status": { "enum": ["quarantined", "filter_error"] } },
+    "required": ["validation_status"]
+  },
+  "then": {
+    "not": { "required": ["response_raw"] },
+    "$comment": "A text the filter blocked, and a text the filter could not judge, are both left unstored: the record keeps the hash and the length, and content.incident.recorded carries the fact without the text (C-07, orchestrator decision on OV-33)."
+  }
+}

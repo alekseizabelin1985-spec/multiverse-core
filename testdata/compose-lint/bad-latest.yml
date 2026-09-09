@@ -1,0 +1,7 @@
+# Rule 1: a floating tag on a third-party image, and one that does not come
+# from build/versions.env (NFR-071).
+services:
+  neo4j:
+    image: neo4j:latest
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}

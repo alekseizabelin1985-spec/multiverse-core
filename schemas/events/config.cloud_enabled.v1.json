@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/config.cloud_enabled.v1.json",
+  "title": "config.cloud_enabled payload",
+  "description": "The state of the cloud flag of the LLM gateway (api-contracts.md 2.3.16, contracts.md C-06 v1.1, ADR-005 addendum p. 3). Published on every start of core, enabled=false included, so that the projection of the gateway is deterministic after a restart. No key, no URL, no secret ever travels here (SEC-21).",
+  "type": "object",
+  "properties": {
+    "enabled": { "type": "boolean" },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The name from MV_LLM_PROVIDER and nothing else."
+    },
+    "external_players_ack": {
+      "type": "boolean",
+      "description": "The operator confirmed the flag with external players in the world (UC-030)."
+    }
+  },
+  "required": ["enabled"],
+  "additionalProperties": false
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/analytics.turn.completed.v1.json",
+  "title": "analytics.turn.completed payload",
+  "description": "One turn of a player as the gateway measured it (metrics.md 4.2, contracts.md C-10). The action that started the turn is meta.causation_id and the chain is meta.correlation_id, so neither is repeated in the payload (ADR-007 p. 1). A rejected turn carries received_at and acked_at only and does not enter the latency metrics.",
+  "type": "object",
+  "properties": {
+    "world": { "$ref": "_common.json#/$defs/WorldRef" },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "session": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "turn": {
+      "type": "object",
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "action_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The action.type of the player event that opened the turn; a free string there, a free string here."
+        },
+        "target": { "$ref": "_common.json#/$defs/EntityWithName" },
+        "status": { "type": "string", "enum": ["ok", "degraded", "rejected", "timeout", "error"] },
+        "gm_path": { "type": "string", "enum": ["agent", "legacy"] },
+        "phase1_mode": { "type": "string", "enum": ["rules", "llm"] },
+        "lod": { "type": "string", "enum": ["disabled", "rule-only", "basic", "full"] }
+      },
+      "required": ["seq", "action_type", "status", "gm_path"],
+      "additionalProperties": false
+    },
+    "timings": {
+      "type": "object",
+      "description": "Clock of the gateway. mechanics_at and narrative_at are absent for a turn that never reached those stages.",
+      "properties": {
+        "received_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "acked_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "mechanics_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "narrative_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "mechanics_ms": { "type": "integer", "minimum": 0 },
+        "narrative_ms": { "type": "integer", "minimum": 0 },
+        "total_ms": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["received_at", "acked_at"],
+      "additionalProperties": false
+    },
+    "narrative": {
+      "type": "object",
+      "properties": {
+        "generated_by": { "type": "string", "enum": ["llm", "template", "none"] },
+        "agent_level": { "type": "string", "enum": ["global", "domain", "task"] },
+        "agent_blueprint": { "type": "string", "minLength": 1 },
+        "fallback_reason": { "type": ["string", "null"] },
+        "filter_applied": { "type": "boolean" }
+      },
+      "required": ["generated_by", "filter_applied"],
+      "additionalProperties": false
+    },
+    "delivery": {
+      "type": "object",
+      "properties": {
+        "recipients_count": { "type": "integer", "minimum": 0 },
+        "delivered_count": { "type": "integer", "minimum": 0 },
+        "result_event_id": { "type": "string", "minLength": 1 },
+        "narrative_event_id": { "type": "string", "minLength": 1 }
+      },
+      "required": ["recipients_count", "delivered_count"],
+      "additionalProperties": false
+    },
+    "absence": {
+      "type": "object",
+      "description": "Only for an entry turn of a player who has an earlier session in this world; copied from the narrative.output of the personal GM.",
+      "properties": {
+        "since_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "background_events_count": { "type": "integer", "minimum": 0 },
+        "surfaced_event_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      },
+      "required": ["since_at", "background_events_count", "surfaced_event_ids"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity", "session", "turn", "timings", "narrative", "delivery"],
+  "additionalProperties": false
+}

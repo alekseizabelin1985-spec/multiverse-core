@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/combat.decided.v1.json",
+  "title": "combat.decided payload",
+  "description": "The encounter agent recorded the result of mechanics.Resolve (api-contracts.md 2.3.6, contracts.md C-05). The event decides, it does not change state: the change follows as an entity.update.proposed built from mechanics.ChangesFor. defender and hp are absent for a flee, which resolves against a threshold rather than a target.",
+  "type": "object",
+  "properties": {
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "round": {
+      "type": "object",
+      "properties": { "seq": { "type": "integer", "minimum": 1 } },
+      "required": ["seq"],
+      "additionalProperties": false
+    },
+    "action": { "type": "string", "enum": ["attack", "flee", "free_attack", "npc_attack"] },
+    "attacker": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "defender": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "outcome": {
+      "type": "object",
+      "properties": {
+        "hit": { "type": "boolean" },
+        "natural": { "type": "integer" },
+        "damage": { "type": "integer", "minimum": 0 },
+        "critical": { "type": "boolean" },
+        "fumble": { "type": "boolean" },
+        "target_dead": { "type": "boolean" },
+        "success": {
+          "type": ["boolean", "null"],
+          "description": "Result of a flee attempt; null for an attack, which reports hit instead."
+        },
+        "threshold": { "type": "integer", "description": "Flee only: the number the roll had to beat." },
+        "living_enemies": { "type": "integer", "minimum": 0, "description": "Flee only: enemies still standing." }
+      },
+      "required": ["hit", "natural"],
+      "additionalProperties": false
+    },
+    "hp": {
+      "type": "object",
+      "properties": {
+        "defender_before": { "type": "integer" },
+        "defender_after": { "type": "integer" },
+        "defender_max": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["defender_before", "defender_after", "defender_max"],
+      "additionalProperties": false
+    },
+    "rolls": {
+      "type": "array",
+      "description": "The dice.rolled events this decision rests on, published before it.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "type": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          },
+          "index": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["event", "index"],
+        "additionalProperties": false
+      }
+    },
+    "rules_version": { "type": "string", "minLength": 1 },
+    "phase1_mode": { "type": "string", "enum": ["rules", "llm"] },
+    "lod": { "type": "string", "enum": ["disabled", "rule-only", "basic", "full"] },
+    "free_attack": { "type": "boolean" }
+  },
+  "required": ["encounter", "round", "action", "attacker", "outcome", "rolls", "rules_version", "phase1_mode"],
+  "additionalProperties": false
+}

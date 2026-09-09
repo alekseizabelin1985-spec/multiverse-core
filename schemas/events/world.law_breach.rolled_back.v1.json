@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.law_breach.rolled_back.v1.json",
+  "title": "world.law_breach.rolled_back payload",
+  "description": "An applied breach was rolled back and the facts it produced were retconned (api-contracts.md 2.3.13). Reserved in MVP-1, publisher E-B.",
+  "type": "object",
+  "properties": {
+    "breach": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "laws": {
+      "type": "object",
+      "properties": {
+        "version_from": { "type": "string", "minLength": 1 },
+        "version_to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["version_from", "version_to"],
+      "additionalProperties": false
+    },
+    "retconned_fact_ids": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+  },
+  "required": ["breach", "laws", "retconned_fact_ids"],
+  "additionalProperties": false
+}

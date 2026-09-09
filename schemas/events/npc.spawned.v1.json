@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/npc.spawned.v1.json",
+  "title": "npc.spawned payload",
+  "description": "The domain GM spawned an NPC from the npc_table of its blueprint after respawn_ttl (api-contracts.md 2.3.8, UC-036). The first population of a world comes from fixtures, not from this event.",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "kind": { "type": "string", "minLength": 1 },
+    "position": { "type": "string", "minLength": 1 },
+    "spawned_by": {
+      "type": "object",
+      "description": "Absent for a spawn that no tick caused, e.g. one made inside an encounter.",
+      "properties": {
+        "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+        "tick": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "type": { "type": "string", "minLength": 1 }
+              },
+              "required": ["id"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["event"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["agent"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity", "kind", "position"],
+  "additionalProperties": false
+}

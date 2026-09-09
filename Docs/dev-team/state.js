@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-10T03:40:00+03:00",
+  "updatedAt": "2026-09-10T08:10:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -53,7 +53,7 @@ window.DEVTEAM_STATE =
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
       "branch": "epic/EPIC-001-foundation",
-      "next": "Коммит T-006 + T-007 (ждёт подтверждения) → T-008 профили compose, T-012 CI",
+      "next": "Коммит T-008 + T-009 → T-010 (mvctl), T-011 (shared/entity v2), T-012 (CI)",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -137,6 +137,26 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T23:10:00+03:00",
           "finishedAt": "2026-09-10T03:40:00+03:00",
           "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-008",
+          "title": "F-6b профили compose, redpanda-init/minio-init, Makefile, compose-lint",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-10T04:10:00+03:00",
+          "finishedAt": "2026-09-10T08:10:00+03:00",
+          "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-009",
+          "title": "F-4b-2 схемы блока «в» и политики топиков",
+          "status": "done",
+          "assignee": "code-reviewer",
+          "startedAt": "2026-09-10T04:10:00+03:00",
+          "finishedAt": "2026-09-10T06:40:00+03:00",
+          "reviewIterations": 1,
           "wave": 0
         }
       ],
@@ -952,6 +972,56 @@ window.DEVTEAM_STATE =
       "action": "итерация 2 по ревью env/objstore/logging",
       "startedAt": "2026-09-10T02:30:00+03:00",
       "finishedAt": "2026-09-10T03:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-009",
+      "action": "схемы блока «в» и политики топиков",
+      "startedAt": "2026-09-10T04:10:00+03:00",
+      "finishedAt": "2026-09-10T05:00:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-008",
+      "action": "профили compose, redpanda-init/minio-init, Makefile, compose-lint",
+      "startedAt": "2026-09-10T04:10:00+03:00",
+      "finishedAt": "2026-09-10T06:00:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-009",
+      "action": "ревью схем блока «в»",
+      "startedAt": "2026-09-10T05:00:00+03:00",
+      "finishedAt": "2026-09-10T06:40:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-008",
+      "action": "ревью профилей compose и init-скриптов",
+      "startedAt": "2026-09-10T06:00:00+03:00",
+      "finishedAt": "2026-09-10T07:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-008",
+      "action": "итерация 2 по ревью профилей и скриптов",
+      "startedAt": "2026-09-10T07:20:00+03:00",
+      "finishedAt": "2026-09-10T08:10:00+03:00"
     }
   ],
   "events": [
@@ -1644,10 +1714,70 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-007 итерация 2 принята; go mod tidy выполнен, сборка и тесты зелёные"
+    },
+    {
+      "at": "2026-09-10T04:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит 0c92f2a (T-006+T-007, contract-change); указание продолжать волну 0"
+    },
+    {
+      "at": "2026-09-10T04:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельно: developer#1 → T-009 (схемы блока «в»), developer#2 → T-008 (профили compose, init-скрипты, compose-lint)"
+    },
+    {
+      "at": "2026-09-10T05:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-009: 31 схема блока «в», политики топиков, Spec.Reserved; покрытие 81,5 %"
+    },
+    {
+      "at": "2026-09-10T05:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer#1 (Opus) → T-009"
+    },
+    {
+      "at": "2026-09-10T06:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-008: 5 профилей, init-контейнеры, compose-lint (10/10 нарушений), llm-server скрипты, Makefile; живой up ядра зелёный"
+    },
+    {
+      "at": "2026-09-10T06:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer#2 (Opus) → T-008"
+    },
+    {
+      "at": "2026-09-10T06:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-009 принята: M-1 (filter_error без response_raw) и Mi-1 внесены оркестратором, тесты и lint зелёные"
+    },
+    {
+      "at": "2026-09-10T07:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-008: вернуть (5 Major: манифест env, healthcheck qdrant, код возврата make up, ложные пропуски compose-lint, .env не читается)"
+    },
+    {
+      "at": "2026-09-10T07:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-008 итерация 2: M-1..M-5 + Mi-1/2/3/6"
+    },
+    {
+      "at": "2026-09-10T08:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-008 итерация 2 принята: линтер ловит все фикстуры, qdrant healthy, make up деградирует без LLM"
     }
   ],
   "blockers": [
-    "EPIC-001: ждёт подтверждения коммитов T-006 и T-007"
+    "EPIC-001: ждёт подтверждения коммита T-008 + T-009"
   ],
   "risks": [
     {

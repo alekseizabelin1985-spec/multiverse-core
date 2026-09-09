@@ -1,0 +1,7 @@
+# Rule 2: a published port with no host interface listens on every address
+# (SEC-13).
+services:
+  qdrant:
+    image: ${QDRANT_IMAGE:?set QDRANT_IMAGE in build/versions.env}
+    ports:
+      - "6333:6333"

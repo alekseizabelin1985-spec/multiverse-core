@@ -46,6 +46,14 @@ type Spec struct {
 	// consumer is a defect, except for the reserved families named in
 	// contracts.md §16 p. 4.
 	Consumers []string
+	// Reserved marks a type whose schema is registered before anything
+	// publishes or reads it: world.law_breach.* waits for E-B (C-12), and the
+	// exception is named in contracts.md §16 p. 4. Publishers and Consumers
+	// still name the component that will do it, so that the check of the
+	// contracts job has something to compare a source against once it exists.
+	// It is this flag that mvctl contracts check reads to skip the "one
+	// publisher and at least one consumer" rule.
+	Reserved bool
 	// Since is the release the type appeared in.
 	Since string
 	// Schema is the compiled payload schema, nil for a deprecated legacy type

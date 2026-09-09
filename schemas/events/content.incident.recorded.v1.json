@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/content.incident.recorded.v1.json",
+  "title": "content.incident.recorded payload",
+  "description": "The category (a) filter blocked a generated text (api-contracts.md 2.3.15, ADR-016 p. 3). The incident carries no text at all: only the version of the filter and the record it refers to.",
+  "type": "object",
+  "properties": {
+    "incident": {
+      "type": "object",
+      "properties": {
+        "category": { "type": "string", "enum": ["a"] },
+        "filter_version": { "type": "string", "minLength": 1 },
+        "llm_output": {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "type": { "type": "string", "minLength": 1 }
+              },
+              "required": ["id"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["event"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["category", "filter_version", "llm_output"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["incident"],
+  "additionalProperties": false
+}

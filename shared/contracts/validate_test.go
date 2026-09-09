@@ -229,8 +229,10 @@ func TestPayloadExamples(t *testing.T) {
 		})
 	}
 
-	if want := countTypesWithSchema(t); len(cases) != want {
-		t.Errorf("%d examples for %d registered types with a schema: every type needs one", len(cases), want)
+	// Blocks "а" and "б" live here, block "в" in blockv_test.go; together they
+	// must cover every type that has a schema.
+	if got, want := len(cases)+len(blockVExamples), countTypesWithSchema(t); got != want {
+		t.Errorf("%d examples for %d registered types with a schema: every type needs one", got, want)
 	}
 }
 
