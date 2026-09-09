@@ -3,7 +3,8 @@
 #
 # The depguard rules below encode the import boundaries of ADR-001 (p. 3 and
 # addendum p. 2, 7): internal/<a> does not import internal/<b>, everything else
-# talks over the bus. forbidigo keeps time and the environment behind
+# talks over the bus. forbidigo keeps the whole of time (the clock, the timers
+# and the durations derived from them) and the whole of the environment behind
 # shared/clock and shared/env so that replay stays deterministic.
 version: "2"
 
@@ -166,10 +167,12 @@ linters:
 
     forbidigo:
       forbid:
-        - pattern: ^os\.(Getenv|LookupEnv)$
+        - pattern: ^os\.(Getenv|LookupEnv|Environ|ExpandEnv)$
           msg: read configuration through shared/env so that it appears in the manifest and in .env.example (NFR-074)
         - pattern: ^time\.Now$
           msg: take the time from shared/clock.Clock, otherwise replay is not reproducible (ADR-001 addendum p. 2)
+        - pattern: ^time\.(After|Tick|NewTimer|NewTicker|Since|Until)$
+          msg: take timers and durations from shared/clock.Timers, otherwise replay runs at wall-clock speed and is not reproducible (ADR-001 addendum p. 2)
         - pattern: ^log\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln)$
           msg: log through log/slog (shared/logging), the platform emits JSON only
 
@@ -188,18 +191,15 @@ linters:
       - path: shared/(clock|runtime|env)/
         linters:
           - forbidigo
-        text: (os\.(Getenv|LookupEnv)|time\.Now)
+        text: (os\.(Getenv|LookupEnv|Environ|ExpandEnv)|time\.(Now|After|Tick|NewTimer|NewTicker|Since|Until))
 
       # Code carried over unchanged when the workspace became one module
       # (T-003, foundation.md §11). Formatting is enforced everywhere; the
       # historic semantic findings of these packages are deferred to the task
       # that rewrites them, and the entry goes away with that rewrite.
       #
-      # shared/eventbus: eventbus.go and topics.go are rewritten in F-4a (T-005).
-      - path: shared/eventbus/
-        linters:
-          - errcheck
-          - forbidigo
+      # shared/eventbus is no longer listed: F-4a (T-005) rewrote it, and its
+      # time now comes from shared/clock through eventbus.SetClock.
       # shared/agent: EPIC-003 rewrites the agent runtime; only the blueprint
       # types, parser and validator stay. forbidigo (time.Now) goes away with
       # that rewrite, like the one of shared/eventbus above.

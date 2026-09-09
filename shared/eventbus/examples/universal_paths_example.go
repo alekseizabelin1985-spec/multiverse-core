@@ -29,12 +29,14 @@ func main() {
 	eventbus.SetNested(payload.GetCustom(), "player.stats.hp.current", 85)
 	eventbus.SetNested(payload.GetCustom(), "player.stats.hp.max", 100)
 
-	// Создаём событие
-	event := eventbus.NewStructuredEvent(
+	// Создаём корневое событие цепочки (конверт meta заполняется конструктором)
+	event := eventbus.NewRoot(
 		"player.entered_region",
-		"entity-actor",
+		"gateway",
 		"world-789",
-		payload,
+		&eventbus.ScopeRef{ID: "group-abc", Type: "group"},
+		eventbus.ActorHuman,
+		payload.ToMap(),
 	)
 
 	// Сериализуем в JSON для наглядности

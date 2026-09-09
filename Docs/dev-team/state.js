@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-09T14:10:00+03:00",
+  "updatedAt": "2026-09-09T22:50:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -53,7 +53,7 @@ window.DEVTEAM_STATE =
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
       "branch": "epic/EPIC-001-foundation",
-      "next": "T-001 в работе",
+      "next": "Коммит подволны 0.3 (T-004 + T-005) → T-006 реестр типов, T-007 shared/env",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -72,11 +72,51 @@ window.DEVTEAM_STATE =
         {
           "id": "T-001",
           "title": "F-1 Гигиена индекса, gitleaks и pre-commit",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-09T14:10:00+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-09T15:20:00+03:00",
+          "reviewIterations": 1,
+          "wave": 0
+        },
+        {
+          "id": "T-002",
+          "title": "F-3 Архив заменяемого кода (services/_archive)",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-09T15:40:00+03:00",
+          "finishedAt": "2026-09-09T17:00:00+03:00",
+          "reviewIterations": 1,
+          "wave": 0
+        },
+        {
+          "id": "T-003",
+          "title": "F-2 Go 1.26, единый модуль, .golangci.yml",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-09T17:15:00+03:00",
+          "finishedAt": "2026-09-09T19:20:00+03:00",
+          "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-005",
+          "title": "F-4a shared/eventbus: конверт meta, Bus, Journal, Dedup, DLQ",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-09T19:40:00+03:00",
+          "finishedAt": "2026-09-09T22:50:00+03:00",
+          "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-004",
+          "title": "F-6a build/versions.env, minio.Dockerfile, ядро compose, .dockerignore",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-09T19:40:00+03:00",
+          "finishedAt": "2026-09-09T21:40:00+03:00",
+          "reviewIterations": 1,
           "wave": 0
         }
       ],
@@ -721,7 +761,117 @@ window.DEVTEAM_STATE =
       "task": "T-001",
       "action": "F-1 гигиена индекса, gitleaks, pre-commit",
       "startedAt": "2026-09-09T14:10:00+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-09T14:50:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-001",
+      "action": "ревью diff T-001",
+      "startedAt": "2026-09-09T14:50:00+03:00",
+      "finishedAt": "2026-09-09T15:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-002",
+      "action": "F-3 перенос заменяемого кода в services/_archive/",
+      "startedAt": "2026-09-09T15:40:00+03:00",
+      "finishedAt": "2026-09-09T16:30:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-002",
+      "action": "ревью переноса в архив",
+      "startedAt": "2026-09-09T16:30:00+03:00",
+      "finishedAt": "2026-09-09T17:00:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-003",
+      "action": "F-2: Go 1.26, единый модуль, .golangci.yml",
+      "startedAt": "2026-09-09T17:15:00+03:00",
+      "finishedAt": "2026-09-09T18:00:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-003",
+      "action": "ревью единого модуля и каркаса",
+      "startedAt": "2026-09-09T18:00:00+03:00",
+      "finishedAt": "2026-09-09T18:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-003",
+      "action": "итерация 2: исправления по ревью",
+      "startedAt": "2026-09-09T18:40:00+03:00",
+      "finishedAt": "2026-09-09T19:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-005",
+      "action": "F-4a шина событий: конверт meta, Bus, Journal, Dedup, DLQ",
+      "startedAt": "2026-09-09T19:40:00+03:00",
+      "finishedAt": "2026-09-09T21:00:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-004",
+      "action": "F-6a versions.env, minio.Dockerfile, compose, .dockerignore",
+      "startedAt": "2026-09-09T19:40:00+03:00",
+      "finishedAt": "2026-09-09T20:30:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-004",
+      "action": "ревью сборки и compose",
+      "startedAt": "2026-09-09T20:30:00+03:00",
+      "finishedAt": "2026-09-09T21:40:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-005",
+      "action": "ревью шины событий",
+      "startedAt": "2026-09-09T21:00:00+03:00",
+      "finishedAt": "2026-09-09T22:10:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-005",
+      "action": "итерация 2 по ревью шины",
+      "startedAt": "2026-09-09T22:10:00+03:00",
+      "finishedAt": "2026-09-09T22:50:00+03:00"
     }
   ],
   "events": [
@@ -1192,9 +1342,167 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "A5: ветка epic/EPIC-001-foundation; developer#1 (Opus) → T-001"
+    },
+    {
+      "at": "2026-09-09T14:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-001 выполнена: gitleaks+pre-commit, плейсхолдер ключа, бинарники/секреты из индекса, .env.example 55 MV_*; хук отклоняет токен; 16 файлов в индексе"
+    },
+    {
+      "at": "2026-09-09T14:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer (Opus) → T-001"
+    },
+    {
+      "at": "2026-09-09T15:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-001: принять (0 Critical/Major, 5 Minor, 6 Nit)"
+    },
+    {
+      "at": "2026-09-09T15:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-001 принята по DoD; подволна 0.1 закрыта; запрос коммита"
+    },
+    {
+      "at": "2026-09-09T15:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит T-001 подтверждён → 04a3a15 (через pre-commit)"
+    },
+    {
+      "at": "2026-09-09T15:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "developer#1 (Opus) → T-002 F-3 архив"
+    },
+    {
+      "at": "2026-09-09T16:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-002: 60 путей в services/_archive (rename 100%), go.work сокращён, сборка корня зелёная"
+    },
+    {
+      "at": "2026-09-09T16:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Решения по ОВ T-002: filter.go в архив, replace для legacy в T-008, -race только в CI"
+    },
+    {
+      "at": "2026-09-09T17:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-002: принять (0 Critical/Major, 4 Minor); M-1/M-2/M-3 внесены оркестратором, M-4 назначен в T-003"
+    },
+    {
+      "at": "2026-09-09T17:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит T-002 подтверждён → 5a20bb8"
+    },
+    {
+      "at": "2026-09-09T17:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "developer#1 (Opus) → T-003 F-2"
+    },
+    {
+      "at": "2026-09-09T18:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-003: единый модуль go 1.26, shared/clock, shared/runtime, cmd/multiverse + /health, .golangci.yml, build/Dockerfile; docker build ok"
+    },
+    {
+      "at": "2026-09-09T18:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer (Opus) → T-003"
+    },
+    {
+      "at": "2026-09-09T18:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-003: вернуть (Major 1 — AdminOnly путает actor_kind и client_id; 8 Minor)"
+    },
+    {
+      "at": "2026-09-09T18:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-003 итерация 2: M-1 + Mi-1/3/4/5/8"
+    },
+    {
+      "at": "2026-09-09T19:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-003 итерация 2 проверена и принята: build/vet/test зелёные, lint 0 issues"
+    },
+    {
+      "at": "2026-09-09T19:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит T-003 подтверждён → b7df900"
+    },
+    {
+      "at": "2026-09-09T19:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельно (файлово независимы): developer#1 → T-005 (шина), developer#2 → T-004 (сборка/compose)"
+    },
+    {
+      "at": "2026-09-09T20:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-004: versions.env, minio.Dockerfile (образ собран, RELEASE-версия ок), ядро compose (порты на 127.0.0.1), .dockerignore, ci.env; as-is compose в архив"
+    },
+    {
+      "at": "2026-09-09T20:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer (Opus) → T-004"
+    },
+    {
+      "at": "2026-09-09T21:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-005: eventbus по C-01 (meta, Bus/Journal/Dedup, kafka, DLQ, политики топиков), покрытие 69,7 %, исключение линтера снято"
+    },
+    {
+      "at": "2026-09-09T21:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer#2 (Opus) → T-005 (параллельно ревью T-004)"
+    },
+    {
+      "at": "2026-09-09T21:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-004: принять (0 Critical/Major, 5 Minor); Mi-1/2/4/5 внесены оркестратором: рекурсивные глобы, новые имена томов, admin-порт core не публикуется, MinIO по коммиту"
+    },
+    {
+      "at": "2026-09-09T22:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-005: вернуть (3 Major: батч-таймаут 1 с при публикации, валидация при чтении fail-open, gm_path не заполняется)"
+    },
+    {
+      "at": "2026-09-09T22:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-005 итерация 2: M-1..M-3 + Mi-1/2/3/6"
+    },
+    {
+      "at": "2026-09-09T22:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-005 итерация 2 принята: покрытие 76,1 %, lint 0 issues; подволна 0.3 готова к коммиту"
     }
   ],
-  "blockers": [],
+  "blockers": [
+    "EPIC-001: ждёт подтверждения коммита подволны 0.3 (T-004 + T-005)"
+  ],
   "risks": [
     {
       "id": "R-01",

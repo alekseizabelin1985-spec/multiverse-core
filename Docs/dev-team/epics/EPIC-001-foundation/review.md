@@ -698,3 +698,549 @@ system-architect и зафиксировать выбранный вариант
   §6 п. 2–3): шины и журнала в `Deps` нет. Значит, `--bus=kafka` (умолчание) сегодня поднимает
   процесс без единого соединения — это ожидаемо, но `make up` в T-008 не должен трактовать
   «`/health` = ok» как «шина жива» до T-005.
+
+---
+
+## T-004 · ревью #1 · 2026-09-09 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Ветка `epic/EPIC-001-foundation`, HEAD `b7df900`. Ревьюировались **изменения в индексе**
+(`git diff --cached`) **только по файлам T-004**. Параллельно developer#1 ведёт T-005
+(`shared/eventbus/**`, `.golangci.yml`, в т.ч. удаления `shared/eventbus/eventbus*.go`) —
+эти пути в границы не входят и не рассматривались; незастейдженные правки пользователя
+(`.claude/**`, `.qwen/**`, `.mcp.json`, `services/*/go.mod`) — тоже.
+
+| Действие | Путь |
+|---|---|
+| A | `build/versions.env`, `build/minio.Dockerfile`, `.dockerignore`, `.github/ci.env`, `services/_archive/build/docker-compose.as-is.yml` |
+| M | `docker-compose.yml` (переписано ядро), `Makefile` (+27 строк), `services/_archive/build/ARCHIVED.md`, `Docs/dev-team/epics/EPIC-001-foundation/dev-log.md` |
+| вне git | `backups/minio-src-RELEASE.2025-10-15T17-29-55Z.tar.gz` (24 257 476 Б, проверен `tar -xzO`) |
+
+Основание: `tasks.md` §1 (общий DoD) и §3 (T-004, включая «Дополнение (сведение 3)» и
+«Предпосылку»), §4 (T-008 — границы отложенного); `dev-log.md` запись T-004 (отклонения 1–6,
+ОВ-13…ОВ-16); `architecture/infrastructure.md` **v0.3** §1.1–§1.4, §2.2–§2.5, §3.1, §3.1.1, §3.2,
+§4.2, §5.1, §5.2, §5.5, §10 (F-6); `threat-model.md` SEC-13, SEC-14, SEC-15, SEC-25, SEC-33,
+T-14, T-28…T-32, чек-лист §10; ADR-021, ADR-005 доп. 2 п. 7, ADR-004 доп. п. 4, ADR-001 доп. п. 4/6;
+`journal.md` (форк MinIO — U-10; llama-server вне compose — U-8; retention 30/90/180 — OQ-A-19,
+относится к T-008).
+
+Прогоны ревьюера (Docker Desktop есть, `make` нет — цели проверены чтением; пересборка образа
+MinIO не повторялась по указанию оркестратора, `build/minio.Dockerfile` оценён статически +
+сверен с исходником `buildscripts/gen-ldflags.go` из тарбола):
+
+- `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` → ✔ без вывода;
+  то же с `--profile gpu` → ✔;
+- `docker compose … --profile gpu config --format json` → 6 публикаций портов, **все** с
+  `host_ip=127.0.0.1`; образы `docker.redpanda.com/redpandadata/redpanda:v26.1.17`,
+  `multiverse-core/minio:RELEASE.2025-10-15T17-29-55Z`, `ollama/ollama:0.33.3`,
+  `multiverse-core:ci` — все с явным тегом, `latest` нет; `core.extra_hosts` =
+  `host.docker.internal=host-gateway`; сервиса `llama-server` нет; `name=multiverse`;
+- `docker compose --env-file .github/ci.env config` (без `versions.env`) → падает на
+  `required variable REDPANDA_IMAGE is missing a value` — fail-closed подтверждён;
+- `gitleaks git --staged --redact .` → `no leaks found`;
+- `pre-commit run --files <9 файлов T-004>` → все хуки `Passed` (`golangci-lint*` — Skipped, нет
+  Go-файлов);
+- `git grep -icE "minioadmin|password|secret"` по `build/`, `docker-compose.yml`, `.github/ci.env`
+  → только ожидаемые имена переменных и комментарии, литералов учётных данных нет; `minioadmin`
+  в файлах T-004 отсутствует;
+- `git ls-files --eol` по шести файлам → `i/lf w/lf` (CRLF нет), хвостовых пробелов нет;
+- `git hash-object services/_archive/build/docker-compose.as-is.yml` = `git show
+  b7df900:docker-compose.yml | git hash-object --stdin` = `df991b8a…` — архивная копия
+  побайтно идентична оригиналу;
+- `go build ./... && go vet ./...` с `GOFLAGS=-buildvcs=false` → зелёные (T-004 Go-кода не добавляет,
+  проверка «ничего не сломано»);
+- отдельный микро-эксперимент (`docker build` тестового контекста в scratchpad) — проверка
+  якорения глобов `.dockerignore`, см. Mi-1.
+
+### Вердикт
+
+**Принять** — Critical 0, Major 0, Minor 5, Nit 8. Задача сделана по дизайну, отклонения 1–6
+из `dev-log.md` разумны и обоснованы, самое содержательное из них (`ENV MINIO_RELEASE` +
+явный аргумент версии) проверено по исходнику `gen-ldflags.go` и **улучшает** воспроизводимость,
+а не ухудшает её (см. «Проверено отдельно»). Все команды DoD воспроизведены ревьюером и зелёные.
+Пять Minor — доработки, ни одна не блокирует T-008 и волну 0; три из них (Mi-2, Mi-3, Mi-4)
+по существу адресованы T-008 и архитектору, а не переделке T-004.
+
+### Проверено отдельно: отклонение 1 (`ENV MINIO_RELEASE=RELEASE`)
+
+Замечаний нет, отклонение обосновано и корректно. Из `buildscripts/gen-ldflags.go` тега
+(извлечён из тарбола в `backups/`):
+
+- `releaseTag(version)`: `relPrefix := "DEVELOPMENT"`, переопределяется `os.Getenv("MINIO_RELEASE")`
+  → без `ENV MINIO_RELEASE=RELEASE` штамп был бы `DEVELOPMENT.…` и критерий DoD «`minio --version`
+  печатает `RELEASE.2025-10-15T17-29-55Z`» недостижим — вывод `dev-log.md` подтверждается кодом;
+- версия-аргумент `"${MINIO_TAG#RELEASE.}"` = `2025-10-15T17-29-55Z` парсится как
+  `time.Parse("2006-01-02T15-04-05Z", …)`, из неё же берётся `CopyrightYear`. Без аргумента версия
+  и год выводятся из **времени коммита клона** — то есть предложенный §2.5 вариант отдаёт штамп на
+  откуп метаданным `git clone`, а вариант разработчика делает его детерминированным. При «не том»
+  формате тега `time.Parse` паникует, то есть ошибка громкая, а не тихая.
+
+ОВ-15 (внести правку в `infrastructure.md` §2.5) — поддерживаю, это дефект документа, не кода.
+
+### Проверенные пункты DoD
+
+**DoD задачи (`tasks.md` §3, T-004)**
+
+| # | Критерий | Результат |
+|---|---|---|
+| 1 | `make minio-image` собирается; `minio --version` = `RELEASE.2025-10-15T17-29-55Z` | ✔ по `dev-log.md` §3/§7 (образ 164 МБ, `Runtime: go1.26.8`); ревьюером не пересобиралось (указание оркестратора). Цель `Makefile:26-28` прочитана: `--build-arg` передаются все три (`MINIO_TAG`, `MINIO_REPO`, `MINIO_BUILDER_IMAGE`), тег `-t $(MINIO_IMAGE)` |
+| 1 | откат на `golang:1.24.x` при провале, выбор зафиксирован | ✔ не понадобился; факт и запасное значение записаны в `versions.env:50-53` и `dev-log.md` §3 |
+| 2 | `docker compose --env-file … config -q` | ✔ воспроизведено, вывод пуст |
+| 3 | `config --format json`: ни одной публикации без `127.0.0.1` | ✔ 6/6 портов с `host_ip=127.0.0.1` (19092, 9644, 9000, 8088, 8090, 11434) |
+| 3 | ни одного `image` без явного тега / с `latest` | ✔ 4 уникальных образа, все с тегом |
+| 3 | `extra_hosts` у `core` | ✔ `host.docker.internal=host-gateway` (`docker-compose.yml:170-171`) |
+| 3 | сервиса `llama-server` нет | ✔ и профиля для него нет |
+| 4 | `mc admin info local` против собранного образа | ✔ по `dev-log.md` §3 (`1 drive online`), ревьюером не повторялось |
+| 5 | `docker build --build-arg MINIO_REPO=<форк>` | ✔ на upstream; **форка нет** — предпосылка задачи не выполнена владельцем, задача корректно пошла по разрешённому запасному пути (ОВ-14, эскалация tech-lead#1) |
+| 5 | `git ls-remote --tags <форк>` не пуст | частично: на upstream — ✔ (`9e49d5e7a648…`); на форке — n/a, форка нет |
+| 5 | `backups/minio-src-<tag>.tar.gz` существует и распаковывается | ✔ 24 257 476 Б, проверено ревьюером (`tar -xzO … buildscripts/gen-ldflags.go`); `/backups/` в `.gitignore:16` |
+| 5 | `versions.env` содержит `MINIO_REPO`, `LLAMACPP_BUILD`, `LLM_MODEL_DEFAULT` | ✔ строки 44, 74, 78 |
+| 6 | путь тарбола записан в `dev-log.md` | ✔ §1 |
+| — | состав файлов = «Файлы» задачи, ничего лишнего | ✔ ровно 5 файлов задачи + архив as-is compose + `ARCHIVED.md` + `dev-log.md` |
+| — | «Не входит» (профили `memory/dev/legacy/bot`, init-скрипты, Makefile целиком, `compose-lint`) не сделано | ✔ границы соблюдены, ссылки на T-008 расставлены комментариями по месту |
+
+**Общий DoD §1**
+
+| # | Критерий | Результат |
+|---|---|---|
+| 1 | `make lint` / `gofmt` | n/a (Go-кода нет); `make` на машине отсутствует, цель `lint` появляется в T-008 |
+| 2 | `go build ./... && go vet ./...` | ✔ зелёные (проверено ревьюером) |
+| 2 | `go test -short -race` | Go-кода задача не добавляет; `-race` — только CI (принято по ОВ-5) |
+| 3 | Тесты на новое поведение | n/a по составу задачи; поведение конфигурации закрывается `scripts/compose-lint.sh` в T-008 — это **зафиксировано** в DoD T-008, отдельного риска нет |
+| 4 | `make secrets-scan` (gitleaks) | ✔ `gitleaks git --staged --redact .` → 0 находок |
+| 5 | `dev-log.md` заполнен | ✔ образцово: таблица файлов, происхождение каждого значения, 6 отклонений с обоснованием, отложенное в T-008, таблица результатов DoD, 4 ОВ, 6 рисков |
+| 6 | Соответствие критериям приёмки/дизайну | ✔ §1.3 (состав ядра), §1.4 (порты), §2.4 (пины), §2.5 (Dockerfile), §3.1 (`ci.env`), §5.5 (тома не апгрейдятся) — расхождения перечислены ниже |
+| 7 | Изменений вне карты владения нет | ✔ `build/**`, `docker-compose.yml`, `Makefile`, `.dockerignore`, `.github/ci.env` — владение devops; `services/_archive/**` — перенос по U-1; `shared/eventbus/**` и `.golangci.yml` (T-005) не тронуты |
+| 8 | CI зелёный | n/a до T-012 |
+
+**Безопасность (SEC)**
+
+| Пункт | Результат |
+|---|---|
+| SEC-13 (порты только loopback) | ✔ 6/6; консоли (MinIO 9001, Redpanda Console, Neo4j 7474) не публикуются. Оговорка — Mi-4 |
+| SEC-14 (нет паролей по умолчанию) | ✔ `MINIO_ROOT_USER/PASSWORD`, `MV_MINIO_ACCESS_KEY/SECRET_KEY` — только `${VAR:?подсказка}`; `env_file: .env` не используется ни у одного сервиса (правильное решение: иначе правило 4 `compose-lint` становится непроверяемым) |
+| SEC-15 (Ollama) | ✔ версия с пином, порт на loopback, литерала `OLLAMA_HOST=0.0.0.0` / `OLLAMA_ORIGINS=*` в файле нет |
+| SEC-25 (цепочка поставок) | частично — Mi-5 (клон по мутабельному тегу, без сверки коммита) |
+| SEC-33 (консоли только `dev`) | ✔ |
+| D-10 (токен бота) | ✔ `MV_TELEGRAM_BOT_TOKEN` в `docker-compose.yml` отсутствует; в `.github/ci.env:92` — заведомо нереалистичная заглушка, обоснование в комментарии |
+| Секреты в файлах T-004 | ✔ `gitleaks` чист; `.github/ci.env` корректно исключает `MV_LLM_API_KEY`/`MV_ANTHROPIC_API_KEY` (отклонение 5) — согласен: пустая строка `KEY=` действительно провоцирует `generic-api-key` на захват следующей строки |
+
+**Полнота `build/versions.env` против §2.4**: все 16 требуемых ключей на месте, лишних нет;
+`GO_VERSION=1.26.8` = `toolchain go1.26.8` в `go.mod` (сверено), `MINIO_BUILDER_IMAGE` тот же патч,
+`GOLANGCI_LINT_VERSION=v2.13.2` и `GITLEAKS_VERSION=v8.30.1` совпадают с `rev:` в
+`.pre-commit-config.yaml:10,14` (дрейфа нет). Формат: ни одной строки, которая не является
+комментарием или `NAME=value` (проверено регуляркой) → `include` в `make` безопасен; `=` во всех
+строках стоит **до** первого `:`, поэтому GNU make разбирает их как присваивания, а не как правила;
+инлайновых комментариев после значений нет — ровно то, о чём предупреждает шапка файла. Файл
+успешно прочитан `docker compose --env-file` в прогонах выше, то есть совместимость с обоими
+потребителями подтверждена практически.
+
+**`.github/ci.env` против `.env.example`**: множество имён — строгое подмножество (лишних
+переменных нет ни одной); отсутствуют только `COMPOSE_ENV_FILES` (осознанно, файлы передаются
+ключами), два ключевых `*_API_KEY` (отклонение 5) и 11 машинно-зависимых `MV_LLM_*`, которые
+читает только `scripts/llm-server.*` и которые compose не интерполирует (§2.4, §4.2 п. 5).
+Дрейфа значений с `.env.example` не обнаружено.
+
+**Архивация as-is compose**: перенос корректен, содержимое побайтно идентично `b7df900`, секции
+`narrative-orchestrator` (стр. 118), `semantic-memory` (136) и `chromadb` (63) — источник профиля
+`legacy` — на месте вместе с as-is переменными; `ARCHIVED.md` заполнен по всем шести полям
+(причина, коммит архивации, последний рабочий коммит, эпик возврата, что использовало) и честно
+фиксирует, что `--follow` истории не даст, с двумя способами прочитать оригинал. U-1 соблюдён.
+
+### Замечания
+
+#### Critical
+
+Нет.
+
+#### Major
+
+Нет.
+
+#### Minor
+
+**Mi-1. `.dockerignore:23, 53-60` — глобы без `**` якорятся на корень контекста, вложенные файлы
+в образ попадают.** Заявленная в шапке файла первая цель — безопасность («`.env`, local IDE state
+and the archive must not be baked into an image»), и в `dev-log.md` §7 стоит «✔ `.dockerignore`
+исключает … `*.exe`, `*.log`». Фактически исключается только корневой уровень. Проверено
+экспериментом (контекст с `root.exe` и `sub/nested.exe`, `.dockerignore` = `*.exe`): в образ попал
+`sub/nested.exe`, `root.exe` — нет. Касается `*.exe`, `*.test`, `*.out`, `*.log`, `*.db`,
+`*.db-wal`, `*.db-shm`, `coverage.*`, `.env.*`. Сегодня прикрыто тем, что `services/`, `bin/`,
+`backups/` исключены целиком, а T-001 вывел бинарники из индекса, — но правило рассчитано на
+будущее. **Как исправить:** заменить на рекурсивную форму с двумя звёздочками и слешем
+(`**/*.exe`, `**/*.log`, `**/*.test`, `**/*.out`, `**/*.db`, `**/*.db-wal`, `**/*.db-shm`,
+`**/coverage.*`, `**/.env.*`); каталоги `Docs/`, `bin/`, `.claude/` якорить на корень —
+правильно, их не трогать.
+
+**Mi-2. `docker-compose.yml:250-253` — имена томов `minio_data` и `ollama_data` совпадают с as-is
+(`services/_archive/build/docker-compose.as-is.yml:349,353`) при одинаковом имени проекта.**
+As-is стек запускался из того же каталога, то есть его тома — `multiverse_minio_data` и
+`multiverse_ollama_data`; `COMPOSE_PROJECT_NAME=multiverse` (`.env.example`, `.github/ci.env:25`)
+даёт ровно те же имена. Первый же `docker compose up` на машине владельца молча примонтирует
+каталог данных as-is MinIO (созданный под `minioadmin/minioadmin`) в новый сервер — а
+`infrastructure.md` §5.5 / D-8 прямо требуют **не** апгрейдить тома на месте, а пересоздать их
+после `make archive-legacy`. Комментарий в секции `volumes` это описывает, но ничего не
+предотвращает; `redpanda_data` коллизии не имеет (у as-is тома вообще не было).
+**Как исправить:** развести имена (`minio_data_v2` / `ollama_models`) **или** внести в DoD T-008
+проверку «`docker volume ls` не содержит `multiverse_minio_data` до первого `make up`» и
+жёсткий порядок `make archive-legacy` → `docker volume rm` → `make up`. Решение — за T-008,
+но зафиксировать нужно сейчас.
+
+**Mi-3. `build/versions.env:68` — `CHROMA_IMAGE=` пуста, пин §2.4 отсутствует.** Логика
+«пустое падает громко, выдуманный тег — тихо» верная, и ОВ-16 честно передаёт решение в T-008,
+но формально DoD «создать `build/versions.env` со **всеми** пинами `infrastructure.md` §2.4»
+на конец T-004 не выполнен. **Как исправить:** не менять код — попросить оркестратора закрыть
+это решением (как ОВ-16) и перенести пункт «`CHROMA_IMAGE` = конкретный тег» в DoD T-008 явной
+строкой, иначе критерий останется висеть между двумя задачами. Дополнительно: пустая переменная
+в `--env-file` не даёт ошибки интерполяции сама по себе — сервис `chromadb` в T-008 должен
+использовать `${CHROMA_IMAGE:?}`, иначе «громко» не получится.
+
+**Mi-4. `docker-compose.yml:201-202` — публикация admin/health-порта `core` противоречит
+`threat-model.md` (T-14, чек-лист §10), но соответствует `infrastructure.md` v0.3 §1.4.**
+T-14 в графе «Митигация» требует «admin-порт core **не публикуется**», чек-лист §10 — «admin-порт
+core не опубликован»; §1.4 таблицы портов требует ровно `127.0.0.1:8090`. Разработчик выбрал
+более новый и прямо названный в задаче документ — это правильный выбор, но противоречие живёт в
+двух утверждённых документах, и `scripts/compose-lint.sh` (T-008) придётся писать под одно из них.
+Практический риск низкий (loopback + `AdminOnly` по `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS`).
+**Как исправить:** вопрос system-architect/security-engineer — привести `threat-model.md` T-14 и
+чек-лист §10 в соответствие с §1.4 (или наоборот); в T-004 менять нечего.
+
+**Mi-5. `build/minio.Dockerfile:21` — клон по мутабельному тегу без сверки коммита (SEC-25).**
+`git clone --depth 1 --branch "${MINIO_TAG}"` даёт воспроизводимость ровно настолько, насколько
+неизменяем тег в `${MINIO_REPO}`. Именно этот репозиторий планируется заменить на **форк**, где
+владелец (или кто-то с доступом к аккаунту) может переставить тег, — то есть страховка U-10
+одновременно открывает возможность подмены содержимого при неизменных значениях в `versions.env`.
+Коммит уже известен и записан в `dev-log.md` §3 (`9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a`).
+**Как исправить:** добавить `MINIO_COMMIT=9e49d5e7a648f00e26f2246f4dc28e6b07f8c84a` в
+`build/versions.env`, прокинуть `ARG MINIO_COMMIT` и после `git clone` — fail-closed проверку
+вида `test "$(git rev-parse HEAD)" = "${MINIO_COMMIT}"` (одна строка, ноль стоимости сборки).
+Тот же аргумент закрывает и переход на форк без повторной ручной сверки.
+
+#### Nit
+
+**N-1. `docker-compose.yml:250-253` — разнобой в именовании томов:** `redpanda_data`, `minio_data`,
+`ollama_data` через подчёркивание, `gateway-data` через дефис. Привести к одному стилю (в T-008,
+где файл всё равно дополняется).
+
+**N-2. `docker-compose.yml:90-92` и `Makefile:28` — контекст сборки MinIO — весь репозиторий,
+хотя из него не используется ничего:** Dockerfile клонирует исходники внутрь. `context: build`
+(или отдельный пустой каталог) сократит передачу контекста до килобайтов и уберёт зависимость
+сборки образа хранилища от `.dockerignore` платформы.
+
+**N-3. `docker-compose.yml:47, 94-96` — build-аргументы без `:?`/дефолта.**
+`GO_VERSION: ${GO_VERSION}` при отсутствующем `versions.env` дал бы `golang:-bookworm`.
+На практике недостижимо (проверено: интерполяция падает раньше, на `REDPANDA_IMAGE:?`), поэтому
+только для единообразия — `${GO_VERSION:?}`.
+
+**N-4. `docker-compose.yml:42` — `image: multiverse-core:${MV_IMAGE_TAG:-dev}` берёт тег не из
+`versions.env`.** Правило 1 `compose-lint` (§3.1.1) сформулировано как «совпадает со значением из
+`build/versions.env`» — для образа платформы нужно явное исключение в `scripts/compose-lint.sh`
+(T-008), иначе правило либо ложно сработает, либо будет ослаблено целиком.
+
+**N-5. `docker-compose.yml:77, 238` — healthcheck'и `redpanda` и `ollama` не проверены в рантайме.**
+`docker compose up` в T-004 запрещён, и это правильно, но `rpk cluster health | grep -q
+'Healthy:.*true'` завязан на формат текстового вывода `rpk` v26.1, а `depends_on: service_healthy`
+у `gateway`/`core` делает его блокирующим: при несовпадении формата стек не поднимется вовсе.
+Внести в DoD T-008 («стенд») отдельной строкой; запасной вариант — `rpk cluster health
+--exit-when-healthy` (код возврата вместо grep по тексту).
+
+**N-6. `build/minio.Dockerfile:37-38` — runtime `alpine` без `ca-certificates`.** Для MVP-1
+(loopback, `MV_MINIO_USE_SSL=false`, без tiering и notification targets) не нужен, но первая же
+исходящая TLS-операция даст невнятную ошибку `x509: certificate signed by unknown authority`.
+Либо `RUN apk add --no-cache ca-certificates` (≈ 0,5 МБ), либо строка в `dev-log`/ADR-021
+«исходящий TLS вне области MVP-1».
+
+**N-7. `Makefile:9` — `GIT_SHA := $(shell git rev-parse --short HEAD)` вычисляется при каждом
+запуске make (включая `make help`) и пуст вне git-checkout** → `make image` соберёт
+`-t multiverse-core:` и упадёт с `invalid reference format`. Заменить на
+`GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)`.
+
+**N-8. `Makefile:54-56` — as-is цель `build` теперь собирает новый `build/Dockerfile` и тегирует
+его `multiverse-core` (то есть неявный `:latest`)**, что прямо противоречит правилу «никаких
+`latest`» из шапки `docker-compose.yml` и NFR-071. Цель снимается T-008 (файл переписывается
+целиком) — но до тех пор она вводит в заблуждение; внести удаление as-is целей отдельной строкой
+в DoD T-008.
+
+### Предложения в бэклог
+
+1. **T-008 (F-6b), обязательное к учёту:** (а) Mi-2 — коллизия имён томов с as-is; (б) Mi-3 —
+   `CHROMA_IMAGE` и `${CHROMA_IMAGE:?}` у сервиса `chromadb`; (в) N-4 — исключение для образа
+   платформы в правиле 1 `compose-lint`; (г) N-5 — проверка healthcheck'ов на стенде;
+   (д) N-8 — снятие as-is целей `Makefile`; (е) перевод `depends_on` на
+   `redpanda-init`/`minio-init` (`service_completed_successfully`) — комментарии уже расставлены.
+2. **T-008, правило 3 `compose-lint` требует правки формулировки.** «`git grep -i minioadmin`
+   пуст вне `Docs/` и `services/_archive/`» сегодня невыполнимо и от T-004 не зависит: совпадения
+   дают замороженные сервисы в `services/**` (`entity-manager`, `entity-actor`,
+   `evolution-watcher`, `ontological-archivist`, `rule-engine`, `semantic-memory`) и комментарий
+   «не minioadmin» в `.env.example:18`. Либо расширить исключения на `services/**` и
+   `.env.example`, либо переформулировать правило как «нет литерала в `docker-compose.yml` и
+   `build/**`».
+3. **T-008:** N-8 из ревью T-003 (`.env.example:51` `MV_CORE_ADDR=:8090` против умолчания кода
+   `127.0.0.1:8090`) был направлен «в бэклог T-004/T-008»; `.env.example` в состав файлов T-004 не
+   входит, поэтому пункт целиком переходит в T-008.
+4. **system-architect / security-engineer:** Mi-4 — согласовать `threat-model.md` T-14 и чек-лист
+   §10 с `infrastructure.md` v0.3 §1.4 по публикации admin-порта `core`.
+5. **devops-engineer:** ОВ-15 — внести `ENV MINIO_RELEASE=RELEASE` и аргумент версии
+   `gen-ldflags.go` в `infrastructure.md` §2.5 (подтверждено чтением исходника, см. выше);
+   заодно Mi-5 (`MINIO_COMMIT`).
+6. **Владелец / tech-lead#1:** ОВ-14 — форк `minio/minio` в `alekseizabelin1985-spec` не создан,
+   первая линия страховки U-10 отсутствует. Задача корректно пошла по разрешённому запасному
+   пути, но эскалацию нужно довести до владельца: после создания форка меняется одна строка
+   `build/versions.env:44`.
+7. **T-012 (F-7):** ОВ-13 — Dependabot (`docker`, каталог `build/`) должен покрывать оба
+   Dockerfile (digest distroless и `alpine:3.22` / `MINIO_BUILDER_IMAGE`); пины `versions.env`
+   Dependabot не видит — ежемесячная ручная сверка (§2.4). Плюс сверка `toolchain` в `go.mod` ↔
+   `GO_VERSION` (ОВ-9, уже принято).
+
+### Риски и допущения
+
+- Ревью выполнено **по индексу**, не по коммиту; параллельная работа T-005 в том же индексе
+  сознательно исключена из границ. Итоговый коммит T-004 должен захватить ровно 9 путей из
+  таблицы «Границы ревью» — иначе граница задач размоется.
+- **Сборка образа MinIO и `mc admin info local` ревьюером не воспроизводились** (указание
+  оркестратора): приняты по `dev-log.md` §3/§7. Статически проверено всё, что можно проверить без
+  сборки, включая семантику `gen-ldflags.go` по исходнику из тарбола.
+- **`docker compose up` не запускался** ни разработчиком (запрет задачи), ни ревьюером. Значит,
+  рантайм-поведение ядра (healthcheck'и, порядок `depends_on`, два listener'а Redpanda,
+  доступность `host.docker.internal` из `core`) подтверждено только статически. Первый фактический
+  подъём — DoD «стенд» T-008; N-5 и Mi-2 — самые вероятные места отказа.
+- Образ `multiverse-core/minio:<tag>` существует только локально: на чистой машине и в CI до
+  `make minio-image` / шага сборки в job `integration` любой `docker compose up` и любой
+  integration-тест T-007 упадут с «image not found». В `dev-log.md` это записано; критично, чтобы
+  порядок команд попал в `make up` (T-008) и в README (F-9).
+- Тарбол `backups/minio-src-<tag>.tar.gz` — вне git и вне бэкапов проекта: при переезде на другую
+  машину вторая линия страховки U-10 не переезжает автоматически. Пока форка нет (ОВ-14), это
+  единственная страховка.
+- Значения `${VAR:-…}` в `docker-compose.yml` дублируют дефолты `.env.example`; `mvctl env check`
+  (T-010) сверяет только `.env.example` с реестром `shared/env`, но не с compose. Расхождение
+  дефолтов будет тихим до тех пор, пока в `scripts/compose-lint.sh` (T-008) не появится
+  соответствующая проверка. Риск отмечен разработчиком — подтверждаю его как реальный.
+- `make` на машине ревьюера отсутствует: `Makefile` (включая корректность `include
+  build/versions.env`) проверен чтением плюс формальным разбором файла на «make-враждебные»
+  конструкции; фактического `make -n` не было.
+
+---
+
+## T-005 · ревью #1 · 2026-09-09 · code-reviewer#2 (TEAM-1)
+
+### Границы ревью
+
+Ветка `epic/EPIC-001-foundation`, HEAD `b7df900`, изменения **в индексе** (коммита нет,
+`git.commits: ask`). Ревьюировались только файлы T-005:
+
+| Действие | Путь |
+|---|---|
+| A | `shared/eventbus/{bus,registry,delivery,dedup,kafka,sources}.go`, `shared/eventbus/{types,registry,delivery,dedup,kafka,fixtures}_test.go` |
+| M | `shared/eventbus/{types,topics,relations,relation_types,payload_types}.go`, `README.md`, `examples/universal_paths_example.go`, `relations_test.go`, `shared/runtime/runtime.go`, `.golangci.yml`, `dev-log.md` (запись T-005) |
+| D | `shared/eventbus/{eventbus.go,eventbus_test.go}` |
+
+Файлы T-004 (`build/**`, `docker-compose.yml`, `Makefile`, `.dockerignore`, `.github/ci.env`,
+`services/_archive/build/**`) — параллельная задача другого разработчика, не ревьюировались.
+Основание: `contracts.md` v0.4 §0 и C-01 v1.1; `components/foundation.md` v0.2 §5–§6;
+`analysis/api-contracts.md` v0.2.1 §2.0–§2.2; ADR-007, ADR-010; `tasks.md` §1 и T-005;
+`dev-log.md` (запись developer#1 · T-005); `journal.md` (решения оркестратора по ОВ T-005).
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 3 · Minor: 7 · Nit: 4.
+
+Задача сделана по контракту: имена типов, полей и методов C-01 воспроизведены, `Route`/`Delivery`
+действительно транспортно-независимы (membus T-014 переиспользует их без копирования правил),
+тесты содержательные и покрывают негативные пути, исключение линтера снято без единого `//nolint`.
+Возврат — из-за трёх дефектов, каждый чинится в несколько строк: настройка writer'а kafka-go даёт
+≈ 1 с задержки на каждую публикацию (M-1); значение по умолчанию у флага валидации при чтении
+«выключено», тогда как SEC-16/C-01 требуют «включено» (M-2); конверт `NewRoot` не заполняет
+обязательный по §2.1 `meta.gm_path`, что рассинхронит библиотеку с `_envelope.json` из T-006 (M-3).
+
+### Проверенные пункты DoD
+
+| Проверка | Результат ревьюера |
+|---|---|
+| `go build ./...` | ✔ |
+| `go vet ./...` | ✔ |
+| `go test -short -count=1 ./...` | ✔ (10 пакетов `ok`) |
+| `go test -cover ./shared/eventbus/` | ✔ **69,7 %** (порог DoD — 60 %) |
+| `golangci-lint run ./...` (v2.13.2) | ✔ `0 issues`; исключение `shared/eventbus/` из `.golangci.yml` снято (ОВ-7 закрыт), `//nolint` в `shared/**`, `cmd/**` — 0 |
+| `gofmt -l shared cmd` | ✔ пусто |
+| `gitleaks git --staged --redact .` | ✔ `no leaks found` |
+| `pre-commit run --files <файлы T-005>` | ✔ 8 хуков `Passed` |
+| DoD T-005: unit `NewRoot`/`Derive` (наследование `CorrelationID`/`Timestamp`, новый `event_id`) | ✔ `types_test.go:9,70,113,128,158` |
+| DoD T-005: `Dedup` (повтор не проходит дважды) | ✔ `dedup_test.go` — повтор, вытеснение LRU, снапшот, 8 горутин |
+| DoD T-005: политики топиков на фикстурах | ✔ `registry_test.go:239,260` (`player_events` отклоняет `actor_kind=system` и `meta.agent`; топики роя требуют `meta.agent`) |
+| DoD T-005: DLQ после 3 повторов | ✔ `delivery_test.go:162` (`Attempts=4` — трактовка принята оркестратором) |
+| DoD T-005: `End` монотонен, `ReadRange` по возрастанию офсета | ⚠ по DoD «полностью проверяется в T-014»; здесь только пустой интервал и отрицательный офсет — принято |
+| Общий DoD §1 п. 2 `-race` | не запускался (нет gcc, ОВ-5); построчный разбор гонок — см. «Риски» |
+| Общий DoD §1 п. 7 (карта владения) | ⚠ см. Mi-7: `shared/runtime/runtime.go` вне карты файлов T-005 |
+
+### Соответствие C-01 (пословная сверка)
+
+Совпадает буквально: `Event{ID,Type,Timestamp,Source,World,Scope,Meta,Payload,Relations}`;
+`Meta{SchemaVersion,CorrelationID,CausationID,CausationType,ActorKind,Agent,Replay,Locale,GMPath}`;
+`NewRoot(type,source,worldID,scope,actorKind,payload)`; `Derive(parent,type,source,payload,opts…)`
+с наследованием `CorrelationID`/`ActorKind`/`Locale`/`GMPath` и `CausationID = parent.ID`;
+`WithAgent(AgentRef)`; `Bus{Publish,Subscribe,Close}`; `Handler func(ctx,Event) error`;
+`Journal{ReadRange(ctx,topic,from,to,h)(next,err), Tail, End}`; `Position{Topic,Offset}`;
+`PositionFromContext(ctx)(Position,bool)`; `Dedup` LRU по `event.id`, ёмкость 10 000, `Seen(id) bool`,
+сериализация в снапшот; политики `player_events` и топиков роя; валидация при чтении;
+`Event.Path()`, `GetWorldIDFromEvent`, `GetScopeFromEvent` — без изменений;
+`runtime.Deps{Bus, Journal, …}`. Отклонения — M-3 (`meta.gm_path`) и Mi-2 (`DeriveOption`).
+
+### Замечания
+
+**M-1 (Major). `shared/eventbus/kafka.go:299-308` — writer без `BatchSize`/`BatchTimeout`: каждая
+публикация ждёт ≈ 1 с.** У `kafka-go` v0.4.51 `Writer.batchTimeout()` по умолчанию — 1 с, а
+`batchSize()` — 100 (`writer.go:825,1067`); синхронный `WriteMessages` (`Async=false`) ждёт
+`<-batch.done`, а батч закрывается либо по заполнению 100 сообщениями, либо по таймеру. При
+одном событии в батче каждый `Publish` блокируется на ~1 с. Для MVP-1 (низкий трафик, 1 партиция)
+это режим по умолчанию, а не исключение: рушится NFR-001 (ack gateway ≤ 300 мс, `overview.md`
+строка `gateway`) и цепочка «действие → механика → нарратив». Тестами без брокера не ловится —
+именно поэтому 24 % покрытия `kafka.go` здесь недостаточно как аргумент. **Правка**: в
+`k.writer()` добавить `BatchSize: 1` (публикация у нас всегда одиночная) либо
+`BatchTimeout: 10 * time.Millisecond`; значение вынести в константу рядом с `kafkaMaxWait` и
+упомянуть в `README.md` в разделе «Шина и журнал» вместе с reader-параметрами. Проверку задержки
+публикации добавить в contract-тест T-014 (testcontainers), иначе регрессия вернётся незаметно.
+
+**M-2 (Major). `shared/eventbus/kafka.go:37`, `delivery.go:58` — нулевое значение
+`ValidateOnRead` = «валидация выключена», тогда как C-01/SEC-16 требуют «по умолчанию
+включено».** Решение вынести чтение `MV_BUS_VALIDATE_ON_READ` в процесс правильное (`forbidigo`,
+`shared/env` появится в T-007) и задокументировано в `dev-log.md` §2 п. 2 — но защитная мера
+получила fail-open умолчание в общей библиотеке. Любой, кто соберёт `KafkaConfig{Brokers,
+Registry}` (membus T-014, харнесс T-018, `mvctl` T-010, будущие контексты), молча отключит
+проверку схемы и политик при чтении; `cmd/multiverse` шину пока не строит вообще, то есть владельца
+у умолчания сейчас нет ни в коде, ни в DoD. **Правка** (достаточно одной из двух): (а) инвертировать
+поле — `SkipValidateOnRead bool` (нулевое значение = валидация включена), поправив `kafka.go:85`,
+`delivery.go:72` и `README.md:86`; или (б) оставить как есть, но внести явным пунктом DoD T-007
+(`shared/env`) и T-010 «умолчание `MV_BUS_VALIDATE_ON_READ` при отсутствии переменной — `true`» и
+сослаться на это в комментарии к полю. Вариант (а) предпочтительнее: он не зависит от чужой задачи.
+
+**M-3 (Major). `shared/eventbus/types.go:70,144-165` — `meta.gm_path` обязателен по
+`api-contracts.md` §2.1, но `NewRoot` его не заполняет, а тег — `omitempty`.** Каждое корневое
+событие уходит на шину без `gm_path`; `Derive` его наследует, значит вся цепочка тоже. Как только
+T-006 напишет `_envelope.json` с `required: [… gm_path]` (таблица §2.1 помечает поле «обяз. да»),
+валидация при чтении отправит **все** события в `dead_letters`, а поймается это только на
+contract-тесте T-014 или позже. `ValidateEnvelope` пустой `gm_path` тоже пропускает
+(`registry.go:133`). **Правка**: либо ставить умолчание в `NewRoot` (`GMPath: GMPathAgent`, а
+legacy-издатель переопределяет `WithGMPath(GMPathLegacy)`) и проверять непустоту в
+`ValidateEnvelope` для не-legacy конверта, либо (если поле задумано опциональным) поднять ОВ
+системному архитектору и зафиксировать `gm_path` как необязательный в `_envelope.json` **до**
+старта T-006. Решение принять нельзя молча: оно жёстко связывает T-005, T-006 и всех издателей.
+
+**Mi-1 (Minor). `shared/eventbus/kafka.go:142-147` и `delivery.go:91-96` — при штатной остановке
+`Subscribe` возвращает `context.Canceled`, а не `nil`.** `readerError` (`kafka.go:356`) специально
+превращает отмену в `nil` («shutdown, not a failure»), но два других выхода из цикла этого не
+делают: отмена во время backoff'а (`Deliver` → `ctx.Err()`) и `reader.CommitMessages(ctx, msg)` с
+уже отменённым контекстом. Контекст рантайма получит ошибку на нормальном `Stop`, а contract-тест
+T-014 будет сравнивать kafka и membus по разным веткам. **Правка**: пропускать возврат `deliver`
+и `CommitMessages` через тот же `k.readerError(ctx, topic, err)` (он уже умеет отличать отмену), а
+в `bus.go` у `Bus.Subscribe` дописать в комментарий, что штатное завершение по `ctx` — это `nil`.
+
+**Mi-2 (Minor). `shared/eventbus/types.go:90` — тип опции назван `Option`, C-01 называет
+`DeriveOption`.** Расхождение имён из контракта, который реализуют три эпика; в `dev-log.md`
+отклонение не отмечено. **Правка**: добавить `type DeriveOption = Option` (алиас, ноль изменений в
+коде вызывающих) либо зафиксировать переименование в `dev-log.md` и запросом на изменение C-01.
+
+**Mi-3 (Minor). `shared/eventbus/delivery.go:104-109,144-151` — размер dead letter не ограничен:
+«ядовитое» большое сообщение навсегда останавливает топик.** `DeliverRaw` кладёт в `Raw` тело
+целиком (reader принимает до `kafkaMaxBytes` = 10 МиБ), а `deadLetter` — весь `Original`. Запись
+в `dead_letters` больше 1 МиБ (`batchBytes` kafka-go и `max.message.bytes` брокера по умолчанию)
+не пройдёт, `Deliver` вернёт ошибку, офсет не закоммитится — и то же сообщение будет читаться
+бесконечно, блокируя топик, ради чего DLQ и заводился. **Правка**: обрезать `Raw` до константы
+(например, 64 КиБ) с пометкой в `Error` об усечении и делать то же для `Original.Payload`, если
+сериализованный dead letter превысил порог.
+
+**Mi-4 (Minor). `shared/eventbus/kafka.go:210-226` — `End` не реагирует на отмену контекста и
+знает только `brokers[0]`.** `conn.SetDeadline` ставится, лишь если у `ctx` есть дедлайн; при
+`context.WithCancel` без дедлайна `ReadLastOffset` на неотвечающем брокере повиснет до TCP-таймаута
+ОС, а признак «конца журнала» — это как раз путь выхода из `replay` в `live` (C-01). Плюс `End` не
+проверяет `k.closed` и всегда идёт в первый брокер списка. **Правка**: ставить дедлайн всегда
+(`deadline, ok := ctx.Deadline()`; иначе `nowUTC().Add(kafkaEndTimeout)` — константа рядом с
+`kafkaMaxWait`), проверять `closed` и перебирать `k.brokers`, пока `DialLeader` не удастся.
+
+**Mi-5 (Minor). `shared/eventbus/registry.go:108-137` — `ValidateEnvelope` не проверяет
+`meta.schema_version` и `meta.locale`, обязательные по §2.1.** Конверт с `schema_version = 0` или
+пустой `locale` (собранный не конструктором — например, при ручной правке в фикстурах или после
+неполного JSON) пройдёт и публикацию, и чтение. Проверка `correlation_id`/`actor_kind`/`gm_path`
+рядом уже есть, добавление симметрично. **Правка**: для не-legacy конверта требовать
+`SchemaVersion >= 1` и `Locale != ""`.
+
+**Mi-6 (Minor). `.golangci.yml` — предложение №1 из ревью T-003, адресованное T-005, не выполнено
+и не отклонено.** Просилось вместе со снятием исключения `shared/eventbus` расширить `forbidigo`
+на `time.After|Tick|NewTimer|NewTicker|Since|Until` и `os.Environ|ExpandEnv` и сузить
+`path: shared/` до владельцев времени и окружения (второе, кстати, уже сделано в T-003 —
+`shared/(clock|runtime|env)/`). Проверено: расширение шаблонов даёт `0 issues` (единственные
+нарушители — `shared/agent`, у него исключение уже есть). **Правка**: либо добавить шаблоны, либо
+записать отказ в `dev-log.md` и перенести пункт в бэклог T-012 явной строкой.
+
+**Mi-7 (Minor). `shared/runtime/runtime.go:19,56-64` — правка вне карты файлов T-005, решения по
+ней нет.** Изменение по существу верное и предписано C-01 (`runtime.Deps{Bus, Journal, …}`), но
+общий DoD §1 п. 7 требует отсутствия изменений вне карты владения. Разработчик поднял это как
+ОВ-17 в `dev-log.md` §6, однако в `journal.md` под номером ОВ-17 записано другое решение
+(`contracts.Spec` встраивает `eventbus.TypeSpec`) — нумерация сдвинулась, и вопрос остался без
+ответа. **Правка**: tech-lead#1 подтверждает правку одной строкой в `journal.md`; в `tasks.md`
+раздел T-005 «Файлы» дополнить `shared/runtime/runtime.go`.
+
+**N-1 (Nit). `shared/eventbus/delivery.go:16` — `DefaultBackoff` экспортирован изменяемым срезом.**
+Любой потребитель (или тест) может переписать элемент и изменить поведение всех подписок процесса.
+Заменить на функцию `DefaultBackoff() []time.Duration`, возвращающую копию, либо оставить
+неэкспортируемым, а наружу дать только поле `Backoff`.
+
+**N-2 (Nit). `shared/eventbus/kafka.go:166,196` — имя потребителя журнала `"journal." + topic`
+собирается литералом в двух местах.** membus в T-014 обязан повторить ту же строку, иначе
+contract-тест сравнит разные `DeadLetter.Consumer`. Вынести в экспортируемый хелпер
+(`JournalConsumer(topic string) string`) рядом с `Position`.
+
+**N-3 (Nit). `shared/eventbus/delivery.go:154` — запись dead letter идёт с
+`context.WithoutCancel(ctx)` без собственного таймаута.** Решение (пережить отмену при остановке)
+правильное, но верхняя граница держится только на дефолтах kafka-go (`WriteTimeout` 10 с,
+`MaxAttempts` 10). Обернуть в `context.WithTimeout(context.WithoutCancel(ctx), …)` — таймаут
+взять из `Delivery` (поле или константа).
+
+**N-4 (Nit). Legacy-профиль ссылается на удалённые символы.**
+`services/{semantic-memory,narrative-orchestrator}` (остаются до S5 по T-002) используют
+`eventbus.EventBus`, `NewEventBus`, `TopicScopeManagement` — удалены вместе с `eventbus.go` и
+`topics.go`. Регрессии сегодня нет: эти модули после разделения workspace (T-003) не имеют
+`require` на общий модуль и не собираются и без T-005. Отразить факт в решении по профилю `legacy`
+(`tasks.md` §9, подволна 0.3), чтобы он не всплыл при сборке профиля в T-008.
+
+### Предложения в бэклог
+
+1. **T-014 (F-5t)**: contract-тест обязан сравнивать kafka и membus не только по порядку и
+   офсетам, но и по (а) `nil` при штатной отмене `Subscribe`/`Tail` (Mi-1), (б) `DeadLetter.Consumer`
+   для журнала (N-2), (в) задержке публикации одиночного события (M-1).
+2. **T-014**: `testkit.Dedup` — псевдоним `eventbus.Dedup` (C-01), в T-005 сознательно не делался.
+3. **T-006**: закрыть M-3 в `_envelope.json` до фиксации схем; `Spec` встраивает
+   `eventbus.TypeSpec` (решение оркестратора по ОВ-17 в `journal.md`).
+4. **T-010/T-014**: кеш соединения для `Journal.End` (риск из `dev-log.md` §7) — измерить накладные
+   расходы, прежде чем усложнять.
+5. **T-019 (F-9)**: `shared/eventbus/{MIGRATION.md,docs/,examples/}` описывают предыдущую итерацию
+   модели событий (`NewStructuredEvent`, `PublishEntityCreated`) — расходятся с новым README
+   (ОВ-19 оркестратора).
+
+### Риски и допущения
+
+- Ревью по индексу, не по коммиту; `-race` не запускался (нет gcc). Построчный разбор гонок:
+  `Dedup` — всё состояние под `sync.Mutex`, `evict` вызывается только под ним, `IDs`/`Restore`
+  согласованы по порядку (oldest → newest) — гонок не видно; `sources.go` — `sync.RWMutex`, значение
+  копируется под `RLock` и вызывается вне блокировки (`nextID`, `nowUTC`) — реентерабельность
+  безопасна; `Kafka` — `writers`/`readers`/`closed` под `k.mu`, `registry`/`brokers` неизменяемы
+  после конструктора, двойной `Reader.Close()` (из `Close` и `closeReader`) безопасен, kafka-go
+  защищён своим флагом; горутин пакет не создаёт (`go func` — только в тесте `Dedup`).
+  Единственное разделяемое изменяемое состояние — пакетные `SetIDSource`/`SetClock`/`SetRegistry`
+  и экспортированный `DefaultBackoff` (N-1); тесты источники не гоняют параллельно (`t.Parallel`
+  в пакете нет), но и запрета на переустановку «на живом процессе» в коде нет — допущение принято
+  как в `dev-log.md` §7.
+- Транспортная независимость (`Route` + `Delivery`) проверена по коду: правила публикации,
+  валидации при чтении, ретраев и DLQ не зависят ни от одного типа kafka-go; membus в T-014 обязан
+  вызывать те же `Route`/`Delivery.Deliver` и предоставить свой `DeadLetterSink`. Единственные
+  места, которые придётся повторить руками, — имя потребителя журнала (N-2) и значение
+  `ValidateOnRead` (M-2); оба замечания об этом и написаны.
+- `kafka.go` покрыт на 24 % — принято: без брокера дальше конфигурации и отказов до сети не уйти.
+  Но M-1 показывает цену этого допущения: дефекты настройки клиента ловятся только в T-014,
+  поэтому предложение №1 в бэклог считаю обязательным к внесению в DoD T-014.
+- `ReadRange` с `to` больше high watermark блокируется на `FetchMessage` до отмены контекста, а
+  курсор впереди конца журнала (`from > End`) отдан на откуп поведению kafka-go при
+  `OffsetOutOfRange`. Для MVP-1 (`from`/`to` берутся из снапшота и `End()`) допустимо; проверить
+  на брокере в T-014.
+- Проверка `source ∈ Spec.Publishers` в `Route` отсутствует — соответствует решению оркестратора
+  (ОВ-18: проверка статическая, job `contracts`/T-010).

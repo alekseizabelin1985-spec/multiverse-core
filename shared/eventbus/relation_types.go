@@ -1,5 +1,5 @@
-// Package eventbus provides constants for relation types used in explicit event relations.
-// These relations are embedded in events to create typed edges in Neo4j.
+// Relation type constants embedded in events to create typed edges in Neo4j.
+
 package eventbus
 
 // Relation type constants — semantic edge types for the knowledge graph.

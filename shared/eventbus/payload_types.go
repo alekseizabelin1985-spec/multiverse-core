@@ -1,4 +1,5 @@
-// Package eventbus provides the event bus infrastructure for the multiverse-core system.
+// Typed payload builder and the reference types shared by every payload.
+
 package eventbus
 
 import (
