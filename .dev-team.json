@@ -10,16 +10,16 @@
     "commits": "ask"
   },
   "parallelism": {
-    "maxTeams": 3,
-    "maxAgentsPerRole": 3,
-    "maxParallelAgents": 6
+    "maxTeams": 1,
+    "maxAgentsPerRole": 2,
+    "maxParallelAgents": 2
   },
   "counters": {
     "feature": 0,
     "bug": 0,
-    "epic": 0,
-    "team": 0,
+    "epic": 13,
+    "team": 3,
     "adr": 21,
-    "task": 0
+    "task": 393
   }
 }

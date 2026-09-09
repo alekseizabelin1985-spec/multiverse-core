@@ -40,3 +40,12 @@ ADR-006 зафиксировал транспорт (long polling `getUpdates`, 
 - Позитивные: одна зависимость без транзитивных; ADR-006 соблюдён буквально (`allowed_updates=[message]`); бот не хранит ПДн — тест NFR-041 проверяет только логи бота; детерминированные e2e бота через фейки источника/отправителя.
 - Негативные: последовательная обработка ограничивает пропускную способность (~10 обновлений/с) — достаточно для ≤ 6 игроков; при росте — `WithWorkers(N)` + мьютекс на чат без изменения контрактов; рестарт бота сбрасывает незавершённый онбординг.
 - Что придётся сделать: EPIC-004 I1 — `cmd/telegram-bot` по `components/gateway-and-bot.md` §10; DevOps — retention логов, `restart`-политика, публикация порта gateway на `127.0.0.1`; system-architect — решение по п. 8 §14 компонентного документа (общий чат группы).
+
+## Дополнение после G2 (2026-09-09, сведение `consolidation.md` §3/§6; статус ADR — принят на G2)
+
+1. **Allowlist и только личные чаты (SEC-06/07, решение пользователя U-7; ADR-006 дополнение п. 1–2)**: перед FSM (п. 4) добавляется компонент `access.Gate` — первый шаг обработки `Update`: `chat.type != private` → отказ; `from.id ∉ MV_TELEGRAM_ALLOWED_USER_IDS` → одно сообщение «доступ по приглашению», gateway не вызывается, ID не логируется, счётчик `bot_denied_total`; пустой список = отказ всем. Связка — только по `from.id`. Общий чат группы (п. «Групповая доставка») — подтверждено как E-H.
+2. **Лимит команд (SEC-11)**: 20 команд/мин на user id (`MV_BOT_RATE_COMMANDS_PER_MIN`, token bucket в памяти) — в том же `access.Gate`, до вызова gateway.
+3. **Редакция токена (SEC-08; ADR-006 дополнение п. 3)**: п. 7 расширяется — `privacy.Handler` не только отбрасывает атрибуты, но и заменяет подстроку `bot<digits>:<token>` → `bot<redacted>` в тексте любого сообщения лога и ошибки (`WithErrorsHandler` оборачивает ошибки библиотеки через `privacy.Redact`); unit-тест «строка ошибки не содержит токен», включая `409 Conflict`.
+4. **Без `parse_mode` (SEC-10; ADR-006 дополнение п. 4)**: `Sender.Send` не имеет параметра разметки; UGC и нарратив — plain text; тест с `[x](http://…)`, `<a>`, `*`.
+5. **Env с префиксом `MV_` (G-11/D-4)**: п. 8 читать как `MV_TELEGRAM_BOT_TOKEN`, `MV_TELEGRAM_ALLOWED_USER_IDS`, `MV_BOT_GATEWAY_URL`, `MV_BOT_CLIENT_ID`, `MV_BOT_ACTION_KEY_SALT`, `MV_BOT_RATE_COMMANDS_PER_MIN`, `MV_BOT_POLL_TIMEOUT`, `MV_BOT_DELIVERY_WAIT`, `MV_BOT_DIALOG_TTL`, `MV_LOG_LEVEL`; объявление — `shared/env.Declare`.
+6. **Логи бота (D-12)**: ротация по объёму `json-file 10m × 3`, «≤ 7 дней» — ориентир (ADR-006 дополнение п. 5).

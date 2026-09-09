@@ -1,6 +1,7 @@
 # Компоненты блока «Состояние и механика» (EPIC-002)
 
-Версия 0.1 · 2026-09-09 · architect#1 (TEAM-1) · статус: к ревью system-architect, затем к G3.
+Версия 0.2 · 2026-09-09 · architect#1 (TEAM-1) · статус: **утверждён на G2 (2026-09-09)**; запросы §14 приняты системным архитектором (`consolidation.md` §2, S-1…S-6 — «П»); детализация инкрементов — `epics/EPIC-002-state-mechanics/design.md`.
+**Дополнение после G2**: правки по `consolidation.md` §9 внесены точечно с пометкой «Дополнение после G2»; сводка — §16. Где старый текст противоречит дополнению — действует дополнение.
 Границы заданы `architecture/overview.md` §11–§19, ADR-001, ADR-003, ADR-004, ADR-007, ADR-010 и контрактами C-01, C-02, C-03, C-13, C-14 (`architecture/contracts.md`). Этот документ — уровень **компонентов** (C4 L3) внутри контейнера `core` для пакетов `internal/state`, `internal/mechanics`, `internal/replay`, `shared/entity` и файла `rules/dark-forest.yaml`. Решения уровня реализации — ADR-011 (хранение и снапшоты), ADR-012 (правила как данные), ADR-013 (версии и atomic-пакеты). Запросы на изменение контрактов — §14.
 
 Трассировка: FR-018, FR-020…FR-025, FR-030…FR-034, FR-087; BR-01, BR-03, BR-04, BR-05, BR-06, BR-13, BR-16; NFR-001, NFR-010…NFR-014, NFR-020, NFR-033, NFR-060, NFR-061, NFR-064; UC-004, UC-006…UC-011, UC-015…UC-017, UC-025, UC-026; `data-model.md` §3, §4, §6.3, §8, §10; `api-contracts.md` §2.3.4, §2.3.5, §2.3.12; `domain-review.md` §3.2–3.3; PRD приложение A.
@@ -30,7 +31,7 @@ C4Component
     Rel(replay, bus, "ReadFrom/Tail/End по офсетам")
 ```
 
-Правила зависимостей (в дополнение к ADR-001 п. 3, требуют записи в `depguard` — §14): `internal/state → internal/mechanics` (библиотека инвариантов, чистая), `internal/mechanics → shared/entity`, `internal/state → shared/{entity,eventbus,contracts,objstore,clock,runtime,logging}`. `internal/replay` импортирует **только** `cmd/multiverse` (сборка `EventClock`, таймеров, журнала и режима в `runtime.Deps`); контексты получают их через интерфейсы `shared/clock` и `shared/runtime` (см. `foundation.md` §3–§4). `internal/swarm`, `internal/gateway` не импортируют `internal/state` — общение только через шину.
+Правила зависимостей (**Дополнение после G2**: приняты ADR-001 дополнение п. 2, S-2; кодируются в `.golangci.yml` `depguard` в EPIC-001 F-2): `internal/state → internal/mechanics` (библиотека инвариантов, чистая), `internal/mechanics → shared/entity`, `internal/state → shared/{entity,eventbus,contracts,objstore,clock,runtime,logging,env}`. `internal/replay` импортирует **только** `cmd/multiverse` (сборка `EventClock`, таймеров, журнала и режима в `runtime.Deps`); контексты получают их через интерфейсы `shared/clock` и `shared/runtime` (см. `foundation.md` §3–§4). `internal/swarm`, `internal/gateway` не импортируют `internal/state` — общение только через шину. `cmd/mvctl/internal/world` (подкоманда `world init`, EPIC-002) импортирует `internal/state` (bootstrap) — допустимо по правилу «`cmd/*` импортирует всё».
 
 Владение данными: `internal/state` — все сущности мира и снапшоты `snapshots-{world}/state/*`; `internal/mechanics` — не владеет состоянием (файл `rules/dark-forest.yaml` в Git); `internal/replay` — не владеет ничем персистентным (`testdata/recordings/*.jsonl` — EPIC-005).
 
@@ -54,9 +55,12 @@ internal/state/
   recovery.go       протокол старта: latest.json → снапшот → факты журнала → сверка объектов → интенты → replay.completed
   dedup.go          дедуп proposal_id (LRU 10k + last_change сущности) и event.id фактов
   facts.go          конструкторы событий entity.created/updated/update.rejected, snapshot.created, analytics.replay.completed
-  bootstrap.go      загрузка фикстур (мир/регион/NPC) через create.proposed из testdata/fixtures — используется тестами и mvctl world init
+  bootstrap.go      загрузка фикстур (мир/регион/NPC/игроки) через create.proposed из testdata/fixtures — используется тестами и mvctl world init (§4.10)
   health.go         секция /health: lag, snapshot, intents, counters
-  admin.go          POST /v1/admin/state/{world}/snapshot (только actor_kind=ci/оператор; на admin-порту core :8090)
+  admin.go          Routes(mux): POST /v1/admin/state/{world}/snapshot — монтируется на HTTP-сервере процесса shared/runtime (MV_CORE_ADDR=127.0.0.1:8090), обёрнут runtime.AdminOnly (Дополнение после G2: D-7)
+cmd/mvctl/internal/world/
+  init.go           mvctl world init --world <id> --fixtures <dir> [--bus kafka|memory]: EnsureBucket ×2 → bootstrap → снапшот seq 0 reason=bootstrap (Дополнение после G2: epics.md §2)
+  status.go         mvctl world status: latest.json, entities_count, cursor, health
 internal/mechanics/
   rules.go          Rules, Load(path), RulesDocument (YAML-модель), валидация
   formula.go        мини-грамматика формул: DiceExpr, CheckExpr; парсер и вычислитель
@@ -86,10 +90,13 @@ rules/dark-forest.yaml
 schemas/events/entity.create.proposed.v1.json, entity.update.proposed.v1.json, entity.created.v1.json,
                entity.updated.v1.json, entity.update.rejected.v1.json, dice.rolled.v1.json,
                snapshot.created.v1.json, analytics.replay.completed.v1.json
-shared/testkit/state/fake_state.go   testkit.FakeState (C-02): memstore + membus, WithInvariants()
+shared/testkit/state/fake_state.go       testkit.FakeState (C-02): memstore + membus, WithInvariants()
+shared/testkit/mechanics/fixed.go        testkit.FixedMechanics (C-03): табличные исходы по seed
+testdata/fixtures/{world,region,npc,players}.json, testdata/fixtures/snapshots/state/latest.json
 ```
 
 Владелец каждого файла — EPIC-002 (`plan/ownership.md`). Схемы `analytics.replay.completed` — совместно с EPIC-005 (mode=test), файл один.
+**Дополнение после G2 (F-10)**: `shared/entity` v2 (§3), `internal/mechanics/{rules,formula,actor}.go` (типы C-03 + `Load`, без `Resolve`), `rules/dark-forest.yaml`, `testkit/state.FakeState` v0 (ops в память, факты, без инвариантов), `testkit/mechanics.FixedMechanics`, фикстуры — создаются в EPIC-001 F-10 (developer + architect#1) по этому документу; с волны 1 владелец — EPIC-002, который заменяет v0 реализацией в своей ветке. `testdata/fixtures/**` после создания — общие (менять существующие — уведомить tech-lead#1).
 
 ---
 
@@ -234,9 +241,12 @@ type Store interface {
 
 Реализации: `objStore` (над `shared/objstore`, ключи и бакеты из `objstore/buckets.go`), `memstore.Store` (map + копии; используется в unit-тестах, e2e `--bus=memory`, `testkit.FakeState`). Замена на PostgreSQL при росте — новая реализация без изменения `Applier` (NFR-081, ADR-004).
 
-Ключи: `entities-{world}/{type}/{id}.json`; `entities-{world}/_intents/{proposal_id}.json`; `snapshots-{world}/state/{YYYYMMDDTHHMMSSZ}-{seq:06d}.json`; `snapshots-{world}/state/latest.json`. Bucket versioning включён на обоих бакетах (EPIC-001 F-6) — откат объекта средствами MinIO.
+Ключи: `entities-{world}/{type}/{id}.json`; `entities-{world}/_intents/{proposal_id}.json`; `snapshots-{world}/state/{YYYYMMDDTHHMMSSZ}-{seq:06d}.json`; `snapshots-{world}/state/latest.json`.
+**Дополнение после G2 (ADR-021 п. 3, D-6)**: бакеты `entities-{world}` и `snapshots-{world}` создаёт `mvctl world init` через `objstore.EnsureBucket(bucket, objstore.BucketOptionsFor(bucket))` — versioning + ILM `noncurrent-expire-days 30` включаются кодом (init-контейнер не видит ещё не созданных бакетов). Versioning — **только страховочный слой**: ни один путь State не зависит от него (откат снапшота — ротация K=5; история сущности — `history`/`last_change`; интент — обычный объект). При `Capabilities().Versioning=false` (`objstore.Memory`, будущая замена сервера) поведение State не меняется. Объект `Put` использует `PutOptions{ContentType: "application/json"}`; `ETag` не сохраняется (целостность — `state_hash` и `version`).
 
 ### 4.4. Формат `latest.json` (указатель, не состояние)
+
+**Дополнение после G2 (S-5 → C-14 v1.1)**: формат указателя закреплён контрактом; `component ∈ state|swarm|gateway`; тот же формат реализуют EPIC-003 (`swarm/`) и EPIC-004 (`gateway/`). Фикстура `testdata/fixtures/snapshots/state/latest.json` (seq 0 «Тёмного леса», F-10) — эталон для потребителей read-model до готовности State.
 
 ```json
 {
@@ -378,7 +388,36 @@ sequenceDiagram
 
 ### 4.9. Снапшоты (C-14)
 
-Триггеры: каждые `STATE_SNAPSHOT_EVERY=200` применённых фактов (счётчик на мир); `analytics.session.ended` (State подписан на `analytics_events` только как на триггер, группа `core.state.triggers`; в replay не читается — снапшот по счётчику); `SIGTERM` (`Stop()` ждёт завершения текущего предложения, пишет снапшот с `reason=shutdown`, ≤ 10 с); admin `POST /v1/admin/state/{world}/snapshot` (харнесс S3, `X-Actor-Kind: ci`); `bootstrap` (seq 0 после `world init`). Ротация: после успешной записи удаляются снапшоты старше пяти последних (`K=5`), `latest.json` не считается. Событие `snapshot.created {component: state, snapshot{id, taken_at, cursor, laws_version, state_hash, size_bytes}}` публикуется после записи `latest.json`. Снапшот **не** блокирует обработку дольше сериализации (≤ 1 МБ, единицы мс): worker делает копию списка сущностей под своим же исполнением (сериализация в горутине, курсор фиксируется в момент копии).
+Триггеры: каждые `MV_STATE_SNAPSHOT_EVERY=200` применённых фактов (счётчик на мир; Дополнение после G2: префикс `MV_`); `analytics.session.ended` (State подписан на `analytics_events` только как на триггер, группа `core.state.triggers`; в replay не читается — снапшот по счётчику; **I2**); `SIGTERM` (`Stop()` ждёт завершения текущего предложения, пишет снапшот с `reason=shutdown`, ≤ 10 с); admin `POST /v1/admin/state/{world}/snapshot` (харнесс S3, `X-Actor-Kind: ci`; маршрут смонтирован на HTTP-сервере процесса `shared/runtime`, `MV_CORE_ADDR`; в compose доступен через прокси gateway `/v1/admin/*` — C-06); `bootstrap` (seq 0 после `world init`, §4.10). Ротация: после успешной записи удаляются снапшоты старше пяти последних (`K=5`), `latest.json` не считается. Событие `snapshot.created {component: state, snapshot{id, seq, taken_at, cursor, laws_version, state_hash, size_bytes, key}}` публикуется после записи `latest.json`. Снапшот **не** блокирует обработку дольше сериализации (≤ 1 МБ, единицы мс): worker делает копию списка сущностей под своим же исполнением (сериализация в горутине, курсор фиксируется в момент копии).
+
+### 4.10. Инициализация мира: `bootstrap.go` и `mvctl world init --fixtures` (Дополнение после G2)
+
+Решение G2 (`epics.md` §2, журнал): **единственный** способ создать мир на MVP-1 — фикстуры; `npc_table` блупринта региона — производный механизм только для респауна (EPIC-003 I1b); `swarm.InitWorld`/`mvctl world init --blueprints` — не в MVP-1.
+
+Фикстуры `testdata/fixtures/` (создаёт EPIC-001 F-10 по `data-model.md` §3; общие):
+
+| Файл | Содержимое | Обязательные атрибуты |
+|---|---|---|
+| `world.json` | `dark-forest-world` (`type=world`) | `laws_version: "v1"`, `weather`, `time_of_day`, `day`, `season` |
+| `region.json` | `dark-forest-01` «Тёмный лес» (`type=region`, `world_id`) | `name`, `description` (краткое), `encounter_chance`, `respawn_ttl: 24h`, `npcs: []` |
+| `npc.json` | `wolf-alpha` (`type=npc`, `kind=wolf`, `position=dark-forest-01`) | статы из `rules.entities.wolf` (`hp, hp_max, atk, def, dmg`), `status=alive` |
+| `players.json` | `player-A`, `player-B`, `player-C` (`type=player`, `actor_kind=ci`, `position=outside:dark-forest-world`, `scope=solo:{id}`) | `hp, hp_max, atk, def, dmg, flee` из `rules.entities.player`, `status=alive`, `inventory: []` |
+| `snapshots/state/latest.json` | указатель на снапшот seq 0 (формат §4.4) — эталон для read-model потребителей | `entities_count: 6`, `cursor.system_events: 0`, `state_hash` пересчитывается тестом |
+
+Статы NPC/игроков в фикстурах **дублируют** `rules/dark-forest.yaml` намеренно (сущность — истина о состоянии, правила — истина о формулах); тест `bootstrap_test.go` проверяет, что фикстурные `hp_max/atk/def/dmg` равны `Rules.Stats(kind)` — расхождение = ошибка (тот же тест в EPIC-003 I1b проверяет `npc_table.stats_ref`).
+
+```go
+package state
+// Bootstrap читает fixtures и публикует entity.create.proposed (proposer system, cause=init, meta.actor_kind=system,
+// source="core/state", proposal_id = "bootstrap:{world}:{type}/{id}") в порядке world → region → npc → players;
+// ждёт entity.created по каждому (таймаут 10 с) через Journal.Tail; повтор идемпотентен (duplicate_entity с тем же
+// proposal_id = дедуп → тихий пропуск). Возвращает число созданных/пропущенных.
+func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir string) (BootstrapResult, error)
+```
+
+`mvctl world init --world dark-forest-world --fixtures testdata/fixtures/ [--bus kafka|memory]`: (1) `objstore.EnsureBucket` для `entities-{world}`, `snapshots-{world}` (versioning/ILM — §4.3); (2) если `latest.json` уже есть и `--force` не задан — отказ «мир инициализирован» (exit 2); (3) `Bootstrap`; (4) снапшот `seq 0, reason=bootstrap` через admin-маршрут State (`POST /v1/admin/state/{world}/snapshot`, `X-Actor-Kind: ci`) или — при `--bus memory` — in-process `state.Context`; (5) печатает `entities_count`, `state_hash`. Требует запущенного `core` с контекстом `state` (при `--bus kafka`); e2e-харнессы вызывают `Bootstrap` напрямую в процессе `--contexts=all --bus=memory`. Права: `system` proposer в `OwnershipRules` (§4.6) — `Create` любых типов, `cause=init`.
+
+Что не делает `world init`: не создаёт агентов роя (их спавнит EPIC-003 при старте по блупринтам), не пишет `laws/` (файл в Git), не трогает `gateway.db`/`links.db`.
 
 ---
 
@@ -682,7 +721,7 @@ sequenceDiagram
 | C-02 (read-model) | `snapshots-{world}/state/latest.json` (указатель) + объект | §4.4; чтение через `shared/objstore` только на старте потребителя |
 | C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops |
 | C-03 | Go-API §5.1; `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
-| C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу) |
+| C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `MV_SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу; Дополнение после G2: префикс `MV_`) |
 | C-14 | формат `snapshot.created`, объекты снапшота, `latest.json`, порядок старта | §4.4, §4.8, §4.9; `component ∈ state|swarm|gateway` (значения C-14; `api-contracts.md` §2.3.12 использует старые имена — правка system-analyst) |
 | C-01 (потребление) | `Bus`, `Journal`, `contracts.Validate` | State публикует через `Bus.Publish` (валидация схем), читает через `Journal.ReadRange/Tail` со своим курсором (§14 — запрос на `Journal` и позицию в ctx) |
 
@@ -745,7 +784,9 @@ sequenceDiagram
 | Бакеты `entities-{world}` с плоским `payload` | не мигрируются; MVP-1 стартует с `mvctl world init` (снапшот seq 0) | overview §19 |
 | `entity-actor`, `evolution-watcher` снапшоты сущностей | заморожены (E-A); при возврате — только через `entity.update.proposed` (C-13) | — |
 
-Порядок внедрения (I1): `shared/entity` + схемы → `mechanics` (YAML, RNG, Resolve, Invariants) + `FixedMechanics` → `state` (memstore, Applier, факты) → `objStore` + снапшоты → recovery + `replay` → e2e S1/S3. I2: atomic группы, `Participation` в `NPCTarget`, снапшот по `session.ended`, `state_hash` для `--audit`.
+Порядок внедрения (I1; **Дополнение после G2**: `shared/entity` v2, типы C-03 + `Load`, `FixedMechanics`, `FakeState` v0 и фикстуры уже созданы в F-10 — EPIC-002 начинает с их доработки, не с нуля): `shared/entity` (дозаполнение) + схемы → `mechanics` (RNG, `Resolve`, `NPCTarget`, `Invariants`, `ChangesFor`) → `state` (memstore, Applier, факты; замена `FakeState` v0 реализацией) → `objStore` + снапшоты → **`bootstrap.go` + `mvctl world init`** → recovery + `replay` → e2e S1/S3. I2: atomic группы, `Participation` в `NPCTarget`, снапшот по `session.ended`, `state_hash` для `--audit` (совместно с 005-ops). Детализация — `epics/EPIC-002-state-mechanics/design.md`.
+
+Судьба as-is по U-1: `services/entity-manager`, `services/rule-engine`, `shared/rules` **не удаляются** — после готовности новых пакетов переносятся в `services/_archive/` владельцем (EPIC-002) с `ARCHIVED.md`.
 
 ---
 
@@ -768,6 +809,8 @@ sequenceDiagram
 
 ## 14. Запросы на изменение контрактов и уточнения (для system-architect)
 
+**Статус после G2**: все шесть запросов **приняты** (`consolidation.md` §2: S-1 → C-01 v1.1; S-2 → ADR-001 доп. п. 2–3; S-3 → C-03 v1.1; S-4 → C-02 v1.1; S-5 → C-14 v1.1 + правка `api-contracts.md` §2.3.12 system-analyst; S-6 → `ownership.md` §1). Текст ниже сохранён как история; действующие формулировки — в `contracts.md` v0.2.
+
 1. **C-01 (шина) — дополнение, совместимое:** интерфейс `eventbus.Journal { ReadRange(ctx, topic string, from, to int64, h Handler) (next int64, err error); Tail(ctx, topic string, from int64, h Handler) error; End(ctx, topic string) (int64, error) }` (реализации: kafka-go — `SetOffset`/`ReadLastOffset`; membus — индексы очередей) и позиция сообщения в контексте обработчика (`eventbus.PositionFromContext(ctx) (Position{Topic, Offset}, bool)`). Нужно State (свой курсор), Swarm и Gateway (догон с курсора снапшота, C-14). Также `eventbus.Dedup` (LRU по `event.id`) — в production-пакете `eventbus`, а `testkit.Dedup` — псевдоним.
 2. **ADR-001 п. 3 (границы импортов) — уточнение:** разрешить `internal/state → internal/mechanics` (библиотека инвариантов, чистая; иначе инварианты дублируются) и `cmd/multiverse → internal/replay` (единственный импортёр; контексты получают `Clock/Timers/Journal/Mode` через `shared/runtime.Deps`). Новые foundation-пакеты `shared/clock`, `shared/runtime` — добавить в `plan/ownership.md` (EPIC-001 → tech-lead).
 3. **C-03 — совместимые дополнения:** поля `Actor.Participation`, `Actor.LastDamager`; функции `Rules.Roll`, `Rules.Stats`, `LoadBytes`, `ActorFromEntity`, `ChangesFor`, `DiceRolledPayload`; типы `StateView`, `Violation`, поле `Invariant.Where`. Сигнатуры C-03 не меняются.
@@ -777,7 +820,39 @@ sequenceDiagram
 
 ## 15. Открытые вопросы и допущения
 
-- inv-04 применяется к `alive` участникам группы (мёртвые остаются в `members` формально, UC-009 A1) — подтвердить у BA.
-- `entity.update.proposed` от агента встречи: рекомендован один atomic-пакет на раунд соло (§7.1); EPIC-003 может публиковать и по одному предложению на `combat.decided` — оба варианта поддерживаются.
-- Интент как WAL для atomic-пакетов добавляет два объектных вызова (~40 мс) на пакет из > 1 сущности; при замере NFR-001 на стенде, если группа из 6 не укладывается, вариант — батч-PUT в одном объекте-«транзакции» (ADR-013, отклонённый вариант B) — не меняет контрактов.
-- Снапшот State по `analytics.session.ended` требует чтения `analytics_events` (не участвует в replay); альтернатива — триггер от gateway через `system_events`; оставлено по ADR-003.
+- inv-04 применяется к `alive` участникам группы (мёртвые остаются в `members` формально, UC-009 A1) — **передано BA (S-7, NFR-020)**; архитектурно принято, реализация по `alive` до ответа BA.
+- `entity.update.proposed` от агента встречи: рекомендован один atomic-пакет на раунд соло (§7.1); EPIC-003 может публиковать и по одному предложению на `combat.decided` — оба варианта поддерживаются (S-8 — «К», закреплено в C-03 v1.1).
+- Интент как WAL для atomic-пакетов добавляет два объектных вызова (~40 мс) на пакет из > 1 сущности; при замере NFR-001 на стенде, если группа из 6 не укладывается, вариант — батч-PUT в одном объекте-«транзакции» (ADR-013, отклонённый вариант B) — не меняет контрактов (S-9 — «К», замер в I2).
+- Снапшот State по `analytics.session.ended` требует чтения `analytics_events` (не участвует в replay); альтернатива — триггер от gateway через `system_events`; оставлено по ADR-003 (S-10 — «К»).
+
+---
+
+## 16. Дополнения после G2 — сводка (2026-09-09)
+
+Источник: `consolidation.md` §2 (S-1…S-10), §9; `contracts.md` v0.2; `epics.md` v0.2 §2 (инициализация мира), §6 (F-10); журнал G2.
+
+| # | Решение | Где в документе |
+|---|---|---|
+| 1 | Все env с префиксом `MV_`: `MV_STATE_SNAPSHOT_EVERY`, `MV_SWARM_OBJECT_AGENTS_ENABLED`, `MV_CORE_ADDR` | §4.9, §8 |
+| 2 | Admin-маршрут State монтируется на HTTP-сервере процесса (`shared/runtime`, `Routes(mux)`, `MV_CORE_ADDR=127.0.0.1:8090`); спецификация — раздел `admin` `api/gateway.openapi.yaml` | §2, §4.9 |
+| 3 | Границы импортов `state → mechanics`, `cmd/multiverse → internal/replay` приняты; `cmd/mvctl/internal/world → internal/state` | §1 |
+| 4 | C-01 v1.1: `Journal`/`Position`/`Dedup` — реализация EPIC-001, State использует как есть | §4.8, §14 |
+| 5 | `latest.json` — указатель (C-14 v1.1), фикстура seq 0 | §4.4 |
+| 6 | Инициализация мира — фикстуры: `bootstrap.go` + `mvctl world init --fixtures`; `npc_table` только респаун | §2, §4.10, §12 |
+| 7 | F-10: `shared/entity` v2, типы C-03 + `Load`, `rules/dark-forest.yaml`, `FakeState` v0, `FixedMechanics`, фикстуры — создаёт EPIC-001, EPIC-002 дорабатывает | §2, §12 |
+| 8 | Versioning MinIO — не опора; `EnsureBucket` включает versioning/ILM в `world init`; MinIO из исходников (ADR-021) прозрачно для State | §4.3 |
+| 9 | `services/entity-manager`, `rule-engine`, `shared/rules` → `services/_archive/` после переноса, не удаляются (U-1) | §12 |
+| 10 | Схема `analytics.replay.completed` — совладение с EPIC-005 (файл EPIC-002; `mode=test`, `events_hash_match` — EPIC-005 через PR) | §2, §8 |
+| 11 | inv-04 по `alive` — BA (S-7); прочие допущения §15 — «К» | §15 |
+
+---
+
+## Дополнение после сведения 3 (внесено tech-lead#1)
+
+Владелец документа — **architect#1**; текст разделов ниже **не переписан**. Указатель на решения `architecture/consolidation.md` **§14** (З-2, TL2-3), `architecture/contracts.md` **v0.4** (C-02 v1.2, §16 п. 6) и ADR-017 «Дополнение 1» п. 5. Внесено tech-lead#1, потому что architect#1 в этой волне не запускался; при следующей ревизии architect#1 переносит решения в основной текст и снимает этот раздел.
+
+| Раздел документа | Что изменилось по сведению 3 | Основание |
+|---|---|---|
+| Раздел **«Мёртвые»** (терминальные статусы), §5.5 inv-01 | Терминальные статусы — **`status ∈ {dead, abandoned, ascended_final}`**. Покинутый персонаж (`abandoned`, следствие `/forget`) трактуется как `dead` во всех правилах: `dead_entity` при попытке изменения, inv-01 `dead_does_not_act`, `NPCTarget`, таблица видимости стража, исключение из scope, `expected[]`/`acted[]` и `participation=active`. Отличие от смерти: `narrative.output kind=death` **не** генерируется | З-2, C-02 v1.2, ADR-017 доп. 1 п. 5; задачи T-053, T-054, T-056 |
+| §4.4/§4.8 (`cause` в предложениях и фактах) | `cause` дополнена значением **`forget`**; переход `alive → abandoned` предлагает **только gateway** (`entity.update.proposed {atomic: true, cause: forget}`, `set status=abandoned`, `expected_version`, без `meta.agent`); предложение с `meta.agent` → `level_violation`; над `dead`/`ascended_final`/`abandoned` → `dead_entity`. Факт — `entity.updated {changed:[{path: status, old: alive, new: abandoned}], cause: forget}`. Схемы с `cause=forget` создаёт EPIC-001 F-4b (T-006) | З-2, C-02 v1.2; задача T-056 |
+| **§4.6** (`OwnershipRules`) | Добавляется строка **gateway**: `Character.status → abandoned` (только из `alive`) и `Group.leader_id` (включая `null`). Истина — `shared/agent/levels.go` (EPIC-003), `shared/contracts.OwnershipRules` — статичная копия; копия правится **тем же PR**, что и истина; State — только потребитель, узнаёт из отчёта PR | З-2, TL2-3, `contracts.md` §16 п. 6; задачи T-202 (EPIC-003), T-006 (EPIC-001) |

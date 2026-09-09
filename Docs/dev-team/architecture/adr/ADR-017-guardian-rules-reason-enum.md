@@ -1,6 +1,6 @@
 # ADR-017: Страж как чистая функция над структурированным выводом — правила 3–6, частичное отклонение, видимость по уровню, `reason` enum и инварианты по `check`-ключам законов
 
-Статус: предложено (к ревью system-architect#1) · Дата: 2026-09-09 · Автор: architect#2 (TEAM-2, EPIC-003) · Уровень: реализация блока
+Статус: **принято с дополнением 1** (ревью system-architect#1, сведение 3, 2026-09-09) · Дата: 2026-09-09 · Автор: architect#2 (TEAM-2, EPIC-003) · Уровень: реализация блока
 Связи: ADR-002 п. 5, ADR-005 п. 2, ADR-008 п. 2/3/5, ADR-009 п. 6; FR-034, FR-042, FR-122, FR-123, FR-128, BR-06, BR-16; NFR-020, NFR-021, NFR-026, NFR-043; UC-022; `api-contracts.md` §2.4, §2.3.10; `data-model.md` §4; C-02 (`OwnershipRules`), C-03 (`Invariants()`), C-12; `components/swarm-llm-laws.md` §10.
 
 ## Контекст
@@ -40,3 +40,19 @@
 - Позитивные: страж тестируется таблично без шины и LLM (9 правил × 2 вида схем); NFR-021 «100 % событий из `llm.output` содержат только зарегистрированные id и свой уровень» обеспечивается до публикации; законы управляют набором проверок без правки Go.
 - Негативные: видимость — ещё одна таблица на роль (при новой роли — правка); гипотетическое применение `ops` требует небольшой копии сущности (≤ 50 сущностей/scope — дёшево).
 - Что придётся сделать: `internal/llm/guardian/{guardian,visibility,reasons}.go`; схема `llm.output.rejected.v1.json`; проверка полноты `check`-ключей при старте `core`; тесты с подложенными ссылками (US-018, US-037).
+
+## Дополнение 1 (сведение 3, 2026-09-09, system-architect#1) — единый `validation_status`, связь статуса и причин, покинутые персонажи
+
+Контекст: `data-model.md` §7.2 v0.2 задавал 11 значений `validation_status` (в т. ч. `rejected_unknown_entity`, `rejected_player_agency`, `rejected_level_violation`, `rejected_language`, `budget_exceeded`), КД §9.2/§10.2 — 7 (`… | rejected_language | error`), п. 2 этого ADR — 3 исхода стража. Замечание tech-lead#2 (EPIC-003 tasks §10 п. 1): нужно одно перечисление до T-215. US-018 повторяет вариант `data-model`.
+
+Решение (C-07 v1.2):
+1. **Статус описывает исход конвейера, причина — почему.** `llm.output.validation_status ∈ valid | partially_rejected | invalid | error | quarantined | filter_error` (6 значений):
+   - `valid` / `partially_rejected` / `invalid` — исходы стража и парсера (п. 2 этого ADR: `invalid` также при `schema_invalid`, `language` и устаревшей `laws_version`);
+   - `error` — ответа нет (провайдер, таймаут, `error{code: yielded}` по ADR-014 п. 2); стражу нечего проверять;
+   - `quarantined` — фильтр (a) `block` (без `response_raw`, `content.incident.recorded`); `filter_error` — сбой фильтра, fail-closed (без `response_raw`). Оставлены статусами, а не причинами, потому что от них зависит хранение `response_raw` (FR-050, SEC) и ветка конвейера без повтора.
+2. **Причины — только в `llm.output.rejected.reason`** по п. 3 (`unknown_entity | player_agency | level_violation | schema_invalid | language | filter_blocked | filter_error | budget_exceeded | law_violation | other`); по одному событию на отброшенный элемент (`element{index,type}`), без `element` — на весь ответ. `rejected_*`-статусы удалены: они дублировали `reason` и не позволяли выразить «два элемента по разным причинам». `budget_exceeded` — не статус: `llm.output.rejected` без `llm.output` (вызова не было), как в §9.2 КД.
+3. **`llm.output.reasons[]` (опц.)** — множество `reason` связанных `rejected`; заполняет шлюз (страж вычислен до записи — п. 5 §9.2 КД), чтобы `mvctl llm-usage`/`session-report` считали `guardian_rejections_per_100` без join по `llm_output.event.id`.
+4. **US-018 (запрос BA)**: критерий «`validation_status = rejected_unknown_entity`» → «`validation_status ∈ partially_rejected|invalid` и `llm.output.rejected reason=unknown_entity` с отсутствующей ссылкой»; критерий про повторы — `invalid` (без изменений). `data-model.md` §7.2/§9.7 и `api-contracts.md` §2.3.10 приведены system-architect в сведении 3 (пометка).
+5. **Покинутые персонажи (C-02 v1.2, FR-061)**: `status=abandoned` для правил стража эквивалентен `dead` — сущность видима (нужна для «его больше нет»), `ops` над ней → `law_violation dead_does_not_act` (inv-01 расширен на `status ∈ dead|abandoned|ascended_final`); таблица видимости §10.3 КД без изменений.
+
+Последствия: схема `llm.output.v1.json` (T-215) — enum из 6 значений; `guardian.Verdict.Status` — 3 значения (без изменений); шлюз сводит статусы парсера/фильтра/провайдера и вердикт в один `validation_status`; замер NFR-021/NFR-023 — по `llm.output.rejected` (+ `reasons[]`).

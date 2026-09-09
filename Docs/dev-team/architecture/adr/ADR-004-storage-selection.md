@@ -37,7 +37,7 @@ As-is: MinIO — де-факто основная БД (JSON-объект на �
 
 - Позитивные: минус три сервиса (Chroma, Timescale, Redis-план), один путь сборки без CGO, ПДн изолированы физически, снапшоты с историей версий.
 - Негативные: переписывание `chroma*.go` под Qdrant (EPIC-005); SQLite — ещё одна зависимость (чистый Go, без CGO); MinIO остаётся «БД» — при росте объёмов State нужно вынести за `Store` в PostgreSQL (интерфейс предусмотрен).
-- Что придётся сделать: EPIC-001 — compose (пины, профили, init versioning), удаление Chroma/Timescale; EPIC-004 — схемы SQLite и миграции (`golang-migrate` или встроенные SQL-файлы); EPIC-005 — Qdrant-адаптер, `mvctl memory rebuild`; тест NFR-041 обходит все четыре хранилища и логи.
+- Что придётся сделать: EPIC-001 — compose (пины, профили, init versioning), удаление Chroma/Timescale; EPIC-004 — схемы SQLite и миграции (выбор делегирован команде; **решено ADR-019: `pressly/goose/v3` как библиотека из embed FS, без `Down` — `golang-migrate` не используется**; сведение A4-2, запрос g); EPIC-005 — Qdrant-адаптер, `mvctl memory rebuild`; тест NFR-041 обходит все четыре хранилища и логи.
 
 ## Дополнение 2026-09-09 (сведение A3 шаг 4)
 

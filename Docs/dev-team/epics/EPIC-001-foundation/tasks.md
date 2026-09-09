@@ -1,0 +1,391 @@
+# Задачи EPIC-001 «Фундамент» (волна 0)
+
+Версия 0.1.1 · 2026-09-09 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
+**Правки сведения 3** (`architecture/consolidation.md` §14, `contracts.md` v0.4, `infrastructure.md` v0.3; внесено tech-lead#1): T-001 (F-1 — IDE-каталоги), T-004 (F-6a — `MINIO_REPO`/`LLAMACPP_BUILD`/`LLM_MODEL_DEFAULT`, `extra_hosts`, форк MinIO), T-006 (F-4b-1 — `Spec.Publishers`, строка gateway в `OwnershipRules`, `cause=forget`), T-007 (F-5 — `MV_LLM_*`, условные `OLLAMA_*`), T-008 (F-6b — `llm-server.*`, `make llm-*`, правило `compose-lint`), T-012 (F-7 — CODEOWNERS), T-013 (F-8 — `prompts.jsonl`, порядок E→C→A), T-017 (F-10d — `replay.completed`, `abandoned`), §0 (F-6 +0,5), §9 п. 1. Структура подволн и состав задач не менялись.
+Команда TEAM-1 · ветка `epic/EPIC-001-foundation` (от `integration/mvp-1`, создана после F-0, коммит `744fb10`) · волна 0 · G2 утверждён 2026-09-09.
+Основание: `epics/EPIC-001-foundation/design.md` v0.1 (§4 подволны, §5 заглушки v0, §10 тестируемость); `architecture/infrastructure.md` v0.2 (§2.1–§2.5, §3.1–§3.4, §4.5, §4.6, §6.4, §10 чек-лист); `architecture/components/foundation.md` v0.2 (§1–§12, §14); `architecture/contracts.md` v0.2 (C-01, C-02, C-03, C-04, C-05, C-06, C-13, C-14, §17); `plan/epics.md` v0.2 §6; `plan/decomposition-review.md` §2, §3.3, §5.3; `plan/teams.md` §4; `plan/ownership.md` v0.2; ADR-001, ADR-004, ADR-007, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-021.
+
+Диапазон номеров TEAM-1: **T-001…T-199** (EPIC-001 — T-001…T-049, EPIC-002 — T-050…T-129, EPIC-005 — T-130…T-199).
+Размер задачи: **S** ≤ полдня · **M** ≤ одной сессии одного разработчика · L — не допускается (дробится тимлидом).
+
+---
+
+## 0. Статус F-задач и отклонения от `epics.md` §6
+
+| F | Задачи | Статус |
+|---|---|---|
+| **F-0** | — | **выполнено** 2026-09-09 (коммит `744fb10`): `git worktree prune`, 13 gitlink'ов `.claude/worktrees/*` из индекса, `.gitignore`, `Docs/dev-team/**` зафиксированы, `integration/mvp-1` от `feature/agent-gm-core`. Проверка: `git status` работает, `git branch --list integration/mvp-1` не пуст |
+| F-1 | T-001 | todo (первая задача волны) |
+| F-3 | T-002 | todo |
+| F-2 | T-003 | todo |
+| **F-6 → F-6a / F-6b** | T-004, T-008 | **разбито тимлидом**: F-6 одной задачей = L (образ MinIO + compose + 5 профилей + два init-скрипта + Makefile 25 целей + `compose-lint`). F-6a — версии, образы, compose-ядро; F-6b — профили, init, Makefile, линтер compose. **Сведение 3 (`infrastructure.md` v0.3): объём F-6 вырос на ≈ 0,5 задачи** — `scripts/llm-server.ps1`/`.sh`, `make llm-up/llm-down/llm-health`, `extra_hosts` у `core`, `LLAMACPP_BUILD`/`LLM_MODEL_DEFAULT`/`MINIO_REPO` в `versions.env`, шестое правило `compose-lint`. Прирост распределён: T-004 (+`versions.env`, `extra_hosts`, форк MinIO), T-008 (+скрипты LLM, цели Makefile, правило линтера); дробление на третью задачу не требуется, обе остаются **M** |
+| F-4a | T-005 | todo |
+| **F-4b → F-4b-1 / F-4b-2** | T-006, T-009 | разбито (подтверждает `decomposition-review.md` §2: «F-4b×2»): блоки «а+б» (player/group/round; entity/snapshot/dice) и блок «в» (agent/tick/llm/narrative/world/region/npc/laws/analytics) |
+| F-5 | T-007 | todo. **Уточнение**: `build/versions.env` создаётся в T-004 (F-6a, подволна 0.2, владелец `build/` — devops), а не в F-5 — иначе F-6a нечем пинить образы. F-5/F-5t файл только читают (`testkit.Versions()`). Отклонение от `design.md` §4 (строка 0.3) — согласовать с architect#1 |
+| F-4c | T-010 | todo |
+| F-7 | T-012 | todo |
+| F-8 | T-013 | todo (стенд, слот разработчика не занимает) |
+| F-5t | T-014 | todo — **ворота волны 1** |
+| **F-10 → 5 задач** | T-011, T-015, T-016, T-017, T-018 | по указанию оркестратора: `entity` v2 · `mechanics` типы+`Load`+`rules` · фикстуры · `FakeState`+`FixedMechanics` · `Harness`+`FakeNarrator`+e2e. Между ними три последовательные группы зависимостей → подволны 0.4–0.7 |
+| F-9 | T-019 | todo |
+| — | T-020 | приёмка волны 0, слияние в `integration/mvp-1`, тег `mvp-1/wave-0` (tech-lead#1) |
+
+Порядок (`epics.md` §6, `infrastructure.md` §10): **F-0 → F-1 ∥ F-3 → F-2 → (F-4a ∥ F-4b ∥ F-5 ∥ F-6) → (F-4c ∥ F-5t ∥ F-10 ∥ F-7 ∥ F-8) → F-9**.
+Критический путь волны 0: **T-001 → T-003 → T-005 → T-014** (F-1 → F-2 → F-4a → F-5t).
+
+**Изменения общих файлов** (`cmd/multiverse/main.go`, `cmd/mvctl/main.go`, `go.mod`, `docker-compose.yml`, `Makefile`, `.github/**`) после волны 0 — **только через tech-lead#1**; `shared/{eventbus,contracts,entity,clock,runtime}` и `schemas/events/_common.json` — через system-architect (пометка `contract-change`). Задачи с такой пометкой ниже помечены «⚠ только через tech-lead#1».
+
+---
+
+## 1. Общий DoD (применяется к каждой задаче; в задаче — только специфика)
+
+1. `make lint` (`golangci-lint run`) чист; `gofmt`/`goimports` без диффа.
+2. `go build ./... && go vet ./...` зелёные; `go test -short -race -count=1 ./...` зелёные.
+3. Тесты написаны в той же задаче (уровни — по `design.md` §10); новый код без тестов не принимается.
+4. `make secrets-scan` (gitleaks по диапазону ветки + рабочей копии) — 0 находок.
+5. `Docs/dev-team/epics/EPIC-001-foundation/dev-log.md` заполнен: экземпляр (`developer#K`), задача `T-NNN`, что сделано, отклонения от дизайна, открытые вопросы.
+6. Поведение соответствует критериям приёмки историй задачи (US-010, US-011, US-013, US-017 — по ссылкам в задаче) и `design.md` §10.
+7. Изменений вне карты владения (`plan/ownership.md` §1) нет; контракты не меняются без запроса system-architect.
+8. Начиная с T-012 (F-7) — **CI зелёный** на PR в `integration/mvp-1`: `unit`, `integration`, `e2e`, `contracts`, `security`, `compose-lint` ≤ 10 мин. До T-012 — эквивалент локально (`make ci`).
+
+---
+
+## 2. Подволна 0.1 — гигиена и архив (2 слота)
+
+### T-001: F-1 · Гигиена индекса, gitleaks и pre-commit · Размер: S · Статус: todo · Исполнитель: developer#1 (пара — security-engineer) · Подволна 0.1
+- **Описание**: выполнить `infrastructure.md` §4.5 п. 1–13 **в указанном порядке**: (1) `.gitleaks.toml` (allowlist только `^\.env\.example$`, `^\.mcp\.env\.example$` + очевидные плейсхолдеры); (2) `.pre-commit-config.yaml` (§3.4) → `pre-commit install` → `pre-commit run --all-files`; (3) **плейсхолдер ключа**: `shared/oracle/README.md` строки 14, 29 → `sk-xxxxxxxxxxxxxxxxxxxxxxxx`, строка 68 → `export ORACLE_API_KEY="<your-key>"` (U-5; делается **до** переноса файла в архив T-002); (4) `git rm --cached .mcp.env .claude/settings.local.json`; (5) `git rm --cached` + удаление с диска `examples.exe`, `semantic-memory.exe`, `services/narrative-orchestrator/cmd.exe`, `mcp_kafka.log`, `mcp_audit.log`; (6) пустые каталоги `-p/`, `Multiverse/`; (8) целевой `.gitignore`; (9) `.mcp.env.example`; (10) `.gitattributes` (`testdata/recordings/*.jsonl merge=binary` **без** `-diff`, `eol=lf` для `sh/yml/yaml/toml/Makefile`); (11) `.env.example` по §4.2 (полный, значения пустые).
+- **Не входит**: `git filter-repo` (только по явной команде пользователя); перенос кода (`fake_deps`, `test_minio.go`, дубли `Dockerfile`) — T-002; решение по IDE/AI-каталогам и `event-model.pdf` — вопрос пользователю (см. §7).
+- **Уточнение (сведение 3, `infrastructure.md` v0.3 §4.5 п. 13, U-11)**: вопрос закрыт — уже отслеживаемые `.idea/`, `.vscode/`, `.kilo*`, `.roo*`, `.qwen`, `memory/`, `plans/`, `reports/`, `shared/eventbus/docs/event-model.pdf` **из индекса не выводятся** (`git rm --cached` по ним в T-001 не выполняется, критерий их не проверяет); правила `.gitignore` касаются только новых файлов; окончательное решение по этим каталогам принимает tech-writer в T-019 (F-9). Секреты и бинарники (п. 4–5 описания) выводятся независимо.
+- **Файлы**: `.gitleaks.toml`, `.pre-commit-config.yaml`, `.gitignore`, `.gitattributes`, `.env.example`, `.mcp.env.example`, `shared/oracle/README.md`.
+- **Зависимости**: F-0 (выполнен).
+- **Ссылки**: `design.md` §2 (US-013), §9 (T-16/U-5); `infrastructure.md` §4.5, §3.4; `foundation.md` §12; ADR-009 п. 8, доп. п. 10; US-013 (все три критерия); NFR-040; SEC/threat-model T-16.
+- **DoD**:
+  - `gitleaks dir --redact .` → 0 находок; `gitleaks git --redact --log-opts="integration/mvp-1..HEAD" .` → 0;
+  - `git ls-files | grep -E '\.(exe|log)$|\.mcp\.env$|settings\.local\.json$'` → пусто;
+  - `grep -n "sk-4659" shared/oracle/README.md` → пусто;
+  - `pre-commit run --all-files` зелёный; **проверка хука на Windows**: `git commit` файла с `MV_TELEGRAM_BOT_TOKEN=123456789:AA…` (фиктивный) отклонён;
+  - `git status` работает; `.env.example` содержит все переменные `infrastructure.md` §4.2 с префиксом `MV_`;
+  - общий DoD §1.
+
+### T-002: F-3 · `services/_archive/`, `FROZEN.md`, `Docs/archive/` · Размер: M · Статус: todo · Исполнитель: developer#2 (пара — tech-writer) · Подволна 0.1
+- **Описание**: перенести выводимый из сборки код по `infrastructure.md` §4.6 **через `git mv`** (ничего не удалять, U-1): `services/{ban-of-world,reality-monitor}`, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}`, `shared/agent/tools/*` (кроме реестра инструментов), `fake_deps/`, `test_minio.go`, корневой `Dockerfile` → `services/_archive/build/Dockerfile.root`, `services/{entity-actor,evolution-watcher,rule-engine}/Dockerfile` → `services/_archive/build/services/…`, `configs/gm_*.yaml`. В каждом каталоге — `ARCHIVED.md` (причина со ссылкой на ADR/`overview` §16, коммит архивации, последний рабочий коммит, эпик возврата, что использовало); `services/_archive/README.md` — индекс; `services/_archive/go.mod` (`module multiverse-core.io/archive`) и собственные `go.mod` подкаталогов, чтобы корневой `./...` их не видел. `FROZEN.md` в 8 замороженных сервисах (остаются на месте): world-generator, universe-genesis-oracle, ontological-archivist, cultivation-module, plan-manager, city-governor, entity-actor, evolution-watcher. Создать `Docs/archive/` с индексом.
+- **Не входит**: `services/{narrative-orchestrator,semantic-memory}` — остаются (профиль `legacy` до S5, EPIC-003 I2); `entity-manager`/`rule-engine` — архивируются EPIC-002 (T-064) после переноса кода.
+- **Файлы**: `services/_archive/**`, `services/<8 frozen>/FROZEN.md`, `Docs/archive/README.md`.
+- **Зависимости**: T-001 (плейсхолдер ключа ставится до `git mv` `shared/oracle`).
+- **Ссылки**: `infrastructure.md` §4.6, §10 (F-3); `foundation.md` §11, §12; `ownership.md` §1 (строка `services/_archive/**`); U-1 / OQ-A-17; `epics.md` §6 F-3.
+- **DoD**:
+  - `services/_archive/README.md` перечисляет **все** перенесённые пути с причиной и коммитом; в каждом каталоге есть `ARCHIVED.md`;
+  - `ls services/*/FROZEN.md | wc -l` = 8;
+  - `git log --follow` по перенесённому файлу читается (перенос, а не удаление+добавление);
+  - `go build ./...` в корне (после T-003) не видит `services/_archive/**` — проверяется в DoD T-003;
+  - общий DoD §1.
+
+---
+
+## 3. Подволна 0.2 — единый модуль и образы (2 слота)
+
+### T-003: F-2 · Единый модуль Go 1.26, `cmd/multiverse`, `shared/runtime`, `shared/clock` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 0.2 · ⚠ только через tech-lead#1 (`cmd/multiverse/main.go`, `go.mod`)
+- **Описание**: удалить `go.work`/`go.work.sum`; корневой `go.mod` = `module multiverse-core.io`, `go 1.26`, `toolchain go1.26.x` (точный патч — из `build/versions.env`, T-004); слить shared-модули (`shared/{eventbus,jsonpath,entity,agent}`) в пакеты корневого модуля, удалив их `go.mod`; каркас `cmd/multiverse` — флаги `--contexts/--mode/--bus/--recording`, подкоманды `health --url` (для healthcheck distroless) и `db backup|check`; регистрация **пустых** контекстов `state|mechanics|swarm|llm|laws|gateway|memory` (`Health()=ok`, `Start/Stop` no-op) — по `design.md` §4.1; `shared/runtime` (HTTP-сервер процесса, `Deps`, `Context`, `Routes(mux)`, `AdminOnly`, `MV_CORE_ADDR=127.0.0.1:8090`); `shared/clock` (`Clock`, `Timers`, `Manual`, `ManualTimers`); `.golangci.yml` (`depguard` границ ADR-001 доп. п. 2, `forbidigo` на `os.Getenv`/`time.Now` вне `shared/*` и `log.Printf`, исключение `services/_archive/**` и замороженных); `build/Dockerfile` (§2.3 `infrastructure.md`).
+- **Файлы**: `go.mod`, `go.sum`, `cmd/multiverse/**`, `shared/runtime/**`, `shared/clock/**`, `.golangci.yml`, `build/Dockerfile`, удаление `go.work*`.
+- **Зависимости**: T-001, T-002.
+- **Ссылки**: `foundation.md` §1, §2, §3, §4, §12 (F-2), §14 п. 2/3/8; `infrastructure.md` §2.1, §2.3, §10 (F-2); `design.md` §4.1; ADR-001 + дополнения п. 1–3; US-010 (критерий 1 частично), NFR-075.
+- **DoD**:
+  - `go mod tidy && go build ./... && go vet ./... && make lint` — зелёные; `go mod verify` ок;
+  - `go run ./cmd/multiverse --contexts=all --bus=memory` → `curl 127.0.0.1:8090/health` = `{"status":"ok"}` со списком контекстов; `--contexts=state,gateway` поднимает только их;
+  - `go build ./...` не собирает `services/_archive/**` и 8 замороженных сервисов (`go list ./... | grep -c _archive` = 0);
+  - unit: `runtime.New` соблюдает порядок `DependsOn`; `clock.Manual`/`ManualTimers` детерминированы; `AdminOnly` отклоняет запрос без `X-Actor-Kind`;
+  - `docker build -f build/Dockerfile .` собирает три бинарника (`multiverse`, `mvctl`; `telegram-bot` — заглушка `main` до EPIC-004 или исключён из `./cmd/...` с пометкой);
+  - локально установлен Go 1.26 (зафиксировать версию в `dev-log.md`); общий DoD §1.
+
+### T-004: F-6a · `build/versions.env`, образ MinIO из исходников, ядро compose · Размер: M · Статус: todo · Исполнитель: devops-engineer (выполняет developer#2 по инструкциям devops-engineer) · Подволна 0.2
+- **Описание**: создать `build/versions.env` со всеми пинами `infrastructure.md` §2.4 (`GO_VERSION`, `REDPANDA_IMAGE`, `REDPANDA_CONSOLE_IMAGE`, `MINIO_TAG`, `MINIO_IMAGE`, `MINIO_BUILDER_IMAGE`, `MC_IMAGE`, `QDRANT_IMAGE`, `NEO4J_IMAGE`, `OLLAMA_IMAGE`, `CHROMA_IMAGE`, `GOLANGCI_LINT_VERSION`, `GITLEAKS_VERSION`); `build/minio.Dockerfile` (§2.5) и цель `make minio-image`; ядро `docker-compose.yml`: сервисы `redpanda`, `minio`, `ollama` (профиль `gpu`), образы через `${…}` из `versions.env` (`COMPOSE_ENV_FILES=.env,build/versions.env`), healthchecks, `depends_on: condition`, **все порты только `127.0.0.1`**, пароли только `${VAR:?}`, ротация логов `50m×5`; `.dockerignore`; тарбол исходников MinIO в `backups/minio-src-<tag>.tar.gz` (вне git).
+- **Не входит**: профили `memory/dev/legacy/bot`, init-скрипты, Makefile целиком, `compose-lint` — T-008.
+- **Дополнение (сведение 3, `infrastructure.md` v0.3 п. 1/5, U-8/U-10)**: в `build/versions.env` добавляются `MINIO_REPO=https://github.com/alekseizabelin1985-spec/minio.git` (форк владельца; upstream `https://github.com/minio/minio.git` — запасное значение аргумента), `LLAMACPP_BUILD=b<NNNN>` (значение вносится по установленной у владельца сборке, `llama-server --version`) и `LLM_MODEL_DEFAULT=Qwen3.8-27B-UD-Q3_K_XL` (**имя** модели, не путь); `build/minio.Dockerfile` клонирует форк (`ARG MINIO_REPO`, `MINIO_TAG=RELEASE.2025-10-15T17-29-55Z`); `make minio-image` передаёт `--build-arg MINIO_REPO`. В compose-ядре у сервиса `core` — `extra_hosts: ["host.docker.internal:host-gateway"]` (нативный `llama-server` на хосте `127.0.0.1:1234` вне compose, ADR-005 доп. 2 п. 7); сервиса `llama-server` в compose **нет** и профиля для него не заводим.
+- **Предпосылка (вне задачи, блокирует DoD)**: **форк `minio/minio` в аккаунт `alekseizabelin1985-spec` делает владелец** (кнопка Fork на GitHub, однократно, до сборки образа) — агенты внешние системы не меняют. Если форка нет на момент старта — задача идёт на upstream-значении `MINIO_REPO`, факт фиксируется в `dev-log.md` и эскалируется tech-lead#1.
+- **Файлы**: `build/versions.env`, `build/minio.Dockerfile`, `docker-compose.yml` (ядро), `.dockerignore`, `.github/ci.env` (нужен уже для `docker compose config -q`), `Makefile` (только цели `minio-image`, `image`).
+- **Зависимости**: — (не зависит от кода; идёт параллельно T-003).
+- **Ссылки**: `infrastructure.md` **v0.3** §2.4, §2.5, §1.4, §6, §12, §10 (F-6); ADR-021 (вариант B, решён на G2); ADR-005 доп. 2; `design.md` §7; NFR-071.
+- **DoD**:
+  - `make minio-image` собирается; `docker run --rm $MINIO_IMAGE --version` печатает `RELEASE.2025-10-15T17-29-55Z`; при провале сборки на `golang:1.26.x` — вторая попытка `golang:1.24.x`, выбранное значение зафиксировано в `versions.env` и в `dev-log.md` (ADR-021);
+  - `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` без ошибок;
+  - `docker compose config --format json` — ни одной публикации порта без префикса `127.0.0.1`, ни одного `image` без явного тега и с `latest`; у сервиса `core` присутствует `extra_hosts: host.docker.internal:host-gateway`, сервиса `llama-server` в конфиге нет;
+  - `mc admin info local` работает против собранного образа (`MC_IMAGE`);
+  - **(сведение 3)** `docker build -f build/minio.Dockerfile --build-arg MINIO_REPO=<форк> …` собирается; `git ls-remote --tags <форк> | grep RELEASE.2025-10-15T17-29-55Z` не пуст; `backups/minio-src-<tag>.tar.gz` существует и распаковывается; `build/versions.env` содержит `MINIO_REPO`, `LLAMACPP_BUILD`, `LLM_MODEL_DEFAULT`;
+  - тарбол исходников создан, путь записан в `dev-log.md`; общий DoD §1 (пункты про Go-тесты — n/a, отметить).
+
+---
+
+## 4. Подволна 0.3 — шина, контракты, объектное хранилище, профили (4 слота)
+
+### T-005: F-4a · `shared/eventbus`: конверт `meta`, `Bus`, `Journal`, DLQ, kafka · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 0.3 · ⚠ общий код (изменения после волны 0 — через system-architect)
+- **Описание**: конверт события C-01 v1.1 (`meta`: `event_id`, `correlation_id`, `causation_id`, `timestamp`, `source`, `actor_kind`, `agent{}`, `world`, `scope`), конструкторы `NewRoot`/`Derive` (наследование `CorrelationID` и `Timestamp` причины); интерфейсы `Bus{Publish, Subscribe}`, `Journal{ReadRange, Tail, End}`, `PositionFromContext`, `eventbus.Dedup` (LRU) — все в production-пакете; kafka-реализация на `segmentio/kafka-go v0.4.51` с reader-параметрами `MinBytes=1`, `MaxWait=100ms`; DLQ (`dead_letters`) после 3 повторов; политики топиков (`player_events` отклоняет `actor_kind=system` и `meta.agent`); валидация при чтении по `MV_BUS_VALIDATE_ON_READ`.
+- **Файлы**: `shared/eventbus/**` (переиспользование по `foundation.md` §5.1), `shared/jsonpath/**` (перенос как есть).
+- **Зависимости**: T-003.
+- **Ссылки**: `foundation.md` §5.1–§5.3, §14 п. 4; `contracts.md` C-01 v1.1; `design.md` §2 (FR-036), §10; ADR-007; NFR-012, NFR-013.
+- **DoD**:
+  - unit: `NewRoot`/`Derive` (наследование `CorrelationID`/`Timestamp`, новый `event_id`), `Dedup` (повтор не проходит дважды), политики топиков на фикстурах, DLQ после 3 повторов;
+  - `Journal.End` монотонен, `ReadRange` строго по возрастанию офсета (проверяется полностью в T-014 contract-тестом);
+  - покрытие `shared/eventbus` ≥ 60 %;
+  - общий DoD §1.
+
+### T-006: F-4b-1 · `shared/contracts` + схемы блоков «а» и «б» · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 0.3 · ⚠ общий код
+
+> **Решение tech-lead#1 о пересечении с TEAM-2/TEAM-3**: файлы схем **всех** типов §2.2 создаёт F-4b в волне 0 (так в `design.md` §4, `foundation.md` §12). Задачи владельцев — **ревизия и дополнение**, а не создание с нуля: EPIC-002 T-052, EPIC-003 T-214/T-215, EPIC-004 T-301. Если владелец обнаруживает расхождение с `api-contracts.md` — правит свой файл в своей ветке (это его владение по `ownership.md`), уведомляя tech-lead#1; `_common.json`/`_envelope.json` — только через system-architect.
+- **Описание**: пакет `shared/contracts`: реестр `Spec{Type, Topic, Schema, Publishers, Consumers, Policy, Deprecated}`, `Lookup`, `Topics`, `Validate` на `santhosh-tekuri/jsonschema/v6` (JSON Schema 2020-12); статичная таблица `contracts.OwnershipRules` MVP-1 (`state-and-mechanics.md` §4.6; источник для сверки — `shared/agent/levels.go`, EPIC-003 I1a); `schemas/events/_common.json`, `_envelope.json`; **блок «а»** — `player.*`, `group.*`, `round.*`; **блок «б»** — `entity.create.proposed`, `entity.update.proposed`, `entity.created`, `entity.updated`, `entity.update.rejected`, `snapshot.created`, `dice.rolled`, `analytics.replay.completed` (формат по `state-and-mechanics.md` §4.4/§4.8, файлы передаются владельцу EPIC-002).
+- **Дополнение (сведение 3, `contracts.md` v0.4 §0, §16 п. 6–7, C-02 v1.2; в `consolidation.md` §14.3 адресовано «F-4a» — по этой нарезке реестр и `OwnershipRules` живут в F-4b-1/T-006, F-4a/T-005 — только конверт и шина)**:
+  - `Spec.Publishers` — **обязательное** поле реестра: «тип — владелец схемы и семантики; фактические издатели — список `Publishers`». Заполнить для типов с несколькими издателями: `dice.rolled` (владелец EPIC-002; издатели — агент встречи EPIC-003 и `testkit/swarm.FakeEncounter`), `entity.create.proposed`/`entity.update.proposed` (владелец EPIC-002; издатели — `gateway`, `swarm`, `mvctl` при `world init --fixtures`, фейки), `encounter.started` (EPIC-003; `region-gm` и `FakeEncounter`), `analytics.replay.completed` (`state` EPIC-002, харнесс EPIC-005, `testkit/state.FakeState`), `snapshot.created` (`state`, `swarm`, `gateway`). Источники `testkit/*` допустимы только на `membus`/`MV_SWARM_FAKE=true`.
+  - `contracts.OwnershipRules` — статичная копия по `data-model.md` §4, **включая строку gateway**: `Character.status: alive → abandoned` (и только этот переход) и `Group.leader_id` (включая значение `null`). Истина — `shared/agent/levels.go` (EPIC-003, T-202), тест равенства копии и истины блокирует merge; правка копии без истины запрещена (§16 п. 6).
+  - Схемы блока «б»: в `entity.update.proposed`/`entity.updated` поле `cause` дополнено значением **`forget`** (C-02 v1.2); `analytics.replay.completed` — поля по C-14 v0.4 (`mode`, `replay{run_id, snapshot_id?, events_replayed, llm_calls, dice_rolled_new, duration_ms, state_hash_after, incomplete_record}`).
+- **Файлы**: `shared/contracts/**`, `schemas/events/_common.json`, `_envelope.json`, `schemas/events/{player,group,round,entity,snapshot,dice,analytics.replay}*.v1.json`.
+- **Зависимости**: T-003 (может стартовать параллельно T-005 от `analysis/api-contracts.md` §2.2).
+- **Ссылки**: `foundation.md` §6, §14 п. 5; **`contracts.md` v0.4** §0, §16 п. 6–7, C-01, **C-02 v1.2**, C-13, C-14 (уточнение v0.4); `consolidation.md` §14.1 (TL2-2, TL2-3, З-2); `analysis/api-contracts.md` §2.2, §2.3.4/5/12; `design.md` §6; ADR-007, ADR-013.
+- **DoD**:
+  - `go test ./shared/contracts/... -run TestSchemasValid` — все схемы компилируются как JSON Schema 2020-12;
+  - каждый пример из `api-contracts.md` §2.3 для блоков «а»/«б» валиден против своей схемы (тест на таблице примеров);
+  - каждый `Spec` имеет файл схемы и наоборот (тест «нет фантомов»);
+  - `OwnershipRules` покрывает уровни `global/domain/encounter/personal/system/author` + пустые `object/monitor` (C-13) и **строку gateway** (`Character.status → abandoned`, `Group.leader_id` с `null`);
+  - **(сведение 3)** у каждого `Spec` непустой `Publishers`; тест на таблице типов с несколькими издателями; `cause` в схемах `entity.*.proposed`/`entity.updated` содержит `forget`;
+  - покрытие `shared/contracts` ≥ 60 %; общий DoD §1.
+
+### T-007: F-5 · `shared/objstore`, `shared/env`, `shared/logging` · Размер: M · Статус: todo · Исполнитель: developer#3 · Подволна 0.3
+- **Описание**: `shared/objstore` по ADR-021 — минимальный интерфейс (`Put/Get/Stat/List/Delete/EnsureBucket/Capabilities`), **две реализации сразу**: `Memory` (нужна EPIC-002 для unit-тестов State) и `minio` на `minio-go/v7 v7.3.0`; `EnsureBucket` сам включает versioning и ILM по `BucketOptionsFor` (`prompts-*` — без versioning, ILM 30 дн.); `buckets.go` с именами `entities-*`, `snapshots-*`, `prompts-*`, `ops-artifacts`; `shared/env` — `Declare`-манифест с обязательным префиксом `MV_`, `DeclareExternal` для сторонних, сверка с `.env.example`; `shared/logging` — slog с обязательными полями, `BusMiddleware`, редакция внешних ID и токенов.
+- **Дополнение (сведение 3, `infrastructure.md` v0.3 §4.2 п. 1, ADR-005 доп. 2)** — манифест `shared/env` и `.env.example`:
+  - LLM-блок объявляется под провайдер по умолчанию `openai_compat`: `MV_LLM_PROVIDER` (`openai_compat | ollama | anthropic | recorded | fake`, default `openai_compat`), `MV_LLM_URL` (`http://host.docker.internal:1234/v1` для контейнеров), `MV_LLM_API_KEY`, `MV_LLM_MODELS_DIR`, `MV_LLM_CLOUD_ENABLED`;
+  - `OLLAMA_*` (сторонние, без префикса `MV_`) — **обязательны только при `MV_LLM_PROVIDER=ollama`**; `Declare` поддерживает условную обязательность (проверка в `mvctl env check`, T-010), при других провайдерах отсутствие `OLLAMA_*` — не ошибка;
+  - `MV_OPENAI_API_KEY` и `MV_DEEPSEEK_API_KEY` **удалены** (были в v0.2): `openai`/`deepseek` — не имена провайдера, а другой `MV_LLM_URL` + `MV_LLM_API_KEY` у той же реализации; `mvctl env check` сообщает о них как об устаревших, если остались в чьём-то `.env`.
+- **Файлы**: `shared/objstore/**`, `shared/env/**`, `shared/logging/**`.
+- **Зависимости**: T-003.
+- **Ссылки**: `foundation.md` §7, §8, §14 п. 1/6; `infrastructure.md` **v0.3** §5.2, §4.1, §4.2, §7.1, §10 (F-5); ADR-004 доп. п. 2, ADR-021 п. 1–2, ADR-005 доп. 2; `contracts.md` v0.4 C-15 v1.1, раздел Env; `design.md` §8; NFR-074, NFR-041.
+- **DoD**:
+  - unit: `objstore.Memory` полностью (все методы + `Capabilities()`); `env.Declare` отклоняет имя без `MV_`; `logging` — тест «внешний ID и токен не попадают в лог»;
+  - **(сведение 3)** unit: при `MV_LLM_PROVIDER=openai_compat` отсутствие `OLLAMA_*` не даёт ошибки, при `ollama` — даёт; `.env.example` не содержит `MV_OPENAI_API_KEY`/`MV_DEEPSEEK_API_KEY` и содержит блок `MV_LLM_*`;
+  - integration (`-tags integration`, testcontainers, образ `${MINIO_IMAGE}` из T-004): `Put/Get/Stat/List/Delete`, `EnsureBucket` включает versioning + ILM, `prompts-*` без versioning, `Capabilities()` = `{Versioning:true, Lifecycle:true}`;
+  - `.env.example` дополнен всеми объявленными переменными (сверку автоматизирует T-010);
+  - покрытие ≥ 60 %; общий DoD §1.
+
+### T-008: F-6b · Профили compose, `redpanda-init`/`minio-init`, Makefile, `compose-lint` · Размер: M · Статус: todo · Исполнитель: devops-engineer (выполняет developer по инструкциям devops) · Подволна 0.3
+- **Описание**: профили `gpu`, `memory`, `dev`, `legacy` (as-is `narrative-orchestrator` + `semantic-memory` :8083 + `chromadb` с зафиксированным тегом — D-3), `bot`; `build/redpanda-init.sh` — 8 топиков с retention 30/90/180 дн. и `segment.ms=1d` (U-3, D-9); `build/minio-init.sh` — бакеты и versioning/ILM; Ollama env (`OLLAMA_KEEP_ALIVE=-1`, `OLLAMA_MAX_LOADED_MODELS=2`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_ORIGINS` не `*`); Neo4j без `NEO4J_PLUGINS` (T-17); токен бота — только у сервиса `telegram-bot`; полный `Makefile` (`infrastructure.md` §2.2, включая `up/down/health/ci/ci-full/replay/archive-legacy/models/warm/bench/backup/restore/logs/clean`), `SHELL := bash`, `include build/versions.env`, `GOFLAGS=-buildvcs=false` для локальных целей; `scripts/compose-lint.sh` (§3.1.1, 5 проверок); **решение по жизнеспособности профиля `legacy`** — до старта волны 1, при провале зафиксировать запасной вариант S5 в журнале и уведомить tech-lead#2.
+- **Дополнение (сведение 3, `infrastructure.md` v0.3 п. 1, §6.2, §2.2, §3.1.1; +0,5 к объёму F-6 — см. §0)**: `scripts/llm-server.ps1` (основной, Windows) и `scripts/llm-server.sh` (WSL/Linux) — старт нативного `llama-server` (llama.cpp) на `127.0.0.1:1234` с зафиксированными параметрами и ожиданием `/health = 200` до 180 с, повторный вызов при живом процессе — no-op с сообщением; цели `make llm-up` / `make llm-down` / `make llm-health`; `make up` процесс **не поднимает**, только проверяет health (LLM вне compose); в `scripts/compose-lint.sh` — **дополнительное правило**: сервиса `llama-server` в compose нет, а `MV_LLM_URL` контейнеров указывает на `host.docker.internal` либо на сервис внутри сети, но не на публичный адрес.
+- **Файлы**: `docker-compose.yml`, `build/redpanda-init.sh`, `build/minio-init.sh`, `build/legacy.Dockerfile`, `Makefile`, `scripts/compose-lint.sh`, `scripts/llm-server.ps1`, `scripts/llm-server.sh`, `.github/ci.env` (дополнение).
+- **Зависимости**: T-004.
+- **Ссылки**: `infrastructure.md` **v0.3** §1.3, §1.4, §2.2, §3.1.1, §5.1, §5.2, §6, §6.2, §10 (F-6); `foundation.md` §10; ADR-005 доп. 2 п. 1/7; D-3, D-9, D-10, U-3, U-8; T-3, T-13, T-17 (threat-model); NFR-070, NFR-071.
+- **DoD**:
+  - `make compose-lint` зелёный (5 проверок §3.1.1 **+ правило про `llama-server`/`MV_LLM_URL`**); `git grep -i minioadmin` пуст вне `Docs/` и `services/_archive/`;
+  - **(сведение 3, стенд)** `make llm-up` поднимает `llama-server` и дожидается `/health = 200`; повторный `make llm-up` — no-op; `make llm-health` печатает статус (503 = loading — не ошибка); `make llm-down` останавливает процесс; `make up` не пытается запустить LLM;
+  - `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` для каждого профиля;
+  - **стенд**: `make up` на машине владельца → `make health` = ok для `core`/`gateway` (пустые контексты из T-003); `rpk topic list` показывает 8 топиков с ожидаемыми `retention.ms`/`segment.ms`; `make up PROFILES=legacy` поднимает orchestrator + semantic-memory :8083 + chroma **или** в журнал внесено решение о запасном варианте S5;
+  - `make down` сохраняет тома; общий DoD §1 (Go-тесты — n/a).
+
+---
+
+## 5. Подволна 0.4 — схемы блока «в», `mvctl`, `entity` v2, CI, замер (4 слота + стенд)
+
+### T-009: F-4b-2 · Схемы блока «в» и политики топиков · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 0.4 · ⚠ общий код
+- **Описание**: схемы `agent.*` (lifecycle), `tick.*`, `llm.output`, `llm.output.rejected`, `narrative.output`, `world.*` (включая `world.law_breach.*` как зарезервированные), `region.*`, `npc.*`, `laws.*`, `analytics.session.*`, `analytics.turn.completed`, **`analytics.consistency.violated`** (издатель EPIC-005 — по запросу §12 п. 2 дизайна EPIC-005); заполнение `Publishers/Consumers/Policy` в реестре для всех типов §2.2 `api-contracts.md`; исключения проверки «издатель + ≥1 потребитель» — `world.law_breach.*`, `rules.change.*`.
+- **Файлы**: `schemas/events/*.v1.json` (блок «в»), `shared/contracts/registry.go`.
+- **Зависимости**: T-006.
+- **Ссылки**: `foundation.md` §6; `contracts.md` §0, C-05…C-07, C-10, C-12; `epics/EPIC-005-memory-ops/design.md` §12 п. 2; `design.md` §4.1 (проверки `contracts check`).
+- **DoD**: все схемы блока «в» компилируются и покрывают примеры `api-contracts.md`; реестр полон (проверка «нет фантомов» проходит в T-010); `analytics.consistency.violated` содержит `code ∈ {state_divergence, log_gap, invariant}`, `severity ∈ {break, warn}`, `detected_by`; общий DoD §1.
+
+### T-010: F-4c · Каркас `cmd/mvctl` + `contracts check/topics`, `env check`, `storage init` · Размер: S · Статус: todo · Исполнитель: developer#1 · Подволна 0.4 · ⚠ только через tech-lead#1 (`cmd/mvctl/main.go` — реестр подкоманд)
+- **Описание**: `cmd/mvctl/main.go` — таблица `name → func(args) int` на стандартном `flag` (без cobra); подкоманды EPIC-001 в `cmd/mvctl/internal/{contracts,env,storage}`: `contracts check` (проверки (а)–(д) `design.md` §4.1, наполнение — EPIC-005 T-138), `contracts topics --format=rpk`, `env check` (`.env.example` ↔ манифест `shared/env`), `storage init` (`EnsureBucket(ops-artifacts)` + `Capabilities()`; страховка от исчезновения `minio/mc`, ADR-021 п. 1). Зарезервировать в реестре имена подкоманд других эпиков (`world`, `blueprint`, `laws`, `record`, `report`, `trace`, `llm`, `golden`, `memory`, `privacy`) с заглушкой «не реализовано» и владельцем в комментарии.
+- **Файлы**: `cmd/mvctl/main.go`, `cmd/mvctl/internal/{contracts,env,storage}/**`.
+- **Зависимости**: T-006, T-007, T-009.
+- **Ссылки**: `design.md` §4.1; `foundation.md` §6, §12; `decomposition-review.md` §5.2 п. 4; `ownership.md` §1 (`cmd/mvctl`).
+- **DoD**: `go run ./cmd/mvctl contracts check` — 0 фантомных типов/топиков; `go run ./cmd/mvctl env check` зелёный на `.env.example`; `go run ./cmd/mvctl storage init` создаёт `ops-artifacts` на `objstore.Memory` и на MinIO (integration); `make contracts` зелёный; unit на синтетическом реестре с подложенным фантомом — команда возвращает ≠ 0; общий DoD §1.
+
+### T-011: F-10a · `shared/entity` v2 (модель сущности) · Размер: M · Статус: todo · Исполнитель: developer#3 (пара — architect#1) · Подволна 0.4 · ⚠ общий код (с волны 1 владелец — EPIC-002)
+- **Описание**: полная модель по `state-and-mechanics.md` §3 (не заглушка): `Entity`, `LastChange`, `HistoryEntry` (обрезка 50), `Op{set,inc,append,remove}`, `ApplyOps` (все ошибки и no-op), `Clone`, `CanonicalJSON`, `StateHash`, типизированные геттеры `attrs.go` для всех атрибутов `data-model.md` §3, константы типов `types.go`, `Ref` ⇄ `eventbus.EntityRef`.
+- **Файлы**: `shared/entity/**`.
+- **Зависимости**: T-005 (`Ref` ⇄ `eventbus.EntityRef`), T-003.
+- **Ссылки**: `design.md` §5 (строка `shared/entity` v2); `state-and-mechanics.md` §3, §11; `contracts.md` C-02 v1.1; ADR-013; `decomposition-review.md` §3.3.
+- **DoD**: unit покрывает `ApplyOps` по всем операциям, ошибкам и no-op; `StateHash` стабилен между запусками и не зависит от порядка ключей (тест на перемешанном `map`); `CanonicalJSON` детерминирован; покрытие `shared/entity` ≥ 60 %; сигнатуры совпадают с §3 `state-and-mechanics.md` (сверка architect#1 в ревью); общий DoD §1.
+
+### T-012: F-7 · CI `.github/workflows/go.yml` и hardening · Размер: M · Статус: todo · Исполнитель: devops-engineer (выполняет developer по инструкциям devops) · Подволна 0.4
+- **Описание**: workflow с шестью job'ами (`unit`, `integration`, `e2e`, `contracts`, `security`, `compose-lint`) + `image` (без push) по `infrastructure.md` §3.1; общий шаг `cat build/versions.env >> $GITHUB_ENV`; `permissions: {contents: read}` на workflow, `security-events: write` только у `security`; все `uses:` — по SHA с комментарием версии; `go mod verify`, `go mod tidy -diff`; `govulncheck` блокирующий (до перевода `go.mod` на 1.26 — `continue-on-error`, снимается тем же PR); `privacy-scan` (`mvctl privacy scan testdata/` — заглушка команды до EPIC-005 T-139: сейчас проверка числовых внешних ID и username в `testdata/`); `scripts/coverage-gate.sh 60 internal/state internal/mechanics internal/swarm internal/llm internal/replay` (отсутствующие пакеты — предупреждение); `.github/dependabot.yml`, `.github/CODEOWNERS`, `.github/ci.env`; удалить `validate-blueprints.yml`; не трогать `qwen-*.yml`; branch protection на `main` и `integration/mvp-1` (required checks — шесть job'ов).
+- **Дополнение (сведение 3, `infrastructure.md` v0.3 п. 4, §3.2, U-9)**: GitHub-логин владельца — **`@alekseizabelin1985-spec`** (вопрос закрыт), базовое правило `CODEOWNERS` — на весь репозиторий (`*`), «контрактные» каталоги перечислены отдельными строками; `services/_archive/**` из CODEOWNERS исключён. Репозиторий приватный личный → `gitleaks-action` **без** `GITLEAKS_LICENSE`, лимит Actions 2 000 мин/мес (`paths-ignore` + `concurrency` обязательны). Branch protection: «Require review from Code Owners» включается **только на `main`**; на `integration/mvp-1` — required checks (шесть job'ов), линейная история, без force-push, **апрув Code Owners не требуется** (единственный человек-владелец не может апрувить собственный PR и заблокировал бы сам себя).
+- **Файлы**: `.github/workflows/go.yml`, `.github/dependabot.yml`, `.github/CODEOWNERS`, `scripts/coverage-gate.sh`, удаление `.github/workflows/validate-blueprints.yml`.
+- **Зависимости**: T-008, T-010 (для job `contracts`), T-007 (integration), T-003 (e2e «пустой мир»).
+- **Ссылки**: `infrastructure.md` **v0.3** §3.1, §3.1.1, §3.2, §12, §10 (F-7); `design.md` §9, §10; ADR-010 + дополнения; T-15 (threat-model); NFR-062, NFR-063.
+- **DoD**: PR в `integration/mvp-1` → все шесть job'ов зелёные, суммарно ≤ 10 мин; второй прогон `integration` берёт образ MinIO из кэша `type=gha` ≤ 1 мин; `CODEOWNERS` содержит `* @alekseizabelin1985-spec` и покрывает `shared/`, `schemas/`, `.github/`, `build/`, `blueprints/`, `laws/`, `config/`, `docker-compose.yml`, `Makefile`; branch protection включена (скриншот/лог в `dev-log.md`): на `main` — Code Owners review, на `integration/mvp-1` — **только** required checks; общий DoD §1.
+
+### T-013: F-8 · Матрица замера LLM и `ops/metrics/baseline.md` · Размер: M · Статус: todo · Исполнитель: architect#1 + пользователь (**стенд**, слот разработчика не занимает) · Подволна 0.4–0.5
+- **Описание**: `scripts/llm-bench.ps1` (основной) и `scripts/llm-bench.sh` (WSL), `ops/metrics/bench-matrix.json`, `ops/models.txt`, `testdata/bench/prompts.jsonl` (10 ситуаций «Тёмного леса» × фазы `tick`/`phase2`/`phase2-group3`, схемы из `schemas/agent/`); три прогона конфигураций C и A; `ops/metrics/baseline.md` с решением по U-2.
+- **Дополнение (сведение 3, `infrastructure.md` v0.3 §6.4, U-8/U-12)**: замер идёт против `llama-server` (`/v1/chat/completions`, `response_format json_schema`, `chat_template_kwargs.enable_thinking=false`), метрики — из `usage`/`timings` ответа + `nvidia-smi`; `bench-matrix.json` содержит поле `provider` и конфигурации **E / E+ / C / A**; **порядок прогона: сначала E** (базовый кандидат, `num_ctx` 8192/16384, KV `f16`/`q8_0`), при `verdict=fail` — **C**, затем **A**; в CSV обязательны колонки `llamacpp_build` и имя модели (`LLM_MODEL_DEFAULT`). Каждая запись `testdata/bench/prompts.jsonl` содержит `schema_name`, `schema` (объект схемы из `schemas/agent/`, подставляется в `json_schema.schema`, `strict: true`) и `max_tokens`; файл поставляет architect#1. Замер **ручной** на машине владельца (self-hosted runner не заводим, U-12).
+- **Файлы**: `scripts/llm-bench.{ps1,sh}`, `ops/metrics/bench-matrix.json`, `ops/models.txt` (секции `gguf` и `ollama`), `testdata/bench/prompts.jsonl`, `ops/metrics/bench-<date>.csv`, `ops/metrics/baseline.md`.
+- **Зависимости**: T-008 (`make llm-up`, `make models`, `make warm`).
+- **Ссылки**: `infrastructure.md` **v0.3** §6.3, §6.4, §12, §10 (F-8); `design.md` §3 п. 6; ADR-005 доп. 2; OQ-A-18 / U-2, U-8, U-12; NFR-002, NFR-076, NFR-090.
+- **DoD**: `make llm-up && pwsh scripts/llm-bench.ps1 -Configs E` → `ops/metrics/bench-<date>.csv` со всеми колонками §6.4, колонкой `llamacpp_build` и `verdict` для E; при `fail` — прогон C, затем A; три прогона в разные моменты; каждая строка `prompts.jsonl` валидна (`schema_name`/`schema`/`max_tokens`, схема компилируется как JSON Schema 2020-12); `baseline.md` содержит решение по U-2, VRAM/RAM и `stack_up_time_s`; результат передан BA для порогов NFR (EPIC-005 T-140). **Не блокирует волну 1** — при переносе на волну 1 отметить в журнале.
+
+---
+
+## 6. Подволны 0.5–0.7 — testkit, заглушки v0, документация
+
+### T-014: F-5t · `shared/testkit` ядро и **contract-тест шины** · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 0.5 · **ВОРОТА ВОЛНЫ 1**
+- **Описание**: `membus` (in-memory `Bus` + `Journal` с той же семантикой, что kafka), `Dedup`-псевдоним, `Versions()` (чтение `build/versions.env`), `containers.go` (testcontainers: redpanda, MinIO — наш образ, qdrant, neo4j из `Versions()`); **contract-тест шины** — один набор тестов против `membus` (`-short`) и redpanda (`-tags integration`).
+- **Файлы**: `shared/testkit/{membus,containers,versions,contract}/**`.
+- **Зависимости**: T-005, T-006, T-007, T-004.
+- **Ссылки**: `foundation.md` §9, §12, §14 п. 7; `design.md` §3 п. 3, §10 (строка contract-тест); `contracts.md` C-01 v1.1, §17; ADR-010; NFR-063.
+- **DoD**:
+  - contract-тест проходит на **обеих** реализациях: порядок в топике; at-least-once (дубли по `--chaos=duplicate`); retry ×3 → `dead_letters`; `Journal.ReadRange` строго по возрастанию; `End` монотонен; `Tail` живёт до `ctx.Done()`; `PositionFromContext`; невалидное событие при чтении → DLQ без вызова handler;
+  - `make test-integration` зелёный локально (Docker Desktop) и в CI job `integration`;
+  - `testkit.Versions()` возвращает пины из `build/versions.env` (тест на расхождение с файлом);
+  - **ворота**: без зелёного contract-теста волна 1 не стартует — tech-lead#1 фиксирует результат в `journal.md`;
+  - общий DoD §1.
+
+### T-015: F-10b · `internal/mechanics` типы, `Load`, формулы, RNG, `rules/dark-forest.yaml` v0.1 · Размер: M · Статус: todo · Исполнитель: developer#2 (пара — architect#1) · Подволна 0.5
+- **Описание**: `rules.go` (`RulesDocument`, `Load`, `LoadBytes`, валидация §5.2), `formula.go` (парсер мини-грамматики `check`/`dice` §5.3 — нужен для валидации при `Load`), `rng.go` (`Seed`, `NewRNG`, `Roll`), типы C-03: `Actor/Action/Outcome/Item/Roll/Invariant/StateView/Violation/ProposedChange`, `Stats`, `DiceRolledPayload`, `ActorFromEntity`; `Invariants()` — 10 записей с `Check=nil`; `Resolve`, `NPCTarget`, `ChangesFor` возвращают `mechanics.ErrNotImplemented`; `rules/dark-forest.yaml` v0.1 с числами приложения A PRD.
+- **Не входит**: логика `Resolve`/`NPCTarget`/`ChangesFor` и реализации `Check` — EPIC-002 I1 (T-053, T-054).
+- **Файлы**: `internal/mechanics/{rules,formula,rng,types,actor,dice_event}.go`, `rules/dark-forest.yaml`.
+- **Зависимости**: T-011.
+- **Ссылки**: `design.md` §5 (строка `internal/mechanics`); `state-and-mechanics.md` §5.2, §5.3, §5.4; `contracts.md` C-03 v1.1; ADR-012; NFR-060.
+- **DoD**: `Load` на `rules/dark-forest.yaml` — золотые числа приложения A; негативные тесты валидации (неизвестная формула, отрицательный dmg, отсутствующий `entities.*`); `Seed` — фиксированные векторы (детерминизм); `NdM+K` на одном RNG; вызов `Resolve` даёт `ErrNotImplemented`; покрытие `internal/mechanics` ≥ 60 %; общий DoD §1.
+
+### T-016: F-10c · Фикстуры мира и `latest.json` seq 0 · Размер: S · Статус: todo · Исполнитель: developer#1 · Подволна 0.6
+- **Описание**: `testdata/fixtures/{world,region,npc,players}.json` по `state-and-mechanics.md` §4.10 (`dark-forest-world`; `dark-forest-01` с `encounter_chance`, `respawn_ttl: 24h`; `wolf-alpha`; `player-A/B/C` с `actor_kind=ci`, `position=outside:dark-forest-world`, `scope=solo:{id}`) и `testdata/fixtures/snapshots/state/latest.json` — указатель на снапшот seq 0 (формат §4.4, `entities_count: 6`, `cursor.system_events: 0`, `state_hash` пересчитывается тестом).
+- **Файлы**: `testdata/fixtures/**`.
+- **Зависимости**: T-011, T-015 (сверка статов с `Rules.Stats`).
+- **Ссылки**: `design.md` §5 (строка «Фикстуры»), §7; `state-and-mechanics.md` §4.4, §4.10; `data-model.md` §3; `contracts.md` C-14 v1.1; `ownership.md` §1 (`testdata/fixtures/**`).
+- **DoD**: тест сверяет `hp_max/atk/def/dmg` фикстур с `mechanics.Rules.Stats(kind)` — расхождений нет; `latest.json` валиден против `snapshot.created.v1.json`/формата §4.4, `state_hash` пересчитывается в тесте (в файле — вычисленное значение); **privacy-scan** по `testdata/` зелёный (нет внешних ID, username, реальных имён); общий DoD §1.
+
+### T-017: F-10d · `testkit/state.FakeState` v0 и `testkit/mechanics.FixedMechanics` · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 0.6
+- **Описание**: `FakeState` v0 — `memstore` + подписка `membus` на `entity.*.proposed` в `system_events`; применяет `ApplyOps` на копии, `version+1`, публикует `entity.created/updated` через `Derive` с `timestamp` предложения и общим `proposal_id`; отказы только `unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`; `atomic=true` — всё или ничего в памяти; `Seed(entities)` из фикстур; `Snapshot()` → объект + `latest.json` в `objstore.Memory`; `WithInvariants()` — no-op с логом. `FixedMechanics` — тот же набор методов, что у `*mechanics.Rules`; `Resolve` — таблица исходов по `(Seed(causeEventID, rollIndexStart) mod N)`: 60 % попадание d6, 10 % крит, 10 % фамбл, 20 % промах; `NPCTarget` — первый живой кандидат по `id`; `Stats` из `rules/dark-forest.yaml`.
+- **Дополнение (сведение 3, `contracts.md` v0.4 C-14 уточнение и C-02 v1.2; TL2-6, З-2)**:
+  - **`FakeState` v0 публикует `analytics.replay.completed`** сразу после подписки на `system_events`: `{mode: recovery, replay{run_id, snapshot_id: null, events_replayed: 0, llm_calls: 0, dice_rolled_new: 0, duration_ms, state_hash_after, incomplete_record: false}}`, `source = testkit/state` (значение из реестра `Spec.Publishers`, T-006). Заглушка соблюдает протокол старта — потребители (рой T-237, gateway) ждут сигнал, а не подстраиваются под заглушку.
+  - **Приём `status=abandoned`**: `entity.update.proposed {atomic: true, cause: forget}` с `set path=status value=abandoned` от `source=gateway` — принимается **только** если текущий `status = alive` (факт `entity.updated {changed:[{path: status, old: alive, new: abandoned}], cause: forget}`); над `status ∈ dead | abandoned | ascended_final` — отказ `dead_entity`; `abandoned` — терминальный (повторное предложение → `dead_entity`). `narrative.output kind=death` заглушка не издаёт. Причина `dead_entity` добавляется к четырём существующим (`unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`).
+- **Файлы**: `shared/testkit/state/**`, `shared/testkit/mechanics/**`.
+- **Зависимости**: T-014, T-015, T-011.
+- **Ссылки**: `design.md` §5 (строки `FakeState` v0, `FixedMechanics`), §11 (отклонённая альтернатива «интерфейс в C-03»); `state-and-mechanics.md` §4.5, §5.1; `contracts.md` **v0.4** C-02 v1.2, C-03 v1.1, C-14 (уточнение v0.4), §17; `consolidation.md` §14.1 (TL2-6, З-2).
+- **DoD**: unit — цикл «предложение → факт» на membus для каждого типа op; матрица причин отказа (`unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`, **`dead_entity`**); `atomic=true` откатывает пакет целиком; `Snapshot()` кладёт объект и `latest.json` в `objstore.Memory` в формате §4.4; **(сведение 3)** тест «при старте `FakeState` в шине появляется `analytics.replay.completed mode=recovery`, валидное против схемы из T-006»; тест «`set status=abandoned cause=forget` от gateway: `alive` → `entity.updated`, `dead`/`abandoned` → `entity.update.rejected reason=dead_entity`»; сигнатуры совпадают с C-02/C-03 (замена на реализацию EPIC-002 не требует правок у потребителей — проверяется компиляцией теста-потребителя); общий DoD §1.
+
+### T-018: F-10e · `testkit/gateway.Harness` v0, `testkit/swarm.FakeNarrator` v0 и e2e «заглушки v0» · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 0.7
+- **Описание**: `Harness` v0 — генератор `player.*` из фикстур в membus **без HTTP**: `NewHarness(bus, fixtures)`, `CreatePlayer`, `Enter`, `Look`, `Attack`, `Flee`, `Rest`, `Say`, `Leave`, `Scenario("solo-30")`; `meta.actor_kind=ci`, `correlation_id = id`, `source=gateway`. `FakeNarrator` v0 — подписки: `combat.decided` → `narrative.output kind=turn`, `round.closed` → `kind=round`, `player.looked`/`player.entered_region` → `kind=entry`; `generated_by=template`, ≤ 10 русских шаблонов с подстановкой `hp`/`damage`/имени, `recipients[]` игроков scope, `filter{applied:false,status:pass,filter_version:"none"}`, `laws_version:"v1"`, `meta.agent{id:"fake-narrator", level:"task", …}`; **`WithEncounterStub(rules)`** (`design.md` §5.1) — на `player.attacked` вызывает `Resolve`, публикует `dice.rolled` → `combat.decided` → `entity.update.proposed` одним atomic-пакетом, отвечает ударом NPC через `NPCTarget`, издаёт `encounter.started`/`encounter.ended`; включается **только флагом** в e2e/I1-α.
+- ⚠ **Не внесённое решение сведения 2 (обнаружено tech-lead#1 при сведении 3; требует подтверждения перед стартом задачи)**: по `contracts.md` v0.3+ (C-05, блок «Заглушка») и `consolidation.md` §11–§12 **`WithEncounterStub` в F-10 не делается** — единственная заглушка боя Phase 1 — `testkit/swarm.FakeEncounter` (EPIC-003 T-219, ранний merge). Если решение подтверждается, из описания и DoD ниже уходят пункты про `WithEncounterStub`, а e2e «заглушки v0» переводится на `FakeEncounter` (появляется зависимость от раннего merge TEAM-2) либо ограничивается сценарием без боя. Правку вносит tech-lead#1 отдельно — здесь текст сохранён как есть, чтобы не менять состав подволны 0.7 параллельно с построением дорожной карты.
+- **Файлы**: `shared/testkit/gateway/**`, `shared/testkit/swarm/**`, e2e-тест `test/e2e/stubs_v0_test.go` (`-tags e2e`).
+- **Зависимости**: T-016, T-017.
+- **Ссылки**: `design.md` §5, §5.1, §10 (строка e2e), §12 (риск «`WithEncounterStub` прижилась»); `contracts.md` C-04, C-05 v1.1, §17; `epics.md` §2 (I1-α).
+- **DoD**:
+  - e2e «пустой мир»: `cmd/multiverse --contexts=all --bus=memory` → `/health ok`;
+  - e2e «заглушки v0»: `Harness.Scenario("solo-30")` + `FakeState` v0 + `FakeNarrator(WithEncounterStub(FixedMechanics))` на membus → **30 `narrative.output`**, `entity.updated` по каждому удару, `dead_letters` = 0, все события валидны по реестру;
+  - в коде `WithEncounterStub` — комментарий «тестовая подмена роли `encounter`; удаляется EPIC-003 I1b» и запись задачи-удаления в `tasks.md` EPIC-003 (уведомить tech-lead#2);
+  - `testkit` содержит membus + v0 всех заглушек C-02…C-05 (критерий готовности эпика);
+  - общий DoD §1.
+
+### T-019: F-9 · Документация под новую раскладку · Размер: S · Статус: todo · Исполнитель: tech-writer · Подволна 0.7
+- **Описание**: `README.md` («запуск за 5 команд», список `winget`: `ezwinports.make`, `jqlang.jq`, `FiloSottile.age`, опц. `Gitleaks.Gitleaks`), `CLAUDE.md` и `AGENTS.md` под карту `internal/*`/`shared/*`/`cmd/*` (as-is описание 15 сервисов и `go.work` — убрать), таблица статусов сервисов (активен / заморожен / архив) со ссылкой на `services/_archive/README.md`, `docs/ops/runbook.md` из `infrastructure.md` §9, `.dev-team.json.stack` по факту (Go 1.26, MinIO из исходников, Qdrant вместо Chroma, Chroma только `legacy`, без Timescale/Redis).
+- **Файлы**: `README.md`, `CLAUDE.md`, `AGENTS.md`, `docs/ops/runbook.md`, `services/_archive/README.md` (дополнение), `.dev-team.json`.
+- **Зависимости**: T-018, T-012.
+- **Ссылки**: `infrastructure.md` §9, §10 (F-9); `epics.md` §6 F-9; NFR-095.
+- **DoD**: команды из README выполняются на чистой машине владельца (проверка человеком); в документах нет ссылок на `go.work`, `make build-service`, Chroma как основную БД; `.dev-team.json.stack` обновлён; ревью tech-lead#1; общий DoD §1 (Go-тесты — n/a).
+
+### T-020: Приёмка волны 0 и слияние в `integration/mvp-1` · Размер: S · Статус: todo · Исполнитель: tech-lead#1 · Подволна 0.8
+- **Описание**: сверка критериев готовности EPIC-001 (`epics.md` §2, `foundation.md` §12), слияние `epic/EPIC-001-foundation` → `integration/mvp-1`, тег `mvp-1/wave-0`, запрос пользователю на коммит (одним запросом на волну, `commits=ask`), запись в `journal.md`, фиксация имени ветки EPIC-002 (`epic/EPIC-002-state-mechanics` — см. §7), передача владения подпакетами `testkit/{state,mechanics,gateway,swarm}` поставщикам по `ownership.md`.
+- **Зависимости**: T-001…T-019 (кроме T-013, который может завершиться в волне 1).
+- **DoD** (= критерий готовности эпика): `git status` чист; `pre-commit` с `gitleaks` установлен, `gitleaks git --redact` = 0; `make ci` зелёный; `make up` поднимает инфраструктуру и пустые контексты `core|gateway|memory` с `/health ok`; contract-тест шины зелёный на testcontainers; `testkit` содержит membus + v0 заглушек C-02…C-05; `mvctl contracts check` без фантомов; секретов в HEAD нет; `services/_archive/` и замороженные сервисы вне `go build ./...`; `baseline.md` есть **или** зафиксирован перенос T-013 в волну 1; тег `mvp-1/wave-0` проставлен.
+
+---
+
+## 7. Стендовые задачи EPIC-001 (stand)
+
+Стендовые задачи выполняет человек с одним агентом-помощником; **слот разработчика не занимают** (`teams.md` §4).
+
+| Задача | Что проверяется на стенде | Когда | Кто |
+|---|---|---|---|
+| T-004 (часть) | `make minio-image`, `minio --version`, `mc admin info local` | 0.2 | devops + человек |
+| T-008 (часть) | `make up` → `make health` = ok; 8 топиков с retention; `make up PROFILES=legacy` (orchestrator + semantic-memory :8083 + chroma) или решение по запасному S5 | 0.3 | devops + человек |
+| **T-013 (F-8)** | матрица замера LLM: 3 прогона конфигураций C и A, `ollama ps`, `stack_up_time_s`, `baseline.md` по U-2 | 0.4–0.5 (может уехать в волну 1) | architect#1 + человек |
+| T-019 (часть) | «запуск за 5 команд» из README на чистой машине | 0.7 | tech-writer + человек |
+| T-014 (часть) | `make test-integration` на Docker Desktop владельца | 0.5 | developer#1 + человек |
+
+---
+
+## 8. Волны проекта — координация трёх команд (ведёт tech-lead#1)
+
+Лимиты `.dev-team.json`: `maxTeams=3`, `maxAgentsPerRole=3`, **`maxParallelAgents=6`**. В таблице считаются **слоты разработчиков** (включая devops-задачи, которые выполняет разработчик по инструкциям devops). Ревьюеры (`code-reviewer#N` ≤ 3), тестировщики и QA запускаются **отдельным запуском** после волны разработчиков и в счёт строки не входят. Стендовые задачи слот не занимают.
+
+Номера задач: TEAM-1 — T-001…T-199, TEAM-2 (EPIC-003) — T-200…T-299, TEAM-3 (EPIC-004) — T-300…T-399. Задачи TEAM-2/TEAM-3 обозначены метками их тимлидов (`tasks.md` эпиков 003/004); конкретные `T-NNN` подставляют tech-lead#2 / tech-lead#3.
+
+### 8.1. Волна 0 (≈ 1,5–2 нед., только TEAM-1)
+
+| Подволна | TEAM-1 | TEAM-2 | TEAM-3 | Слотов | Ворота / точка |
+|---|---|---|---|---|---|
+| 0.1 | T-001 (dev#1), T-002 (dev#2) | — | — | 2 (+security-engineer) | — |
+| 0.2 | T-003 (dev#1), T-004 (devops) | — | — | 2 | — |
+| 0.3 | T-005 (dev#1), T-006 (dev#2), T-007 (dev#3), T-008 (devops) | — | — | 4 | решение по профилю `legacy` |
+| 0.4 | T-010 (dev#1), T-009 (dev#2), T-011 (dev#3), T-012 (devops); T-013 — стенд | — | — | 4 | CI зелёный |
+| 0.5 | T-014 (dev#1), T-015 (dev#2) | — | — | 2 | **contract-тест шины — ворота волны 1** |
+| 0.6 | T-016 (dev#1), T-017 (dev#2) | — | — | 2 | — |
+| 0.7 | T-018 (dev#1), T-019 (tech-writer) | — | — | 2 | e2e «заглушки v0» |
+| 0.8 | T-020 (tech-lead#1) | — | — | 0 | **тег `mvp-1/wave-0`**, старт волны 1 |
+
+### 8.2. Волна 1 «соло + фон» (≈ 5–6 нед., ограничена EPIC-003 — оценка tech-lead#2)
+
+Слоты: **TEAM-1 2 / TEAM-2 3 / TEAM-3 1 → 2** (`teams.md` §4; приоритет — критическому пути TEAM-2). Подволны сквозные: одна строка = один запуск оркестратора.
+Номера задач TEAM-2 — по `epics/EPIC-003-swarm-llm-laws/tasks.md` §6, TEAM-3 — по `epics/EPIC-004-gateway-bot/tasks.md` §4.
+
+| Подволна | TEAM-1 (EPIC-002 I1 → I2 / 005-ops) | TEAM-2 (EPIC-003 I1a → I1b) | TEAM-3 (EPIC-004 I1) | Слотов | Точка / ранняя поставка |
+|---|---|---|---|---|---|
+| 1.1 | T-050 (dev#2), T-051 (dev#1) | T-201, T-206, T-214 | T-301 (dev#1) | 6 | **ранний merge**: схемы C-04/C-10 + OpenAPI (T-301), схемы EPIC-003 ч.1 (T-214) |
+| 1.2 | T-052 (dev#2), T-053 (dev#1) | T-202, T-207, T-215 | T-302 (dev#1) | 6 | **ранний merge**: схемы ч.2 + `providers/fake` (T-215, T-207) |
+| 1.3 | T-055 (dev#2), T-054 (dev#1) | T-203, T-208, T-219 | T-303 (dev#1) | 6 | **ранний merge**: `FakeEncounter` (T-219) |
+| 1.4 | T-056 (dev#2), T-060 (dev#1) | T-204, T-209, T-220 | T-304 (dev#1), T-310 (dev#2) | 7 → **6** | **ранний merge**: `FakeNarrator` (T-220) — вклад EPIC-003 в I1-α закрыт. Перебор снимается: TEAM-2 отдаёт слот (developer#3 со сдвигом) |
+| 1.5 | T-057 (dev#2), T-061 (dev#1) | T-205, T-210, T-216 | T-305, T-311 | 7 → **6** | то же правило сдвига |
+| 1.6 | T-059 (dev#2), T-058 (dev#1) | T-221, T-211, T-218 | T-306, T-312 | 7 → **6** | — |
+| 1.7 | T-062 (dev#1), долги/покрытие (dev#2) | T-222, T-212, T-217 | T-307, T-317 | 7 → **6** | приёмка **EPIC-002 I1** тимлидом |
+| 1.8 | T-065 (dev#1), **старт 005-ops** T-130 (dev#2) | T-223, T-213, T-234 | T-308 (dev#1; слот #2 → резерв TEAM-2) | 6 | **ранний merge T-a**: `FakeGateway` + `Harness` v1 (T-308); готовность I1a TEAM-2 |
+| 1.9 | T-066 (dev#1), T-131 (dev#2) | T-224, T-229, T-235 | T-313, T-315 | 7 → **6** | **точка I1-α**: T-063 (стенд, TEAM-1) + T-391 (стенд, TEAM-3) → тег `mvp-1/i1-alpha` |
+| 1.10 | T-064 (dev#2), T-067 (dev#1) | T-225, T-230, T-236 | T-309, T-316 | 7 → **6** | — |
+| 1.11 | T-068 (dev#1), T-133 (dev#2) | T-226, T-233, T-237 | T-314, T-320 | 7 → **6** | готовность **EPIC-004 I1** (T-392, стенд) |
+| 1.12 | T-069 (dev#1), T-134 (dev#2) | T-227, T-231, T-238 | T-319 (архивация `game-service`) | 6 | — |
+| 1.13 | T-070 (dev#1), T-135 (dev#2) | T-228, T-232, T-239 | старт EPIC-004 I2 (T-350) | 6 | — |
+| 1.14 | T-071 (стенд), T-136 (dev#2) | T-240, T-241, T-242 | T-352 | 5 | — |
+| 1.15 | T-137 (dev#2), подготовка к интеграции (dev#1) | T-245, T-243, T-244 | T-351 | 6 | **готовность EPIC-003 I1** → интеграция |
+| **интеграция I1** | tech-lead#1 (слияния 002 → 004 → 003), qa-engineer#1, tester#1 | tester#2 (S14) | tester#3 (S9, стенд) | ≤ 6 (отдельный запуск) | **S1, S3, S8, S9, S10, S14** → тег `mvp-1/i1` |
+
+Правило снятия перебора (7 → 6): при конфликте слотов приоритет — критическому пути **TEAM-2**; сдвигается задача TEAM-1 (005-ops — Must, но не на критическом пути) либо TEAM-2 developer#3 на одну подволну (как в `teams.md` §4 для волны 2). Решение фиксирует tech-lead#1 перед запуском подволны.
+
+**Точка I1-α** (подволна 1.9, ≈ 3–4-я неделя волны 1): EPIC-002 I1 (T-050…T-062) + EPIC-004 I1 (T-301…T-315) + `FakeNarrator` (T-018 v0, затем T-220) → бой с волком через Telegram, `generated_by=template`, без роя и LLM. Замечания человека → задачи в эпик-владелец.
+**Правило старта I2**: команда начинает I2 по приёмке своей I1 тимлидом команды (TEAM-1 — с подволны 1.8, TEAM-3 — с 1.13); **слияние** I2 в `integration/mvp-1` — только после зелёного интеграционного прогона I1.
+
+### 8.3. Волна 2 «группа + память/операции» (≈ 3–4 нед.)
+
+| Подволна | TEAM-1 (005-ops → 005-memory) | TEAM-2 (EPIC-003 I2) | TEAM-3 (EPIC-004 I2) | Слотов | Точка |
+|---|---|---|---|---|---|
+| 2.1 | T-141 (dev#1), T-138 (dev#2) | T-246, T-250 (dev#3 — со сдвигом) | T-350/T-352 хвост | 5–6 | старт 005-memory (**отрезаемо**) |
+| 2.2 | T-142 (dev#1), T-139 (dev#2) | T-249, T-247, T-248 | T-351, T-353 | 6 | — |
+| 2.3 | T-143 (dev#1), резерв/долги ops (dev#2) | T-251, T-253 | T-354, T-355 | 6 | **S2 зелёный** (TEAM-2) |
+| 2.4 | T-144 (dev#1), T-147 (dev#2) | T-252 (архив `legacy`) | T-357, T-356 | 5 | готовность EPIC-003 I2 и EPIC-004 I2 |
+| 2.5 | T-145 (dev#1), T-146 (dev#2); T-140 — стенд | — | T-393 (стенд) | 2 | пороги NFR закреплены |
+| 2.6 | T-148 (dev#1) | — | — | 1 | готовность 005-memory (если не отрезана) |
+| **интеграция I2** | tech-lead#1 (слияния 002 → 003 → 004 → 005), qa-engineer#1, tester#1 | tester#2 | tester#3 | ≤ 6 (отдельный запуск) | **S2, S4, S5, S6** → тег `mvp-1/i2` → **G4** |
+
+### 8.4. Порядок интеграции и ранние поставки
+
+**Порядок слияния** (`teams.md` §3.3, `epics.md` §5):
+- волна 0: `epic/EPIC-001-foundation` → `integration/mvp-1`, тег `mvp-1/wave-0`;
+- **I1: 002 → 004 → 003** (I1-α не нуждается в рое; EPIC-003 — самый длинный, вливается последним и заменяет `FakeNarrator`/`FixedMechanics` реализацией);
+- **I2: 002 → 003 → 004 → 005** (поставщики раньше потребителей: atomic-пакеты State → раунд `encounter` → координатор gateway → память последней).
+
+**Ранние merge-поставки** (сливаются в `integration/mvp-1` вне общего порядка, сразу по приёмке тимлидом команды; каждая — отдельным узким PR только в свой подпакет `shared/testkit/*`, ревью tech-lead#1 + system-architect):
+
+| Поставка | Что | Кому нужна | Когда | Пометка |
+|---|---|---|---|---|
+| **F-10** (T-011, T-015…T-018) | заглушки v0 C-02…C-05, `shared/entity` v2, `internal/mechanics` типы, фикстуры | всем трём командам на старте волны 1 | конец волны 0 | обязательна, в составе `mvp-1/wave-0` |
+| **T-301 (EPIC-004 I1)** | схемы `player.*`/`group.*`/`round.*`/`analytics.*` в реестре, скелет `api/gateway.openapi.yaml`, DTO, Go-клиент | TEAM-1 (005-ops фикстуры), TEAM-2 (потребление C-04) | подволна 1.1 | ранний merge; регистрация типов — PR в `shared/contracts/registry.go` с ревью system-architect |
+| **T-214 / T-215 (EPIC-003 «A5–A6»)** | схемы событий EPIC-003 ч. 1 и ч. 2 (`tick.*`, `narrative.*`, `llm.*`, `agent.*`, `laws.*`) | все (валидация при чтении), EPIC-005 (`trace`, `llm usage`) | подволны 1.1–1.2 | ранний merge; расхождения с T-009 — `contract-change` через system-architect |
+| **T-207 (EPIC-003 «B2»)** | `providers/fake` + `recorded` (C-07/C-15) | EPIC-005 (`Embedder` фейк, golden), EPIC-002 (replay) | подволна 1.2 | ранний merge |
+| **T-219 / T-220 (EPIC-003 «C4»)** | `FakeEncounter` и `FakeNarrator` реализация (замена v0) в `shared/testkit/swarm` | TEAM-3 (e2e бота), TEAM-1 (I1-α, golden 005-ops) | подволны 1.3–1.4 | ранний merge — **решение G3** (запрос architect#2/tech-lead#2; рекомендация тимлида проекта: разрешить) |
+| **T-308 (EPIC-004 «T-a»)** | `FakeGateway` + `Harness` v1 (замена v0) в `shared/testkit/gateway` | TEAM-1 (e2e `group-3x30`, T-070), TEAM-2 (e2e роя) | подволна 1.8 | ранний merge, вне порядка 002 → 004 → 003 |
+| **T-130…T-137 (005-ops)** | `mvctl session-report`, `trace`, `llm usage`, `golden check`, `--audit` | приёмка I1 и I2 всеми командами | подволны 1.8–1.15 | сливается в общем порядке (005 последним), но **доступно тимлидам раньше** через ветку эпика |
+
+**Правила ранних merge**: (1) только в подпакет-владелец, без правок чужих файлов; (2) `make ci` на `integration/mvp-1` зелёный после каждого слияния; (3) после слияния tech-lead#1 прогоняет e2e `solo-30` на оставшихся заглушках; (4) дефект интеграции — задача в эпик-владелец по карте владения, не «быстрая правка» в интеграционной ветке.
+
+---
+
+## 9. Открытые вопросы и допущения по волне 0
+
+1. ~~**Вопросы пользователю**~~ — **закрыты** (`infrastructure.md` v0.3, решения U-8…U-12; внесено tech-lead#1 по сведению 3): LLM-рантайм — нативный `llama-server`, Ollama опционален (U-8, T-004/T-008); `CODEOWNERS` = `@alekseizabelin1985-spec`, репозиторий приватный личный (U-9, T-012); форк `minio/minio` делает владелец до F-6 (U-10, предпосылка T-004); GPU-замер — вручную, self-hosted runner не заводим (U-12, T-013); IDE/AI-каталоги и `event-model.pdf` из индекса **не выводятся**, решение по ним — за tech-writer в T-019 (U-11, T-001).
+2. **Имя ветки EPIC-002**: `teams.md` §3.2 — `epic/EPIC-002-state`; задание оркестратора и каталог — `epic/EPIC-002-state-mechanics`. Тимлид фиксирует **`epic/EPIC-002-state-mechanics`** (как каталог `epics/`) и правит `teams.md` §3.2 в T-020.
+3. **`build/versions.env` в F-6a, а не в F-5** — уточнение к `design.md` §4 (см. §0).
+4. **`WithEncounterStub`** — тестовая подмена роли `encounter`, издаёт типы EPIC-003 в тестовом режиме; допустимость подтверждена дизайном EPIC-001 §5.1 и запросом architect#1 в журнале; удаление — задача EPIC-003 I1b (критерий готовности I1).
+5. Допущение: `shared/agent` переносится в модуль как есть (без `tools/*`); если ломает `go build` — временный `//go:build ignore` с задачей EPIC-003 I1a.

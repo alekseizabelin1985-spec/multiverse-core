@@ -4,12 +4,17 @@
 ## Активные инициативы
 | ID | Название | Тип | Размер | Этап | Следующий шаг |
 |---|---|---|---|---|---|
-| PROJECT | Аудит платформы, архитектурное видение, декомпозиция на эпики, реестр открытых вопросов (ветка feat/PROJECT-audit-architecture) | project | L | A3 Архитектура | system-architect → architect/security/devops → эпики → G2 (было: A2 анализ завершён; A3 архитектура (system-architect, architect, security, devops) → декомпозиция на эпики → G2 |
+| PROJECT | Аудит платформы, архитектурное видение, декомпозиция на эпики, реестр открытых вопросов (ветка feat/PROJECT-audit-architecture) | project | L | A5 Разработка (1 команда, последовательно) | Волна 0 EPIC-001: T-001 → … → T-020; затем мост M0+, EPIC-002 I1, EPIC-004 I1, I1-α |
 
 ## Гейты
 | Инициатива | G1 | G2 | G3 | G4 |
 |---|---|---|---|---|
-| PROJECT | ✅ 2026-09-09 | — | — | — |
+| PROJECT | ✅ 2026-09-09 | ✅ 2026-09-09 | ✅ 2026-09-09 | — |
+| EPIC-001..005 (MVP-1) | n/a | ✅ 2026-09-09 | ✅ 2026-09-09 (объединённый) | — |
+
+## Эпики и команды
+- MVP-1: EPIC-001 Фундамент (TEAM-1, волна 0), EPIC-002 Состояние и механика (TEAM-1), EPIC-003 Рой GM/LLM/законы (TEAM-2, XL), EPIC-004 Gateway/бот (TEAM-3), EPIC-005 Память и операции (TEAM-1). Целевые EPIC-006..013 — бэклог. См. plan/epics.md, plan/teams.md, plan/ownership.md.
+- Ветки: integration/mvp-1 (= коммит F-0 744fb10), epic/EPIC-001-foundation (текущая), далее epic/EPIC-002-state, epic/EPIC-004-gateway, epic/EPIC-003-swarm, epic/EPIC-005-memory-ops. Режим: 1 команда, ≤ 2 агентов, 2-й developer только на файлово независимых задачах. Порядок и вехи — plan/roadmap.md.
 
 ## Блокеры
 - Критично вне процесса: секреты в git-истории (.mcp.env) — OQ-A-11

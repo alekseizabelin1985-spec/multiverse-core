@@ -1,10 +1,10 @@
 # Компоненты EPIC-004: gateway и telegram-bot
 
-Статус: детальный дизайн (Flow A, A3 шаг 2) · Версия 0.1 · 2026-09-09 · architect#3 (TEAM-3) · к ревью system-architect#1, security-engineer, devops-engineer; утверждается на G2 вместе с планом EPIC-004.
+Статус: **утверждён на G2 (2026-09-09), правки сведения внесены** · Версия 0.2 · 2026-09-09 · architect#3 (TEAM-3) · изменения v0.2 — §17 (по `architecture/consolidation.md` §3, §6, §9; `contracts.md` v0.2; решениям пользователя U-5…U-7).
 Границы: `architecture/overview.md` §12–§18, ADR-001, ADR-003, ADR-004, ADR-006, ADR-007, ADR-009, ADR-010; контракты `contracts.md` C-04, C-08, C-10 (поставляем), C-01, C-02, C-05, C-06, C-14 (потребляем); `plan/epics.md` EPIC-004 (I1 «соло», I2 «группа»); `plan/ownership.md` (`internal/gateway/**`, `cmd/telegram-bot/**`, `api/gateway.openapi.yaml`, `internal/gateway/migrations/*.sql`, `links.db`, `gateway.db`).
 Источники требований: `analysis/api-contracts.md` §1, §2.3.1–2.3.3, 2.3.11, 2.3.14; `analysis/data-model.md` §5, §9.3–9.6, 9.10–9.11; `analysis/use-cases.md` UC-001…UC-005, UC-007, UC-009, UC-012, UC-014…UC-017, UC-020, UC-025, UC-027, UC-031; `analysis/integrations.md` §1, §7; `requirements/prd.md` FR-001…FR-009, FR-023, FR-025, FR-060, FR-061, FR-084…FR-088, BR-07, BR-09, BR-13, BR-17; `requirements/nfr.md` NFR-001, NFR-003, NFR-013, NFR-036, NFR-041, NFR-042, NFR-045, NFR-092; `requirements/domain-review.md` §3.2; `project/metrics.md` §4.2.
 Решения уровня реализации: ADR-018 (библиотека Telegram и режим бота), ADR-019 (SQLite без CGO, схема `links.db`/`gateway.db`, миграции), ADR-020 (координатор раундов в gateway).
-Глобальные решения здесь **не пересматриваются**; всё, что требует изменения контрактов, вынесено в §14.
+Глобальные решения здесь **не пересматриваются**; запросы на изменение контрактов (§14) решены на сведении A3 шаг 4 и внесены в `contracts.md` v0.2 — §14 сохранён как история. Имена переменных окружения — с префиксом `MV_` (§11.3); дизайн эпика по инкрементам — `epics/EPIC-004-gateway-bot/design.md`.
 
 ---
 
@@ -15,11 +15,11 @@
 | Процесс | Пакет / бинарник | Что делает | Чем владеет |
 |---|---|---|---|
 | `gateway` | `internal/gateway` → `cmd/multiverse --contexts=gateway`, порт `:8088` | HTTP API v1 (C-08); псевдонимизация (BR-07, ADR-009); валидация действий до механики и публикация `player.*`/`group.*`/`round.*` (C-04); сессии, ходы и `analytics.*` (C-10); координация раундов группы (ADR-020); outbox доставок с long-poll и ack (ADR-006); read-model состояния персонажей (проекция C-02/C-05); `/health`; прокси `/v1/admin/*` к `core` (C-06) | `links.db` (единственная копия ПДн), `gateway.db` (сессии, ходы, раунды, ключи идемпотентности, outbox, курсоры), read-model в памяти + объект `snapshots-{world}/gateway/…` |
-| `telegram-bot` | `cmd/telegram-bot` | тонкий клиент: long polling Telegram → команды словаря FR-002 → HTTP gateway; long-poll доставок → сообщения в чат; онбординг (`/start` с уведомлением об ИИ, 18+, согласием), `/help`, `/forget` | ничего персистентного; в памяти — только состояние диалога на чат (TTL) |
+| `telegram-bot` | `cmd/telegram-bot` | тонкий клиент: long polling Telegram → **allowlist Telegram user id (SEC-06, решение пользователя U-7) и только личные чаты (SEC-07)** → команды словаря FR-002 → HTTP gateway; long-poll доставок → сообщения в чат без `parse_mode` (SEC-10); онбординг (`/start` с уведомлением об ИИ, 18+, согласием), `/help`, `/forget`; редакция токена в логах/ошибках (SEC-08); лимит 20 команд/мин на user id (SEC-11) | ничего персистентного; в памяти — только состояние диалога на чат (TTL), кэш `chat_id → player_id` (TTL) и счётчики лимита |
 
 Вне блока: механика, рой, LLM (EPIC-003), State (EPIC-002), память и `mvctl` (EPIC-005), контракты/шина/`testkit`-каркас (EPIC-001). Всё общение с ними — только события через `eventbus.Bus` (C-01) и один HTTP-прокси к admin-порту `core`.
 
-Принципы, унаследованные из `overview.md` §14 и обязательные в блоке: единственный писатель (gateway **не** пишет сущности мира, только `entity.*.proposed`); record-replay (`round.closed` публикуется до обработки раунда, таймеры — через `Clock`, в `--mode=replay` таймеры выключены); идемпотентность по `action_key` (клиент) и `event.id` (потребитель); приватность по построению (внешний ID — только в `links.db`, тела `links/*` и `characters` не логируются).
+Принципы, унаследованные из `overview.md` §14 и обязательные в блоке: единственный писатель (gateway **не** пишет сущности мира, только `entity.*.proposed`); record-replay (`round.closed` публикуется до обработки раунда, таймеры — через `Clock`, в `--mode=replay` таймеры выключены); идемпотентность по `action_key` (клиент) и `event.id` (потребитель); приватность по построению (внешний ID — только в `links.db`; ключ идемпотентности `POST /v1/characters` — суррогат `link_id`, не внешний ID (SEC-03); тела `links/*` и `characters` не логируются).
 
 ---
 
@@ -30,8 +30,8 @@ C4Component
     title gateway — компоненты (internal/gateway)
     Container_Boundary(gw, "gateway (cmd/multiverse --contexts=gateway)") {
         Component(api, "api", "net/http 1.22 ServeMux", "маршруты v1, DTO, коды ошибок, middleware: client allow-list, actor_kind, лимит тела, rate limit, JSON-ошибки, request_id")
-        Component(links, "links", "SQLite links.db", "Link: resolve / consent / attach player / forget; маршрут доставки по player_id; идемпотентность POST /characters")
-        Component(actions, "actions", "Go", "валидация словаря и предусловий (§1.4 api-contracts), InputFilter (пустышка), идемпотентность action_key, публикация player.* + entity.*.proposed")
+        Component(links, "links", "SQLite links.db", "Link{link_id}: resolve / consent / attach player / forget (+checkpoint/vacuum); маршрут доставки по player_id; идемпотентность POST /characters по (link_id, action_key)")
+        Component(actions, "actions", "Go", "валидация словаря и предусловий (§1.4 api-contracts), InputFilter (пустышка — точка вставки FR-056), идемпотентность action_key, rate limit 30/мин, публикация player.* + entity.*.proposed")
         Component(groups, "groups", "Go", "group create/join/leave, лидер, group.* события, атомарные предложения")
         Component(rounds, "rounds", "Go + таблица rounds", "координатор раундов группы: open/close, таймаут через Clock, auto-defend, idle, explicit close (ci)")
         Component(session, "session", "Go + таблица sessions", "сессии scope, простой 30 мин, analytics.session.started/ended")
@@ -84,8 +84,8 @@ C4Component
 | Компонент | Ответственность | Данные (владелец) | Зависимости внутрь | NFR |
 |---|---|---|---|---|
 | `api` | HTTP-контракт C-08: маршруты, DTO, ошибки §1.6, middleware; **не содержит бизнес-логики** | — | все прикладные компоненты через интерфейсы | NFR-001/003 (ack ≤ 300 мс), NFR-092 |
-| `links` | псевдонимизация: `Link` CRUD, `player_id = "player-" + ULID`, согласие, `notice_due`, `/forget`; маршрут доставки; идемпотентность `POST /v1/characters` | `links.db` целиком | `store` | NFR-041, NFR-042, NFR-045 |
-| `actions` | словарь и предусловия (таблица §1.4), `InputFilter` (пустышка с журналом, FR-056), идемпотентность `action_key`, rate limit, публикация `player.*` и `entity.update.proposed` (position) | `idempotency_keys` | `readmodel`, `session`, `turns`, `rounds`, `bus` | NFR-001, NFR-013, NFR-043 (экранирование не здесь — текст уходит как данные в `payload.text`) |
+| `links` | псевдонимизация: `Link` CRUD, суррогат `link_id = ULID` (присваивается при первом `resolve`), `player_id = "player-" + ULID`, согласие, `notice_due`, `/forget` с немедленным `wal_checkpoint(TRUNCATE)` + `incremental_vacuum`; маршрут доставки; идемпотентность `POST /v1/characters` по `(link_id, action_key)` | `links.db` целиком | `store` | NFR-041, NFR-042, NFR-045; SEC-03/04/05 |
+| `actions` | словарь и предусловия (таблица §1.4), `InputFilter` (пустышка с журналом — **точка вставки** FR-056/US-016; фильтр категории (a) на выходе нарратива — EPIC-003, здесь не дублируется), идемпотентность `action_key`, rate limit 30/мин burst 5 на `player_id`, публикация `player.*` и `entity.update.proposed` (position) | `idempotency_keys` | `readmodel`, `session`, `turns`, `rounds`, `bus` | NFR-001, NFR-013, NFR-043 (экранирование не здесь — текст уходит как данные в `payload.text`); SEC-11 |
 | `groups` | `group.create/join/leave`, правила лидера (BR-13), `group.entered_region/left_region` при `enter/leave` лидера, атомарные предложения | — (сущность `group` принадлежит State; gateway — издатель предложений) | `readmodel`, `bus`, `session` | NFR-020 (4–6) через `atomic=true` |
 | `rounds` | координатор раундов группы (ADR-020) | `rounds` | `Clock`, `bus`, `readmodel` | FR-025, BR-04 (round.closed записан), NFR-005 |
 | `session` | сессии scope, простой 30 мин (BR-17), парные `analytics.session.*` | `sessions` | `Clock`, `bus` | NFR-036 |
@@ -111,7 +111,7 @@ internal/gateway/
   api/
     server.go                # http.Server, таймауты, listen 127.0.0.1:8088, graceful shutdown
     router.go                # регистрация маршрутов (ServeMux patterns 1.22)
-    middleware.go            # client allow-list, actor_kind, request_id, body limit 64 KiB, JSON error, recover, no-log для links/characters
+    middleware.go            # client allow-list, actor_kind, request_id, body limit 64 KiB (413), rate limit 30/мин (429), один long-poll на клиента (409), JSON error, recover, no-log для links/characters
     errors.go                # apiError{code,status,msg}; таблица §1.6
     dto.go                   # DTO запросов/ответов (общие с client)
     handlers_links.go        # /v1/links/resolve|consent, DELETE /v1/links, DELETE /v1/admin/links/{player_id}
@@ -124,14 +124,14 @@ internal/gateway/
     openapi_test.go          # маршруты ↔ api/gateway.openapi.yaml
   links/
     store.go                 # интерфейс Store + реализация SQLite
-    pseudonym.go             # NewPlayerID(ids IDSource) "player-<ULID>"
-    forget.go                # Forget → каскад (outbox drop, session end, group leave) через хук ForgetHooks
+    pseudonym.go             # NewPlayerID(ids IDSource) "player-<ULID>"; NewLinkID(ids) "<ULID>" (суррогат связки, SEC-03)
+    forget.go                # Forget → каскад (outbox drop, session end, group leave) через хук ForgetHooks; затем checkpoint(TRUNCATE)+incremental_vacuum
   actions/
     validate.go              # Validate(cmd, state) → *apiError; таблица предусловий
     publish.go               # BuildPlayerEvent, BuildPositionProposal
     idempotency.go           # Store (gateway.db idempotency_keys)
-    ratelimit.go             # token bucket на player_id
-    inputfilter.go           # InputFilter интерфейс + NoopFilter с журналом
+    ratelimit.go             # token bucket на player_id: 30/мин, burst 5 (MV_GATEWAY_RATE_ACTIONS_PER_MIN)
+    inputfilter.go           # InputFilter интерфейс + NoopFilter с журналом — точка вставки (FR-056); реализация выбирается в gateway.go по MV_GATEWAY_INPUT_FILTER=noop
   groups/
     service.go               # Create/Join/Leave; правила лидера; события group.*
   rounds/
@@ -175,15 +175,16 @@ internal/gateway/
     longpoll.go              # Deliveries(ctx, after, wait) / Ack
 
 cmd/telegram-bot/
-  main.go                    # config, wiring, graceful shutdown
-  internal/config/           # env
+  main.go                    # config, wiring, graceful shutdown; выход с кодом 3 при 409 getUpdates
+  internal/config/           # env с префиксом MV_ (MV_TELEGRAM_BOT_TOKEN, MV_TELEGRAM_ALLOWED_USER_IDS, …)
+  internal/access/           # Gate: allowlist user id (SEC-06) + «только личные чаты» (SEC-07) + лимит 20 команд/мин на user id (SEC-11); первый шаг обработки Update, до любого вызова gateway
   internal/updates/          # UpdateSource интерфейс; telegram.go (go-telegram/bot); fake.go
-  internal/sender/           # Sender интерфейс; telegram.go; fake.go
+  internal/sender/           # Sender интерфейс; telegram.go (без parse_mode, SEC-10); fake.go
   internal/commands/         # Parse(text) → Command{Type, Target, Text}; словарь FR-002; синонимы без «/»
   internal/flow/             # per-chat FSM: onboarding (consent→name→world→create), game, forget; TTL состояния 15 мин
   internal/render/           # тексты: notice, help, ошибки по code, Delivery → сообщение, клавиатуры
   internal/deliver/          # цикл long-poll → send → ack; последовательность на chat_id
-  internal/privacy/          # slog.Handler с запретом полей external_id/chat_id/username; тест-помощник
+  internal/privacy/          # slog.Handler: запрет полей external_id/chat_id/username/text; редакция токена `bot<digits>:<token>` → `bot<redacted>` в любом сообщении/ошибке (SEC-08); тест-помощник
 
 shared/testkit/gateway/      # владелец — EPIC-004 (ownership.md): FakeGateway, Harness, фикстуры player-A/B/C
 api/gateway.openapi.yaml     # OpenAPI 3.1 (§5.6)
@@ -199,11 +200,12 @@ api/gateway.openapi.yaml     # OpenAPI 3.1 (§5.6)
 
 ### 4.1. `links.db` — единственная копия ПДн
 
-Файл `${GATEWAY_DATA_DIR}/links.db`, режим `0600`, каталог `0700`; `PRAGMA journal_mode=WAL, synchronous=FULL, foreign_keys=ON, secure_delete=ON` (перезапись удалённых страниц нулями — физическое удаление при `/forget`, ADR-009 п. 2).
+Файл `${MV_GATEWAY_DATA_DIR}/links.db`, режим `0600`, каталог `0700`; `PRAGMA journal_mode=WAL, synchronous=FULL, foreign_keys=ON, secure_delete=ON, auto_vacuum=INCREMENTAL` (перезапись удалённых страниц нулями — физическое удаление при `/forget`, ADR-009 п. 2; SEC-04/05).
 
 ```sql
 -- migrations/links/0001_init.sql
 CREATE TABLE links (
+  link_id           TEXT NOT NULL UNIQUE,             -- суррогат связки: ULID, присваивается при первом resolve (SEC-03, C-08 v1.1)
   external_platform TEXT NOT NULL CHECK (external_platform IN ('telegram','ci','sim')),
   external_id       TEXT NOT NULL,                    -- Telegram user id как строка; для ci/sim — имя фикстуры
   player_id         TEXT,                             -- текущий живой (или создаваемый) персонаж
@@ -216,26 +218,25 @@ CREATE TABLE links (
 ) WITHOUT ROWID;
 CREATE UNIQUE INDEX ux_links_player ON links(player_id) WHERE player_id IS NOT NULL;
 
--- идемпотентность POST /v1/characters (ключ содержит внешний ID → живёт только здесь)
+-- идемпотентность POST /v1/characters: ключ — суррогат link_id, не внешний ID (SEC-03);
+-- таблица остаётся в links.db, потому что каскадно удаляется вместе со связкой при /forget
 CREATE TABLE character_requests (
-  external_platform TEXT NOT NULL,
-  external_id       TEXT NOT NULL,
+  link_id           TEXT NOT NULL REFERENCES links(link_id) ON DELETE CASCADE,
   action_key        TEXT NOT NULL,
   player_id         TEXT NOT NULL,
   status_code       INTEGER NOT NULL,
   response_json     TEXT NOT NULL CHECK (json_valid(response_json)),
   expires_at        TEXT NOT NULL,
-  PRIMARY KEY (external_platform, external_id, action_key),
-  FOREIGN KEY (external_platform, external_id) REFERENCES links ON DELETE CASCADE
+  PRIMARY KEY (link_id, action_key)
 ) WITHOUT ROWID;
 CREATE INDEX ix_character_requests_exp ON character_requests(expires_at);
 ```
 
-Инварианты: `status='consented'` ⇒ три timestamp не NULL (проверяется кодом при `Consent`, CHECK не выражает условную обязательность без триггера — намеренно без триггеров); один `player_id` ↔ одна связка (уникальный индекс); `username`, имя профиля, `chat_id` — **не хранятся** (в Telegram для личного чата `chat_id == user_id`, бот отправляет по `external_id`). После `/forget`: `DELETE FROM links` (каскад в `character_requests`) + `PRAGMA incremental_vacuum` в sweeper'е раз в час.
+Инварианты: `status='consented'` ⇒ три timestamp не NULL (проверяется кодом при `Consent`, CHECK не выражает условную обязательность без триггера — намеренно без триггеров); один `player_id` ↔ одна связка (уникальный индекс); `link_id` неизменен на всю жизнь строки (при `dead → новый персонаж` меняется только `player_id`); `username`, имя профиля, `chat_id` — **не хранятся** (в Telegram для личного чата `chat_id == user_id`, бот отправляет по `external_id`). Строка создаётся при первом `POST /v1/links/resolve` со статусом `pending_consent` (это и есть момент выдачи `link_id`; UC-001 допускает `pending_consent`); `Consent` переводит в `consented`. `link_id` нигде, кроме `links.db`, не хранится (в `gateway.db` достаточно `player_id`) и клиентам не отдаётся. После `/forget`: `DELETE FROM links` (каскад в `character_requests`) и **сразу в том же вызове** `PRAGMA wal_checkpoint(TRUNCATE)` + `PRAGMA incremental_vacuum` (ADR-019 дополнение п. 1, T-8) — чтобы байты внешнего ID не оставались ни в WAL, ни в свободных страницах; sweeper раз в час повторяет то же как страховка.
 
 ### 4.2. `gateway.db` — служебные данные
 
-Файл `${GATEWAY_DATA_DIR}/gateway.db`; `PRAGMA journal_mode=WAL, synchronous=NORMAL, foreign_keys=ON, busy_timeout=5000`. Внешних ID здесь **нет** ни в одном поле (тест NFR-041 сканирует файл).
+Файл `${MV_GATEWAY_DATA_DIR}/gateway.db`; `PRAGMA journal_mode=WAL, synchronous=NORMAL, foreign_keys=ON, busy_timeout=5000`. Внешних ID здесь **нет** ни в одном поле — ни `external_id`, ни производных от него (SEC-03); `link_id` тоже не хранится. Проверяется двумя тестами: тест миграций сверяет список колонок обеих БД с allowlist имён (колонка с подстрокой `external` допустима только в `links.db`), privacy-scan e2e ищет известный тестовый ID в файле и WAL.
 
 ```sql
 -- migrations/gateway/0001_init.sql
@@ -280,6 +281,8 @@ CREATE TABLE rounds (
   scope_id        TEXT NOT NULL, seq INTEGER NOT NULL,
   world_id        TEXT NOT NULL, encounter_id TEXT NOT NULL,
   state           TEXT NOT NULL CHECK (state IN ('open','closing','closed')),
+  timeout_ms      INTEGER NOT NULL,                                  -- из encounter.started.round (или env по умолчанию) — для Restore
+  idle_after_missed INTEGER NOT NULL,
   expected        TEXT NOT NULL CHECK (json_valid(expected)),       -- ["player-A",…]
   acted           TEXT NOT NULL CHECK (json_valid(acted)),          -- [{"player_id","event_id","at"}]
   auto_defended   TEXT NOT NULL CHECK (json_valid(auto_defended)),
@@ -355,32 +358,33 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 
 1. `recover` → `500 internal` с `handled=false` в логе (NFR-012: паника = дефект).
 2. `request_id` (ULID) → заголовок `X-Request-Id` и поле лога.
-3. `client`: `X-Client-Id` обязателен и ∈ `GATEWAY_CLIENTS` (иначе `403 client_unknown` — новый код, §14); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент.
-4. `body_limit` 64 KiB; `Content-Type` проверка на `POST/DELETE` с телом.
+3. `client`: `X-Client-Id` обязателен и ∈ `MV_GATEWAY_CLIENTS` (иначе `403 client_unknown`, C-08 v1.1); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент; для маршрутов `/v1/clients/{client_id}/*` — `{client_id}` обязан совпадать с `X-Client-Id` (иначе `403 client_mismatch`, SEC-12).
+4. `body_limit` 64 КиБ через `http.MaxBytesReader` → `413 payload_too_large` (SEC-11); `Content-Type` проверка на `POST/DELETE` с телом.
 5. `nolog` для `POST /v1/links/*`, `DELETE /v1/links`, `POST /v1/characters`: тело и `external_id` не попадают в лог ни при какой ошибке (только `request_id`, `code`).
-6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` (`GATEWAY_RATE_ACTIONS_PER_SEC=2`, burst 5) → `429 rate_limited` с `Retry-After`.
-7. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с).
+6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` — **30 действий/мин, burst 5** (`MV_GATEWAY_RATE_ACTIONS_PER_MIN=30`, `MV_GATEWAY_RATE_ACTIONS_BURST=5`; стартовые значения по SEC-11, уточняются замером) → `429 rate_limited` с `Retry-After`. Бакеты — в памяти, `player_id` → bucket, уборка неактивных раз в 10 мин; в `replay` лимит выключен.
+7. `pollguard` на `GET /v1/clients/{client_id}/deliveries`: один активный long-poll на `client_id` (`sync.Map` client → in-flight); второй параллельный → `409 poll_in_progress` (C-08 v1.1) — защита от истощения соединений (T-13).
+8. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с).
 
-Сервер: `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`, `GATEWAY_LISTEN` по умолчанию `127.0.0.1:8088` (в compose внутри контейнера `0.0.0.0:8088`, наружу публикуется `127.0.0.1:8088:8088` — задача DevOps).
+Сервер: `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`, `MV_GATEWAY_LISTEN` по умолчанию `127.0.0.1:8088` (в compose внутри контейнера `0.0.0.0:8088`, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3).
 
 ### 5.2. Маршруты и обработчики
 
 | Метод и путь | Обработчик | Синхронность / ответ | Идемпотентность |
 |---|---|---|---|
-| `POST /v1/links/resolve` | `links.Resolve` + `readmodel` (character_status) | 200 `{link_status, player_id, world_id, character_status: alive\|dead\|creating\|null, notice_due}`; обновляет `last_seen_at` | по построению |
+| `POST /v1/links/resolve` | `links.Resolve` + `readmodel` (character_status) | 200 `{link_status: none\|pending_consent\|consented, player_id, world_id, character_status: none\|creating\|alive\|dead, notice_due}`; при отсутствии строки создаёт `pending_consent` с новым `link_id` (`link_id` в ответ **не** входит); обновляет `last_seen_at` | по построению |
 | `POST /v1/links/consent` | `links.Consent` | 200 / `400 consent_incomplete` (запись `pending_consent`) | повтор обновляет `last_seen_at` |
 | `DELETE /v1/links` | `links.Forget` → хуки §7.6 | 200 `{deleted, player_id_detached}` | да |
 | `DELETE /v1/admin/links/{player_id}` | `links.ForgetByPlayer` | как выше; только операторский клиент | да |
 | `GET /v1/worlds` | `readmodel.Worlds()` | 200 список миров с регионами и `laws_version` | — |
-| `POST /v1/characters` | §7.1 | 201 / 200 (уже есть) / 202 `{player_id, status:"creating"}`; ошибки `world_not_found`, `consent_required`, `name_required`, `name_invalid` | `character_requests` (links.db) по `(platform, external_id, action_key)`, TTL 24 ч |
+| `POST /v1/characters` | §7.1 | 201 / 200 (уже есть) / 202 `{player_id, status:"creating"}`; ошибки `world_not_found`, `consent_required`, `name_required`, `name_invalid` | `character_requests` (links.db) по `(link_id, action_key)` — `link_id` находится по `(platform, external_id)` внутри одной транзакции `links.db`; TTL 24 ч (C-08 v1.1, SEC-03) |
 | `GET /v1/players/{player_id}` | `readmodel.Character(id)` + `session.Current(scope)` | 200 `CharacterState`; `404 player_not_found`; для `creating` — 200 с `status:"creating"` и минимальными полями | — |
-| `POST /v1/players/{player_id}/actions` | §7.2 (`actions`), `group.*` → `groups` (§7.4) | 202 `{correlation_id, turn{seq, session_id, round_seq?}, status:"accepted", acked_at}`; `group.*` → 200 состав / 202 `{status:"pending", group_id}` (§14); ошибки §1.6 | `idempotency_keys` по `(player_id, action_key)`: повтор → тот же ответ и `correlation_id` |
+| `POST /v1/players/{player_id}/actions` | §7.2 (`actions`), `group.*` → `groups` (§7.4) | 202 `{correlation_id, turn{seq, session_id, round_seq?}, status:"accepted", acked_at}`; `group.*` → 200 состав / 202 `{status:"pending", group_id, correlation_id}` (C-08 v1.1); ошибки §1.6 + `429 rate_limited`, `413 payload_too_large`, `409 already_acted` | `idempotency_keys` по `(player_id, action_key)`: повтор → тот же ответ и `correlation_id` |
 | `GET /v1/groups/{group_id}` | `readmodel.Group(id)` | 200 состав, лидер, позиция, встреча; 404 `unknown_target` | — |
-| `GET /v1/clients/{client_id}/deliveries` | `outbox.Serve` §8.3 | 200 `{deliveries[], cursor}`; `wait_ms ≤ 25000`, `limit ≤ 100`; `client_id` должен совпадать с `X-Client-Id` (иначе `403 client_mismatch`, §14) | — |
+| `GET /v1/clients/{client_id}/deliveries` | `outbox.Serve` §8.3 | 200 `{deliveries[], cursor}`; `wait_ms ≤ 25000`, `limit ≤ 100`; `client_id` == `X-Client-Id` (иначе `403 client_mismatch`); второй параллельный запрос → `409 poll_in_progress`; `route.external_id` подставляется только если `platform` связки == платформе клиента из `MV_GATEWAY_CLIENTS` (иначе доставка не выдаётся этому клиенту, SEC-12) | — |
 | `POST /v1/clients/{client_id}/deliveries/ack` | `outbox.Ack` | 200 `{acked: n, unknown: [ids]}` | да |
 | `GET /v1/clients/{client_id}/stream` | — | `501 not_implemented` (E-H) | — |
-| `POST /v1/scopes/{scope_id}/rounds/close` | `rounds.Close(explicit)` | 200 `{round{seq, close_reason:"explicit"}}`; `409 no_open_round` (§14); только `ci` | да (повтор при закрытом → 409) |
-| `POST /v1/admin/agents/{agent_id}/tick`, `GET /v1/admin/agents` | `httputil.ReverseProxy` → `GATEWAY_CORE_ADMIN_URL` | как отдаёт `core`; заголовки клиента пробрасываются | — |
+| `POST /v1/scopes/{scope_id}/rounds/close` | `rounds.Close(explicit)` | 200 `{round{seq, close_reason:"explicit"}}`; `409 no_open_round` (C-08 v1.1); только `ci` | да (повтор при закрытом → 409) |
+| `POST /v1/admin/agents/{agent_id}/tick`, `GET /v1/admin/agents`, `GET /v1/admin/llm/usage` | `httputil.ReverseProxy` → `MV_CORE_URL` (`http://core:8090`, C-06) | как отдаёт `core`; заголовки клиента пробрасываются; только `ci`/operator | — |
 | `GET /v1/admin/sessions` | `session.Active()` | 200 список активных сессий (без внешних ID) | — |
 | `GET /health` | §11.4 | 200/503 | — |
 
@@ -416,11 +420,13 @@ type ErrorBody struct{ Code, Message string; Details map[string]any }
 
 1. `player_not_found` (404) → `character_dead` (409) → `unknown_action` (400) → структура (`invalid_request`, `text_invalid`, `unknown_target` для отсутствующей цели);
 2. scope/группа: `not_leader` (enter/leave в группе от не-лидера), `already_in_group`, `not_in_group`, `group_full`, `group_in_encounter`;
-3. встреча: `in_encounter` (enter/leave/rest/group.join), `not_in_encounter` (attack/flee/defend), `target_dead` (attack, соло), `encounter_unavailable` (встреча `active`, но `task_agent_id` пуст дольше `GATEWAY_ENCOUNTER_GRACE=10s` — временный код);
+3. встреча: `in_encounter` (enter/leave/rest/group.join), `not_in_encounter` (attack/flee/defend), `target_dead` (attack, соло), `encounter_unavailable` (встреча `active`, но `task_agent_id` пуст дольше `MV_GATEWAY_ENCOUNTER_GRACE=10s` — временный код);
 4. регион: `not_in_region` (leave с опушки), `unknown_target` (регион не в мире / NPC не в этой встрече / группа не существует);
 5. раунд (только scope `group`): `already_acted` (§9, ADR-020).
 
-`say`: `strings.TrimSpace`, длина 1–500 рун; `InputFilter.Check(text)` — `NoopFilter` возвращает `pass` и пишет запись журнала `input_filter{applied:true, status:pass, text_len}` (без текста); ошибка фильтра → `422 filter_error` (fail-closed, FR-056). Имя персонажа проходит тот же фильтр.
+`say`: `strings.TrimSpace`, длина 1–500 рун; `InputFilter.Check(text)` — `NoopFilter` возвращает `pass` и пишет запись журнала `input_filter{applied:true, status:pass, filter:"noop", text_len}` (без текста); ошибка фильтра → `422 filter_error` (fail-closed, FR-056). Имя персонажа проходит тот же фильтр.
+
+**`InputFilter` — точка вставки, не фильтр** (US-016, FR-056; решение G1/OQ-D-16): в MVP-1 единственная реализация — `NoopFilter`; интерфейс `InputFilter{Check(ctx, kind, text) (FilterResult{Status: pass|blocked|replaced, Text string}, error)}` вызывается **до** публикации `player.said` и `entity.create.proposed` (имя), и в шину уходит `FilterResult.Text` — так тестовая реализация оператора («заменить слово») наблюдаема сквозным тестом, а исходный текст не покидает gateway. Выбор реализации — `MV_GATEWAY_INPUT_FILTER=noop` в `gateway.go` (wiring), другие значения в MVP-1 → ошибка старта. Фильтр категории (a) на **выходе** нарратива (`NarrativeFilter`, словарь `config/absolute-limits.yaml`) — EPIC-003 (`internal/llm/filter`), gateway его не дублирует и словарь не читает.
 
 ### 5.5. Идемпотентность и ответ 202
 
@@ -457,19 +463,22 @@ type IDSource interface { NewID() string }   // ULID, монотонный
 
 // internal/gateway/links
 type Link struct {
+    LinkID string                                    // суррогат (ULID); не логируется, клиентам не отдаётся
     Platform, ExternalID string; PlayerID, WorldID *string
     Status string; NoticeShownAt, ConsentAt, AgeConfirmedAt *time.Time; LastSeenAt, CreatedAt time.Time
 }
+func (Link) LogValue() slog.Value // "redacted" — внешний ID и link_id никогда не попадают в slog.Attr
 type Store interface {
-    Resolve(ctx context.Context, platform, externalID string, now time.Time) (Link, bool, error) // обновляет last_seen_at
+    Resolve(ctx context.Context, platform, externalID string, now time.Time) (Link, bool /*created*/, error) // нет строки → INSERT pending_consent + новый link_id; обновляет last_seen_at
     Consent(ctx context.Context, platform, externalID string, shownAt, now time.Time) (Link, error)
-    AttachPlayer(ctx context.Context, platform, externalID, playerID, worldID string) error       // при создании персонажа (в т.ч. замена dead → новый)
+    AttachPlayer(ctx context.Context, linkID, playerID, worldID string) error                     // при создании персонажа (в т.ч. замена dead → новый)
     ByPlayer(ctx context.Context, playerID string) (Link, bool, error)
     RouteFor(ctx context.Context, playerID string) (platform, externalID string, ok bool, err error) // outbox, в момент выдачи
-    Forget(ctx context.Context, platform, externalID string) (detached *string, deleted bool, err error)
+    Forget(ctx context.Context, platform, externalID string) (detached *string, deleted bool, err error) // DELETE + wal_checkpoint(TRUNCATE) + incremental_vacuum в том же вызове
     ForgetByPlayer(ctx context.Context, playerID string) (deleted bool, err error)
-    CharacterRequest(ctx context.Context, platform, externalID, actionKey string) (*StoredResponse, bool, error)
-    SaveCharacterRequest(ctx context.Context, platform, externalID, actionKey, playerID string, r StoredResponse, ttl time.Duration) error
+    CharacterRequest(ctx context.Context, linkID, actionKey string) (*StoredResponse, bool, error)   // ключ — link_id, не внешний ID (SEC-03)
+    SaveCharacterRequest(ctx context.Context, linkID, actionKey, playerID string, r StoredResponse, ttl time.Duration) error
+    Compact(ctx context.Context) error                                                            // sweeper раз в час: checkpoint + incremental_vacuum (страховка)
 }
 type ForgetHooks interface { OnForget(ctx context.Context, playerID string) error } // outbox.DropForPlayer, session.End(leave), groups.LeaveAll
 
@@ -566,12 +575,12 @@ sequenceDiagram
     participant ST as core/state
     P->>B: /start
     B->>G: POST /v1/links/resolve {telegram, <user_id>}
-    G->>G: links.Resolve → нет связки
-    G-->>B: 200 {link_status: none}
+    G->>G: links.Resolve → нет строки → INSERT links{link_id: ULID, status: pending_consent}
+    G-->>B: 200 {link_status: pending_consent, character_status: none, notice_due: true}
     B-->>P: уведомление: ИИ, 18+, обработка текста, /forget; клавиатура [Подтверждаю: 18+ и согласен] [Отказаться]
     P->>B: «Подтверждаю…» (текстовое сообщение с клавиатуры)
     B->>G: POST /v1/links/consent {…, notice_shown, consent, age_confirmed, shown_at}
-    G->>G: INSERT links status=consented, три timestamp (links.db)
+    G->>G: UPDATE links SET status=consented, три timestamp (links.db; link_id не меняется)
     G-->>B: 200 {link_status: consented}
     B-->>P: «Введите имя персонажа (2–32)»
     P->>B: «Вася»
@@ -579,7 +588,7 @@ sequenceDiagram
     B->>G: GET /v1/worlds
     G-->>B: 200 [dark-forest-world]
     B->>G: POST /v1/characters {telegram, <user_id>, world_id, "Вася", action_key}
-    G->>G: character_requests? нет; consented? да; alive-персонажа нет
+    G->>G: link по (telegram, user_id) → link_id; character_requests(link_id, action_key)? нет; consented? да; alive-персонажа нет
     G->>G: player_id = "player-"+ULID; pending_characters; links.AttachPlayer
     G->>BUS: SE entity.create.proposed {entity{player}, attributes{hp 10/10, position outside:…, scope solo:…, actor_kind}, cause: create} (meta.cid = id)
     BUS->>ST: apply → entity.created (version 1)
@@ -595,7 +604,7 @@ sequenceDiagram
     end
 ```
 
-Детали: `character_requests` сохраняет ответ (201/200/202) под `action_key` на 24 ч — повтор возвращает тот же `player_id`. Если факт не пришёл за `GATEWAY_CHARACTER_DEADLINE=60s` (или пришёл `entity.update.rejected` с этим `proposal_id`) — `pending_characters` удаляется, `links.player_id` очищается, лог `handled=true`; следующий `POST /v1/characters` создаёт новый `player_id`. При `dead` персонаже — новый `player_id`, `AttachPlayer` заменяет ссылку (старый `player_id` остаётся в журнале и read-model, `ux_links_player` не нарушен — старая связка та же строка).
+Детали: `character_requests` сохраняет ответ (201/200/202) под `(link_id, action_key)` на 24 ч — повтор возвращает тот же `player_id`; ключ не содержит внешнего ID, а таблица удаляется каскадом при `/forget` (SEC-03). Если факт не пришёл за `MV_GATEWAY_CHARACTER_DEADLINE=60s` (или пришёл `entity.update.rejected` с этим `proposal_id`) — `pending_characters` удаляется, `links.player_id` очищается, лог `handled=true`; следующий `POST /v1/characters` создаёт новый `player_id`. При `dead` персонаже — новый `player_id`, `AttachPlayer` заменяет ссылку (старый `player_id` остаётся в журнале и read-model, `ux_links_player` не нарушен — старая связка та же строка).
 
 ### 7.2. Ход соло `attack` — от бота до нарратива (UC-007, overview §17.1)
 
@@ -699,7 +708,7 @@ sequenceDiagram
     G->>G: links.ByExternal → player_id
     G->>G: ForgetHooks.OnForget(player_id): outbox.DropForPlayer (pending → dropped); session.End(scope игрока, leave); groups.Leave(player) если в группе (вне встречи — обычный выход; во встрече — как flee не исполняется: участник помечается out_of_combat через entity.update.proposed encounter? — нет: gateway не владеет encounter; публикуется group.left cause=leave и atomic-предложение по группе/игроку, встреча остаётся Task-агенту)
     G->>BUS: GE group.left (если был в группе), AE analytics.session.ended end_reason=leave
-    G->>G: DELETE FROM links (каскад character_requests); pending_characters по player_id — удалить
+    G->>G: DELETE FROM links (каскад character_requests) → PRAGMA wal_checkpoint(TRUNCATE) → PRAGMA incremental_vacuum (сразу, ADR-019 доп. п. 1); pending_characters по player_id — удалить
     G-->>B: 200 {deleted: true, player_id_detached: "player-A"}
     B->>B: flow.Reset(chat); удалить состояние диалога
     B-->>P: «Связка удалена. /start — начать заново как новый игрок»
@@ -709,7 +718,7 @@ sequenceDiagram
 
 ### 7.6. Сессии, простой, ходы (UC-027)
 
-- `session.Touch` при каждом принятом игровом действии: нет активной сессии scope или `now − last_action_at ≥ GATEWAY_SESSION_IDLE (30m)` → закрыть старую (`analytics.session.ended end_reason=idle`) и открыть новую (`analytics.session.started {session{id, kind, actor_kind, started_at, players_count}, participants[]}`); `actor_kind` сессии = `X-Actor-Kind` первого действия.
+- `session.Touch` при каждом принятом игровом действии: нет активной сессии scope или `now − last_action_at ≥ MV_GATEWAY_SESSION_IDLE (30m)` → закрыть старую (`analytics.session.ended end_reason=idle`) и открыть новую (`analytics.session.started {session{id, kind, actor_kind, started_at, players_count}, participants[]}`); `actor_kind` сессии = `X-Actor-Kind` первого действия.
 - Sweeper раз в 60 с: активные сессии с `last_action_at < now − 30m` → `ended idle` (чтобы парность `started/ended` не зависела от следующего действия — NFR-036). В `--mode=replay` sweeper выключен.
 - Завершение: все участники вышли/`/forget` → `leave`; все `dead` (по `entity.updated`) → `death`; необработанная ошибка обработчика → `error`.
 - Ход: `Turn.deadline_at = received_at + 60s`; sweeper переводит `accepted/mechanics_applied` с истёкшим сроком в `timeout` и публикует `turn.completed status=timeout`. `status=degraded`, если `narrative.generated_by=template`. `absence{…}` копируется из `narrative.output.absence` + `background_refs[]` → `surfaced_event_ids[]`.
@@ -731,7 +740,7 @@ sequenceDiagram
 | `group.created/joined/left/leader_changed/disbanded`, `round.opened` | участники группы | `group` | `rules` | шаблон состава / «Раунд N…» |
 | `player.said` (scope group) | участники группы, кроме автора | `group` | `rules` | «{name}: {text}» |
 
-`platform` берётся из `links.ByPlayer` в момент постановки (нет связки → `dropped`); `expires_at = now + GATEWAY_DELIVERY_TTL (24h)`; `created_at` = `Clock.Now()`; порядок = `seq` (AUTOINCREMENT). Всё — в одной транзакции с `processed_events` и `cursors` (идемпотентность при повторной доставке события шиной, NFR-013).
+`platform` берётся из `links.ByPlayer` в момент постановки (нет связки → `dropped`); `expires_at = now + MV_GATEWAY_DELIVERY_TTL (24h)`; `created_at` = `Clock.Now()`; порядок = `seq` (AUTOINCREMENT). Всё — в одной транзакции с `processed_events` и `cursors` (идемпотентность при повторной доставке события шиной, NFR-013).
 
 ### 8.2. Выдача: голова очереди на игрока
 
@@ -750,25 +759,25 @@ SELECT * FROM ranked WHERE rn = 1 ORDER BY seq LIMIT :limit;
 UPDATE deliveries SET leased_by=:client, leased_until=:now+:leaseFor, attempts=attempts+1 WHERE id IN (...);
 ```
 
-Затем для каждой строки — `links.RouteFor(player_id)` → `route{external_platform, external_id}` **только в ответ**, в БД не пишется; нет маршрута → `state=dropped`, строка в ответ не попадает. `GATEWAY_OUTBOX_INFLIGHT_PER_PLAYER=1` (константа в MVP-1; параметр оставлен на случай, если ack на каждое сообщение окажется узким местом — при ≤ 6 игроках не окажется). `cursor` в ответе = `max(seq)` выданных; `after` клиента используется только как подсказка: строки с `seq ≤ after`, лизинг которых ещё действует у этого же клиента, повторно не выдаются (защита от дублей при переподключении до истечения 30 с).
+Затем для каждой строки — `links.RouteFor(player_id)` → `route{external_platform, external_id}` **только в ответ**, в БД не пишется; нет маршрута → `state=dropped`, строка в ответ не попадает. `MV_GATEWAY_OUTBOX_INFLIGHT_PER_PLAYER=1` (константа в MVP-1; параметр оставлен на случай, если ack на каждое сообщение окажется узким местом — при ≤ 6 игроках не окажется). `cursor` в ответе = `max(seq)` выданных; `after` клиента используется только как подсказка: строки с `seq ≤ after`, лизинг которых ещё действует у этого же клиента, повторно не выдаются (защита от дублей при переподключении до истечения 30 с).
 
 ### 8.3. Long-poll без удержания соединения БД
 
-`outbox.Serve(ctx, client, platform, after, limit, wait)`: цикл `Lease` → если пусто и осталось время — `Notifier.Wait(ctx, platform, min(remaining, 1s))` (канал-«звонок» на платформу, `Notify` вызывается после каждого `Enqueue`/`ReleaseExpiredLeases`; периодический пробуждение раз в 1 с страхует от потери сигнала) → повтор; выход по данным, `wait_ms` или отмене запроса. Один клиент на платформу висит одним запросом; второй параллельный запрос того же клиента допустим (lease защищает от двойной выдачи).
+`outbox.Serve(ctx, client, platform, after, limit, wait)`: цикл `Lease` → если пусто и осталось время — `Notifier.Wait(ctx, platform, min(remaining, 1s))` (канал-«звонок» на платформу, `Notify` вызывается после каждого `Enqueue`/`ReleaseExpiredLeases`; периодический пробуждение раз в 1 с страхует от потери сигнала) → повтор; выход по данным, `wait_ms` или отмене запроса. Один клиент висит одним запросом; второй параллельный запрос того же `client_id` отклоняется middleware `pollguard` → `409 poll_in_progress` (C-08 v1.1, SEC-11) — клиент переподключается после завершения текущего; lease остаётся второй линией защиты от двойной выдачи (например, после обрыва соединения до истечения лизинга).
 
 ### 8.4. Ack, повтор, TTL, forget
 
-`Ack(ids)`: `UPDATE … SET state='delivered', delivered_at=:now WHERE id IN (...) AND leased_by=:client` → `turns.OnDelivered` по каждому `narrative`; неизвестные/чужие id возвращаются в `unknown[]` (не ошибка). Без ack — `leased_until` истекает через `GATEWAY_DELIVERY_LEASE=30s`, sweeper делает `ReleaseExpiredLeases` (+`Notify`) → повторная выдача. `attempts` — только для наблюдаемости; лимита повторов нет, пока не истёк `expires_at` (24 ч) → `dropped`. `/forget` → `DropForPlayer` (§7.5).
+`Ack(ids)`: `UPDATE … SET state='delivered', delivered_at=:now WHERE id IN (...) AND leased_by=:client` → `turns.OnDelivered` по каждому `narrative`; неизвестные/чужие id возвращаются в `unknown[]` (не ошибка). Без ack — `leased_until` истекает через `MV_GATEWAY_DELIVERY_LEASE=30s`, sweeper делает `ReleaseExpiredLeases` (+`Notify`) → повторная выдача. `attempts` — только для наблюдаемости; лимита повторов нет, пока не истёк `expires_at` (24 ч) → `dropped`. `/forget` → `DropForPlayer` (§7.5).
 
 ---
 
 ## 9. Координатор раундов (кратко; полностью — ADR-020)
 
-- Состояние: `rounds` (durable) + в памяти `map[scopeID]*roundState` с мьютексом на scope; таймер — `Clock.AfterFunc(deadline − now)`.
+- Состояние: `rounds` (durable) + в памяти `map[scopeID]*roundState` с мьютексом на scope; таймер — `Clock.AfterFunc(deadline − now)`. Параметры раунда (`timeout`, `idle_after_missed`) — из `encounter.started.round{}` (C-05 v1.1; источник — блупринт `encounter-*`), сохраняются в `roundState` на всю встречу; при отсутствии поля — `MV_GATEWAY_ROUND_TIMEOUT` / `MV_GATEWAY_ROUND_IDLE_AFTER_MISSED` (ADR-020 дополнение п. 1).
 - Открытие: раунд 1 — по `encounter.started` для scope `group` (C-05); раунд N+1 — первым действием `attack|flee|defend` (или `group.leave` во встрече) после `round.closed`. `say` не открывает раунд и не входит в `acted[]` (UC-016 E2; расхождение с шагом 1 UC-016 отмечено в §14).
 - `expected[]` = участники группы с `participation=active`, `alive`, не `out_of_combat` (по read-model `Encounter.participants` и `group_participation`).
 - Закрытие: `all_acted` (после `Accept`), `timeout` (таймер), `explicit` (`POST …/rounds/close`, только `ci`). Порядок публикации: `player.defended cause=round_timeout` для каждого из `expected − acted` → `round.closed` (содержит `acted[]` по времени приёма, `auto_defended[]`, `idle[]`, `closed_at = Clock.Now()`). `round.closed` — корневое событие (`meta.cid = id`), это seed ответа NPC (ADR-003 п. 5).
-- Пропуски: `missed_rounds` в `group_participation`; ≥ `GATEWAY_ROUND_IDLE_AFTER_MISSED (2)` → `idle` (предложение по группе, `cause=group`); первое действие → `active`, `missed_rounds=0`.
+- Пропуски: `missed_rounds` в `group_participation`; ≥ `idle_after_missed` встречи (из `encounter.started.round`, иначе `MV_GATEWAY_ROUND_IDLE_AFTER_MISSED=2`) → `idle` (предложение по группе, `cause=group`); первое действие → `active`, `missed_rounds=0`.
 - Replay: таймеры не создаются; `round.opened/closed` читаются из журнала и применяются к `rounds` (для `status`/аудита); `Accept` в replay — только учёт.
 - Restart: `Restore` читает `open/closing` раунды; для `open` заново ставит таймер на `deadline_at` (если уже прошёл — закрывает `timeout` сразу); `closing` без `closed_event_id` — довести до `round.closed` (идемпотентно по `(scope, seq)`).
 
@@ -783,6 +792,7 @@ C4Component
     title telegram-bot — компоненты
     Container_Boundary(bot, "telegram-bot") {
         Component(upd, "updates", "go-telegram/bot v1.25 (long polling)", "UpdateSource: Start(ctx, handler); allowed_updates=[message]; timeout 25 с; один экземпляр (409 — штатно)")
+        Component(acc, "access", "Go", "Gate: allowlist MV_TELEGRAM_ALLOWED_USER_IDS (SEC-06); только личные чаты, связка по from.id (SEC-07); 20 команд/мин на user id (SEC-11); отказ — до любого вызова gateway")
         Component(cmd, "commands", "Go", "разбор «/команда цель текст» и без «/»; словарь FR-002; синонимы")
         Component(flow, "flow", "Go", "FSM на чат: idle → awaiting_consent → awaiting_name → awaiting_name_confirm → awaiting_world → ready; TTL 15 мин; /forget confirm")
         Component(rend, "render", "Go", "тексты ru: уведомление, help, ошибки по code, доставки, клавиатуры")
@@ -794,7 +804,8 @@ C4Component
     System_Ext(tg, "Telegram Bot API", "getUpdates / sendMessage")
     System(gw, "gateway", ":8088")
     Rel(tg, upd, "updates")
-    Rel(upd, cmd, "message.text")
+    Rel(upd, acc, "Update")
+    Rel(acc, cmd, "message.text (только допущенные)")
     Rel(cmd, flow, "Command")
     Rel(flow, gwc, "links/*, characters, actions, players")
     Rel(flow, rend, "тексты")
@@ -808,7 +819,14 @@ C4Component
 
 `go-telegram/bot` v1.25.0 (ADR-018): `bot.New(token, bot.WithAllowedUpdates([]string{"message"}), bot.WithNotAsyncHandlers(), bot.WithDefaultHandler(flow.Handle), bot.WithErrorsHandler(privacy.ErrorLog), bot.WithSkipGetMe(false))`; `b.Start(ctx)` — long polling с `timeout=25`. `WithNotAsyncHandlers` даёт последовательную обработку обновлений (порядок команд одного игрока сохраняется; ≤ 6 игроков — достаточно). Второй экземпляр бота получит `409 Conflict` — штатная защита от дублей, бот логирует и завершается с кодом 3. Webhook — интерфейс `UpdateSource` оставлен для E-H, реализация только polling.
 
-Из обновления используются **только**: `message.chat.id` (для личного чата = `from.id`), `message.from.id` → `external_id` (строка), `message.text`, `update_id` (для `action_key`). `from.username`, `first_name`, `last_name`, фото — не читаются в код (только для проверки «имя персонажа == username» в `flow`, значение сравнивается и отбрасывается, не логируется и не сохраняется). Групповые чаты Telegram игнорируются в MVP-1 (ответ «пишите боту в личные сообщения»); групповая доставка «в общий чат» из ADR-006 п. 5 — конфигурация целевого инкремента (§14).
+**Порядок обработки каждого `Update` (`access.Gate`, первый шаг, до FSM и до любого вызова gateway):**
+1. `message == nil` или `message.from == nil` → игнор.
+2. `message.chat.type != "private"` → одно сообщение «пишите боту в личные сообщения», обновление отброшено, gateway не вызывается (SEC-07, ADR-006 дополнение п. 2). Связка и действия — **только** по `from.id`; `chat.id` личного чата равен `from.id` и отдельно не хранится.
+3. `from.id ∉ MV_TELEGRAM_ALLOWED_USER_IDS` → одно сообщение «доступ по приглашению» без деталей, счётчик `bot_denied_total`, лог без ID; пустой allowlist = бот отвечает всем отказом и gateway не вызывает (SEC-06, решение пользователя U-7, ADR-006 дополнение п. 1). Инвайт-коды — E-H.
+4. Лимит 20 команд/мин на `from.id` (token bucket в памяти, `MV_BOT_RATE_COMMANDS_PER_MIN=20`) → «слишком часто, подождите», gateway не вызывается (SEC-11).
+5. Только после этого — `commands.Parse` и `flow`.
+
+Из обновления используются **только**: `message.from.id` → `external_id` (строка) и он же как `chat_id` для ответа, `message.text`, `update_id` (для `action_key`), `message.chat.type` (для п. 2). `from.username`, `first_name`, `last_name`, фото — не читаются в код (только для проверки «имя персонажа == username» в `flow`, значение сравнивается и отбрасывается, не логируется и не сохраняется). Групповая доставка «в общий чат» (ADR-006 п. 5) — **E-H** (решено на сведении, G-8): в MVP-1 каждый участник группы получает сообщения в личный чат.
 
 ### 10.3. Команды и клавиатуры
 
@@ -823,7 +841,7 @@ C4Component
 | `/group create` / `/group join <id>` / `/group leave` | group.* | `actions {group.create|join|leave, target}` | ответ — состав; `group_id` показывается для передачи друзьям |
 | `/forget` → `/forget confirm` | forget | `DELETE /v1/links` | подтверждение обязательно |
 
-`action_key = hex(HMAC-SHA256(BOT_ACTION_KEY_SALT, strconv.Itoa(update_id)))[:32]` — необратим, стабилен при повторной обработке того же обновления (ADR-006 п. 2). `BOT_ACTION_KEY_SALT` — env; по умолчанию `SHA-256(TELEGRAM_BOT_TOKEN)` (одностороннее производное секрета; не логируется).
+`action_key = hex(HMAC-SHA256(MV_BOT_ACTION_KEY_SALT, strconv.Itoa(update_id)))[:32]` — необратим, стабилен при повторной обработке того же обновления (ADR-006 п. 2). `MV_BOT_ACTION_KEY_SALT` — env; по умолчанию `SHA-256(MV_TELEGRAM_BOT_TOKEN)` (одностороннее производное секрета; не логируется).
 
 Онбординг (`flow`): `awaiting_consent` принимает только текст кнопки подтверждения (или `/start` повторно); «Отказаться»/иное → повтор уведомления (UC-001 E1). `awaiting_name`: проверка 2–32, буквы/цифры/пробел/дефис, без управляющих (та же регулярка, что на сервере); совпадение с `username`/`first_name` без учёта регистра → `awaiting_name_confirm` («Это имя совпадает с вашим ником в Telegram и будет видно другим игрокам. Оставить? [Да] [Ввести другое]»). `awaiting_world`: пропускается, если мир один. Состояние диалога — `map[chatID]*chatState` с TTL 15 мин (после рестарта — повторный `/start` восстанавливает по `resolve`). Кэш `chat_id → player_id` — тоже память с TTL 1 ч; промах → `links/resolve`.
 
@@ -831,7 +849,7 @@ C4Component
 
 Горутина `deliver.Loop`: `Deliveries(ctx, "telegram-bot", cursor, 100, 25s)` → для каждой доставки последовательно: `Send(chatID = route.external_id, render.Delivery(d))` → при успехе id в пакет ack; при ошибке Telegram: `429` — пауза `retry_after`, повтор; сеть/`5xx` — 3 попытки с паузой 1 с, затем **без ack** (gateway выдаст повторно через 30 с); `403 bot was blocked` / `400 chat not found` — ack (доставка считается отработанной, игрок недоступен; лог без ID). Пакет ack после обработки всех доставок ответа (≤ 100). Порядок на игрока обеспечивает gateway (одна в лизинге), бот ничего не переупорядочивает.
 
-Рендер: `mechanics` — как есть; `narrative` — текст + строка-пометка «— текст создан ИИ» (`generated_by=llm`) или «— упрощённый режим (шаблон): {fallback_reason}» (`template`); `world_event` — текст + клавиатура боя; `system` — текст + клавиатура `[/start]`; `group` — как есть. Сообщения длиннее 4096 символов режутся по абзацам.
+Рендер: `mechanics` — как есть; `narrative` — текст + строка-пометка «— текст создан ИИ» (`generated_by=llm`) или «— упрощённый режим (шаблон): {fallback_reason}» (`template`); `world_event` — текст + клавиатура боя; `system` — текст + клавиатура `[/start]`; `group` — как есть. Сообщения длиннее 4096 символов режутся по абзацам. **Все `sendMessage` — без `parse_mode`** (plain text, SEC-10, ADR-006 дополнение п. 4): текст игрока (`say`) и нарратив доставляются буквально; заголовки «Механика»/«Рассказчик» — префиксом строки, не разметкой; `Sender.Send` не имеет параметра `parse_mode` по построению, тест подаёт `[x](http://…)`, `<a>`, `*` и проверяет буквальную доставку.
 
 ### 10.5. Ошибки для игрока
 
@@ -845,48 +863,55 @@ C4Component
 
 | Мера | Реализация |
 |---|---|
-| Сетевая изоляция | `GATEWAY_LISTEN=127.0.0.1:8088` по умолчанию (бот на той же машине); в compose — публикация только на `127.0.0.1`; admin-порт `core` доступен gateway по compose-сети, наружу не публикуется |
-| Доверенные клиенты | `GATEWAY_CLIENTS="telegram-bot:telegram:human;ci-harness:ci:ci,sim;operator:*:human"` — `client_id:platform:allowed_actor_kinds`; неизвестный клиент — `403`; служебные и admin-маршруты — только клиенты с `ci` или роль `operator` |
-| Секреты | `TELEGRAM_BOT_TOKEN` только из env (пустой → бот не стартует с понятной ошибкой); ключей у gateway нет; `.env.example` содержит все переменные §11.3 (NFR-074) |
-| ПДн в БД | внешний ID — только `links.db`; `gateway.db` — только `player_id`; `links.db` файл `0600`, каталог `0700`, `secure_delete=ON`; бэкап — по политике DevOps (`infrastructure.md`: шифрование `age`, срок ≤ 30 дней) |
-| ПДн в логах | `slog` через `shared/logging`; middleware `nolog` для `links/*` и `characters`; в gateway внешние ID не попадают в `slog.Attr` по построению (тип `links.Link` имеет `LogValue()` → `redacted`); бот — `privacy.Handler` отбрасывает атрибуты `chat_id`, `external_id`, `username`, `text`; библиотека Telegram — без `WithDebug` в проде; тест NFR-041 (EPIC-005) читает логи обоих процессов |
+| Круг игроков (SEC-06/07) | **allowlist Telegram user id** `MV_TELEGRAM_ALLOWED_USER_IDS` в конфигурации бота (решение пользователя U-7); проверка — первый шаг обработки `Update`, до любого вызова gateway; чужой — один отказ без деталей, связка не создаётся, ID не логируется; **только личные чаты**, связка по `from.id`; общий чат группы и инвайт-коды — E-H |
+| Сетевая изоляция (SEC-13) | `MV_GATEWAY_LISTEN=127.0.0.1:8088` по умолчанию (бот на той же машине); в compose — публикация **всех** портов только на `127.0.0.1` (`compose-lint`); admin-порт `core` доступен gateway по compose-сети, наружу не публикуется |
+| Доверенные клиенты (SEC-12) | `MV_GATEWAY_CLIENTS="telegram-bot:telegram:human;ci-harness:ci:ci,sim;operator:*:human"` — `client_id:platform:allowed_actor_kinds`; неизвестный клиент — `403 client_unknown`; `{client_id}` пути == `X-Client-Id` (`403 client_mismatch`); `route.external_id` — только клиенту платформы связки; служебные и admin-маршруты — только клиенты с `ci` или роль `operator`; `ci-harness` отсутствует в prod-`.env` (профиль `dev`/`test`) |
+| Секреты (SEC-08) | `MV_TELEGRAM_BOT_TOKEN` только из env (пустой → бот не стартует с понятной ошибкой); **редакция токена**: `privacy.Handler` заменяет `bot<digits>:<token>` → `bot<redacted>` в любом сообщении лога и в тексте ошибок HTTP-клиента библиотеки (включая `409 Conflict` и сетевые ошибки; `errors.Handler` бота оборачивает всё через `privacy.Redact`); `WithDebug` запрещён; unit-тест «строка ошибки не содержит токен»; ключей у gateway нет; `.env.example` содержит все переменные §11.3 (NFR-074) |
+| ПДн в БД (SEC-03/04/05) | внешний ID — только `links.db` (в т. ч. `character_requests` через `link_id`); `gateway.db` — только `player_id`; `links.db` файл `0600`, каталог `0700`, `secure_delete=ON`, `auto_vacuum=INCREMENTAL`, `wal_checkpoint(TRUNCATE)` + `incremental_vacuum` сразу после `/forget`; именованный том; бэкап — по политике DevOps (`infrastructure.md`: шифрование `age`, срок ≤ 30 дней) |
+| ПДн в логах (SEC-01/02) | `slog` через `shared/logging`; middleware `nolog` для `links/*` и `characters`; в gateway внешние ID не попадают в `slog.Attr` по построению (тип `links.Link` имеет `LogValue()` → `redacted`); бот — `privacy.Handler` отбрасывает атрибуты `chat_id`, `external_id`, `username`, `text`; библиотека Telegram — без `WithDebug` в проде; тест NFR-041 (EPIC-005) читает логи обоих процессов |
 | ПДн в событиях | `player.*` строятся из `Command` (после псевдонимизации), `action.key_hash = SHA-256(action_key)`; текст — только в `player.said.text`; аналитика — только `player_id`, счётчики, ID |
-| Инъекции | текст `say` и имя — данные (`payload.text`, `entity.name`); экранирование — на стороне промпта (EPIC-003); gateway ограничивает длину и управляющие символы |
-| Flood | rate limit на `player_id` (§5.1); лимит тела; таймауты; `wait_ms` и `limit` ограничены сверху |
-| Retention логов бота | stdout → драйвер логов Docker `json-file` с `max-size=10m, max-file=7` или journald с `MaxRetentionSec=7d` — задача DevOps (NFR-041) |
+| Инъекции / разметка (SEC-10) | текст `say` и имя — данные (`payload.text`, `entity.name`); экранирование — на стороне промпта (EPIC-003); gateway ограничивает длину и управляющие символы; бот отправляет без `parse_mode` |
+| Flood (SEC-11) | бот: 20 команд/мин на user id; gateway: 30 действий/мин burst 5 на `player_id` (`429 rate_limited`), тело ≤ 64 КиБ (`413`), один long-poll на клиента (`409 poll_in_progress`), `ReadHeaderTimeout`, `wait_ms`/`limit` ограничены сверху; `say` ≤ 500 рун, имя 2–32 |
+| Retention логов бота | stdout → драйвер логов Docker `json-file` с `max-size=10m, max-file=3` (ротация по объёму, ADR-006 дополнение п. 5); «≤ 7 дней» — ориентир, логи без ПДн по построению — задача DevOps (NFR-041) |
 
 ### 11.2. Режимы `live | replay` и восстановление (C-14, ADR-003 п. 8)
 
 - Старт: открыть БД → миграции → `readmodel.LoadFromStateSnapshot` (`snapshots-{world}/state/latest.json` через `objstore`; нет объекта → пустая проекция, `/health.projection=missing`, worlds заполнятся из `entity.created`) → подписки с курсора **снапшота State** для проекции; побочные эффекты (outbox, turns, rounds, analytics) — только для событий с `offset > cursors[topic]` из `gateway.db` (два курсора: «проекция» и «эффекты»); `processed_events` — дедуп внутри окна.
-- `--mode=replay`: таймеры раундов, sweeper сессий/ходов, лизинг outbox не работают; `round.opened/closed`, `analytics.*` не публикуются (читаются); `Publish` действий харнесса разрешён (e2e подаёт действия). После конца журнала (`Bus` сигнализирует `EOF` в membus / lag=0 в Redpanda) — переключение в `live`.
+- `--mode=replay`: таймеры раундов, sweeper сессий/ходов, лизинг outbox не работают; `round.opened/closed`, `analytics.*` не публикуются (читаются); `Publish` действий харнесса разрешён (e2e подаёт действия). Признак «конца журнала» — `Journal.End(ctx, topic)` (C-01 v1.1, G-9 принято с изменением: отдельного `Bus.Lag()` нет): gateway читает через `Journal.ReadRange` от курсоров до `End` по каждому из четырёх читаемых топиков; когда по всем `позиция ≥ End − 1`, контекст переключается в `live` (подписки `Subscribe` с consumer-группой `gateway.consumer`, включение таймеров/sweeper'ов от `deadline_at`/`last_action_at`). Реализуют и `membus`, и kafka-адаптер — одна семантика (contract-тест F-5t).
 - Снапшот gateway (`snapshot` компонент): объект `snapshots-{world}/gateway/{ts}-{seq}.json` = `{cursors, projection_hash, active_sessions[], open_rounds[], laws_version}` + `snapshot.created component=gateway {snapshot{id, taken_at, cursor, laws_version, state_hash: projection_hash, size_bytes}}` — по `SIGTERM` и по каждому `analytics.session.ended`; хранить последние 5. Назначение — аудит (`mvctl session-report --audit`) и быстрая сверка проекции; истина для gateway — `gateway.db`.
 
-### 11.3. Конфигурация (env, через `shared/env`)
+### 11.3. Конфигурация (env, через `shared/env.Declare`; префикс `MV_` обязателен — `contracts.md` §16 п. 5, G-11/D-4)
+
+Все переменные объявляются манифестом `shared/env.Declare` в `internal/gateway/config.go` и `cmd/telegram-bot/internal/config`; CI сверяет `.env.example` с манифестом (NFR-074). Сторонние переменные без префикса в блоке не используются.
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `GATEWAY_LISTEN` | `127.0.0.1:8088` | адрес HTTP |
-| `GATEWAY_DATA_DIR` | `/var/lib/multiverse/gateway` | каталог `links.db`, `gateway.db` |
-| `GATEWAY_CLIENTS` | `telegram-bot:telegram:human;ci-harness:ci:ci,sim` | allow-list клиентов |
-| `GATEWAY_CORE_ADMIN_URL` | `http://core:8090` | прокси `/v1/admin/agents*` |
-| `GATEWAY_SESSION_IDLE` | `30m` | BR-17 |
-| `GATEWAY_TURN_TIMEOUT` | `60s` | `turn.completed status=timeout` |
-| `GATEWAY_ROUND_TIMEOUT` | `60s` | A-15 (до появления параметра в `encounter.started`, §14) |
-| `GATEWAY_ROUND_IDLE_AFTER_MISSED` | `2` | A-15 |
-| `GATEWAY_CHARACTER_WAIT` / `GATEWAY_CHARACTER_DEADLINE` | `2s` / `60s` | §7.1 |
-| `GATEWAY_FACT_WAIT` | `2s` | ожидание фактов для `group.*` |
-| `GATEWAY_DELIVERY_LEASE` / `GATEWAY_DELIVERY_TTL` | `30s` / `24h` | ADR-006 |
-| `GATEWAY_OUTBOX_INFLIGHT_PER_PLAYER` | `1` | §8.2 |
-| `GATEWAY_RATE_ACTIONS_PER_SEC` / `_BURST` | `2` / `5` | §5.1 |
-| `GATEWAY_ENCOUNTER_GRACE` | `10s` | `encounter_unavailable` |
-| `MODE` | `live` | `live\|replay` (общий флаг процесса, ADR-003) |
-| `TELEGRAM_BOT_TOKEN` | — (обязательна) | бот |
-| `BOT_GATEWAY_URL` | `http://127.0.0.1:8088` | бот → gateway |
-| `BOT_CLIENT_ID` | `telegram-bot` | `X-Client-Id` |
-| `BOT_ACTION_KEY_SALT` | производное от токена | §10.3 |
-| `BOT_POLL_TIMEOUT` / `BOT_DELIVERY_WAIT` | `25s` / `25s` | long polling / long-poll |
-| `BOT_DIALOG_TTL` | `15m` | состояние диалога |
-| `LOG_LEVEL` | `info` | оба процесса |
+| `MV_GATEWAY_LISTEN` | `127.0.0.1:8088` | адрес HTTP |
+| `MV_GATEWAY_DATA_DIR` | `/var/lib/multiverse/gateway` | каталог `links.db`, `gateway.db` (именованный том) |
+| `MV_GATEWAY_CLIENTS` | `telegram-bot:telegram:human;ci-harness:ci:ci,sim` | allow-list клиентов (в prod-`.env` — без `ci-harness`) |
+| `MV_CORE_URL` | `http://core:8090` | прокси `/v1/admin/*` к процессу `core` (C-06, D-7) |
+| `MV_GATEWAY_SESSION_IDLE` | `30m` | BR-17 |
+| `MV_GATEWAY_TURN_TIMEOUT` | `60s` | `turn.completed status=timeout` |
+| `MV_GATEWAY_ROUND_TIMEOUT` | `60s` | значение по умолчанию, если `encounter.started.round.timeout` отсутствует (C-05 v1.1) |
+| `MV_GATEWAY_ROUND_IDLE_AFTER_MISSED` | `2` | то же для `round.idle_after_missed` |
+| `MV_GATEWAY_CHARACTER_WAIT` / `MV_GATEWAY_CHARACTER_DEADLINE` | `2s` / `60s` | §7.1 |
+| `MV_GATEWAY_FACT_WAIT` | `2s` | ожидание фактов для `group.*` (далее `202 pending`) |
+| `MV_GATEWAY_DELIVERY_LEASE` / `MV_GATEWAY_DELIVERY_TTL` | `30s` / `24h` | ADR-006 |
+| `MV_GATEWAY_OUTBOX_INFLIGHT_PER_PLAYER` | `1` | §8.2 |
+| `MV_GATEWAY_RATE_ACTIONS_PER_MIN` / `MV_GATEWAY_RATE_ACTIONS_BURST` | `30` / `5` | §5.1, SEC-11 (стартовые значения) |
+| `MV_GATEWAY_INPUT_FILTER` | `noop` | точка вставки `InputFilter` (§5.4); иные значения в MVP-1 → ошибка старта |
+| `MV_GATEWAY_ENCOUNTER_GRACE` | `10s` | `encounter_unavailable` |
+| `MV_GM_PATH` | `agent` | `agent\|legacy`: при `legacy` `actions.publish` дополнительно издаёт `gm.created` (US-019/FR-014; один `if`, удаляется в EPIC-003 I2) |
+| `MV_MODE` | `live` | `live\|replay` (общий флаг процесса, ADR-003) |
+| `MV_LOG_LEVEL` | `info` | оба процесса |
+| `MV_TELEGRAM_BOT_TOKEN` | — (обязательна) | бот; только из `env_file` сервиса `telegram-bot` (профиль `bot`, `compose-lint`) |
+| `MV_TELEGRAM_ALLOWED_USER_IDS` | — (пусто = всем отказ) | allowlist Telegram user id через запятую (SEC-06, U-7) |
+| `MV_BOT_GATEWAY_URL` | `http://127.0.0.1:8088` | бот → gateway |
+| `MV_BOT_CLIENT_ID` | `telegram-bot` | `X-Client-Id` |
+| `MV_BOT_ACTION_KEY_SALT` | производное от токена | §10.3 |
+| `MV_BOT_RATE_COMMANDS_PER_MIN` | `20` | лимит команд на user id (SEC-11) |
+| `MV_BOT_POLL_TIMEOUT` / `MV_BOT_DELIVERY_WAIT` | `25s` / `25s` | long polling / long-poll |
+| `MV_BOT_DIALOG_TTL` | `15m` | состояние диалога |
 
 ### 11.4. `/health` и логи
 
@@ -927,13 +952,13 @@ C4Component
 | Подписка `game-service-group` на 5 топиков с `handleEvent`-заглушками | **переписать**: `consumer` с дедупом и курсорами; consumer-группа `gateway.consumer` (ADR-007 п. 6) | C-01 |
 | Публикация `player.moved`, `player.used_skill`, `gm.created` | **удалить**; `GM_PATH=legacy` в gateway (overview §19) публикует `gm.created` только при флаге на время профиля `legacy` — реализуется как один `if` в `actions.publish` и удаляется в EPIC-003 I2 | FR-014, S5 |
 
-Порядок: пакет `internal/gateway` создаётся с нуля в ветке `epic/EPIC-004-gateway`; `services/game-service` удаляется из индекса **той же веткой** после прохождения S9 (ownership.md: «переносить код, а не править на месте»). Данные as-is (`entities-*` с плоским payload) не мигрируются (overview §19).
+Порядок: пакет `internal/gateway` создаётся с нуля в ветке `epic/EPIC-004-gateway-bot`; `services/game-service` **переносится в `services/_archive/game-service/` с `ARCHIVED.md`** (решение пользователя U-1/OQ-A-17 — ничего не удалять) **той же веткой** после прохождения S9 (ownership.md: «переносить код, а не править на месте»; владелец переноса — EPIC-004). Данные as-is (`entities-*` с плоским payload) не мигрируются (overview §19).
 
 ---
 
-## 14. Запросы на изменение контрактов и замечания (к system-architect и BA)
+## 14. Запросы на изменение контрактов и замечания (история; решены на сведении A3 шаг 4)
 
-Все ниже — **совместимые** дополнения (новый код ошибки, новое опциональное поле, новый код ответа), кроме п. 6.
+Статус по `consolidation.md` §3 (G-1…G-11): п. 1–5 — **принято** (C-08 v1.1, C-05 v1.1, C-14 v1.1, ownership §1); п. 6, 7 — принято как уточнение семантики C-04, требования переданы BA (FR-025, BR-13); п. 8 — **принято** (ADR-006 дополнение п. 2: только личные чаты, общий чат — E-H); п. 9 — **принято с изменением** (`Journal.End()` вместо `Bus.Lag()`, §11.2). Дополнительно принят G-11: env с префиксом `MV_` (§11.3). Новых запросов на момент v0.2 нет. Таблица ниже сохранена как история; все ниже — **совместимые** дополнения (новый код ошибки, новое опциональное поле, новый код ответа), кроме п. 6.
 
 | # | Контракт | Суть | Совместимость | Потребители |
 |---|---|---|---|---|
@@ -954,7 +979,8 @@ C4Component
 | Уровень | Что | Где |
 |---|---|---|
 | unit (`-short`, без сети) | `actions.Validate` — табличный тест по всем строкам §1.4 и кодам §1.6; `rounds` с `FakeClock` (all_acted, timeout, explicit, idle после 2, смерть участника, replay без таймеров, restore); `outbox.Lease` — порядок на игрока, одна в лизинге, повтор после 30 с, drop без маршрута; `links` — consent неполный → `pending_consent`, forget каскад, uniqueness `player_id`; `session` — простой 30 мин, парность; `turns` — completed по последнему ack, timeout; `render.Mechanics` — golden-тексты; `api` — идемпотентность, `nolog`, rate limit, `openapi_test`; `commands.Parse` — словарь, синонимы, длины; `flow` — онбординг с `FakeUpdateSource`/`FakeSender` (совпадение с username, отказ, TTL) | пакеты блока |
-| integration (`//go:build integration`) | миграции `links`/`gateway` на временном файле (up с нуля, повторный up — no-op); `secure_delete`/forget физически (grep по файлу после `/forget` = 0); `consumer` против `testcontainers` Redpanda: дедуп дублей, курсоры, DLQ | `internal/gateway/store`, `consumer` |
+| unit (безопасность, SEC-03…12 — обязательны для MVP-1) | `access.Gate`: неизвестный user id → отказ, `links/resolve` не вызван (SEC-06); сообщение из группового чата → отказ, gateway не вызван (SEC-07); 21-я команда за минуту → отказ (SEC-11); `privacy.Redact`: строка ошибки с `bot123456:ABC…` не содержит токен, `409 Conflict` редактируется (SEC-08); `Sender`: `[x](http://…)`, `<a>`, `*` доставлены буквально (SEC-10); `api`: `413` на 65 КиБ, `429` на 31-е действие/мин, `409 poll_in_progress` на второй long-poll, `403 client_mismatch`, `route.external_id` не выдаётся клиенту другой платформы (SEC-11/12); тест миграций: список колонок `gateway.db` без `external*` (SEC-03) | `cmd/telegram-bot/internal/{access,privacy,sender}`, `internal/gateway/{api,store}` |
+| integration (`//go:build integration`) | миграции `links`/`gateway` на временном файле (up с нуля, повторный up — no-op); `secure_delete`/forget физически: `strings`-скан файла **и WAL** сразу после `/forget` = 0 (checkpoint+vacuum в том же вызове, SEC-04/05); `consumer` против `testcontainers` Redpanda: дедуп дублей, курсоры, DLQ, `Journal.End()` | `internal/gateway/store`, `consumer` |
 | e2e (`//go:build e2e`, один процесс `--contexts=all --mode=replay --bus=memory`) | `solo-30` через `testkit.Harness` + `FakeState` + `FakeNarrator`; `group-3x30` с явным `rounds/close` (три клиента `ci-harness` = три `external_id` платформы `ci`); `recovery` (10 ходов → рестарт контекста gateway в процессе → сессии/раунды/outbox сохранены, `identical=true`); `death`, `flee-fail`, `forget` (доставки после forget не выдаются); `privacy-scan` (регистрация с известным ID → grep по `gateway.db`, событиям membus, логам) | `shared/testkit/gateway`, `testdata/` |
 | e2e бота (детерминированный) | `FakeUpdateSource` подаёт сценарий обновлений (`/start` → согласие → имя → `/enter` → `/attack`…), `FakeSender` записывает исходящие; gateway — `testkit.FakeGateway` (in-process) или живой `--contexts=gateway` на membus; проверяются тексты, клавиатуры, `action_key` стабильность, ack, порядок сообщений | `cmd/telegram-bot/internal/flow`, `deliver` |
 | stand (не CI) | живой Telegram + стенд: S9 (сквозной соло-ход), NFR-003 замер `ack_latency_p95_ms` | ручной чек-лист |
@@ -972,3 +998,42 @@ C4Component
 3. `idle` хранится и как счётчик в `gateway.db` (`group_participation`), и предлагается в сущность `group` (`members[].participation`) — второе нужно механике (C-03 `NPCTarget` исключает `idle`), первое — источник для gateway; расхождение невозможно: gateway — единственный, кто предлагает `participation`.
 4. `GET /v1/players/{id}.session.turns_count` берётся из `sessions` gateway, не из State.
 5. Бот не хранит `cursor` доставок между рестартами (после рестарта — все не подтверждённые выдаются заново по лизингу; дубликат возможен только если ack не дошёл — приемлемо).
+6. `link_id` выдаётся при первом `links/resolve` (строка `pending_consent` создаётся до согласия): внешний ID допущенного allowlist-ом пользователя записывается в `links.db` в момент `/start`, до подтверждения; UC-001 E1 это допускает («связка остаётся `pending_consent`»), `/forget` удаляет и такую строку. Альтернатива (создавать строку только при `consent`) потребовала бы `link_id` без строки — отклонена.
+7. Выход из `replay` в `live` — по `Journal.End()` (C-01 v1.1); между чтением `End` и переключением возможен «хвост» новых событий — они придут через `Subscribe` с тем же дедупом `processed_events`, повторного применения нет.
+
+---
+
+## 17. Изменения v0.2 (после G2, по сведению 2026-09-09)
+
+| # | Источник | Что изменено | Где |
+|---|---|---|---|
+| 1 | U-7, T-1, SEC-06/07, ADR-006 доп. п. 1–2 | allowlist Telegram user id (`MV_TELEGRAM_ALLOWED_USER_IDS`) и только личные чаты; компонент `access.Gate` — первый шаг обработки `Update`; общий чат группы — E-H | §1, §3, §10.1–10.2, §11.1, §15 |
+| 2 | T-2, SEC-03, ADR-009 доп. п. 2, C-08 v1.1 | идемпотентность `POST /v1/characters` по суррогату `link_id` (ULID в `links.db`); `character_requests(link_id, action_key)`; `gateway.db` без `external_id` и без `link_id`; `link_id` выдаётся при первом `resolve` | §1, §2, §4.1–4.2, §5.2, §6, §7.1, §16 п. 6 |
+| 3 | T-12, SEC-11, ADR-009 доп. п. 7, C-08 v1.1 | rate limit 30 действий/мин burst 5 на `player_id` (вместо 2/с), 20 команд/мин на user id в боте, тело ≤ 64 КиБ → `413`, один long-poll на клиента → `409 poll_in_progress` | §3, §5.1, §8.3, §10.2, §11.1, §11.3 |
+| 4 | G-1…G-3, T-6, SEC-12, C-08 v1.1 | коды `403 client_unknown/client_mismatch/actor_kind_forbidden`, `409 no_open_round/already_acted`, `501 not_implemented`, `202 pending` для `group.*`, `character_status ∈ none\|creating\|alive\|dead`; `{client_id}` == `X-Client-Id`; `route.external_id` только своей платформе | §5.1, §5.2 |
+| 5 | G-11, D-4, `contracts.md` Env | все переменные — с префиксом `MV_`; `GATEWAY_CORE_ADMIN_URL` → `MV_CORE_URL`; `MODE` → `MV_MODE`; добавлены `MV_GATEWAY_INPUT_FILTER`, `MV_GM_PATH`, `MV_TELEGRAM_ALLOWED_USER_IDS`, `MV_BOT_RATE_COMMANDS_PER_MIN` | §11.3 (и упоминания по тексту) |
+| 6 | G-9 (ПИ), C-01 v1.1 | признак «конца журнала» — `Journal.End()`; описан переход `replay → live` | §11.2, §16 п. 7 |
+| 7 | T-4, SEC-08, ADR-006 доп. п. 3 | редакция токена бота в логах и ошибках (`privacy.Redact`), запрет `WithDebug`, тест | §3, §11.1, §15 |
+| 8 | T-11, SEC-10, ADR-006 доп. п. 4 | отправка без `parse_mode`; `Sender.Send` без параметра разметки | §3, §10.4, §11.1, §15 |
+| 9 | T-8, SEC-04/05, ADR-019 доп. п. 1 | `wal_checkpoint(TRUNCATE)` + `incremental_vacuum` сразу после `/forget` (sweeper — страховка); `auto_vacuum=INCREMENTAL` | §4.1, §6, §7.5 |
+| 10 | G-4, C-05 v1.1, ADR-020 доп. п. 1 | параметры раунда из `encounter.started.round{}`; env — значения по умолчанию | §9, §11.3 |
+| 11 | G-5, C-14 v1.1 | префикс `snapshots-{world}/gateway/` закреплён за EPIC-004 | без изменений текста (§11.2 уже соответствует) |
+| 12 | US-016/FR-056 (decomposition-review §5) | `InputFilter` описан явно как точка вставки: `FilterResult.Text` уходит в шину, реализация выбирается `MV_GATEWAY_INPUT_FILTER`; фильтр (a) на выходе — EPIC-003 | §2.1, §3, §5.4 |
+| 13 | US-019/FR-014 (decomposition-review §5) | `MV_GM_PATH` в gateway: `gm.created` при `legacy` | §11.3 (реализация — §13, строка «Публикация … gm.created») |
+| 14 | U-1, D-12 | `services/game-service` → `services/_archive/` вместо удаления; логи бота `10m × 3` | §11.1, §13 |
+| 15 | — | §14 переведён в историю с проставленными статусами; тесты безопасности SEC-03…12 добавлены в §15 | §14, §15 |
+
+---
+
+## Дополнение после сведения 3 (внесено tech-lead#1)
+
+Владелец документа — **architect#3**; текст разделов ниже **не переписан**. Это указатель на решения `architecture/consolidation.md` **§14** (замечания З-1…З-9 tech-lead#3) и `architecture/contracts.md` **v0.4** (C-02 v1.2, C-04 v1.1, C-08 v1.2, C-10 v1.1). Внесено tech-lead#1, потому что architect#3 в этой волне не запускался; при следующей ревизии architect#3 переносит решения в основной текст и снимает этот раздел.
+
+| Раздел документа | Что изменилось по сведению 3 | Основание |
+|---|---|---|
+| **§4.2** (`migrations/gateway/0001_init.sql`) | CHECK по `sessions.end_reason` — **`IN ('leave','idle','death','error','forget')`**; `forget` не является ошибкой (`error` = 0 в S-метриках) | З-1, C-10 v1.1; задача T-302 |
+| **§7.4** (лидерство в группе) | `Group.leader_id: ref \| null` и `GroupView.leader_id: string \| null`; при отсутствии `alive`-участников gateway предлагает `set leader_id = null` (тот же atomic-пакет) и публикует `group.leader_changed {leader: null, cause}`; `enter`/`leave` группы при `leader_id = null` → **`409 no_leader`** (проверяется раньше `not_leader`); личный `group.leave` допустим | З-4, C-04 v1.1, C-08 v1.2; задачи T-301, T-352 |
+| **§7.5** (`/forget`) и **§6** (`ForgetHooks`) | Обязательный порядок каскада: (1) `outbox.DropForPlayer`; (2) при `status=alive` — один `entity.update.proposed {atomic: true, cause: forget}` (`set status=abandoned` + при лидерстве `set leader_id`); (3) `group.left {cause: forget}` и при смене лидера `group.leader_changed {cause: forget}`; (4) `session.End(forget)` → `analytics.session.ended {end_reason: forget}`; (5) физическое удаление связки. `status=dead` — шаг (2) пропускается (FR-023); `creating` — предложение при `entity.created`. Во встрече gateway ничего дополнительно не публикует. `cause` в `group.left` — **`forget`**, а не `leave` | З-1, З-2, C-02 v1.2, C-04 v1.1; задачи T-314, T-355 |
+| **§5.6 / OpenAPI**, **§2** (проекции) | `GET /v1/worlds → worlds[].llm{cloud_enabled: boolean}` — **единственное** место флага облака (не `/v1/players/{id}`, не `Delivery kind=system`); источник — проекция последнего `config.cloud_enabled`, по умолчанию `false`, попадает в снапшот `gateway/`; без провайдера, URL и ключей (SEC-21); `409 character_dead` — и для `status=abandoned` | З-3, C-06 v1.1, C-08 v1.2; задачи T-301, T-320 |
+| **§11.3** (переменные окружения) | Новая переменная **`MV_TELEGRAM_CLOUD_FLAG_TTL`** (по умолчанию `60s`) — TTL кэша флага облака в боте; обновление на `/start`, `/help` и по TTL, уведомление один раз за сессию диалога. Имя allowlist — **`MV_TELEGRAM_ALLOWED_USER_IDS`** (канон, З-5); hot reload allowlist — невыполненный Should MVP-1, кандидат в EPIC-013 (З-6) | З-3, З-5, З-6 |
+| **§13** (ветка) | Каноническое имя ветки эпика — **`epic/EPIC-004-gateway`** (`plan/teams.md`); ссылка на `epic/EPIC-004-gateway-bot` в §13 подлежит правке при ревизии | З-7 |

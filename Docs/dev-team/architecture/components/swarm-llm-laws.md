@@ -1,6 +1,6 @@
 # Компоненты блока EPIC-003: рой GM, LLM-шлюз, страж, законы
 
-Версия 0.1 · 2026-09-09 · architect#2 (TEAM-2) · статус: к ревью system-architect#1 и tech-lead#1 (Flow A, A3 шаг 2).
+Версия 0.2 · 2026-09-09 · architect#2 (TEAM-2) · статус: утверждён на G2 в составе архитектуры; v0.2 — точечные правки по сведению (`architecture/consolidation.md` §4, §9) и решениям G2 (`journal.md`), сводка — **§20 «Дополнение после G2»**. Места, изменённые в тексте, помечены «(изм. G2)».
 Границы: `architecture/overview.md` Часть II (§11–§20), ADR-001…ADR-010, `contracts.md` (поставляем C-05, C-06, C-07, C-11, C-12, C-15; потребляем C-01, C-02, C-03, C-04, C-09, C-14), `plan/epics.md` EPIC-003 (I1/I2), `plan/ownership.md`. Требования: `prd.md` §5.13, FR-010…FR-018, FR-030…FR-046, FR-050…FR-056, FR-070…FR-072, FR-090…FR-092, FR-120…FR-128, BR-02, BR-05, BR-06, BR-08, BR-10, BR-14…BR-16; `nfr.md` §1, §3, §5–§7, §10; `use-cases.md` UC-004…UC-008, UC-016, UC-018…UC-026, UC-029, UC-030, UC-034; `api-contracts.md` §2, §3; `data-model.md` §4, §6–§8; `domain-review.md` §3.1; `metrics.md` §4.
 Решения уровня реализации — ADR-014 (планировщик), ADR-015 (формат блупринта v2 и валидатор), ADR-016 (парсер вывода LLM, язык, фильтр (a)), ADR-017 (страж и `reason`).
 
@@ -33,7 +33,7 @@ C4Component
         Component(pipe, "Pipeline + roles/*", "Go", "Phase 1 rules → Phase 2 narrative; tick-фаза; шаблоны деградации; Emitter с белыми списками")
         Component(ctxb, "context/", "Go", "WorldView (проекция entity.*), journalContext (окно журнала, индекс фона, присутствие), MemoryClient (C-09, деградация)")
         Component(snap, "Snapshot", "Go", "snapshots-{world}/swarm/{ts}-{seq}.json + latest.json; snapshot.created component=swarm")
-        Component(admin, "Admin HTTP :8090", "Go net/http", "GET /v1/admin/agents; POST /v1/admin/agents/{id}/tick; /health")
+        Component(admin, "Admin routes (изм. G2)", "Go net/http", "монтируются на HTTP-сервере процесса shared/runtime (MV_CORE_ADDR=127.0.0.1:8090): GET /v1/admin/agents; POST /v1/admin/agents/{id}/tick; GET /v1/admin/llm/usage; вклад в /health")
     }
     Container_Boundary(llm, "internal/llm") {
         Component(gw, "Gateway", "Go", "Generate(Call): бюджет → провайдер+повторы → парсер → язык → фильтр (a) → запись → страж")
@@ -87,7 +87,7 @@ C4Component
 ```
 internal/swarm/
   swarm.go            # Context: Start(ctx, deps) / Health(); сборка компонентов; режимы live|replay; фаза догона
-  runtime.go          # подписки (consumer-group core.swarm), дедуп (testkit.Dedup), маршрутизация в Router, курсор
+  runtime.go          # подписки (consumer-group core.swarm), дедуп (eventbus.Dedup — изм. G2), фаза догона через Journal.ReadRange, маршрутизация в Router, курсор
   registry.go         # BlueprintRegistry: LoadDir, Get, ByTrigger, ContentHash, Reload (I2: fsnotify → agent.blueprint_reloaded)
   scope.go            # ScopeIndex: solo/group → region → world; encounter → scope; обновляется из entity.*/group.*
   router.go           # Router: Match (спавн) + Deliver (доставка по уровням), см. §5
@@ -112,16 +112,16 @@ internal/swarm/
   template/
     ru.go             # шаблоны деградации: turn/round/entry/death/world_event/encounter (generated_by=template)
   snapshot.go         # SwarmSnapshot: сериализация/восстановление; snapshot.created component=swarm
-  admin.go            # HTTP :8090 — /v1/admin/agents, /v1/admin/agents/{id}/tick, /health (agents_by_level, llm)
+  admin.go            # (изм. G2) маршруты /v1/admin/agents, /v1/admin/agents/{id}/tick — монтируются на mux shared/runtime (MV_CORE_ADDR); Health() отдаёт agents_by_level в /health процесса
   *_test.go
 
 internal/llm/
   gateway.go          # Gateway.Generate(ctx, Call) (Result, error); ErrUnavailable/ErrBudget/ErrQuarantined/ErrInvalid
   types.go            # Provider, Request, Response, Params, Phase, Call, Result, Rejection, ValidationStatus (C-15)
-  config.go           # LLM_PROVIDER, таймауты фаз, LLM_CLOUD_*, LLM_PROMPT_STORE, таблица цен
+  config.go           # MV_LLM_PROVIDER, таймауты фаз, MV_LLM_CLOUD_*, MV_LLM_STORE_PROMPTS, таблица цен (env через shared/env.Declare — изм. G2)
   budget.go           # Budget: окна (world, level, phase, provider); облачный денежный лимит
   record.go           # Recorder: llm.output / llm.output.rejected / content.incident.recorded (Derive от cause)
-  usage.go            # агрегаты для mvctl llm usage и /v1/admin/llm/usage
+  usage.go            # агрегаты для mvctl llm usage и /v1/admin/llm/usage (маршрут монтируется на mux shared/runtime — изм. G2)
   providers/
     registry.go       # providers.Registry: Register(name, factory); New(name, cfg)
     ollama/client.go  # native /api/chat, /api/embed; format=schema, think, keep_alive, options.num_ctx; токены из eval_count
@@ -180,11 +180,16 @@ schemas/events/   (типы, которыми владеет EPIC-003, v1)
 config/
   absolute-limits.yaml
 shared/testkit/swarm/
-  fake_narrator.go    # testkit.FakeNarrator (C-05 заглушка для EPIC-004)
-  recording_writer.go # testkit.RecordingWriter (C-07)
+  fake_narrator.go    # testkit.FakeNarrator (C-05 заглушка для EPIC-004; v0 создаёт F-10, реализация — EPIC-003 I1a)
+  fake_encounter.go   # (изм. G2) testkit.FakeEncounter — Phase 1 боя на mechanics.Rules/FixedMechanics без роя: combat.decided/dice.rolled/entity.update.proposed для точки I1-α (см. design.md §4.1)
+  recording_writer.go # testkit.RecordingWriter (C-07) — EPIC-003 I1a вместе с `cmd/mvctl/internal/record` (изм. G2)
+cmd/mvctl/internal/
+  record/             # (изм. G2) `mvctl record --scenario … --out testdata/recordings/<s>.jsonl` — только actor_kind=ci (SEC-23)
+  blueprint/          # `mvctl blueprint validate <dir>` — вызывает agent.Validate (код валидатора — shared/agent)
+  laws/               # `mvctl laws bump|show`
 testdata/
-  recordings/{solo-30,group-3x30,background-6h,death,flee-fail,injections-10}.jsonl
-  llm/preamble/*.txt  golden/*.json
+  recordings/{solo-30,group-3x30,background-6h,death,flee-fail,injections-10,recovery}.jsonl   # владелец EPIC-003 (изм. G2)
+  llm/preamble/*.txt  golden/*.json (эталоны golden — совместно с EPIC-005 005-ops)
 ```
 
 ---
@@ -203,10 +208,13 @@ type Deps struct {
     Laws      laws.Service                 // §12
     Mechanics *mechanics.Rules             // C-03 (или testkit.FixedMechanics)
     Memory    swarmctx.MemoryClient        // C-09 (NopMemory при отсутствии/replay)
-    Clock     replay.Clock                 // ADR-003 п. 6
+    Journal   eventbus.Journal             // (изм. G2) C-01 v1.1: догон с курсора снапшота ReadRange(cursor…End)
+    Clock     clock.Clock; Timers clock.Timers // (изм. G2) shared/clock (C-01 v1.1); в replay — EventClock/NullTimers от cmd/multiverse
+    HTTP      runtime.Mux                  // (изм. G2) mux HTTP-сервера процесса (shared/runtime, MV_CORE_ADDR) — swarm/llm монтируют /v1/admin/*
     Mode      Mode                         // ModeLive | ModeReplay
-    Config    Config                       // BlueprintsDir, WorldIDs, AdminAddr, SnapshotEveryEvents, GMPath
+    Config    Config                       // BlueprintsDir, WorldIDs, SnapshotEveryEvents (AdminAddr удалён — адрес принадлежит процессу)
 }
+// Фактический тип — runtime.Deps (foundation §4); поля выше — подмножество, которое использует контекст swarm.
 
 // Поведение роли (реализации в roles/*)
 type Behaviour interface {
@@ -307,8 +315,8 @@ func ContentHash(bp *AgentBlueprint) string
 
 | Роль (`role`) | Уровень | Блупринт | Scope экземпляра | Спавн | Стоп | Фазы | LOD MVP-1 |
 |---|---|---|---|---|---|---|---|
-| `global-gm` | `global` | `global-dark-forest-world` | `world:{world_id}` | старт мира (`mvctl world init` / `Start`) | никогда (`ttl` игнорируется с предупреждением) | tick (60 мин idle) | `basic` → `rule-only` при бюджете |
-| `region-gm` | `domain` | `domain-dark-forest` (по одному на регион) | `region:{region_id}` | старт мира | никогда | tick (30 мин idle / 60 с active), обнаружение встреч (rules), Phase 1 — нет | `basic` → `rule-only` |
+| `global-gm` | `global` | `global-dark-forest-world` | `world:{world_id}` | `swarm.Start` — для каждого блупринта `global` с `scope_binding.id` (сущности мира — из фикстур `mvctl world init --fixtures`, не из блупринта — изм. G2) | никогда (`ttl` игнорируется с предупреждением) | tick (60 мин idle) | `basic` → `rule-only` при бюджете |
+| `region-gm` | `domain` | `domain-dark-forest` (по одному на регион) | `region:{region_id}` | `swarm.Start` — для каждого блупринта `domain`; регион и его NPC должны существовать в `WorldView` (фикстуры); при отсутствии сущности региона агент стартует, но `/health degraded {swarm: region_missing}` (изм. G2) | никогда | tick (30 мин idle / 60 с active), обнаружение встреч (rules), респаун по `npc_table` (только респаун — изм. G2), Phase 1 — нет | `basic` → `rule-only` |
 | `encounter` | `task` | `encounter-wolf` | scope игрока/группы (`solo:…`/`group:…`) | `encounter.started` | `encounter.ended` → `agent.child_resolved` + `agent.stopped`; страховочный TTL 30 мин | Phase 1 `rules` | `rule-only` |
 | `personal-gm` | `task` | `player-gm` | `solo:{player_id}` (и в группе) | первое `player.*` scope без живого агента | TTL 45 мин от последнего действия игрока; `agent.stopped reason=ttl` | Phase 2 (`turn|entry|death|world_event`) | `basic`; в группе — `rule-only` (только `entry|death`) |
 | `group-narrator` | `task` | `group-narrator` | `group:{group_id}` | `group.created` | `group.disbanded` или TTL 45 мин от последнего действия любого участника | Phase 2 (`round`) | `basic` |
@@ -354,7 +362,7 @@ type AgentInstance struct {
   "state_hash": "sha256:…", "size_bytes": 18432 }
 ```
 
-Триггеры снапшота: после каждого тика, при изменении состава агентов, каждые `SWARM_SNAPSHOT_EVERY_EVENTS=200` обработанных событий, по `SIGTERM`; хранится `K=5`. `snapshot.created {component: swarm, …}` публикуется после PUT. Восстановление: `latest.json` → проверка `state_hash` → чтение топиков с `cursor` в фазе догона (§7.6) → `analytics.replay.completed` публикует State (C-14); рой пишет строку в лог `catch_up_done events=N`.
+Триггеры снапшота: после каждого тика, при изменении состава агентов, каждые `MV_SWARM_SNAPSHOT_EVERY_EVENTS=200` обработанных событий, по `SIGTERM`; хранится `K=5` (ротация в коде, не зависит от bucket versioning — ADR-021). `latest.json` — **указатель** (метаданные + `key` объекта, C-14 v1.1), пишется после успешного PUT объекта. `snapshot.created {component: swarm, …}` публикуется после PUT. Восстановление (изм. G2, C-01 v1.1/C-14 v1.1): ждать `analytics.replay.completed mode=recovery` от State → прочитать `snapshots-{world}/state/latest.json` → объект (WorldView) → свой `latest.json` → проверка `state_hash` → фаза догона: `Journal.ReadRange(topic, cursor[topic], End(topic))` по каждому читаемому топику без consumer group, без эмиссии (агенты восстанавливаются из `agent.*`, вызовы LLM — из `llm.output`, тики — из `tick.fired`); «конец журнала» = позиция ≥ `End − 1` по всем топикам → переход в `live` (`Subscribe` с consumer-group `core.swarm`); лог `catch_up_done events=N`. Нет снапшота при пустом журнале — первый запуск (`agent.spawned` для global/domain); нет снапшота при непустом журнале — `/health fail {snapshot: missing}` (UC-025 E1), не стартуем с пустым состоянием молча.
 
 ---
 
@@ -364,7 +372,7 @@ type AgentInstance struct {
 
 ```
 Route(ev):
-  1. dedup: testkit.Dedup по ev.ID (LRU 10k + курсор снапшота) → повтор игнорируется (NFR-013)
+  1. dedup: eventbus.Dedup по ev.ID (production-пакет C-01 v1.1; LRU 10k, сериализуется в снапшот роя) → повтор игнорируется (NFR-013); схема события уже проверена библиотекой при чтении (MV_BUS_VALIDATE_ON_READ) — изм. G2
   2. legacy-фильтр: типы с пометкой deprecated/gm_path=legacy (gm.*, narrative.generate, time.syncTime, player.moved, player.used_skill) → игнор
   3. проекции: WorldView.Apply(ev) для entity.*; ScopeIndex.Apply(ev) для entity.*/group.*/encounter.*; journal.Observe(ev) (все типы); budget.Observe(ev) для llm.output; presence.Observe(ev) для player.*
   4. спавн: for bp in Match(ev): scope := bindScope(bp, ev); inst, spawned := Lifecycle.Ensure(bp, scope, ev)
@@ -479,6 +487,8 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 
 В `solo` (I1): `player.attacked` → Phase 1 атаки игрока (`causeEventID = player.attacked.id`, `rollIndex 0..1`) → ответ NPC тем же событием-причиной (`rollIndex 2..3`) → `combat.decided` ×2 → одно `entity.update.proposed atomic`.
 
+(изм. G2, C-05 v1.1 / C-11 v1.1) `encounter.started` публикует **`region-gm`** (UC-006 шаг 4) и включает `round{timeout, idle_after_missed}` из блупринта дочерней встречи (`encounter.child_blueprint` → `encounter-wolf.round`, значения по умолчанию `60s`/`2`); gateway использует их для таймера раунда (I2). Агент `encounter` при спавне читает те же значения из своего блупринта — источник один.
+
 ### 8.4. Деградация (BR-14, FR-015)
 
 `Gateway.Generate` вернул `ErrUnavailable | ErrBudget | ErrInvalidAfterRetries | ErrQuarantined | ErrFilter` → роль строит текст шаблоном `template/ru.go` из `WorldView` и событий причины (`generated_by: template`, `fallback_reason: unavailable|timeout|invalid_after_retries|budget|filter_blocked|filter_error|language|restart`), помечает «упрощённый режим»; тики — `rule-only`. Рестарт между Phase 1 и Phase 2 (UC-025 A1): при догоне для `combat.decided` без `narrative.output` с тем же `correlation_id` — если `llm.output` записан → нарратив из записи; иначе шаблон с `fallback_reason=restart` (публикуется после выхода из догона).
@@ -496,7 +506,7 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 | `providers/recorded` | чтение `testdata/recordings/*.jsonl` или журнала `llm_records` | ключ `(meta.correlation_id, meta.agent.id, phase, attempt)`; промах → `ErrIncompleteRecord` (в `mode=replay` тест падает, в recovery — шаблон с пометкой) |
 | `providers/fake` | in-memory таблица `(phase, matcher) → Response` | счётчик вызовов для NFR-014/NFR-053; генератор записей через `testkit.RecordingWriter` |
 
-`providers.Registry`: `Register("ollama", factory)`; выбор `LLM_PROVIDER` (по умолчанию `ollama`); модель — из `Call.Model` (блупринт на фазу), не из env.
+`providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `ollama`); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` при старте публикует `config.cloud_enabled {by: operator, provider, allow_external_players}` только если `MV_LLM_CLOUD_ENABLED=true` (без ключей и их фрагментов).
 
 ### 9.2. Конвейер `Generate` (порядок побочных эффектов — ADR-005 п. 2)
 
@@ -504,7 +514,7 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 Generate(call):
   0. replay-режим: provider = recorded (шаги 2–5 читают запись; запись llm.output не издаётся, meta.replay=true при пробросе)
   1. budget.Allow(world, level, phase, provider) → нет → publish llm.output.rejected{reason: budget_exceeded, budget{kind,limit,window}} → ErrBudget (без вызова)
-  2. prompt.Build(call.Prompt) → system, user, prompt_hash (SHA-256); по флагу LLM_PROMPT_STORE=true → prompts-{world}/{cid}/{agent}/{phase}-{attempt}.txt
+  2. prompt.Build(call.Prompt) → system, user, prompt_hash (SHA-256); по флагу MV_LLM_STORE_PROMPTS=true → prompts-{world}/{cid}/{agent}/{phase}-{attempt}.txt
   3. for attempt := 1; attempt <= 1+retries; attempt++ :
        resp, err := provider.Generate(ctx(timeout фазы), req)        # ошибка/таймаут → status=error, повтор при временной ошибке, иначе → ErrUnavailable
        value, strategy, perr := parser.Parse(resp.Content, schema)   # ADR-016; perr → status=invalid(schema_invalid) → retry
@@ -584,7 +594,7 @@ Read-only проекция сущностей мира: `map[entityID]Entity{ID,
 - `BackgroundIndex`: на `(world)` и `(region)` — события `world.*`, `region.*`, `npc.*` с `meta.actor_kind=system` за `SWARM_BACKGROUND_INDEX_TTL=30d` (≤ ~3 000 записей/мир при B=4).
 - `Presence`: `player_id → {last_seen_at, region}` из `player.*` (последняя активность).
 - `Absence(player, region, now)`: если `last_seen_at` есть и `now − last_seen_at ≥ 30 мин` (или это первый `enter` после `left_region`) → `since_at = last_seen_at`, события = `BackgroundIndex(world) ∪ BackgroundIndex(region)` в `(since_at, now]`, отсортированы по `at`, лимит 20 последних (остальное — счётчик). Итог: `absence{since_at, background_events_count}` + `background_refs[]` кандидаты (страж пропускает в `narrative.output` только те `background_refs`, что были в контексте).
-- Всё персистится в снапшоте роя (§4.3) и восстанавливается при догоне; отдельного чтения журнала по времени не требуется (ограничение C-01: `Bus` без range-чтения).
+- Всё персистится в снапшоте роя (§4.3) и восстанавливается при догоне; чтения журнала **по времени** не требуется (изм. G2: `Journal` C-01 v1.1 даёт диапазон по офсетам — используется для догона, не для сводки; сводка фона по-прежнему из индекса роя).
 
 ### 11.3. memoryContext (C-09)
 
@@ -694,6 +704,7 @@ type AgentBlueprint struct {
 | 5 | `ttl` у `global/domain` | warning |
 | 6 | `constraints.max_instances == 1` для `global/domain/personal-gm/group-narrator` | error |
 | 7 | `llm`: фазы, используемые ролью, имеют `model` (кроме `phase1.mode=rules`); `schema_ref` ∈ `env.Schemas`; `temperature ∈ [0,2]`; `max_tokens > 0`; `fallback` задан; модель не из списка `qwen:7b|qwen:72b` (NFR-071) | error |
+| 7а (изм. G2) | модель ∈ `env.Models` (список `Provider.Models()` выбранного `MV_LLM_PROVIDER`, C-11 v1.1/SEC-21); блупринт не содержит поля провайдера (неизвестный ключ `provider` → error по `KnownFields`). Если `env.Models == nil` (провайдер недоступен, CLI `--offline`) — проверка пропускается с `info: models not checked` | error (CLI с доступным провайдером) / **warning** в рантайме: агент активируется, `/health degraded {llm: model_missing}`, вызовы уходят в шаблон до появления модели |
 | 8 | `allowed_event_types` ⊂ `env.EventTypes` ∩ `levels.AllowedEventTypes(level, role)`; `owned_entity_types` ⊂ `levels.OwnedEntityTypes(level, role)` | error |
 | 9 | `tools[].name` ∈ `env.Tools` (MVP-1: пусто → любой `tools` — error) | error |
 | 10 | `laws_ref` (global/domain) и `rules_ref` (domain/encounter) существуют (`env.FileExists`); `absolute_limits_ref` (personal-gm/group-narrator/encounter) существует | error |
@@ -715,6 +726,8 @@ type AgentBlueprint struct {
 - `group-narrator.md` — `level: task`, `role: group-narrator`, `scope_binding: {type: group, pattern: "group:*"}`, `parent: {name: region-gm, instance: dynamic}`, `trigger: {type: event, event_name: group.created}`, `ttl: 45m`, `llm.phase2` как у `player-gm`, `retries: 2`, `fallback: template`, `allowed_event_types: [narrative.output]`, `owned_entity_types: []`, `absolute_limits_ref`; секции `## system` («описываешь раунд для всей группы; каждый участник назван по имени; числа механики — истина»), `## phase2`.
 
 Модель на фазу — параметр блупринта: замена конфигурации A/B/C/D матрицы (overview §18.1) = правка YAML.
+
+**(изм. G2) Модели по OQ-A-18 (U-2)**: стартовая конфигурация блупринтов — **C, одна `qwen3:30b-a3b`** во всех фазах с LLM (`player-gm.llm.phase2.model`, `group-narrator.llm.phase2.model`, `global-*.llm.tick.model`, `domain-*.llm.tick.model`); Phase 1 везде `mode: rules` (модель не нужна). Если матрица F-8 (`ops/metrics/baseline.md`) не подтверждает NFR-002/NFR-090 — запасная **A: `qwen3:8b` для `tick`, `qwen3:14b` для `phase2`**. Переключение — правка пяти YAML-полей без кода; в блупринтах строка `# model: per ops/metrics/baseline.md (OQ-A-18)` рядом с полем. Валидатор 7а гарантирует, что модель есть у провайдера. Замена B/D — только материал замера.
 
 ### 13.4. Схемы `schemas/agent/`
 
@@ -748,7 +761,16 @@ categories:
 
 Объекты MinIO (`shared/objstore/buckets.go`): `snapshots-{world}/swarm/*` (владелец EPIC-003), `prompts-{world}/*` (по флагу `LLM_PROMPT_STORE`, retention — задача DevOps).
 
-Переменные окружения блока (документируются в `.env.example`, NFR-074): `SWARM_BLUEPRINTS_DIR=blueprints`, `SWARM_ADMIN_ADDR=127.0.0.1:8090`, `SWARM_LLM_WORKERS=1`, `SWARM_BACKGROUND_QUIET=5s`, `SWARM_BACKGROUND_MAX_WAIT=30s`, `SWARM_SNAPSHOT_EVERY_EVENTS=200`, `SWARM_MAX_AGENTS=64`, `SWARM_MONITOR_AGENTS_ENABLED=false`, `SWARM_OBJECT_AGENTS_ENABLED=false`, `LLM_PROVIDER=ollama`, `OLLAMA_URL`, `LLM_KEEP_ALIVE=-1`, `LLM_NUM_CTX=8192`, `LLM_TIMEOUT_NARRATIVE=20s`, `LLM_TIMEOUT_TICK=30s`, `LLM_TIMEOUT_DECISION=5s`, `LLM_TIMEOUT_DEGRADED=3s`, `LLM_LATIN_MAX_RATIO=0.10`, `LLM_PROMPT_STORE=false`, `LLM_CLOUD_ENABLED=false`, `LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false`, `LLM_CLOUD_BUDGET_USD_PER_DAY`, `LLM_TURN_CALLS_PER_MIN=0`, `LAWS_DIR=laws`, `LAWS_BREACH_PHASE_ENABLED=false`, `MEMORY_URL` (пусто = деградация), `GM_PATH=agent` (читает gateway; `core` пишет в `combat.decided.gm_path`/`llm.output.gm_path` значение из `meta.gm_path` события-причины).
+Переменные окружения блока (изм. G2: **все с префиксом `MV_`**, объявляются через `shared/env.Declare` в пакете-владельце; сверка с `.env.example` в CI, NFR-074). Во всех разделах выше имена `SWARM_*`, `LLM_*`, `LAWS_*`, `MEMORY_URL`, `GM_PATH`, `OLLAMA_URL` читать как `MV_SWARM_*`, `MV_LLM_*`, `MV_LAWS_*`, `MV_MEMORY_URL`, `MV_GM_PATH`, `MV_OLLAMA_URL`:
+
+| Пакет-владелец | Переменные (значение по умолчанию) |
+|---|---|
+| `internal/swarm` | `MV_SWARM_BLUEPRINTS_DIR=blueprints`, `MV_SWARM_LLM_WORKERS=1`, `MV_SWARM_BACKGROUND_QUIET=5s`, `MV_SWARM_BACKGROUND_MAX_WAIT=30s`, `MV_SWARM_SNAPSHOT_EVERY_EVENTS=200`, `MV_SWARM_MAX_AGENTS=64`, `MV_SWARM_BACKGROUND_INDEX_TTL=720h`, `MV_SWARM_MONITOR_AGENTS_ENABLED=false`, `MV_SWARM_OBJECT_AGENTS_ENABLED=false`, `MV_MEMORY_URL` (пусто = `journalContext`) |
+| `internal/llm` | `MV_LLM_PROVIDER=ollama`, `MV_OLLAMA_URL=http://ollama:11434`, `MV_LLM_KEEP_ALIVE=-1`, `MV_LLM_NUM_CTX=8192`, `MV_LLM_TIMEOUT_NARRATIVE=20s`, `MV_LLM_TIMEOUT_TICK=30s`, `MV_LLM_TIMEOUT_DECISION=5s`, `MV_LLM_TIMEOUT_DEGRADED=3s`, `MV_LLM_LATIN_MAX_RATIO=0.10`, `MV_LLM_STORE_PROMPTS=false` (имя по ADR-005 доп. п. 1; ранее `LLM_PROMPT_STORE`), `MV_LLM_CLOUD_ENABLED=false`, `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false`, `MV_LLM_CLOUD_BUDGET_USD_PER_DAY`, `MV_LLM_TURN_CALLS_PER_MIN=0`, ключи `MV_OPENAI_API_KEY`/`MV_DEEPSEEK_API_KEY`/`MV_ANTHROPIC_API_KEY` (E-H), `MV_LLM_PRICES=config/llm-prices.yaml` |
+| `internal/laws` | `MV_LAWS_DIR=laws`, `MV_LAWS_BREACH_PHASE_ENABLED=false` |
+| `shared/runtime` (EPIC-001), не блок | **`MV_CORE_ADDR=127.0.0.1:8090`** — адрес HTTP-сервера процесса `core`; `SWARM_ADMIN_ADDR` **упразднён**: контексты `swarm`/`llm` только монтируют маршруты `/v1/admin/agents*`, `/v1/admin/llm/usage` на `runtime.Mux`; gateway проксирует по `MV_CORE_URL` (C-06). `MV_BUS_VALIDATE_ON_READ=true` — валидация схем при чтении подписок роя (невалидное → `dead_letters`, handler не вызывается) |
+| gateway (EPIC-004), не блок | `MV_GM_PATH=agent` — читает gateway; `core` копирует `meta.gm_path` события-причины в `combat.decided.gm_path`/`llm.output.gm_path` |
+| сторонние (без префикса) | `OLLAMA_KEEP_ALIVE`, `OLLAMA_MAX_LOADED_MODELS=2`, `OLLAMA_NUM_PARALLEL=1` — переменные контейнера Ollama (compose, EPIC-001) |
 
 ---
 
@@ -897,9 +919,13 @@ sequenceDiagram
 | I1-2 | `shared/agent`: удаление файлов §2, расширение типов, новый парсер/валидатор; `examples/domain-dark-forest.md` → `blueprints/domain-dark-forest.md` (переписан под v2) | `shared/agent`, `blueprints/` |
 | I1-3 | `gm_path` пишется в `combat.decided`, `llm.output` из `meta.gm_path` события-причины; сравнение нарративов legacy/agent — `mvctl session-report` по `gm_path` | `swarm/emitter.go`, `llm/record.go` |
 | I2-1 | `group-narrator`, раунд в `encounter`, `MemoryClient` к EPIC-005, `agent.blueprint_reloaded` | `roles/`, `context/memory.go`, `registry.go` |
-| I2-2 (последняя задача EPIC-003 I2, после зелёного S2) | удалить `services/narrative-orchestrator`, профиль `legacy`, deprecated-типы из реестра, флаг `GM_PATH` (S5) | compose, `shared/contracts` (через system-architect) |
+| I2-2 (последняя задача EPIC-003 I2, после зелёного S2) | (изм. G2, U-1/D-3) перенести `services/narrative-orchestrator` **и** `services/semantic-memory` as-is в `services/_archive/` с `ARCHIVED.md` (ничего не удалять), убрать профиль `legacy` (вместе с `chromadb`) из compose, deprecated-типы из реестра, флаг `MV_GM_PATH` (S5) | compose, `shared/contracts` (через system-architect), `services/_archive/` |
 
-Данные as-is (`entities-{world}` с плоским payload, снапшоты GM в MinIO) не мигрируются; мир создаётся `mvctl world init --blueprints blueprints/` (EPIC-005; логика инициализации — `swarm.InitWorld(bp…)` публикует `entity.create.proposed` для мира/регионов/NPC из `npc_table`).
+Данные as-is (`entities-{world}` с плоским payload, снапшоты GM в MinIO) не мигрируются.
+
+**(изм. G2) Инициализация мира — только из фикстур** (`epics.md` §2, решение G2): источник истины на MVP-1 — `testdata/fixtures/{world,region,npc,players}.json`, загружаемые `internal/state/bootstrap.go` через `mvctl world init --fixtures` (EPIC-002 I1). `swarm.InitWorld(bp…)` **не реализуется**, `mvctl world init --blueprints` — вне MVP-1 (кандидат в EPIC-011). `npc_table` блупринта региона — **производный** механизм: `region-gm` использует его только для респауна (`respawn_ttl`, `npc.spawned` с новым `entity_id` + `entity.create.proposed` типа `npc`, `stats_ref` → `rules/dark-forest.yaml`). Тест согласованности (I1b, `roles/region_gm_test.go`): каждая запись `npc_table` имеет `stats_ref` в `rules/dark-forest.yaml` и `kind`, присутствующий среди типов NPC фикстур; регион блупринта (`scope_binding.id`) есть в `testdata/fixtures/region.json`. Следствие для S6 («второй регион без Go»): новый регион = `blueprints/domain-<region>.md` + запись региона и его NPC в фикстурах (данные, не код) + при необходимости строки в `laws`/`rules`.
+
+Профиль `legacy` (D-3): as-is `narrative-orchestrator` + `semantic-memory` (:8083) + `chromadb` живут в compose-профиле `legacy` до S5; рой при `MV_GM_PATH=legacy` игнорирует deprecated-типы, `gm_path` в `combat.decided`/`llm.output` берётся из `meta.gm_path`. Запасной критерий S5 (если профиль нежизнеспособен, решение до старта волны 1, F-6): «флаг удалён, `gm_path=agent` в 100 % `llm.output`» без сравнения нарративов.
 
 ---
 
@@ -914,7 +940,8 @@ sequenceDiagram
 | integration (`-tags integration`) | подписка/дедуп/DLQ через testcontainers Redpanda; снапшот роя в MinIO (versioning); догон с курсора | `internal/swarm/integration_test.go` |
 | e2e (`-tags e2e`) | `cmd/multiverse --contexts=all --mode=replay --bus=memory --recording=testdata/recordings/<s>.jsonl`: `solo-30` (S1), `group-3x30` (S2, I2), `background-6h` (S14, admin-тики; проверка ≤ B), `death`, `flee-fail`, `injections-10` (0 `entity.updated` от нарратива, 0 `world.law_breach.proposed`), `recovery` (рестарт контекстов → `llm_calls=0`, `identical=true`), `degraded` (fake-провайдер возвращает ошибку → 100 % шаблонов) | `test/e2e/` |
 | golden (NFR-065) | 20 ходов + 3 тика: эталоны `testdata/golden/*.json` (схема, язык, числа механики в тексте не противоречат `combat.decided`, фильтр pass) | `internal/llm/golden_test.go` |
-| фикстуры | записи создаются `mvctl record` (EPIC-005) на GPU-стенде через `testkit.RecordingWriter`; обновление — осознанная задача с ревью диффа | `testdata/recordings/` |
+| фикстуры (изм. G2) | записи создаются **`mvctl record` (EPIC-003 I1a, `cmd/mvctl/internal/record`)** на GPU-стенде через `testkit.RecordingWriter`; ключ записи `(correlation_id, agent.id, phase, attempt)` не зависит от текста промпта; **принимаются только сессии `meta.actor_kind=ci` с фикстурными `player-A/B/C`** — событие с `actor_kind=human` в сценарии → отказ (SEC-23, ADR-010 доп. п. 1); `testdata/recordings/*.jsonl merge=binary` (текстовый diff сохраняется); CI `privacy-scan` сканирует `testdata/`; обновление — осознанная задача с ревью диффа нарративов | `testdata/recordings/` (владелец EPIC-003) |
+| golden (изм. G2) | эталоны `testdata/golden/*.json` — только из записей `actor_kind=ci`; набор собирает EPIC-005 005-ops из записей EPIC-003; тест `internal/llm/golden_test.go` — EPIC-003 | `testdata/golden/` |
 | nightly-gpu | матрица §18.1 overview; `phase2 p95`, `valid_first_try`, язык; результат в `ops/metrics/baseline.md` и модели в блупринтах | стенд |
 
 Покрытие ≥ 60 % по `internal/{swarm,llm}` (NFR-064) — контроль в job `unit`.
@@ -924,4 +951,42 @@ sequenceDiagram
 ## 19. Трассировка и допущения
 
 - FR-010/012/013/016/037/120…128 → §4, §5, §7, §8; FR-014 → §17; FR-015 → §8.4; FR-018/BR-05 → схема `narrative.json` без действий + Emitter; FR-032/034 → §9.2, §10; FR-040/045/BR-02 → §12; FR-050/051/055/056 → §9.2, §11.4, §13.5 (`InputFilter` — gateway, EPIC-004); FR-070…072 → §9.1, §9.3; FR-090…092 → §13, §11.4 (`prompt_hash` в `llm.output`), `mvctl blueprint validate` (валидатор — здесь, команда — EPIC-005).
-- Допущения: (1) `Bus` C-01 не даёт чтения по диапазону времени — сводка фона строится из индекса роя в снапшоте; (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) стартовые модели в блупринтах — до `baseline.md`; (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
+- Допущения: (1) `Journal` C-01 v1.1 даёт чтение по офсетам, не по времени — сводка фона строится из индекса роя в снапшоте (принято к сведению, W-6); (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) стартовые модели в блупринтах — C (`qwen3:30b-a3b`) до `baseline.md`, запасная A (§13.3); (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
+
+---
+
+## 20. Дополнение после G2 (2026-09-09) — сводка правок v0.2
+
+Основание: `architecture/consolidation.md` §4 (W-1…W-6), §6 (T-5, T-7, T-9, T-10), §7 (D-3, D-4, D-7), §9; `journal.md` (решения G2); `contracts.md` v0.2; `plan/epics.md` v0.2 §2. Детальный дизайн инкрементов — `epics/EPIC-003-swarm-llm-laws/design.md`.
+
+| # | Решение сведения / G2 | Что изменено в этом документе | Где |
+|---|---|---|---|
+| 1 | Префикс `MV_` для всех платформенных env (D-4, W-3) | таблица переменных по пакетам-владельцам; `LLM_PROMPT_STORE` → `MV_LLM_STORE_PROMPTS`; `OLLAMA_URL` → `MV_OLLAMA_URL`; сторонние `OLLAMA_*` без префикса | §14 |
+| 2 | `MV_CORE_ADDR=127.0.0.1:8090`, HTTP-сервер — у `shared/runtime` (D-7, W-3) | `SWARM_ADMIN_ADDR` упразднён; `admin.go`/`usage.go` монтируют маршруты на `runtime.Mux`; `Deps.HTTP`; `/health` процесса собирает `agents_by_level`/`llm` из `Health()` контекстов; спецификация маршрутов — раздел `admin` в `api/gateway.openapi.yaml` (EPIC-004), отдельного `core.openapi.yaml` нет | §1.1, §2, §3, §14 |
+| 3 | Инициализация мира — фикстуры; `npc_table` только респаун; `swarm.InitWorld`/`mvctl world init --blueprints` — не в MVP-1 (G2) | §17 переписан; §4.1 спавн `global/domain` при `Start` по блупринтам, сущности — из фикстур; `/health degraded {swarm: region_missing}`; тест согласованности `npc_table` ↔ `rules`/фикстуры в I1b; S6 = блупринт + фикстура | §4.1, §17 |
+| 4 | Модели по OQ-A-18 (U-2) | стартово C (`qwen3:30b-a3b` во всех LLM-фазах), запасная A (`8b` tick / `14b` phase2); параметризовано через блупринты и `baseline.md`; валидатор 7а (`Provider.Models()`, W-5/T-7) | §9.1, §13.2, §13.3 |
+| 5 | Профиль `legacy` = as-is narrative-orchestrator + semantic-memory + chromadb до S5 (D-3, U-1) | I2-2: перенос в `services/_archive/`, не удаление; запасной критерий S5 | §17 |
+| 6 | `RecordingWriter` + `mvctl record` → EPIC-003 I1a (decomposition-review §5.1 п. 2) | структура `cmd/mvctl/internal/record`; владелец `testdata/recordings/` — EPIC-003 | §2, §18 |
+| 7 | Записи/golden только `actor_kind=ci` (T-5, ADR-010 доп. п. 1) | ограничение в `mvctl record`, `merge=binary`, `privacy-scan` | §18 |
+| 8 | C-01 v1.1: `Journal`, `eventbus.Dedup`, `MV_BUS_VALIDATE_ON_READ`, `shared/clock`/`runtime` (S-1, T-10, F-3) | догон через `Journal.ReadRange…End`; `eventbus.Dedup` вместо `testkit.Dedup`; `Deps.Journal/Clock/Timers`; допущение (1) снято | §3, §4.3, §5.1, §11.2, §19 |
+| 9 | C-05/C-06/C-07/C-11 v1.1 (W-1, W-2, W-4, G-4) | `encounter.started.round{}` из блупринта встречи публикует `region-gm`; glob в `trigger.event_name` — принят (валидатор ≥ 1 совпадение); `parse{}`, `narrative_event_id`, `lod_allowed` обязателен, `content_hash`, `error.code=yielded` — уже в §7–§9, §14 | §8.3, §13.2, §14 |
+| 10 | `config.cloud_enabled {by, provider, allow_external_players}` — издатель контекст `llm` (ADR-005 доп. п. 3) | публикуется при старте только при `MV_LLM_CLOUD_ENABLED=true`, без ключей | §9.1 |
+| 11 | Точка I1-α «соло на шаблонах через бота» (G2) | `testkit/swarm.FakeEncounter` + `FakeNarrator` — Phase 1 на реальной механике без роя; состав — `design.md` §4.1 | §2 |
+| 12 | Экранирование `generated`-фактов памяти (T-9, ADR-005 доп. п. 4) | секция `<facts source="memory">` — те же правила экранирования и лимит длины, что `<player_text>`; `injections-10` включает ≥ 3 инъекции через память (I2, при 005-memory) | §11.3–§11.4 (уточнение), §18 |
+
+Не изменилось: порядок middleware (ADR-005 п. 2), ADR-014…017, таблицы видимости и триггеров, схемы `schemas/agent/*`, структура `AgentBlueprint` v2.
+
+---
+
+## Дополнение после сведения 3 (внесено tech-lead#1)
+
+Владелец документа — **architect#2**; текст разделов ниже **не переписан**. Указатель на решения `architecture/consolidation.md` **§14** (TL2-1…TL2-8, З-2, З-3), `architecture/contracts.md` **v0.4** (§0, C-02 v1.2, C-06 v1.1, C-07 v1.2) и ADR-017 **«Дополнение 1»**. Внесено tech-lead#1, потому что architect#2 в этой волне не запускался; при следующей ревизии architect#2 переносит решения в основной текст и снимает этот раздел.
+
+| Раздел документа | Что изменилось по сведению 3 | Основание |
+|---|---|---|
+| **§9.2**, §10.2 (`validation_status`) | Единый enum из **6 значений**: `valid \| partially_rejected \| invalid \| error \| quarantined \| filter_error`. `rejected_language` — **не статус**: это `invalid` + `llm.output.rejected reason=language`. Причины живут только в `llm.output.rejected.reason` (одно событие на отброшенный элемент); `budget_exceeded` — `rejected` без `llm.output`. Новое опциональное поле `llm.output.reasons[]` (сводка причин, заполняет шлюз) | TL2-1, C-07 v1.2, ADR-017 доп. 1; задачи T-215, T-213 |
+| **§10.3**, **§10.4** (страж: видимость и правила) | `status = abandoned` эквивалентен `dead`: сущность **видима** (нужна для фраз «его больше нет»), таблица видимости §10.3 не меняется, но `ops` над ней → `law_violation` / `inv-01 dead_does_not_act`; инвариант действует для `status ∈ dead \| abandoned \| ascended_final`; `narrative.output kind=death` по `abandoned` не генерируется | З-2, C-02 v1.2, ADR-017 доп. 1 п. 5; задачи T-217, T-230, T-246 |
+| **§13.4** (`enum` в `schemas/agent/tick-*.json`) | **Подтверждено** (TL2-7): файл схемы содержит полный набор типов MVP-1 для уровня; рантайм при компиляции подставляет пересечение с `allowed_event_types` блупринта; валидатор проверяет `allowed ⊆ enum` файла. Изменений в T-203 нет | TL2-7 |
+| **§14 п. 10** (`config.cloud_enabled`) | Событие публикуется контекстом `llm` **при каждом старте `core`** — и при `MV_LLM_CLOUD_ENABLED=true`, и при `false` — а также при изменении. Прежняя формулировка «только при `true`» отменена: иначе проекция gateway (`worlds[].llm.cloud_enabled`) после рестарта недетерминирована. Payload — булев флаг, без имени провайдера, URL и ключей (SEC-21) | З-3, C-06 v1.1; задача T-212 |
+| **§14** (издатели типов), §4.3/§5.1 (старт роя) | «Тип — владелец схемы; фактические издатели — `Spec.Publishers` реестра» (`contracts.md` v0.4 §0, §16 п. 7); `dice.rolled` (владелец EPIC-002) издают агент встречи и `FakeEncounter`; job `contracts` проверяет `source ∈ Spec.Publishers`. Старт догона: рой **ждёт** `analytics.replay.completed {mode: recovery}` с таймаутом `MV_SWARM_REPLAY_WAIT` (120 с) → `/health degraded {state_replay: missing}`; `testkit/state.FakeState` v0 сигнал публикует | TL2-2, TL2-5, TL2-6; задачи T-215, T-237, EPIC-001 T-006/T-017 |
+| **§13.2** (валидатор, `levels.go`) | В `shared/agent/levels.go` добавляется строка **gateway**: `Character.status: alive → abandoned`, `Group.leader_id` (включая `null`). `levels.go` — истина, `shared/contracts.OwnershipRules` — копия, правится **тем же PR** (метка `contract-change`, ревью tech-lead#1 + system-architect), тест равенства блокирует merge | TL2-3, З-2, `contracts.md` §16 п. 6; задача T-202 |
