@@ -2,7 +2,6 @@ go 1.24.11
 
 use (
 	.
-	./services/ban-of-world
 	./services/city-governor
 	./services/cultivation-module
 	./services/entity-actor
@@ -12,16 +11,11 @@ use (
 	./services/narrative-orchestrator
 	./services/ontological-archivist
 	./services/plan-manager
-	./services/reality-monitor
 	./services/rule-engine
 	./services/semantic-memory
 	./services/universe-genesis-oracle
 	./services/world-generator
 	./shared/agent
 	./shared/agent/tools
-	./shared/config
 	./shared/eventbus
-	./shared/minio
-	./shared/oracle
-	./shared/spatial
 )

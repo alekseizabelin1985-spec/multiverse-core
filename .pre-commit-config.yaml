@@ -1,6 +1,10 @@
 # .pre-commit-config.yaml — Windows-совместимо (без bash-зависимостей).
 # Источник: Docs/dev-team/architecture/infrastructure.md v0.3 §3.4 (F-1).
 # Версии — Docs/dev-team/architecture/infrastructure.md §2.4 (после F-6a — build/versions.env).
+# Архив кода (F-3, T-002): содержимое переносится `git mv` без изменений (U-1),
+# поэтому автофиксеры его не трогают — exclude стоит пофайлово на каждом из них
+# (ревью T-002, M-1). Проверки безопасности и целостности (gitleaks,
+# check-added-large-files, check-yaml, check-merge-conflict) действуют и на архив.
 repos:
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1
@@ -10,15 +14,20 @@ repos:
     rev: v2.13.2
     hooks:
       - id: golangci-lint-fmt     # gofmt/goimports через golangci-lint fmt
+        exclude: '^services/_archive/'
       - id: golangci-lint         # только изменённые пакеты; полный прогон — make lint
+        exclude: '^services/_archive/'
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
       - id: check-added-large-files
         args: ['--maxkb=1024']    # ловит .exe/.pdf
       - id: end-of-file-fixer
+        exclude: '^services/_archive/'
       - id: check-yaml
+        exclude: '^services/_archive/'
       - id: check-merge-conflict
       - id: mixed-line-ending
         args: ['--fix=lf']
         files: '\.(sh|yml|yaml|toml)$|^Makefile$'
+        exclude: '^services/_archive/'
