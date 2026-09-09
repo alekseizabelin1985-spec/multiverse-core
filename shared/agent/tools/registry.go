@@ -40,19 +40,19 @@ type ToolRegistry struct {
 
 // RateLimit ограничивает частоту вызовов инструмента
 type RateLimit struct {
-	MaxCalls    int           // Максимум вызовов
-	Window      time.Duration // Временное окно
-	LastCalled  time.Time     // Время последнего вызова
-	CallCount   int           // Счётчик вызовов
+	MaxCalls   int           // Максимум вызовов
+	Window     time.Duration // Временное окно
+	LastCalled time.Time     // Время последнего вызова
+	CallCount  int           // Счётчик вызовов
 }
 
 // ToolStats статистика инструментов
 type ToolStats struct {
-	TotalCalls     int64            // Всего вызовов
-	TotalErrors    int64            // Всего ошибок
-	TotalLatency   time.Duration    // Общая задержка
-	CallsByTool    map[string]int64 // Вызовы по инструментам
-	ErrorsByTool   map[string]int64 // Ошибки по инструментам
+	TotalCalls   int64            // Всего вызовов
+	TotalErrors  int64            // Всего ошибок
+	TotalLatency time.Duration    // Общая задержка
+	CallsByTool  map[string]int64 // Вызовы по инструментам
+	ErrorsByTool map[string]int64 // Ошибки по инструментам
 }
 
 // NewToolRegistry создает новый реестр инструментов
@@ -197,11 +197,11 @@ func (r *ToolRegistry) GetStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"total_calls":       r.stats.TotalCalls,
-		"total_errors":      r.stats.TotalErrors,
-		"avg_latency_ms":    avgLatency.Milliseconds(),
-		"calls_by_tool":     r.stats.CallsByTool,
-		"errors_by_tool":    r.stats.ErrorsByTool,
+		"total_calls":    r.stats.TotalCalls,
+		"total_errors":   r.stats.TotalErrors,
+		"avg_latency_ms": avgLatency.Milliseconds(),
+		"calls_by_tool":  r.stats.CallsByTool,
+		"errors_by_tool": r.stats.ErrorsByTool,
 	}
 }
 

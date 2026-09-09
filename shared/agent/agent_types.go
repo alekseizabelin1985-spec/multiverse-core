@@ -5,11 +5,11 @@ type AgentLevel int
 
 const (
 	LevelUnknown AgentLevel = iota
-	LevelGlobal  // Global supervisor - надзор за всем миром
-	LevelDomain  // Domain agent - регион/город/зона (TTL ~1 час)
-	LevelTask    // Task agent - квест/встреча (TTL ~минуты)
-	LevelObject  // Object agent - мгновенная реакция (TTL ~секунды)
-	LevelMonitor // Monitor agent - долгосрочный мониторинг аномалий
+	LevelGlobal             // Global supervisor - надзор за всем миром
+	LevelDomain             // Domain agent - регион/город/зона (TTL ~1 час)
+	LevelTask               // Task agent - квест/встреча (TTL ~минуты)
+	LevelObject             // Object agent - мгновенная реакция (TTL ~секунды)
+	LevelMonitor            // Monitor agent - долгосрочный мониторинг аномалий
 )
 
 // String возвращает строковое представление уровня
@@ -34,9 +34,9 @@ func (l AgentLevel) String() string {
 // Структура блупринта для MD-файла (единый источник: конфиг + промпт + ограничения)
 type AgentBlueprint struct {
 	// Meta информация
-	Name        string              `yaml:"name" json:"name"`
-	Version     string              `yaml:"version" json:"version"`
-	Description string              `yaml:"description" json:"description"`
+	Name        string `yaml:"name" json:"name"`
+	Version     string `yaml:"version" json:"version"`
+	Description string `yaml:"description" json:"description"`
 
 	// Trigger conditions для event-driven спавна
 	Trigger BlueprintTrigger `yaml:"trigger" json:"trigger"`
@@ -68,10 +68,10 @@ type AgentBlueprint struct {
 type BlueprintTrigger struct {
 	// Type тип триггера
 	Type string `yaml:"type" json:"type"` // "event", "condition", "timer"
-	
+
 	// EventName имя события для спавна
 	EventName string `yaml:"event_name,omitempty" json:"event_name,omitempty"`
-	
+
 	// Conditions условия спавна (пример: player_count >= 1)
 	Conditions []Condition `yaml:"conditions,omitempty" json:"conditions,omitempty"`
 }
@@ -80,10 +80,10 @@ type BlueprintTrigger struct {
 type BlueprintConstraints struct {
 	// MaxInstances максимальное количество экземпляров
 	MaxInstances int `yaml:"max_instances,omitempty" json:"max_instances,omitempty"`
-	
+
 	// SharedResources разделяемые ресурсы
 	SharedResources []ResourceReference `yaml:"shared_resources,omitempty" json:"shared_resources,omitempty"`
-	
+
 	// Priority приоритет выполнения
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
 }
@@ -92,16 +92,16 @@ type BlueprintConstraints struct {
 type LLMConfig struct {
 	// Model название модели (qwen:7b, qwen:72b)
 	Model string `yaml:"model" json:"model"`
-	
+
 	// Temperature температура генерации
 	Temperature float64 `yaml:"temperature,omitempty" json:"temperature,omitempty"`
-	
+
 	// MaxTokens максимальное количество токенов
 	MaxTokens int `yaml:"max_tokens,omitempty" json:"max_tokens,omitempty"`
-	
+
 	// Schema JSON schema для валидации ответа
 	Schema map[string]interface{} `yaml:"schema,omitempty" json:"schema,omitempty"`
-	
+
 	// Fallback модель fallback при сбое
 	Fallback string `yaml:"fallback,omitempty" json:"fallback,omitempty"`
 }
@@ -120,9 +120,9 @@ type ParentReference struct {
 
 // Condition простая условная операция
 type Condition struct {
-	Field   string `yaml:"field" json:"field"`
+	Field    string `yaml:"field" json:"field"`
 	Operator string `yaml:"operator" json:"operator"` // >=, <=, ==, !=, >, <
-	Value   int    `yaml:"value" json:"value"`
+	Value    int    `yaml:"value" json:"value"`
 }
 
 // ResourceReference ссылка на ресурс
@@ -168,9 +168,9 @@ type AgentContext struct {
 
 // EntityRef ссылка на сущность
 type EntityRef struct {
-	ID    string `json:"id"`
-	Type  string `json:"type"`
-	Name  string `json:"name"`
+	ID    string   `json:"id"`
+	Type  string   `json:"type"`
+	Name  string   `json:"name"`
 	Level LODLevel `json:"lod"`
 }
 
@@ -179,9 +179,9 @@ type LODLevel int
 
 const (
 	LODDisabled LODLevel = iota // Агент спит
-	LODRuleOnly                  // Только rule-engine (без LLM)
-	LODBasic                     // Простой LLM + кэш
-	LODFull                      // Полный ReAct loop с инструментами
+	LODRuleOnly                 // Только rule-engine (без LLM)
+	LODBasic                    // Простой LLM + кэш
+	LODFull                     // Полный ReAct loop с инструментами
 )
 
 // String возвращает строковое представление LOD

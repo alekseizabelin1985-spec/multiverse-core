@@ -1,0 +1,235 @@
+# golangci-lint configuration of the single module multiverse-core.io.
+# Pinned version: GOLANGCI_LINT_VERSION in build/versions.env (v2.13.2).
+#
+# The depguard rules below encode the import boundaries of ADR-001 (p. 3 and
+# addendum p. 2, 7): internal/<a> does not import internal/<b>, everything else
+# talks over the bus. forbidigo keeps time and the environment behind
+# shared/clock and shared/env so that replay stays deterministic.
+version: "2"
+
+run:
+  build-tags:
+    - integration
+    - e2e
+
+# Report every finding: a truncated report hides regressions in review.
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - errcheck
+    - forbidigo
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+  settings:
+    depguard:
+      rules:
+        # Every rule below is fail-closed: list-mode "lax" plus a deny of the
+        # whole multiverse-core.io/internal prefix means "nothing but what the
+        # allow list names" for contexts, while the standard library, shared/*
+        # and third-party modules stay open (ADR-001 p. 3, addendum p. 2, 7).
+
+        # shared/* is a library layer: it must not reach into a context.
+        shared:
+          files:
+            - "**/shared/**"
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "shared/* must not import internal/*; a context depends on shared, never the other way round (ADR-001 p. 3)"
+
+        # The trap for contexts that have no rule of their own yet: without it a
+        # new internal/<ctx> would inherit no boundary at all and could import
+        # anything. Adding a context means adding both its negation here and its
+        # own allow rule below.
+        internal-unlisted:
+          list-mode: lax
+          files:
+            - "**/internal/**"
+            - "!**/internal/state/**"
+            - "!**/internal/mechanics/**"
+            - "!**/internal/swarm/**"
+            - "!**/internal/llm/**"
+            - "!**/internal/laws/**"
+            - "!**/internal/gateway/**"
+            - "!**/internal/memory/**"
+            - "!**/internal/replay/**"
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "this context has no depguard rule yet: declare its allowed neighbours in .golangci.yml before importing internal/* (ADR-001 p. 3)"
+
+        # state owns the world and uses mechanics as a pure library.
+        internal-state:
+          list-mode: lax
+          files:
+            - "**/internal/state/**"
+          allow:
+            - multiverse-core.io/internal/state
+            - multiverse-core.io/internal/mechanics
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "state uses mechanics as a library and talks to every other context over the bus (ADR-001 p. 3)"
+
+        # mechanics is a pure library: it depends on no context, not even state.
+        internal-mechanics:
+          list-mode: lax
+          files:
+            - "**/internal/mechanics/**"
+          allow:
+            - multiverse-core.io/internal/mechanics
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "mechanics is a pure library: contexts depend on it, not the other way round (ADR-001 addendum p. 2)"
+
+        # swarm is the only context allowed to use mechanics, laws and llm as libraries.
+        internal-swarm:
+          list-mode: lax
+          files:
+            - "**/internal/swarm/**"
+          allow:
+            - multiverse-core.io/internal/swarm
+            - multiverse-core.io/internal/mechanics
+            - multiverse-core.io/internal/laws
+            - multiverse-core.io/internal/llm
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "swarm uses mechanics, laws and llm as libraries; it changes the world by proposing entity operations over the bus (C-02, ADR-001 p. 3)"
+
+        internal-llm:
+          list-mode: lax
+          files:
+            - "**/internal/llm/**"
+          allow:
+            - multiverse-core.io/internal/llm
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "llm is a library of swarm and memory, not the other way round (ADR-001 p. 3)"
+
+        internal-laws:
+          list-mode: lax
+          files:
+            - "**/internal/laws/**"
+          allow:
+            - multiverse-core.io/internal/laws
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "laws is a library of swarm, not the other way round (ADR-001 p. 3)"
+
+        internal-gateway:
+          list-mode: lax
+          files:
+            - "**/internal/gateway/**"
+          allow:
+            - multiverse-core.io/internal/gateway
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "gateway publishes player events on the bus and reaches memory over HTTP (C-04, C-10)"
+
+        # memory may use llm for embeddings only: the root package (Provider,
+        # Request, Response) and providers.Registry (ADR-001 addendum p. 7).
+        internal-memory:
+          list-mode: lax
+          files:
+            - "**/internal/memory/**"
+          allow:
+            - multiverse-core.io/internal/memory
+            - multiverse-core.io/internal/llm$
+            - multiverse-core.io/internal/llm/providers
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "memory indexes the bus and may use only llm.Provider/Request/Response and providers.Registry (ADR-001 addendum p. 7)"
+
+        internal-replay:
+          list-mode: lax
+          files:
+            - "**/internal/replay/**"
+          allow:
+            - multiverse-core.io/internal/replay
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "replay drives the process through shared/runtime.Deps (ADR-001 addendum p. 2)"
+
+        # cmd/multiverse is the only importer of internal/replay.
+        cmd-others:
+          files:
+            - "**/cmd/mvctl/**"
+            - "**/cmd/telegram-bot/**"
+          deny:
+            - pkg: multiverse-core.io/internal/replay
+              desc: "only cmd/multiverse imports internal/replay (ADR-001 addendum p. 2)"
+
+    forbidigo:
+      forbid:
+        - pattern: ^os\.(Getenv|LookupEnv)$
+          msg: read configuration through shared/env so that it appears in the manifest and in .env.example (NFR-074)
+        - pattern: ^time\.Now$
+          msg: take the time from shared/clock.Clock, otherwise replay is not reproducible (ADR-001 addendum p. 2)
+        - pattern: ^log\.(Print|Printf|Println|Fatal|Fatalf|Fatalln|Panic|Panicf|Panicln)$
+          msg: log through log/slog (shared/logging), the platform emits JSON only
+
+  exclusions:
+    generated: lax
+    paths:
+      # Not part of the module: archived code (U-1) and the frozen services keep
+      # their own go.mod and are never built, linted or shipped.
+      - services/_archive
+      - services/
+    rules:
+      # The owners of time and the environment, and only they: shared/clock
+      # implements the time interfaces, shared/runtime and shared/env (F-5,
+      # T-007) are the only readers of the environment. Every other shared/*
+      # package is subject to the ban like a context is (foundation.md §4, §8).
+      - path: shared/(clock|runtime|env)/
+        linters:
+          - forbidigo
+        text: (os\.(Getenv|LookupEnv)|time\.Now)
+
+      # Code carried over unchanged when the workspace became one module
+      # (T-003, foundation.md §11). Formatting is enforced everywhere; the
+      # historic semantic findings of these packages are deferred to the task
+      # that rewrites them, and the entry goes away with that rewrite.
+      #
+      # shared/eventbus: eventbus.go and topics.go are rewritten in F-4a (T-005).
+      - path: shared/eventbus/
+        linters:
+          - errcheck
+          - forbidigo
+      # shared/agent: EPIC-003 rewrites the agent runtime; only the blueprint
+      # types, parser and validator stay. forbidigo (time.Now) goes away with
+      # that rewrite, like the one of shared/eventbus above.
+      - path: shared/agent/
+        linters:
+          - errcheck
+          - forbidigo
+          - staticcheck
+          - unused
+      # shared/entity: the entity model v2 with tests is F-10 (T-011); the
+      # timestamps move to shared/clock there.
+      - path: shared/entity/
+        linters:
+          - forbidigo
+      # Demo programs kept next to the packages they document; F-9 (T-019)
+      # decides whether they stay.
+      - path: shared/[a-z]+/examples/
+        linters:
+          - forbidigo
+          - unused
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - multiverse-core.io
+  exclusions:
+    paths:
+      - services/_archive
+      - services/

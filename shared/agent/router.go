@@ -14,16 +14,16 @@ import (
 type Router struct {
 	// blueprintsByType maps blueprint names to their definitions
 	blueprints map[string]*AgentBlueprint
-	
+
 	// agents stores running agent instances
 	agents map[string]Agent
-	
+
 	// lifecycle manages agent lifecycle
 	lifecycle Lifecycle
-	
+
 	// mu protects concurrent access
 	mu sync.RWMutex
-	
+
 	// startedAt tracks when router was initialized
 	startedAt time.Time
 }
@@ -49,19 +49,19 @@ func (r *Router) SetLifecycle(lifecycle Lifecycle) {
 func (r *Router) RegisterBlueprint(bp *AgentBlueprint) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	
+
 	// Валидация
 	if bp.Name == "" {
 		return fmt.Errorf("blueprint name is required")
 	}
-	
+
 	// Проверка дубликатов
 	if _, exists := r.blueprints[bp.Name]; exists {
 		return fmt.Errorf("blueprint %s already exists", bp.Name)
 	}
-	
+
 	r.blueprints[bp.Name] = bp
-	
+
 	return nil
 }
 
@@ -69,7 +69,7 @@ func (r *Router) RegisterBlueprint(bp *AgentBlueprint) error {
 func (r *Router) GetBlueprint(name string) (*AgentBlueprint, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	bp, exists := r.blueprints[name]
 	return bp, exists
 }
@@ -78,16 +78,16 @@ func (r *Router) GetBlueprint(name string) (*AgentBlueprint, bool) {
 func (r *Router) MatchEvents(event Event) []*AgentBlueprint {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	var matches []*AgentBlueprint
-	
+
 	// Проверяем все блупринты
 	for _, bp := range r.blueprints {
 		if r.eventMatchesTrigger(event, bp) {
 			matches = append(matches, bp)
 		}
 	}
-	
+
 	return matches
 }
 
@@ -97,14 +97,14 @@ func (r *Router) eventMatchesTrigger(event Event, bp *AgentBlueprint) bool {
 	if event.Type != bp.Trigger.Type && bp.Trigger.EventName != event.Type {
 		return false
 	}
-	
+
 	// Если есть условия, проверяем их
 	if len(bp.Trigger.Conditions) > 0 {
 		// TODO: реализовать оценку условий
 		// Пока возвращаем true, если событие совпадает по типу
 		return true
 	}
-	
+
 	return true
 }
 
@@ -165,7 +165,7 @@ func (r *Router) UnregisterAgent(agentID string) error {
 func (r *Router) GetAgent(agentID string) (Agent, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	agent, exists := r.agents[agentID]
 	return agent, exists
 }
@@ -174,12 +174,12 @@ func (r *Router) GetAgent(agentID string) (Agent, bool) {
 func (r *Router) ListAgents() []Agent {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	
+
 	agents := make([]Agent, 0, len(r.agents))
 	for _, agent := range r.agents {
 		agents = append(agents, agent)
 	}
-	
+
 	return agents
 }
 
@@ -212,9 +212,9 @@ func (r *Router) RouteEvent(ctx context.Context, event Event) error {
 
 		// Создаем нового агента
 		agentCtx := &AgentContext{
-			ScopeID:   event.ScopeID,
-			Level:     r.determineLevel(bp),
-			LOD:       LODBasic, // Начальный уровень детализации
+			ScopeID: event.ScopeID,
+			Level:   r.determineLevel(bp),
+			LOD:     LODBasic, // Начальный уровень детализации
 		}
 
 		agent, err := r.SpawnAgent(ctx, bp, agentCtx)
@@ -278,9 +278,9 @@ func (r *Router) StartTime() time.Time {
 // Stats возвращает статистику роутера
 func (r *Router) Stats() map[string]interface{} {
 	return map[string]interface{}{
-		"blueprints_count":    r.GetBlueprintsCount(),
-		"agents_count":        r.GetAgentsCount(),
-		"started_at":          r.StartTime().Format(time.RFC3339),
-		"uptime_seconds":      time.Since(r.StartTime()).Seconds(),
+		"blueprints_count": r.GetBlueprintsCount(),
+		"agents_count":     r.GetAgentsCount(),
+		"started_at":       r.StartTime().Format(time.RFC3339),
+		"uptime_seconds":   time.Since(r.StartTime()).Seconds(),
 	}
 }

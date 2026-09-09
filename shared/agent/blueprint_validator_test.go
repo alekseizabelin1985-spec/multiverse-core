@@ -12,10 +12,10 @@ func TestBlueprintValidator_ValidBlueprint(t *testing.T) {
 	validator := agent.NewBlueprintValidator()
 
 	bp := &agent.AgentBlueprint{
-		Name:        "test-gm",
-		Type:        "game-master",
-		Version:     "1.0",
-		Description: "Test blueprint",
+		Name:         "test-gm",
+		Type:         "game-master",
+		Version:      "1.0",
+		Description:  "Test blueprint",
 		Phase1Prompt: "Process event: {{.EventType}}",
 		Phase2Prompt: "Generate narrative: {{.Narrative}}",
 		LLM: agent.LLMConfig{
@@ -167,7 +167,7 @@ func TestBlueprintValidator_InvalidLLMConfig(t *testing.T) {
 		Type:    "game-master",
 		Version: "1.0",
 		LLM: agent.LLMConfig{
-			Model:       "", // Пустая модель
+			Model:       "",  // Пустая модель
 			Temperature: 3.0, // За пределами 0-2
 			MaxTokens:   0,   // Неположительный
 		},
@@ -198,9 +198,9 @@ func TestBlueprintValidator_Warnings(t *testing.T) {
 	validator := agent.NewBlueprintValidator()
 
 	bp := &agent.AgentBlueprint{
-		Name:       "test-gm",
-		Type:       "game-master",
-		Version:    "1.0",
+		Name:         "test-gm",
+		Type:         "game-master",
+		Version:      "1.0",
 		Phase1Prompt: "", // Пустой
 		Phase2Prompt: "", // Пустой
 		LLM: agent.LLMConfig{
@@ -375,10 +375,10 @@ func TestBlueprintValidator_FullValid(t *testing.T) {
 	validator := agent.NewBlueprintValidator()
 
 	bp := &agent.AgentBlueprint{
-		Name:        "dark-forest-gm",
-		Version:     "2.1.0",
-		Description: "GM for dark forest scenario",
-		Type:        "game-master",
+		Name:         "dark-forest-gm",
+		Version:      "2.1.0",
+		Description:  "GM for dark forest scenario",
+		Type:         "game-master",
 		Phase1Prompt: "Process event: {{.EventType}}",
 		Phase2Prompt: "Generate narrative: {{.Narrative}}",
 		LLM: agent.LLMConfig{

@@ -54,28 +54,28 @@ type TwoPhasePipeline struct {
 type PipelineConfig struct {
 	// Phase1Model модель для фазы 1 (быстрая)
 	Phase1Model string
-	
+
 	// Phase2Model модель для фазы 2 (качественная)
 	Phase2Model string
-	
+
 	// Phase1MaxTokens максимальные токены для фазы 1
 	Phase1MaxTokens int
-	
+
 	// Phase2MaxTokens максимальные токены для фазы 2
 	Phase2MaxTokens int
-	
+
 	// EnableCache включать кэш
 	EnableCache bool
-	
+
 	// CacheTTL время жизни кэша
 	CacheTTL time.Duration
-	
+
 	// Phase1Timeout таймаут для фазы 1
 	Phase1Timeout time.Duration
-	
+
 	// Phase2Timeout таймаут для фазы 2
 	Phase2Timeout time.Duration
-	
+
 	// LogLevel уровень логирования
 	LogLevel int
 }
@@ -113,7 +113,7 @@ func (p *TwoPhasePipeline) Process(ctx context.Context, event Event, agent Agent
 		// Fallback на rule-engine
 		decision = p.fallbackRouter.Decide(ctx, event)
 	}
-	
+
 	// Если фаза 2 не нужна, возвращаем результат
 	if decision.NextPhase != "narrative" {
 		return &TwoPhaseResult{
@@ -121,11 +121,11 @@ func (p *TwoPhasePipeline) Process(ctx context.Context, event Event, agent Agent
 			Status:   "decision_only",
 		}, nil
 	}
-	
+
 	// Фаза 2: Narrative (асинхронно)
 	narrativeCh := make(chan *NarrativeResult, 1)
 	go p.processPhase2Async(ctx, event, agent, decision, narrativeCh)
-	
+
 	// Возвращаем результат фазы 1
 	return &TwoPhaseResult{
 		Decision:    decision,
@@ -139,7 +139,7 @@ func (p *TwoPhasePipeline) Process(ctx context.Context, event Event, agent Agent
 func (p *TwoPhasePipeline) processPhase1(ctx context.Context, event Event, agent Agent) (*DecisionResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.config.Phase1Timeout)
 	defer cancel()
-	
+
 	// Проверяем кэш
 	if p.config.EnableCache {
 		cacheKey := p.getCacheKey(event, "phase1")
@@ -147,47 +147,47 @@ func (p *TwoPhasePipeline) processPhase1(ctx context.Context, event Event, agent
 			return cached.(*DecisionResult), nil
 		}
 	}
-	
+
 	// Получаем prompt для фазы 1
 	agentBP := agent.Context().Blueprint
 	if agentBP == nil {
 		return nil, fmt.Errorf("blueprint not available")
 	}
-	
+
 	prompt := p.buildPhase1Prompt(event, agent, agentBP)
-	
+
 	// Вызываем LLM
 	result, err := p.llmClient.Generate(ctx, p.config.Phase1Model, prompt, GenerateConfig{
 		MaxTokens:   p.config.Phase1MaxTokens,
 		StrictJSON:  true,
 		Temperature: 0.1, // Низкая температура для строгости
 	})
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("phase1 generate: %w", err)
 	}
-	
+
 	// Парсим результат
 	decision := &DecisionResult{}
 	if err := decision.ParseJSON(result.Content); err != nil {
 		return nil, fmt.Errorf("parse decision: %w", err)
 	}
-	
+
 	// Кэшируем результат
 	if p.config.EnableCache {
 		p.cache.Set(p.getCacheKey(event, "phase1"), decision, p.config.CacheTTL)
 	}
-	
+
 	return decision, nil
 }
 
 // processPhase2Async выполняет фазу 2 асинхронно
 func (p *TwoPhasePipeline) processPhase2Async(ctx context.Context, event Event, agent Agent, decision *DecisionResult, ch chan<- *NarrativeResult) {
 	defer close(ch)
-	
+
 	ctx, cancel := context.WithTimeout(ctx, p.config.Phase2Timeout)
 	defer cancel()
-	
+
 	// Проверяем кэш
 	if p.config.EnableCache {
 		cacheKey := p.getCacheKey(event, "phase2")
@@ -196,7 +196,7 @@ func (p *TwoPhasePipeline) processPhase2Async(ctx context.Context, event Event, 
 			return
 		}
 	}
-	
+
 	// Получаем prompt для фазы 2
 	agentBP := agent.Context().Blueprint
 	if agentBP == nil {
@@ -206,16 +206,16 @@ func (p *TwoPhasePipeline) processPhase2Async(ctx context.Context, event Event, 
 		}
 		return
 	}
-	
+
 	prompt := p.buildPhase2Prompt(event, agent, decision, agentBP)
-	
+
 	// Вызываем LLM
 	result, err := p.llmClient.Generate(ctx, p.config.Phase2Model, prompt, GenerateConfig{
 		MaxTokens:   p.config.Phase2MaxTokens,
 		StrictJSON:  false,
 		Temperature: 0.7, // Высокая температура для креатива
 	})
-	
+
 	if err != nil {
 		ch <- &NarrativeResult{
 			Text:  "",
@@ -223,18 +223,18 @@ func (p *TwoPhasePipeline) processPhase2Async(ctx context.Context, event Event, 
 		}
 		return
 	}
-	
+
 	narrative := &NarrativeResult{
-		Text:      result.Content,
-		Effects:   result.Effects,
+		Text:        result.Content,
+		Effects:     result.Effects,
 		ProcessedAt: time.Now(),
 	}
-	
+
 	// Кэшируем результат
 	if p.config.EnableCache {
 		p.cache.Set(p.getCacheKey(event, "phase2"), narrative, p.config.CacheTTL)
 	}
-	
+
 	ch <- narrative
 }
 
@@ -246,7 +246,7 @@ func (p *TwoPhasePipeline) buildPhase1Prompt(event Event, agent Agent, bp *Agent
 	if template == "" {
 		template = defaultPhase1PromptTemplate
 	}
-	
+
 	// Заполняем переменные
 	prompt := template
 	prompt = strings.ReplaceAll(prompt, "{player_name}", getEntityName(event.Payload, "player"))
@@ -254,7 +254,7 @@ func (p *TwoPhasePipeline) buildPhase1Prompt(event Event, agent Agent, bp *Agent
 	prompt = strings.ReplaceAll(prompt, "{weather}", "clear")   // TODO: получить из контекста
 	prompt = strings.ReplaceAll(prompt, "{nearby_entities}", getEntitiesString(event.Payload))
 	prompt = strings.ReplaceAll(prompt, "{region_history}", "no history") // TODO: получить из памяти
-	
+
 	return prompt
 }
 
@@ -264,13 +264,13 @@ func (p *TwoPhasePipeline) buildPhase2Prompt(event Event, agent Agent, decision 
 	if template == "" {
 		template = defaultPhase2PromptTemplate
 	}
-	
+
 	// Заполняем переменные
 	prompt := template
 	prompt = strings.ReplaceAll(prompt, "{player_name}", getEntityName(event.Payload, "player"))
 	prompt = strings.ReplaceAll(prompt, "{event_description}", event.Type)
 	prompt = strings.ReplaceAll(prompt, "{phase1_result}", decision.String())
-	
+
 	return prompt
 }
 
@@ -283,13 +283,13 @@ func (p *TwoPhasePipeline) getCacheKey(event Event, phase string) string {
 type DecisionResult struct {
 	// Decisions решения
 	Decisions []Decision `json:"decisions"`
-	
+
 	// NextPhase следующая фаза
 	NextPhase string `json:"narrative_phase"`
-	
+
 	// ProcessedAt время обработки
 	ProcessedAt time.Time
-	
+
 	// Validated флаг валидации
 	Validated bool
 }
@@ -315,16 +315,16 @@ func (d *DecisionResult) ParseJSON(content string) error {
 type NarrativeResult struct {
 	// Text текст нарратива
 	Text string `json:"text"`
-	
+
 	// Effects эффекты
 	Effects []NarrativeEffect `json:"effects,omitempty"`
-	
+
 	// Error ошибка если есть
 	Error string `json:"error,omitempty"`
-	
+
 	// ProcessedAt время обработки
 	ProcessedAt time.Time
-	
+
 	// Validated флаг валидации
 	Validated bool
 }
@@ -339,13 +339,13 @@ type NarrativeEffect struct {
 type TwoPhaseResult struct {
 	// Decision результат фазы 1
 	Decision *DecisionResult
-	
+
 	// Narrative результат фазы 2
 	Narrative *NarrativeResult
-	
+
 	// Status статус обработки
 	Status string
-	
+
 	// ProcessedAt время обработки
 	ProcessedAt time.Time
 }

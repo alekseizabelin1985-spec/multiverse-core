@@ -50,16 +50,16 @@ func (f *DefaultBlueprintFactory) ValidateBlueprint(bp *AgentBlueprint) error {
 type TTLManager struct {
 	// CheckInterval интервал проверки
 	CheckInterval time.Duration
-	
+
 	// DefaultTTL время жизни по умолчанию
 	DefaultTTL time.Duration
-	
+
 	// mu для синхронизации
 	mu sync.RWMutex
-	
+
 	// agentTTLs хранит TTL для агентов
 	agentTTLs map[string]time.Time
-	
+
 	// cleanupFunc функция для очистки
 	cleanupFunc func(agentID string) error
 }
@@ -84,7 +84,7 @@ func (tm *TTLManager) SetTTL(agentID string, ttl time.Time) {
 func (tm *TTLManager) GetTTL(agentID string) (time.Time, bool) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	ttl, exists := tm.agentTTLs[agentID]
 	return ttl, exists
 }
@@ -100,12 +100,12 @@ func (tm *TTLManager) RemoveTTL(agentID string) {
 func (tm *TTLManager) Expired(agentID string) bool {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	ttl, exists := tm.agentTTLs[agentID]
 	if !exists {
 		return false // Нет TTL, не истекает
 	}
-	
+
 	return time.Now().After(ttl)
 }
 
@@ -113,14 +113,14 @@ func (tm *TTLManager) Expired(agentID string) bool {
 func (tm *TTLManager) GetAllExpired() []string {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	var expired []string
 	for agentID, ttl := range tm.agentTTLs {
 		if time.Now().After(ttl) {
 			expired = append(expired, agentID)
 		}
 	}
-	
+
 	return expired
 }
 
@@ -132,7 +132,7 @@ func (tm *TTLManager) SetCleanupFunc(fn func(agentID string) error) {
 // CleanupExpired удаляет истекшие агенты
 func (tm *TTLManager) CleanupExpired() ([]string, error) {
 	expired := tm.GetAllExpired()
-	
+
 	for _, agentID := range expired {
 		if tm.cleanupFunc != nil {
 			if err := tm.cleanupFunc(agentID); err != nil {
@@ -141,17 +141,17 @@ func (tm *TTLManager) CleanupExpired() ([]string, error) {
 		}
 		tm.RemoveTTL(agentID)
 	}
-	
+
 	return expired, nil
 }
 
 // StartAutoCleanup запускает автоочистку
 func (tm *TTLManager) StartAutoCleanup(ctx context.Context) {
 	ticker := time.NewTicker(tm.CheckInterval)
-	
+
 	go func() {
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ctx.Done():
@@ -171,7 +171,7 @@ func (tm *TTLManager) StartAutoCleanup(ctx context.Context) {
 func (tm *TTLManager) Stats() map[string]interface{} {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
-	
+
 	return map[string]interface{}{
 		"total_agents":   len(tm.agentTTLs),
 		"check_interval": tm.CheckInterval.String(),

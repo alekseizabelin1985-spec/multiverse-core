@@ -146,16 +146,16 @@ type VersionEntry struct {
 
 // StateManagerStats статистика StateManager
 type StateManagerStats struct {
-	mu              sync.RWMutex
-	TotalLoads      int64
-	TotalSaves      int64
-	TotalRollbacks  int64
-	CacheHits       int64
-	CacheMisses     int64
-	PGHits          int64
-	PGMisses        int64
-	AvgLoadTime     time.Duration
-	AvgSaveTime     time.Duration
+	mu             sync.RWMutex
+	TotalLoads     int64
+	TotalSaves     int64
+	TotalRollbacks int64
+	CacheHits      int64
+	CacheMisses    int64
+	PGHits         int64
+	PGMisses       int64
+	AvgLoadTime    time.Duration
+	AvgSaveTime    time.Duration
 }
 
 // PGStore интерфейс для PostgreSQL хранилища

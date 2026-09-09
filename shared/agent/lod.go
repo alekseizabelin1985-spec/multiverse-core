@@ -11,25 +11,25 @@ import (
 // LODConfig конфигурация адаптивного LOD
 type LODConfig struct {
 	// Thresholds пороги переключения
-	PlayerDensityHigh int     // Игроков на км² для перехода на LODBasic
-	PlayerDensityMed  int     // Игроков на км² для перехода на LODRuleOnly
-	PlayerDensityLow  int     // Игроков на км² для перехода на LODFull
+	PlayerDensityHigh int // Игроков на км² для перехода на LODBasic
+	PlayerDensityMed  int // Игроков на км² для перехода на LODRuleOnly
+	PlayerDensityLow  int // Игроков на км² для перехода на LODFull
 
 	// Queue thresholds пороги очереди
-	QueueDepthHigh    int     // Размер очереди для понижения LOD
-	QueueDepthMed     int     // Средний размер очереди
-	QueueDepthLow     int     // Низкий размер очереди
+	QueueDepthHigh int // Размер очереди для понижения LOD
+	QueueDepthMed  int // Средний размер очереди
+	QueueDepthLow  int // Низкий размер очереди
 
 	// LLM latency пороги задержки
-	LLMLatencyHigh    time.Duration // > 500ms — понижаем LOD
-	LLMLatencyMed     time.Duration // > 200ms — мониторинг
-	LLMLatencyLow     time.Duration // < 100ms — полный LOD
+	LLMLatencyHigh time.Duration // > 500ms — понижаем LOD
+	LLMLatencyMed  time.Duration // > 200ms — мониторинг
+	LLMLatencyLow  time.Duration // < 100ms — полный LOD
 
 	// Check interval интервал проверки
-	CheckInterval     time.Duration // Как часто проверять (по умолчанию 10s)
+	CheckInterval time.Duration // Как часто проверять (по умолчанию 10s)
 
 	// Decay time время возврата на высокий LOD
-	DecayTime         time.Duration // Через какое время вернуть LODFull (по умолчанию 5m)
+	DecayTime time.Duration // Через какое время вернуть LODFull (по умолчанию 5m)
 }
 
 // DefaultLODConfig возвращает конфигурацию по умолчанию
@@ -77,13 +77,13 @@ type LODCallback func(agentID string, oldLOD, newLOD LODLevel)
 
 // LODMetrics метрики для LOD
 type LODMetrics struct {
-	mu                sync.RWMutex
-	avgPlayerDensity  float64
-	avgQueueDepth     float64
-	avgLLMLatency     time.Duration
-	totalDowngrades   int64
-	totalUpgrades     int64
-	lastChangeTime    time.Time
+	mu               sync.RWMutex
+	avgPlayerDensity float64
+	avgQueueDepth    float64
+	avgLLMLatency    time.Duration
+	totalDowngrades  int64
+	totalUpgrades    int64
+	lastChangeTime   time.Time
 }
 
 // NewLODManager создает новый менеджер LOD
@@ -220,10 +220,10 @@ func (lm *LODManager) GetStats() map[string]interface{} {
 
 	// Считаем распределение LOD
 	lodDistribution := map[string]int{
-		"LODFull":      0,
-		"LODBasic":     0,
-		"LODRuleOnly":  0,
-		"LODDisabled":  0,
+		"LODFull":     0,
+		"LODBasic":    0,
+		"LODRuleOnly": 0,
+		"LODDisabled": 0,
 	}
 
 	lm.mu.RLock()

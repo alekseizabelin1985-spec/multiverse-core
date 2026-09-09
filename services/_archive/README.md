@@ -24,8 +24,10 @@ ADR-001 доп. п. 5.
 
 ## Что перенесено
 
-Коммит архивации для всех строк один: задача **T-002**, ветка `epic/EPIC-001-foundation`
-(база `04a3a15`; хэш проставляется при коммите задачи).
+Коммит архивации для всех строк, кроме двух файлов `shared/agent`, один: задача **T-002**, ветка
+`epic/EPIC-001-foundation` (база `04a3a15`; хэш проставляется при коммите задачи). `shared/agent/filter.go`
+и `shared/agent/e2e_dark_forest_test.go` перенесены задачей **T-003** (база `5a20bb8`) — см. отдельную
+строку и `services/_archive/shared/agent/ARCHIVED.md`.
 
 | Исходный путь | Путь в архиве | Причина | Последний рабочий коммит | Эпик возврата |
 |---|---|---|---|---|
@@ -40,6 +42,8 @@ ADR-001 доп. п. 5.
 | `shared/intent` | `services/_archive/shared/intent` | намерение приходит из gateway/роя | `002eece` | нет |
 | `shared/tinyml` | `services/_archive/shared/tinyml` | локальные ONNX-модели вне стека MVP-1 | `a40d9f4` | нет |
 | `shared/spatial` | `services/_archive/shared/spatial` | → позиция и scope в `shared/entity` v2 | `e6103e4` | нет |
+| `shared/agent/filter.go` | `services/_archive/shared/agent/filter.go` | зависит от заархивированного `shared/rules`; в модуль по §11 идут только типы/парсер/валидатор блупринтов, фильтр переписывает EPIC-003 (`internal/llm/filter`) — **перенесён в T-003** (M-4/ОВ-1) | `e6103e4` | нет |
+| `shared/agent/e2e_dark_forest_test.go` | `services/_archive/shared/agent/e2e_dark_forest_test.go` | e2e-тест as-is поверх `shared/rules` и заархивированных `agent/tools/*`; сценарий «Тёмный лес» пересобирается в F-10/EPIC-003 — **перенесён в T-003** (M-4/ОВ-1) | `e6103e4` | нет |
 | `shared/agent/tools/adapter.go` | `services/_archive/shared/agent/tools/adapter.go` | инструмент агента as-is (в исходном каталоге остаётся только `registry.go`) | `e6103e4` | нет |
 | `shared/agent/tools/entity_tool.go` | `services/_archive/shared/agent/tools/entity_tool.go` | инструмент агента as-is | `e6103e4` | нет |
 | `shared/agent/tools/narrative_tool.go` | `services/_archive/shared/agent/tools/narrative_tool.go` | инструмент агента as-is | `e6103e4` | нет |
@@ -65,5 +69,5 @@ ADR-001 доп. п. 5.
 | `services/entity-manager`, `services/rule-engine` | источники для переписывания | → архив в EPIC-002 (T-064) |
 | `services/game-service` | источник для переписывания gateway | → архив после EPIC-004 |
 | 8 замороженных сервисов (`FROZEN.md`) | заморозка, не архив: `world-generator`, `universe-genesis-oracle`, `ontological-archivist`, `cultivation-module`, `plan-manager`, `city-governor`, `entity-actor`, `evolution-watcher` | EPIC-006…010 |
-| `shared/eventbus`, `shared/jsonpath`, `shared/entity`, `shared/agent` (кроме `tools/*`) | переносятся в единый модуль в T-003 (F-2) | — |
+| `shared/eventbus`, `shared/jsonpath`, `shared/entity`, `shared/agent` (кроме `tools/*`, `filter.go`, `e2e_dark_forest_test.go`) | переносятся в единый модуль в T-003 (F-2) | — |
 | `shared/agent/tools/registry.go` | реестр инструментов остаётся | EPIC-003 |

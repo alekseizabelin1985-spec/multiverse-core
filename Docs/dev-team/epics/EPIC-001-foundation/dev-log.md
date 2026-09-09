@@ -383,3 +383,387 @@ services/_archive/shared/rules/engine.go` -> все автофиксеры `Skip
   не собирается по назначению — версия оставлена «эпохи as-is» намеренно.
 - `Docs/archive/` создан пустым (только `README.md`). Если по факту F-9 документы решат не
   переносить, каталог останется с одним индексом — это ожидаемо.
+
+---
+
+## developer#1 · T-003 · F-2 «Единый модуль Go 1.26, `cmd/multiverse`, `shared/runtime`, `shared/clock`» · 2026-09-09
+
+Ветка `epic/EPIC-001-foundation`, база `5a20bb8` (T-002). Основание: `architecture/components/foundation.md`
+v0.2 §1–§4, §11, §12 (F-2), §14 п. 2/3/8; `architecture/infrastructure.md` v0.3 §2.1, §2.3, §2.4, §10;
+`epics/EPIC-001-foundation/design.md` §4.1; ADR-001 + дополнения п. 1–3, 5, 7, 8; `plan/ownership.md` §1.
+Дополнительно — решение оркестратора по ревью T-002 (M-4 / ОВ-1, вариант «а»).
+Коммит не выполнялся (`git.commits: ask`) — изменения подготовлены в индексе.
+
+### 1. Версия Go
+
+`go.dev/dl` доступен, последний патч линейки — **`go1.26.8`** (в наличии 1.26.0…1.26.8; актуальный
+релиз Go — 1.27.1, что совпадает с §2.4). Зафиксировано:
+
+- `go.mod`: `go 1.26` + `toolchain go1.26.8`;
+- `build/Dockerfile`: `ARG GO_VERSION=1.26.8`.
+
+Локально установлен Go **1.25.3**; тулчейн 1.26.8 подтянулся автоматически (`GOTOOLCHAIN=auto`,
+`go: downloading go1.26.8 (windows/amd64)`), `go version` в модуле печатает `go1.26.8 windows/amd64`.
+Отдельная установка дистрибутива не требовалась.
+
+**Вход для T-004 (F-6a)**: в `build/versions.env` — `GO_VERSION=1.26.8` и
+`MINIO_BUILDER_IMAGE=golang:1.26.8-bookworm` (первая попытка по ADR-021). Файл `build/versions.env`
+в T-003 не создавался: он в списке файлов T-004, значение продублировано в `go.mod`/`Dockerfile`
+как значение по умолчанию, `Dockerfile` принимает `--build-arg GO_VERSION`.
+
+### 2. Единый модуль
+
+- `git rm` `go.work`, `go.work.sum` (конфигурация workspace, не код — U-1 не касается, §11).
+- `git rm` `shared/eventbus/go.mod`, `shared/agent/go.mod`, `shared/agent/tools/go.mod` — пакеты
+  вошли в корневой модуль. У `shared/{entity,jsonpath}` своих `go.mod` не было.
+- Корневой `go.mod`: `module multiverse-core.io`, `go 1.26`, `toolchain go1.26.8`, зависимости после
+  `go mod tidy`: `google/uuid v1.6.0`, `segmentio/kafka-go v0.4.51` (пин §2.4, было v0.4.49),
+  `gopkg.in/yaml.v3 v3.0.1`; indirect — `klauspost/compress`, `pierrec/lz4/v4`.
+  Ушли зависимости заархивированного кода (ревью T-002, N-5): `xeipuuv/gojsonschema`,
+  `yalue/onnxruntime_go`, `minio-go/v7`, `stretchr/testify` и весь их транзитивный хвост
+  (`go.sum` −219 строк). Остальные библиотеки целевого набора §11 (`minio-go v7.3.0`,
+  `santhosh-tekuri/jsonschema/v6`, `oklog/ulid/v2`, `testcontainers-go`, `goose`, `modernc.org/sqlite`,
+  `go-telegram/bot`, `qdrant/go-client`, `neo4j-go-driver/v5`, `testify`) добавляют задачи, которые
+  первыми их импортируют (F-4/F-5/F-5t и далее): `go mod tidy` не держит зависимость без импорта.
+- Состав корневого модуля (`go list ./...`, 10 пакетов): `cmd/multiverse`,
+  `shared/{agent,agent/tools,clock,entity,eventbus,eventbus/examples,jsonpath,jsonpath/examples,runtime}`.
+- `services/_archive/**` и 8 замороженных сервисов в `./...` не попадают: у замороженных свои `go.mod`,
+  а имя `_archive` начинается с `_`, поэтому go-инструмент такой каталог не обходит в принципе.
+
+### 3. M-4 / ОВ-1 — архивация двух файлов `shared/agent`
+
+По решению оркестратора (вариант «а» ревью T-002) через `git mv` перенесены в
+`services/_archive/shared/agent/`:
+
+| Исходный путь | Причина |
+|---|---|
+| `shared/agent/filter.go` | импортирует заархивированный `shared/rules`; в модуль по §11 идут только типы, парсер и валидатор блупринтов — фильтр переписывает EPIC-003 (`internal/llm/filter`) |
+| `shared/agent/e2e_dark_forest_test.go` | тот же импорт + `shared/agent/tools/*` из архива; сценарий «Тёмный лес» пересобирается в F-10/EPIC-003 |
+
+Создан `services/_archive/shared/agent/ARCHIVED.md`; в `services/_archive/README.md` добавлены две
+строки индекса, уточнена оговорка про коммит архивации (эти два файла — T-003, база `5a20bb8`,
+остальные — T-002) и строка «что в архив не уходит». Внешних импортёров у `filter.go` нет
+(`grep` по `FilterResult|DeterministicOutput|NewFilter` вне архива — пусто). После переноса
+`shared/agent` собирается, `go vet` и тесты пакета зелёные.
+
+### 4. Что создано
+
+**`shared/clock`** (`clock.go`, `manual.go`): `Clock`, `Timer`, `Timers`, `Real`/`RealTimers`,
+`Manual` (`NewManual`, `Now`, `Set`, `Advance`, `Timers()`), `ManualTimers` (`After`, `Every`).
+`Manual` срабатывает по `Advance`/`Set` строго в порядке дедлайнов, канал таймера буферизован на 1
+(пропущенные периоды схлопываются в один тик — семантика `time.Ticker`), движение времени назад
+ничего не запускает. `EventClock`/`NullTimers` для replay — `internal/replay` (EPIC-002), как в §4.
+
+**`shared/runtime`** (`runtime.go`, `http.go`, `lifecycle.go`): `Mode`, `Status`, `Deps`, `Context`,
+`Routes`, `Registry` (`Register`/`Names`/`New` + пакетные обёртки над реестром по умолчанию),
+`StartAll`/`StopAll`/`Aggregate`, `HTTP` (`NewHTTP` с `GET /health`, `Start`/`Stop` с graceful 5 с),
+`AdminOnly`, `EnvAddr`. `New` упорядочивает контексты топологически по `DependsOn`, ничьи разрешает
+порядком регистрации (результат не зависит от порядка аргументов), ловит цикл и неизвестное имя
+(`ErrUnknownContext`), понимает `all`. Зависимость на контекст, которого нет в выбранном наборе,
+не считается ошибкой: такой контекст работает в другом процессе и доступен через шину.
+
+**`cmd/multiverse`** (`main.go`, `serve.go`, `contexts.go`, `health.go`, `db.go`):
+
+- флаги `--contexts` (обязателен), `--mode=live|replay`, `--bus=kafka|memory` (`memory` только с
+  `--contexts=all`), `--recording` (только с `--mode=replay`), `--id-source=uuid|sequence`;
+- подкоманды `health --url` (healthcheck distroless-образа: 0 при `200` + `status=ok`, иначе 1),
+  `db backup|check`, `version`;
+- адрес HTTP — env `MV_CORE_ADDR` (по умолчанию `127.0.0.1:8090`), флага нет (D-7);
+- регистрация 7 пустых контекстов `state, laws, mechanics, llm, swarm, gateway, memory`
+  (`Health()=ok`, `Start/Stop` — no-op) в порядке §2; владелец заменяет заглушку своим
+  `runtime.Register` в своей ветке.
+
+**`.golangci.yml`** (v2, пин `v2.13.2`):
+
+- линтеры: `depguard`, `errcheck`, `forbidigo`, `govet`, `ineffassign`, `staticcheck`, `unused`;
+  форматтеры `gofmt` + `goimports` (`local-prefixes: multiverse-core.io`);
+- `depguard` — 10 правил по границам ADR-001 п. 3 и доп. п. 2/7: `shared/*` не импортирует
+  `internal/*`; для каждого `internal/<ctx>` перечислены запрещённые соседи, разрешены только
+  `swarm → mechanics|laws|llm`, `state → mechanics`, `memory → llm` (при запрете
+  `llm/{guardian,prompt,filter,parser}`); `internal/replay` запрещён всем, кроме `cmd/multiverse`
+  (отдельное правило запрещает его и `cmd/mvctl`, `cmd/telegram-bot`);
+- `forbidigo`: `os.Getenv|os.LookupEnv`, `time.Now`, `log.Print*|Fatal*|Panic*`; исключение по
+  `os.*`/`time.Now` — только `shared/**` (там живут `clock`, `env`, `runtime`);
+- `issues.max-issues-per-linter: 0`, `max-same-issues: 0` — иначе golangci-lint по умолчанию
+  показывает не больше трёх однотипных находок и часть проблем не видна в ревью;
+- исключены `services/_archive` и `services/` (замороженные и legacy — вне модуля).
+
+Правила проверены на живом примере: во временных пакетах `internal/{state,memory,laws}` и
+`shared/probe` (созданы и удалены в ходе задачи, в индекс не попали) depguard отклонил
+`state → swarm`, `state → replay`, `memory → llm/guardian` и `shared → internal`, пропустил
+`memory → llm`; forbidigo отработал на `os.Getenv`/`time.Now`/`log.Printf` вне `shared/*`.
+
+**`build/Dockerfile`** по §2.3: multi-stage `golang:${GO_VERSION}-bookworm` → `distroless/static-debian12:nonroot`,
+`CGO_ENABLED=0`, `GOFLAGS=-trimpath`, кэш модулей и сборки через `--mount=type=cache`,
+`-ldflags "-s -w -X main.version=${VERSION}"`, `HEALTHCHECK` вызывает `/multiverse health --url …`.
+
+### 5. Результаты DoD
+
+| Критерий | Результат |
+|---|---|
+| `go mod tidy && go build ./... && go vet ./...` | зелёные |
+| `go mod verify` | `all modules verified` |
+| `make lint` (`golangci-lint run ./...`) | `0 issues` |
+| `gofmt`/`goimports` без диффа | `gofmt -l` пусто; `golangci-lint fmt` без изменений |
+| `go test -short -count=1 ./...` | 6 пакетов ok, 4 без тестов |
+| Покрытие нового кода | `shared/runtime` 93,2 %, `shared/clock` 87,1 %, `cmd/multiverse` 61,6 % |
+| `go run ./cmd/multiverse --contexts=all --bus=memory` → `curl 127.0.0.1:8090/health` | `{"status":"ok","details":{"contexts":{"gateway":…,"laws":…,"llm":…,"mechanics":…,"memory":…,"state":…,"swarm":…}}}` |
+| `--contexts=state,gateway` поднимает только их | да, в `details.contexts` ровно два имени (проверено на `MV_CORE_ADDR=127.0.0.1:8099`) |
+| `go list ./... \| grep -c _archive` | `0`; замороженных сервисов в списке тоже 0 |
+| `docker build -f build/Dockerfile .` | образ собран; `docker run … --contexts=all --bus=memory` → `/health` = ok, `docker exec … /multiverse health --url …` → `ok`, exit 0, `docker inspect .State.Health.Status` = `healthy` |
+| `pre-commit run --files <файлы задачи>` | 8 хуков Passed (включая `gitleaks`, `golangci-lint`, `golangci-lint-fmt`) |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| `gitleaks git --redact --log-opts="integration/mvp-1..HEAD" .` | `no leaks found` |
+| `go test -short -race` | **не выполнялся** — на машине нет gcc/cgo (решение по ОВ-5: `-race` только в CI, T-012) |
+
+`gitleaks dir --redact .` по рабочей копии даёт 5 находок, все — в неотслеживаемых файлах вне
+индекса: `.env` (реальный env владельца, в `.gitignore`) и `.claude/worktrees/frosty-bell/{.env,shared/oracle/README.md}`
+(остаток снятого в F-0 worktree). Задачей не внесены; см. ОВ-8.
+
+### 6. Отклонения от дизайна
+
+1. **`runtime.Deps` неполный.** По `foundation.md` §3 в `Deps` есть `Bus`, `Journal`, `Store`, `Env`,
+   `Contracts`. Пакетов `shared/{objstore,env,contracts}` и интерфейсов `eventbus.Bus`/`Journal`
+   ещё нет (F-4a — T-005, F-4b — T-006, F-5 — T-007), объявить поля не на чем. В T-003 `Deps`
+   содержит `Clock`, `Timers`, `Mode`, `IDs`, `Log`, `Mux`; в комментарии к типу перечислено, какая
+   задача добавляет каждое оставшееся поле. Добавление поля в `Deps` — совместимое изменение.
+2. **`--bus` только валидируется.** Реализации шины (`kafka`, `membus`) появляются в F-4a/F-5t;
+   в волне 0 флаг разбирается и проверяется (`memory` только с `--contexts=all`), но объект шины
+   в `Deps` не кладётся. То же с `--recording`: путь проверяется, читает его `internal/replay` (EPIC-002).
+3. **`--mode=replay` без `EventClock`.** До появления `internal/replay` replay получает
+   `clock.Manual`, который никто не двигает, — для пустых контекстов этого достаточно.
+4. **`build/Dockerfile` копирует каталог `/out/`, а не три файла поимённо.** В §2.3 указано
+   `COPY --from=builder /out/multiverse /out/telegram-bot /out/mvctl /`; `cmd/mvctl` создаёт T-010,
+   `cmd/telegram-bot` — EPIC-004, и до тех пор такой `COPY` падает. `-o /out/ ./cmd/...` + `COPY /out/ /`
+   даёт тот же результат и не требует править файл при появлении новых бинарников. По той же причине
+   опущены `COPY` каталогов `blueprints/`, `rules/`, `laws/`, `config/` — их создают F-10 и EPIC-003;
+   в файле стоит комментарий с задачами.
+5. **`.dockerignore` не создан** — он в списке файлов T-004 (F-6a). Без него в контекст сборки уходят
+   `Docs/`, `services/`, `.git`; сборка проходит (проверено), но контекст лишний.
+6. **Чтение env — `runtime.EnvAddr`.** `shared/env` появляется в T-007, а `forbidigo` запрещает
+   `os.Getenv` вне `shared/*`, поэтому `MV_CORE_ADDR` читает хелпер в `shared/runtime`; в комментарии
+   указано, что его заменяет манифест `shared/env`.
+7. **Хук `MV_SWARM_FAKE` (`cmd/multiverse/fake_contexts.go`, ADR-001 доп. п. 8) не делался** —
+   по `ownership.md` §1 он относится к F-2/F-10 и требует `shared/testkit/swarm.FakeContext`,
+   которого ещё нет (F-10, T-018). Ожидаемое место — T-018.
+8. **`db backup|check` — распознаваемые подкоманды без реализации.** Базы данных платформы
+   (`links.db`, `gateway.db`) появляются в EPIC-004 (ADR-019); сейчас обе печатают причину и
+   возвращают 1, неизвестная подкоманда — 2. Тест это фиксирует.
+
+### 7. Правки в as-is коде, потребовавшиеся для «зелёного» линтера
+
+Задача переводит `shared/{eventbus,agent,entity,jsonpath}` в единый модуль, после чего они впервые
+попадают под `golangci-lint`. Сделано минимально:
+
+- `.gitattributes`: добавлена строка **`*.go text eol=lf`**. При `* text=auto` и `core.autocrlf=true`
+  все `.go` выкладываются на диск с CRLF, и `gofmt`/`golangci-lint` считают неотформатированным
+  **каждый** файл — DoD §1 п. 1 локально не выполним в принципе. Содержимое в индексе уже LF, поэтому
+  строка не даёт диффа по коду; рабочая копия приведена к LF (131 файл, `git diff` по ним пуст).
+  Файл в границах владения EPIC-001 (`ownership.md` §1), но в списке файлов T-003 его не было —
+  фиксирую как добавление, см. ОВ-6.
+- `gofmt`/`goimports` применены к 14 файлам `shared/agent`, `shared/agent/tools`, `shared/eventbus`
+  (только пробелы и группировка импортов, `+324/−324`, семантики не меняет).
+- `shared/jsonpath/accessor.go`: `reflect.Ptr` → `reflect.Pointer` (это алиас той же константы;
+  `go vet` Go 1.26 добавил проверку `inline` и ругается на устаревшее имя). Единственная правка,
+  затрагивающая код, и она не меняет поведение.
+- Историческая семантика as-is кода **не исправлялась**: в `.golangci.yml` заведены точечные
+  исключения с указанием задачи, которая их снимет — `shared/eventbus/` (`errcheck`, `forbidigo`;
+  снимается в F-4a/T-005), `shared/agent/` (`errcheck`, `staticcheck`, `unused`; снимается при
+  переписывании рантайма агента в EPIC-003), `shared/*/examples/` (`forbidigo`, `unused`; судьбу
+  демо-программ решает F-9/T-019). Исключения — только по перечисленным линтерам, форматирование
+  проверяется везде.
+
+### 8. Открытые вопросы
+
+- **ОВ-6 (tech-lead#1).** Строка `*.go text eol=lf` в `.gitattributes` добавлена вне списка файлов
+  T-003 (обоснование — раздел 7). Подтвердить или перенести правку в отдельную задачу; без неё
+  `make lint` на Windows красный на всём репозитории.
+- **ОВ-7 (tech-lead#1 / system-architect).** Исключения as-is пакетов в `.golangci.yml` (раздел 7) —
+  временные. Нужно ли завести на них задачи явно (снятие исключения `shared/eventbus` — критерий
+  DoD T-005; `shared/agent` — критерий EPIC-003), чтобы они не остались навсегда.
+- **ОВ-8 (devops-engineer, T-008/T-012).** `make secrets-scan` по `infrastructure.md` §2.2 включает
+  `gitleaks dir --redact .` по рабочей копии. На машине владельца это всегда 5 находок:
+  реальный `.env` (в `.gitignore`, секреты там по назначению) и остаток каталога
+  `.claude/worktrees/frosty-bell/` (снятый в F-0 worktree, физически на диске). Решить: сузить цель
+  до отслеживаемых файлов, добавить пути в `.gitleaks.toml` (`allowlist.paths`) или удалить
+  каталог worktree с диска (последнее — решение пользователя, там лежит его `.env`).
+- **ОВ-9 (tech-lead#1 / T-004).** `build/versions.env` создаёт T-004; значения из T-003 —
+  `GO_VERSION=1.26.8`, `GOLANGCI_LINT_VERSION=v2.13.2`. Проверить, что `go.mod` (`toolchain go1.26.8`)
+  и `versions.env` не разъедутся: сверка «`toolchain` = `GO_VERSION`» — кандидат в `mvctl env check`
+  (T-010) или в job `unit` (T-012).
+- **ОВ-10 (tech-lead#1 / EPIC-002).** `shared/entity` вошёл в модуль без тестов (`[no test files]`).
+  Общий DoD §1 п. 3 требует тесты на новый код; здесь кода не писалось — это перенос. Полная модель
+  v2 с тестами — F-10/T-011.
+
+### 9. Установка инструментов
+
+`golangci-lint` на машине не было. Установлен пином §2.4:
+`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2` →
+`%USERPROFILE%\go\bin\golangci-lint.exe` (каталог уже в `PATH`, там же `gitleaks`).
+`golangci-lint --version` → `2.13.2 built with go1.26.8`. Хуки `pre-commit` из T-001 подхватывают
+его автоматически. `make` на машине по-прежнему нет (`infrastructure.md` §2.1:
+`winget install ezwinports.make`), поэтому цели `make lint`/`make test` прогонялись их содержимым
+напрямую; сам `Makefile` — задача T-004/T-008.
+
+### 10. Риски и допущения
+
+- `-race` локально не проверялся (нет cgo/gcc) — по решению оркестратора проверка уходит в CI (T-012).
+  Гонки вероятнее всего в `shared/clock.Manual` (мьютекс + буферизованные каналы) и
+  `shared/runtime.Registry`/`HTTP`; тесты этих пакетов написаны так, чтобы `-race` их покрывал.
+- Тулчейн 1.26.8 скачивается автоматически по `GOTOOLCHAIN=auto`. На машине без сети и без
+  установленного Go 1.26 сборка не пойдёт — в CI `setup-go` с `go-version-file: go.mod` (T-012)
+  этот случай закрывает.
+- `GOFLAGS=-buildvcs=false` требуется локально (путь с кириллицей, `infrastructure.md` §2.1);
+  все команды задачи прогонялись с ним. В `Makefile` (T-004/T-008) он должен экспортироваться
+  для локальных целей.
+- `cmd/multiverse/main.go` намеренно тонкий: диспетчер подкоманд и `run()`. Владельцы контекстов
+  добавляют только строку импорта в `contexts.go` — это уменьшает число PR, проходящих через
+  tech-lead#1.
+- Каталог `shared/*/examples/` остался в сборке (`go build ./...` их компилирует). Если F-9 решит,
+  что демо-программы не нужны, их место — `services/_archive/` или `Docs/`.
+
+---
+
+## developer#1 · T-003 · итерация 2 (исправления по ревью #1) · 2026-09-09
+
+Основание: `review.md`, запись «T-003 · ревью #1 · 2026-09-09» (вердикт «вернуть»), и решение
+оркестратора по M-1 из `journal.md` (админ-доступ решается по клиенту, а не по виду актора).
+В границах итерации — M-1, Mi-1, Mi-3, Mi-4, Mi-5, Mi-8. Mi-2, Mi-6, Mi-7 и Nit не трогались:
+они назначены в T-004/T-012 и бэклог T-019. Коммит не выполнялся, изменения в индексе.
+
+### 1. M-1 — `AdminOnly` решает по клиенту (`shared/runtime/http.go`)
+
+Было: допуск по `X-Actor-Kind ∈ {ci, operator}`; `operator` — не значение `actor_kind`, а `client_id`,
+поэтому штатный оператор (`human` через прокси gateway) получал `403`.
+
+Стало (ADR-009 п. 9, C-01, C-06):
+
+- `X-Client-Id` сверяется со списком из `MV_CORE_ADMIN_CLIENTS` (значение по умолчанию — `operator`,
+  список через запятую, пробелы обрезаются, пустые элементы отбрасываются). Отсутствующий или пустой
+  заголовок не совпадает ни с чем → `403`.
+- `X-Actor-Kind` необязателен; если передан — проверяется на принадлежность enum
+  `human|ci|sim|system` и ничего не разрешает сам по себе. Неизвестное значение → `403`.
+- Константы: `ActorKindHeader`, добавлены `ClientIDHeader`, `EnvAdminClients`, `DefaultAdminClients`;
+  `ActorKindCI` и `ActorKindOp` удалены (правка «б» ревью). Enum — неэкспортируемая карта
+  `actorKinds`.
+- Список читается один раз, при построении middleware (`AdminOnly(next)`), а не на каждый запрос;
+  это записано в doc-комментарии.
+- `EnvAddr` сохранён как есть (используется `serve.go`) и делегирует новому `envOr`, чтобы чтение
+  окружения в пакете осталось в одном месте до появления `shared/env` (F-5, T-007).
+
+Тесты `shared/runtime/http_test.go`: `TestAdminOnly` переписан на пары заголовков — оператор
+(`operator` + `human`) → 200; оператор без `X-Actor-Kind` → 200; `ci`-клиент из списка
+(`MV_CORE_ADMIN_CLIENTS=operator,ci-harness`, `ci-harness` + `ci`) → 200; чужой клиент
+(`telegram-bot`) → 403; без `X-Client-Id` → 403; вовсе без заголовков → 403; пустое значение → 403;
+неизвестный `actor_kind` (`operator` в роли вида актора) → 403; `Human` в другом регистре → 403;
+клиент, выпавший из переопределённого списка → 403. Старый кейс `http_test.go:70-71`, закреплявший
+прежнее поведение, удалён вместе с константами. Добавлен `TestAdminOnlyReportsReason` — в теле `403`
+названа причина и заголовок `X-Client-Id`.
+
+`MV_CORE_ADMIN_CLIENTS` внесена в `.env.example` строкой ниже `MV_CORE_ADDR` (файл T-001; правка в
+одну строку, содержательно относится к T-003).
+
+### 2. Mi-1 — `forbidigo` только для владельцев времени и окружения (`.golangci.yml`)
+
+Исключение `path: shared/` заменено на `path: shared/(clock|runtime|env)/` (`env` объявлен заранее,
+появится в T-007). Прогон после сужения дал 38 issues на as-is коде:
+`shared/agent` + `shared/agent/tools` (27) и `shared/entity` (11). `shared/eventbus` снова под
+правилом `time.Now` лишь формально: его временное исключение (снятие — T-005) перечисляет
+`forbidigo` целиком.
+По образцу ОВ-7 добавлено: `forbidigo` в существующее исключение `shared/agent/` (снятие — EPIC-003,
+там же переписывается рантайм агента) и новое исключение `shared/entity/` только на `forbidigo`
+(снятие — F-10/T-011, модель сущности v2, где отметки времени уходят в `shared/clock`).
+Итог: `golangci-lint run ./...` → `0 issues`.
+
+### 3. Mi-3 — depguard стал fail-closed (`.golangci.yml`)
+
+Правила контекстов переведены с deny-перечислений соседей на `list-mode: lax` + deny всего префикса
+`multiverse-core.io/internal` + `allow` с явным перечислением разрешённых соседей. В режиме `lax`
+запрет действует на всё, что не названо в `allow`, а стандартная библиотека, `shared/*` и внешние
+модули остаются открытыми — то есть fail-closed ровно по границам ADR-001 п. 3, без превращения
+списка зависимостей `go.mod` в часть конфига линтера.
+
+Разрешения: `state → mechanics`; `mechanics` — ничего; `swarm → mechanics, laws, llm`; `llm`, `laws`,
+`gateway`, `replay` — ничего; `memory → llm` (точное совпадение корневого пакета, запись
+`multiverse-core.io/internal/llm$`) и `llm/providers`, подпакеты `llm/guardian|prompt|filter|parser`
+остаются закрытыми (ADR-001 доп. п. 7).
+
+Добавлено правило-ловушка `internal-unlisted`: `files: **/internal/**` с отрицаниями
+(`!**/internal/state/**` и так далее для восьми известных имён) и deny всего `internal`. Новый
+`internal/<ctx>` без собственного правила не получает молчаливого разрешения — линтер требует сначала
+объявить границы. Это записано в комментарии правила.
+
+Проверено на временных пакетах (созданы, прогнаны, удалены, в индекс не добавлялись):
+`internal/{state,mechanics,swarm,llm,llm/guardian,llm/providers,laws,memory,foo}`. Ожидаемые 4 отказа
+получены, других нет: `state → memory`, `swarm → state`, `memory → llm/guardian`,
+`foo → mechanics` (ловушка). Разрешённое прошло: `state → mechanics`, `state → shared/clock`,
+`state → github.com/google/uuid`, `memory → llm` и `memory → llm/providers`, `swarm → laws|llm`.
+Это закрывает и замечание ревьюера о непроверенных глобах `**/internal/<ctx>/**`.
+
+### 4. Mi-4 — distroless по digest (`build/Dockerfile`)
+
+`FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872…f7ab` (индекс-манифест, multi-arch;
+получен 2026-09-09). В комментарии над строкой — обе команды обновления digest:
+`docker buildx imagetools inspect` и вариант через `curl` к `gcr.io/v2/.../manifests/nonroot`
+(заголовок `Docker-Content-Digest`), чтобы T-004 и Dependabot не искали способ.
+
+### 5. Mi-5 — `HEALTHCHECK` убран из образа (`build/Dockerfile`)
+
+Инструкция удалена: образ один на все роли, порты разные (gateway :8088, core :8090, memory :8082),
+и вшитый URL пометил бы две роли из трёх `unhealthy`. На её месте комментарий с причиной и готовой
+строкой `healthcheck` для compose (`infrastructure.md` §2.3, T-004) — проверка по-прежнему вызывает
+сам бинарник (`/multiverse health --url …`), в образе нет ни shell, ни curl. `docker build` в этой
+итерации не перезапускался: правки статические (удаление инструкции и пин базового образа).
+
+### 6. Mi-8 — гонка в `realTicker.Stop()` (`shared/clock/clock.go`)
+
+`stopped bool` заменён на `atomic.Bool` с `CompareAndSwap(false, true)`: первый `Stop()` возвращает
+`true` и останавливает `time.Ticker`, все последующие — `false`. Причина выбора (владелец держит
+тикер в рабочей горутине, а останавливает из `Stop(ctx)`) записана комментарием к типу.
+Тест `TestRealTickerStopIsIdempotentAndConcurrent`: повторный `Stop()` возвращает `false`; восемь
+горутин наперегонки останавливают один тикер — ровно одна видит `true`. Под `-race` (CI, T-012) этот
+тест покрывает исходное замечание; локально `-race` не запускался (нет gcc, ОВ-5).
+
+### 7. Результаты DoD итерации
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | ✔ |
+| `go vet ./...` | ✔ |
+| `go test -short -count=1 ./...` | ✔ 6 пакетов `ok`, 4 `[no test files]` |
+| `golangci-lint run ./...` (v2.13.2) | ✔ `0 issues` |
+| `golangci-lint fmt --diff ./...`, `gofmt -l cmd shared` | ✔ пусто |
+| `pre-commit run --files <изменённые>` | ✔ все хуки Passed |
+| `gitleaks git --staged --redact .` | ✔ `no leaks found` |
+| `-race` | локально не запускался (ОВ-5); точка внимания T-012 по `realTicker` снята по существу (Mi-8) |
+
+### 8. Открытые вопросы
+
+- **ОВ-11 (system-architect).** Решение по M-1 принято оркестратором и реализовано: админ-допуск —
+  по `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS`, `X-Actor-Kind` только валидируется по enum
+  `human|ci|sim|system`. Требуется уточнить формулировку C-06 и ADR-009 п. 9 («`X-Actor-Kind: ci|sim`
+  только для разрешённых клиентов» читается как допуск по паре заголовков) и решить, нужен ли на
+  `core` разбор формата `client_id:platform:allowed_actor_kinds` из `MV_GATEWAY_CLIENTS`
+  (`gateway-and-bot.md` §868) — сейчас `core` знает только список идентификаторов клиентов, а
+  сопоставление «клиент ↔ допустимые виды актора» остаётся за gateway (EPIC-004).
+- **ОВ-12 (tech-lead#1 / T-011).** Временное исключение `forbidigo` для `shared/entity` (раздел 2) —
+  внести снятие явным критерием DoD T-011, как это сделано для `shared/eventbus` (T-005) и
+  `shared/agent` (EPIC-003) по решению ОВ-7.
+- **ОВ-13 (devops-engineer / T-004).** Digest distroless в `build/Dockerfile` теперь пин: при
+  подключении Dependabot (экосистема `docker`, каталог `build/`) убедиться, что правило обновляет
+  строку `FROM … @sha256:`; при ручном обновлении пользоваться командами из комментария.
+
+### 9. Риски и допущения
+
+- `MV_CORE_ADMIN_CLIENTS` читается один раз при построении middleware. Пока `AdminOnly` вызывается на
+  старте процесса, это эквивалентно чтению на каждый запрос; при появлении горячей перезагрузки
+  конфигурации (в MVP-1 не планируется) поведение надо пересмотреть.
+- Значение по умолчанию `operator` означает, что без переменной окружения `/v1/admin/*` доступен
+  только клиенту `operator`; `ci-harness` в CI (T-012) и `mvctl` (T-010) должны быть добавлены в
+  список явно — иначе получат `403`. Это ожидаемо (fail-closed), но требует строки в их DoD.
+- depguard в режиме `lax` оставляет внешние модули открытыми: границы третьих сторон по-прежнему
+  контролирует `go.mod`, а не линтер. Альтернатива (полные allow-списки с перечислением
+  `github.com/...`) сделала бы правку `.golangci.yml` обязательной при добавлении любой зависимости —
+  отклонено как избыточное для ADR-001 п. 3.
+- Digest distroless зафиксирован на 2026-09-09. Обновление базового образа теперь осознанное
+  действие (в этом и смысл пина); без Dependabot он будет стареть — отслеживается в T-004.

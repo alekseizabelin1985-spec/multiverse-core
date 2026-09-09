@@ -39,20 +39,20 @@ func (p *yamlParser) Validate(bp *AgentBlueprint) error {
 	if bp.Name == "" {
 		return fmt.Errorf("blueprint name is required")
 	}
-	
+
 	if bp.Version == "" {
 		return fmt.Errorf("blueprint version is required")
 	}
-	
+
 	if bp.Trigger.Type == "" {
 		return fmt.Errorf("blueprint trigger type is required")
 	}
-	
+
 	// Валидация LLM config
 	if bp.LLM.Model == "" {
 		return fmt.Errorf("blueprint LLM model is required")
 	}
-	
+
 	return nil
 }
 
@@ -64,38 +64,38 @@ func (p *yamlParser) Serialize(bp *AgentBlueprint) ([]byte, error) {
 // LoadBlueprintFromDir загружает все блупринты из директории
 func LoadBlueprintsFromDir(dir string) ([]*AgentBlueprint, error) {
 	var blueprints []*AgentBlueprint
-	
+
 	parser := NewYAMLParser()
-	
+
 	// Читаем все .md и .yaml файлы
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("read directory: %w", err)
 	}
-	
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		
+
 		name := entry.Name()
-		
+
 		// Проверяем расширение
 		if !strings.HasSuffix(name, ".md") && !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
 			continue
 		}
-		
+
 		path := fmt.Sprintf("%s/%s", dir, name)
-		
+
 		bp, err := parser.ParseFile(path)
 		if err != nil {
 			// Пропускаем невалидные файлы, но логируем
 			fmt.Printf("Warning: skipping invalid blueprint %s: %v\n", name, err)
 			continue
 		}
-		
+
 		blueprints = append(blueprints, bp)
 	}
-	
+
 	return blueprints, nil
 }

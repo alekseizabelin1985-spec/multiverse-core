@@ -160,7 +160,7 @@ func getFieldByTag(data any, fieldName string) (any, bool) {
 	}
 
 	val := reflect.ValueOf(data)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return nil, false
 		}
