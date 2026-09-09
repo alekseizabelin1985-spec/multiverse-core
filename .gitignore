@@ -2,3 +2,7 @@
 
 .qwen/
 gha-creds-*.json
+
+# dev-team
+.claude/worktrees/
+Docs/dev-team/.dashboard.port

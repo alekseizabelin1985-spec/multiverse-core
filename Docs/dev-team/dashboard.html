@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dev-team · dashboard</title>
+<style>
+:root{color-scheme:light;
+ --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);
+ --s1:#2a78d6;--s1-soft:#cde2fb;--s2:#eb6834;--s3:#1baf7a;--s7:#4a3aa7;
+ --done:#1c5cab;--review:#2a78d6;--prog:#6da7ec;--todo:#e1e0d9;
+ --good:#0ca30c;--warn:#fab219;--serious:#ec835a;--crit:#d03b3b;--good-text:#006300;
+ --radius:12px;--shadow:0 1px 2px rgba(11,11,11,.05),0 8px 24px -16px rgba(11,11,11,.25)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+ --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+ --s1:#3987e5;--s1-soft:#184f95;--s2:#d95926;--s3:#199e70;--s7:#9085e9;
+ --done:#9ec5f4;--review:#5598e7;--prog:#256abf;--todo:#383835;--good-text:#0ca30c;--shadow:none}}
+:root[data-theme="dark"]{color-scheme:dark;
+ --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);
+ --s1:#3987e5;--s1-soft:#184f95;--s2:#d95926;--s3:#199e70;--s7:#9085e9;
+ --done:#9ec5f4;--review:#5598e7;--prog:#256abf;--todo:#383835;--good-text:#0ca30c;--shadow:none}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--page);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:1280px;margin:0 auto;padding:22px 20px 44px}
+.top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px 24px;margin-bottom:18px}
+.top h1{margin:0;font-size:24px;font-weight:650;letter-spacing:-.01em}
+.top h1 span{color:var(--muted);font-weight:500}
+.top .sub{color:var(--ink2);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:4px}
+.top .spacer{flex:1}
+.live{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--ink2);padding:5px 10px;border:1px solid var(--ring);border-radius:999px;background:var(--surface)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live.on{color:var(--good-text)}.live.on i{background:var(--good);animation:pulse 1.6s infinite}
+.live.finished{color:var(--s1)}.live.finished i{background:var(--s1)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(12,163,12,.45)}70%{box-shadow:0 0 0 7px rgba(12,163,12,0)}100%{box-shadow:0 0 0 0 rgba(12,163,12,0)}}
+button.tgl{font:inherit;font-size:12px;color:var(--ink2);background:var(--surface);border:1px solid var(--ring);border-radius:999px;padding:5px 11px;cursor:pointer}
+button.tgl:hover{color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:16px}
+.kpi{background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);padding:13px 15px;box-shadow:var(--shadow)}
+.kpi .k{font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.05em}
+.kpi .v{font-size:28px;font-weight:650;line-height:1.15;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:13px;color:var(--muted);font-weight:500;margin-left:5px}
+.kpi .v.warn{color:var(--serious)}
+.kpi .sub{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.kpi .sub .s-crit{color:var(--crit);font-weight:600}.kpi .sub .s-serious{color:var(--serious);font-weight:600}
+.prog{height:6px;background:var(--todo);border-radius:4px;margin-top:9px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--s1);border-radius:4px;transition:width .4s}
+.grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:16px}
+@media (max-width:920px){.grid{grid-template-columns:1fr}}
+section.card{background:var(--surface);border:1px solid var(--ring);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow);margin-bottom:16px;min-width:0}
+section.card>header{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}
+section.card h2{margin:0;font-size:15px;font-weight:650}
+.hint{color:var(--muted);font-size:12px}
+.sp{flex:1}
+.filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.filters button{font:inherit;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--ring);background:transparent;color:var(--ink2);cursor:pointer}
+.filters button[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
+.filters label{font-size:12px;color:var(--ink2);display:flex;gap:6px;align-items:center;margin-left:6px}
+.empty{color:var(--muted);margin:6px 0}
+/* now */
+.now{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.act{display:grid;grid-template-columns:36px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--s1);border-radius:10px;background:color-mix(in srgb,var(--s1) 6%,var(--surface))}
+.act .avatar{width:36px;height:36px;border-radius:50%;background:var(--s1);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.act .who{font-weight:600;font-size:13px}
+.act .what{font-size:12px;color:var(--ink2)}
+.act .t{font-variant-numeric:tabular-nums;font-size:13px;color:var(--s1);font-weight:600}
+/* initiatives */
+.ini{border-top:1px solid var(--grid);padding:12px 0}
+.ini:first-child{border-top:0;padding-top:2px}
+.ini header{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ini .iid{font-variant-numeric:tabular-nums}
+.ini .ititle{color:var(--ink2)}
+.ini .stage-now{margin-left:auto;font-size:12px;color:var(--s1);font-weight:600;display:flex;gap:8px;align-items:center}
+.ini .stage-now .t{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums}
+.ini.done .stage-now{color:var(--good-text)}
+.chip{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--ring);color:var(--ink2);white-space:nowrap}
+.chip.t-feature{border-color:var(--s1);color:var(--s1)}.chip.t-bug{border-color:var(--s2);color:var(--s2)}.chip.t-project{border-color:var(--s7);color:var(--s7)}.chip.t-epic{border-color:var(--s3);color:var(--s3)}
+.chip.size{background:var(--grid);border-color:transparent}
+.chip.team{background:color-mix(in srgb,var(--s3) 12%,transparent);border-color:transparent;color:var(--ink2)}
+.chip.on{border-color:var(--s1);color:var(--s1)}
+.ini.child{padding-left:18px;border-left:3px solid color-mix(in srgb,var(--s3) 35%,transparent)}
+/* teams */
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.teamcard{border:1px solid var(--grid);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.teamcard.done{opacity:.7}
+.teamcard header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.teamcard header strong{font-size:14px}
+.teamcard .stage-now{margin-left:auto;font-size:12px;color:var(--s1);font-weight:600}
+.teamcard .meta code{font-size:11px;color:var(--muted)}
+.teamcard .members{display:flex;flex-wrap:wrap;gap:4px}
+.teamcard .tprog{display:grid;grid-template-columns:1fr 44px;gap:8px;align-items:center}
+.teamcard .tprog .prog{margin:0}
+.teamcard .tnow{display:flex;flex-wrap:wrap;gap:4px;min-height:20px}
+.role .avatar{position:relative}
+.role .cnt{position:absolute;right:-6px;top:-6px;font-size:9px;background:var(--s2);color:#fff;border-radius:999px;padding:1px 4px;line-height:1.2}
+.pipe{list-style:none;margin:10px 0 0;padding:0;display:flex;align-items:flex-start;overflow-x:auto}
+.pipe li{position:relative;display:flex;flex-direction:column;align-items:center;min-width:60px;flex:1;font-size:11px;color:var(--muted)}
+.pipe li.gate{min-width:34px;flex:0 0 34px}
+.pipe li::before{content:"";position:absolute;top:7px;left:0;right:0;height:2px;background:var(--grid);z-index:0}
+.pipe li:first-child::before{left:50%}.pipe li:last-child::before{right:50%}
+.pipe .dot{position:relative;z-index:1;width:16px;height:16px;border-radius:50%;background:var(--surface);border:2px solid var(--axis)}
+.pipe .st-done .dot{background:var(--s1);border-color:var(--s1)}
+.pipe .st-done::before{background:var(--s1)}
+.pipe .st-cur .dot{background:var(--surface);border-color:var(--s1);box-shadow:0 0 0 4px var(--s1-soft)}
+.pipe .st-cur .lbl{color:var(--ink);font-weight:600}
+.pipe .st-done .lbl{color:var(--ink2)}
+.pipe .lbl,.pipe .glbl{margin-top:6px;white-space:nowrap}
+.pipe .dia{position:relative;z-index:1;width:16px;height:16px;transform:rotate(45deg);border-radius:3px;background:var(--surface);border:2px solid var(--axis);display:flex;align-items:center;justify-content:center}
+.pipe .dia svg{transform:rotate(-45deg);width:11px;height:11px}
+.pipe .g-ok .dia{background:var(--good);border-color:var(--good);color:#fff}
+.pipe .g-warn .dia{background:var(--warn);border-color:var(--warn);color:#0b0b0b}
+.pipe .g-crit .dia{background:var(--crit);border-color:var(--crit);color:#fff}
+.pipe .g-na .dia{background:var(--grid);border-color:var(--grid);color:var(--muted)}
+.pipe .g-ok::before,.pipe .g-na::before{background:var(--s1)}
+.pipe .glbl{font-weight:600}
+.pipe .g-warn .glbl,.pipe .g-crit .glbl{color:var(--ink)}
+.ini .next{margin:8px 0 0;font-size:12px;color:var(--ink2)}
+.ini .next span{color:var(--muted)}
+.ini .tasklist{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.ini .tasklist li{font-size:11px;padding:3px 8px;border-radius:6px;border:1px solid var(--grid);color:var(--ink2);display:flex;gap:6px;align-items:center;font-variant-numeric:tabular-nums}
+.ini .tasklist li i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.ini .tasklist li.done{opacity:.75}.ini .tasklist li.in-progress{border-color:var(--s1);color:var(--ink)}
+/* tasks */
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--ink2);margin-bottom:8px}
+.lg{display:flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sw.todo,.seg.todo,.tasklist i.todo{background:var(--todo)}
+.sw.in-progress,.seg.in-progress,.tasklist i.in-progress{background:var(--prog)}
+.sw.review,.seg.review,.tasklist i.review{background:var(--review)}
+.sw.done,.seg.done,.tasklist i.done{background:var(--done)}
+.bar-row{display:grid;grid-template-columns:minmax(140px,220px) 1fr 52px;align-items:center;gap:10px;padding:5px 0}
+.bar-lbl{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-lbl em{font-style:normal;color:var(--ink2)}
+.bar{display:flex;gap:2px;height:18px}
+.seg{display:flex;align-items:center;justify-content:center;border-radius:3px;min-width:4px;transition:width .4s,filter .15s}
+.seg:first-child{border-radius:4px 3px 3px 4px}.seg:last-child{border-radius:3px 4px 4px 3px}
+.seg b{font-size:11px;font-weight:600;color:var(--ink)}
+.seg.done b,.seg.review b{color:#fff}
+:root[data-theme="dark"] .seg.done b,:root[data-theme="dark"] .seg.review b{color:#0b0b0b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seg.done b,:root:not([data-theme="light"]) .seg.review b{color:#0b0b0b}}
+.seg:hover{filter:brightness(1.12)}
+.bar-val{font-size:12px;color:var(--ink2);text-align:right;font-variant-numeric:tabular-nums}
+/* defects */
+.def-total{font-size:28px;font-weight:650;margin:-2px 0 6px}
+.def-row{display:grid;grid-template-columns:92px 1fr 28px;align-items:center;gap:10px;padding:4px 0;font-size:12px}
+.def-lbl{display:flex;align-items:center;gap:6px;font-weight:600}
+.s-crit{color:var(--crit)}.s-serious{color:var(--serious)}.s-warn{color:var(--warn)}.s-ok{color:var(--good-text)}
+.def-bar{height:10px;background:var(--todo);border-radius:4px;overflow:hidden}
+.def-fill{display:block;height:100%;border-radius:4px;transition:width .4s}
+.def-fill.s-crit{background:var(--crit)}.def-fill.s-serious{background:var(--serious)}.def-fill.s-warn{background:var(--warn)}
+.def-val{text-align:right;font-variant-numeric:tabular-nums;color:var(--ink2)}
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-weight:600;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px;border-bottom:1px solid var(--grid)}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--grid);vertical-align:top}
+.tbl td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl tr:last-child td{border-bottom:0}
+.gcell{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+.gcell.g-ok{color:var(--good-text)}.gcell.g-warn{color:var(--serious)}.gcell.g-crit{color:var(--crit)}.gcell.g-na,.gcell.g-ahead{color:var(--muted)}
+.pill{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid currentColor}
+/* team */
+.team{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.role{display:grid;grid-template-columns:32px 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;padding:8px 10px;border-radius:10px;border:1px solid var(--grid)}
+.role .avatar{grid-row:1/3;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;background:var(--grid);color:var(--ink2)}
+.role .rname{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.role .rstate{font-size:11px;color:var(--muted)}
+.role.r-active{border-color:var(--s1)}.role.r-active .avatar{background:var(--s1);color:#fff}.role.r-active .rstate{color:var(--s1);font-weight:600}
+.role.r-done .avatar{background:var(--s1-soft);color:var(--ink)}
+.role.r-idle{opacity:.7}
+/* timeline */
+.timeline{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--grid);max-height:520px;overflow:auto}
+.timeline li{position:relative;padding:3px 0 9px 14px;font-size:13px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.timeline li::before{content:"";position:absolute;left:-21px;top:8px;width:10px;height:10px;border-radius:50%;background:var(--axis);border:2px solid var(--surface)}
+.timeline li.tl-ok::before{background:var(--good)}.timeline li.tl-warn::before{background:var(--warn)}.timeline li.tl-crit::before{background:var(--crit)}
+.timeline time{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;min-width:96px}
+.timeline .role{display:inline;padding:0;border:0;font-size:12px;color:var(--s1);font-weight:600}
+.timeline .tl-text{color:var(--ink2);flex:1 1 55%}
+.blockers{margin:0;padding-left:18px;color:var(--ink2)}.blockers li{margin:4px 0}
+footer{color:var(--muted);font-size:12px;margin-top:22px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+footer code{font-size:11px}
+[hidden]{display:none!important}
+@media print{.tgl,.filters{display:none}section.card{break-inside:avoid;box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div>
+    <h1 id="h-title">dev-team <span>· dashboard</span></h1>
+    <div class="sub" id="h-sub"></div>
+  </div>
+  <span class="spacer"></span>
+  <span class="live" id="live"><i></i><span id="live-text">—</span></span>
+  <button type="button" class="tgl" id="lang" title="Language">RU / EN</button>
+  <button type="button" class="tgl" id="theme" title="Theme">☀ / ☾</button>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<section class="card" id="sec-now"><header><h2 data-i="now"></h2><span class="hint" data-i="now_hint"></span></header><div class="now" id="now"></div></section>
+
+<section class="card" id="sec-teams" hidden><header><h2 data-i="teams"></h2><span class="hint" data-i="teams_hint"></span></header><div class="teams" id="teams"></div></section>
+
+<section class="card">
+  <header><h2 data-i="pipeline"></h2><span class="hint" data-i="pipeline_hint"></span><span class="sp"></span>
+    <div class="filters" id="filters"></div></header>
+  <div id="pipeline"></div>
+</section>
+
+<div class="grid">
+  <div>
+    <section class="card"><header><h2 data-i="tasks"></h2><span class="sp"></span><button type="button" class="tgl" id="tasks-toggle"></button></header><div id="tasks"></div></section>
+    <section class="card"><header><h2 data-i="gates"></h2></header><div id="gates"></div></section>
+    <section class="card"><header><h2 data-i="team"></h2><span class="hint" data-i="team_hint"></span></header><div class="team" id="team"></div></section>
+    <section class="card"><header><h2 data-i="risks"></h2></header><div id="risks"></div></section>
+  </div>
+  <div>
+    <section class="card"><header><h2 data-i="defects"></h2></header><div id="defects"></div></section>
+    <section class="card"><header><h2 data-i="blockers"></h2></header><div id="blockers"></div></section>
+    <section class="card"><header><h2 data-i="timeline"></h2></header><div id="timeline"></div></section>
+    <section class="card"><header><h2 data-i="releases"></h2></header><div id="releases"></div></section>
+  </div>
+</div>
+<footer><span data-i="generated"></span><span><code>state.js</code> · <span id="f-updated"></span></span></footer>
+</div>
+
+<script>/*STATE-BEGIN*/window.DEVTEAM_SNAPSHOT={"project": "multiverse-core", "stack": "Go 1.24/1.25 workspace, Redpanda (Kafka), MinIO, ChromaDB, Neo4j, TimescaleDB, Ollama+Qwen3, Docker Compose", "autonomy": "gates", "language": "ru", "startedAt": "2026-09-09T00:51:35+03:00", "updatedAt": "2026-09-09T07:45:00+03:00", "finishedAt": null, "initiatives": [{"id": "PROJECT", "title": "Аудит платформы, архитектурное видение, декомпозиция на эпики, реестр открытых вопросов", "type": "project", "size": "L", "status": "active", "stage": "architecture", "stageStartedAt": "2026-09-09T04:50:00+03:00", "startedAt": "2026-09-09T00:51:35+03:00", "finishedAt": null, "branch": "feat/PROJECT-audit-architecture", "next": "Решение по G2 → A4 планирование по командам (system-analyst#N, architect#N, tech-lead#N, PM, QA) → G3", "gates": {"G1": {"status": "approved", "at": "2026-09-09T04:15:00+03:00", "note": "без замечаний; фильтр кат. (a) fail-closed; запреты 7 пунктов; допущения приняты"}, "G2": {"status": "pending"}}, "tasks": [], "defects": []}], "teams": [], "activity": [{"role": "system-architect", "instance": 1, "initiative": "PROJECT", "action": "аудит текущей архитектуры (overview.md → Текущее состояние)", "startedAt": "2026-09-09T00:55:00+03:00", "finishedAt": "2026-09-09T01:30:00+03:00"}, {"role": "product-owner", "instance": 1, "initiative": "PROJECT", "action": "исследование аналогов и варианты видения", "startedAt": "2026-09-09T00:55:00+03:00", "finishedAt": "2026-09-09T01:14:00+03:00"}, {"role": "business-analyst", "instance": 1, "initiative": "PROJECT", "action": "типовые сценарии и блокирующие вопросы", "startedAt": "2026-09-09T00:55:00+03:00", "finishedAt": "2026-09-09T01:05:00+03:00"}, {"role": "domain-expert", "instance": 1, "initiative": "PROJECT", "action": "правила предметной области, краевые случаи, глоссарий", "startedAt": "2026-09-09T00:55:00+03:00", "finishedAt": "2026-09-09T01:12:00+03:00"}, {"role": "product-owner", "instance": 1, "initiative": "PROJECT", "action": "уточнение vision.md и stakeholders.md по ответам раундов 1–3", "startedAt": "2026-09-09T02:00:00+03:00", "finishedAt": "2026-09-09T02:20:00+03:00"}, {"role": "business-analyst", "instance": 1, "initiative": "PROJECT", "action": "PRD, пользовательские истории, NFR; статусы в реестре вопросов", "startedAt": "2026-09-09T02:00:00+03:00", "finishedAt": "2026-09-09T02:40:00+03:00"}, {"role": "domain-expert", "instance": 1, "initiative": "PROJECT", "action": "ревью PRD/историй/NFR на соответствие домену, обновление глоссария", "startedAt": "2026-09-09T02:40:00+03:00", "finishedAt": "2026-09-09T03:15:00+03:00"}, {"role": "product-analyst", "instance": 1, "initiative": "PROJECT", "action": "метрики успеха, события аналитики, гипотезы (project/metrics.md)", "startedAt": "2026-09-09T02:40:00+03:00", "finishedAt": "2026-09-09T03:00:00+03:00"}, {"role": "product-owner", "instance": 1, "initiative": "PROJECT", "action": "правка vision.md: рой GM, фоновая жизнь мира в MVP, железо", "startedAt": "2026-09-09T03:00:00+03:00", "finishedAt": "2026-09-09T03:30:00+03:00"}, {"role": "business-analyst", "instance": 1, "initiative": "PROJECT", "action": "сводные правки требований: рой GM, фоновая жизнь мира, доменное ревью, метрики", "startedAt": "2026-09-09T03:15:00+03:00", "finishedAt": "2026-09-09T04:00:00+03:00"}, {"role": "product-analyst", "instance": 1, "initiative": "PROJECT", "action": "пересмотр metrics.md под фоновую жизнь и рой GM", "startedAt": "2026-09-09T03:30:00+03:00", "finishedAt": "2026-09-09T03:45:00+03:00"}, {"role": "system-analyst", "instance": 1, "initiative": "PROJECT", "action": "use-cases, data-model, api-contracts, integrations", "startedAt": "2026-09-09T04:15:00+03:00", "finishedAt": "2026-09-09T04:50:00+03:00"}, {"role": "business-analyst", "instance": 1, "initiative": "PROJECT", "action": "внесение решений G1 в prd/nfr/open-questions", "startedAt": "2026-09-09T04:15:00+03:00", "finishedAt": "2026-09-09T04:30:00+03:00"}, {"role": "system-architect", "instance": 1, "initiative": "PROJECT", "action": "целевая архитектура, ADR, contracts.md, план миграции, предложение эпиков", "startedAt": "2026-09-09T04:50:00+03:00", "finishedAt": "2026-09-09T05:30:00+03:00"}, {"role": "architect", "instance": 1, "team": "TEAM-1", "initiative": "PROJECT", "action": "детальный дизайн EPIC-002 Состояние и механика (+ каркас EPIC-001)", "startedAt": "2026-09-09T05:40:00+03:00", "finishedAt": "2026-09-09T06:30:00+03:00"}, {"role": "architect", "instance": 2, "team": "TEAM-2", "initiative": "PROJECT", "action": "детальный дизайн EPIC-003 Рой GM, LLM-шлюз, страж, законы", "startedAt": "2026-09-09T05:40:00+03:00", "finishedAt": "2026-09-09T06:30:00+03:00"}, {"role": "architect", "instance": 3, "team": "TEAM-3", "initiative": "PROJECT", "action": "детальный дизайн EPIC-004 Gateway и Telegram-бот", "startedAt": "2026-09-09T05:40:00+03:00", "finishedAt": "2026-09-09T06:30:00+03:00"}, {"role": "security-engineer", "instance": 1, "initiative": "PROJECT", "action": "модель угроз (threat-model.md)", "startedAt": "2026-09-09T05:40:00+03:00", "finishedAt": "2026-09-09T06:05:00+03:00"}, {"role": "devops-engineer", "instance": 1, "initiative": "PROJECT", "action": "инфраструктура, сборка, CI, конфигурация (infrastructure.md)", "startedAt": "2026-09-09T05:40:00+03:00", "finishedAt": "2026-09-09T06:30:00+03:00"}, {"role": "system-architect", "instance": 1, "initiative": "PROJECT", "action": "сведение запросов на изменение контрактов, замечаний security/devops; обновление contracts/ADR/overview/ownership", "startedAt": "2026-09-09T06:40:00+03:00", "finishedAt": "2026-09-09T07:20:00+03:00"}, {"role": "tech-lead", "instance": 1, "team": "TEAM-1", "initiative": "PROJECT", "action": "проверка декомпозиции на эпики, plan/teams.md, волны", "startedAt": "2026-09-09T06:40:00+03:00", "finishedAt": "2026-09-09T07:00:00+03:00"}, {"role": "system-architect", "instance": 1, "initiative": "PROJECT", "action": "обновление plan/epics.md под сведение и замечания тимлида", "startedAt": "2026-09-09T07:20:00+03:00", "finishedAt": "2026-09-09T07:45:00+03:00"}], "events": [{"at": "2026-09-09T00:51:35+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Интейк завершён: цель — аудит, архитектура, эпики, открытые вопросы; ru, gates, git branches+ask"}, {"at": "2026-09-09T00:55:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Запущены system-architect (аудит), product-owner, business-analyst, domain-expert (discovery)"}, {"at": "2026-09-09T01:05:00+03:00", "initiative": "PROJECT", "role": "business-analyst", "text": "Инвентаризация 40 требований, 10 сценариев (ни один игровой не проходит сквозь), 17 вопросов OQ-R (9 блокирующих)"}, {"at": "2026-09-09T01:12:00+03:00", "initiative": "PROJECT", "role": "domain-expert", "text": "Глоссарий (~45 терминов, расхождения), доменные заметки по 13 темам, 15 вопросов OQ-D; replay невоспроизводим, модерация/ПДн только заявлены"}, {"at": "2026-09-09T01:14:00+03:00", "initiative": "PROJECT", "role": "product-owner", "text": "Исследование ниши, черновик vision.md (варианты A/B/C, рекомендация B цель + A как MVP), 13 вопросов OQ-P (6 блокирующих)"}, {"at": "2026-09-09T01:30:00+03:00", "initiative": "PROJECT", "role": "system-architect", "text": "Аудит: 22 модуля собираются; 3 сервиса реализованы, 6 частично, 4 прототипа, 2 неработоспособны; ~30 разрывов событий, 6 фантомных топиков; секреты в git-истории (.mcp.env); CI на Go отсутствует"}, {"at": "2026-09-09T01:30:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Инцидент: open-questions.md перезаписан при параллельной записи; разделы BA/PO/DE восстановлены из транскриптов; итог — 61 вопрос (OQ-R 17, OQ-P 13, OQ-D 15, OQ-A 16)"}, {"at": "2026-09-09T01:30:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Этап A1 «Требования»: показана сводка discovery, раунд 1 вопросов пользователю"}, {"at": "2026-09-09T01:40:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Раунд 1: платформа + первый игрок сам разработчик; Agent GM Core единственный мозг; соло + группа 2–6 сразу; MVP «Тёмный лес» + Telegram/Discord-бот"}, {"at": "2026-09-09T01:50:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Раунд 2: Living Worlds включить в целевое видение; entity-manager единственный писатель + record-replay; консистентность слоями с «пробоем законов» постфактум; облачные LLM допустимы через абстракцию"}, {"at": "2026-09-09T02:00:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Раунд 3: контент без фильтров в MVP + точка вставки и абсолютные запреты; культивация гибрид, Ω — финал; псевдонимизация ПДн; секреты — отзыв вручную, удаление из HEAD, filter-repo отдельной задачей"}, {"at": "2026-09-09T02:00:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Уточнение: product-owner (vision) ∥ business-analyst (PRD, истории, NFR)"}, {"at": "2026-09-09T02:20:00+03:00", "initiative": "PROJECT", "role": "product-owner", "text": "vision.md v1.0 «К подтверждению (G1)»: варианты, 6 отклонений D1–D6, критерии S1–S13, 12 принципов; stakeholders и research обновлены"}, {"at": "2026-09-09T02:40:00+03:00", "initiative": "PROJECT", "role": "business-analyst", "text": "prd.md (FR-001..115, BR 15), user-stories.md (35 историй, 19 детальных MVP-1), nfr.md (60 NFR); реестр: 41 решено, 8 допущений, 12 открытых"}, {"at": "2026-09-09T02:40:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Ревью требований domain-expert ∥ метрики product-analyst; пользователю показан текст подтверждения видения"}, {"at": "2026-09-09T02:50:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Видение: «почти, есть уточнения»; Telegram + команды с текстом; запреты BR-08 приняты; GPU укажет"}, {"at": "2026-09-09T03:00:00+03:00", "initiative": "PROJECT", "role": "product-analyst", "text": "metrics.md v0.1: северная звезда clean_human_turns_weekly, 5 событий analytics.*, 6 гипотез, дашборд оператора CSV+CLI"}, {"at": "2026-09-09T03:00:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Уточнения: GM — рой (глобальный/регион/город/игрок) на базе Agent GM Core; фоновая жизнь мира в MVP; железо RTX 4090 24 ГБ, 128 ГБ RAM"}, {"at": "2026-09-09T03:00:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "product-owner: правка vision.md под рой GM и фоновую жизнь мира"}, {"at": "2026-09-09T03:15:00+03:00", "initiative": "PROJECT", "role": "domain-expert", "text": "domain-review.md: DR-01..27 (10 существенных: пробой законов как механика, раунд группы, правила боя v0.1, запреты, ПДн); glossary v0.2; вывод — на G1 после правок"}, {"at": "2026-09-09T03:15:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "business-analyst: сводные правки PRD/историй/NFR (рой GM, фоновая жизнь, DR-01..10, метрики §8)"}, {"at": "2026-09-09T03:30:00+03:00", "initiative": "PROJECT", "role": "product-owner", "text": "vision.md v1.1: рой GM, фоновая жизнь в MVP, D7/D8, S14"}, {"at": "2026-09-09T03:30:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Видение v1.1 подтверждено: «Да, именно так». Рой в MVP: глобальный+региональный+персональный; S14 пороги после замера; допущения приняты"}, {"at": "2026-09-09T03:30:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "product-analyst: пересмотр metrics.md под фоновую жизнь мира (H5, idle-scope)"}, {"at": "2026-09-09T03:45:00+03:00", "initiative": "PROJECT", "role": "product-analyst", "text": "metrics.md v0.2: метрики роя и фоновой жизни, H5', S14, сессия/S7 решены; предложения к требованиям п.14–17"}, {"at": "2026-09-09T04:00:00+03:00", "initiative": "PROJECT", "role": "business-analyst", "text": "prd/user-stories/nfr v0.2: рой GM, фоновая жизнь, DR-01..10, метрики; реестр 69 вопросов (43 решено, 8 к G1)"}, {"at": "2026-09-09T04:00:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Гейт G1 показан пользователю, ждём решения"}, {"at": "2026-09-09T04:15:00+03:00", "initiative": "PROJECT", "role": "user", "text": "G1 утверждён без замечаний; фильтр кат.(a) fail-closed; запреты 7 пунктов; допущения по рекомендациям"}, {"at": "2026-09-09T04:15:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Этап A2 «Анализ»: system-analyst ∥ business-analyst (решения G1 в требования)"}, {"at": "2026-09-09T04:30:00+03:00", "initiative": "PROJECT", "role": "business-analyst", "text": "Решения G1 внесены: prd/nfr/US v0.3; реестр 51 решено / 7 допущений / 11 на архитектуру"}, {"at": "2026-09-09T04:50:00+03:00", "initiative": "PROJECT", "role": "system-analyst", "text": "use-cases (35+13), data-model, api-contracts (45+ событий), integrations — готовы"}, {"at": "2026-09-09T04:50:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Этап A3 «Архитектура»: system-architect — целевая архитектура, ADR, контракты, эпики"}, {"at": "2026-09-09T05:30:00+03:00", "initiative": "PROJECT", "role": "system-architect", "text": "Целевая архитектура: модульный монолит, 3 процесса + бот, Agent GM Core как runtime роя, MinIO+SQLite+Qdrant+Neo4j; 10 ADR; contracts.md; epics.md (13 эпиков, 3 команды); ownership.md"}, {"at": "2026-09-09T05:40:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "A3 шаги 2–3: architect#1 (EPIC-002) ∥ architect#2 (EPIC-003) ∥ architect#3 (EPIC-004) ∥ security-engineer ∥ devops-engineer; пользователю — OQ-A-17/18/19 и число команд"}, {"at": "2026-09-09T05:45:00+03:00", "initiative": "PROJECT", "role": "user", "text": "OQ-A-17 всё в _archive/ без удаления; OQ-A-18 одна 30b-a3b после замера, иначе 8b+14b; OQ-A-19 retention 30/90/180; 3 команды"}, {"at": "2026-09-09T06:05:00+03:00", "initiative": "PROJECT", "role": "security-engineer", "text": "threat-model.md: 15 активов, 40 угроз STRIDE (1 Critical as-is, 19 Major), SEC-01..33; 5 Major-пробелов к контрактам; найден похожий на ключ sk-… в shared/oracle/README.md"}, {"at": "2026-09-09T06:30:00+03:00", "initiative": "PROJECT", "role": "architect", "text": "architect#1/#2/#3: components/state-and-mechanics.md, swarm-llm-laws.md, gateway-and-bot.md, foundation.md; ADR-011..020 (прерваны лимитом на отчёте, файлы полные)"}, {"at": "2026-09-09T06:30:00+03:00", "initiative": "PROJECT", "role": "devops-engineer", "text": "infrastructure.md: compose-профили, CI (GitHub Actions), гигиена, бэкапы, чек-лист инициализации; 14 замечаний к архитектуре (Go 1.25 вне поддержки, MinIO образы заморожены, segment.ms, core HTTP-порт)"}, {"at": "2026-09-09T06:40:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Ключ в README реальный — отзывает сам; OneDrive нет; allowlist Telegram id"}, {"at": "2026-09-09T06:40:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "A3 шаги 4–5: system-architect (сведение контрактов и замечаний) ∥ tech-lead#1 (декомпозиция, команды)"}, {"at": "2026-09-09T07:00:00+03:00", "initiative": "PROJECT", "role": "tech-lead", "text": "decomposition-review.md, teams.md: 5 MVP-эпиков ~95–100 задач ≈ 9–11 нед., волны 0/1/2, F-0 и F-10 предложены; вопросы: коммит F-0 и отрезаемость памяти"}, {"at": "2026-09-09T07:20:00+03:00", "initiative": "PROJECT", "role": "system-architect", "text": "Сведение: 63 запроса (46 принято, 8 с изменением, 0 отклонено); contracts.md v0.2; ADR-021 (MinIO); consolidation.md; ownership.md v0.2; OQ-A-20 (объектное хранилище)"}, {"at": "2026-09-09T07:20:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "system-architect: правки epics.md по consolidation §9 и decomposition-review §5 перед G2"}, {"at": "2026-09-09T07:30:00+03:00", "initiative": "PROJECT", "role": "user", "text": "Создана ветка feat/PROJECT-audit-architecture (от feature/agent-gm-core)"}, {"at": "2026-09-09T07:45:00+03:00", "initiative": "PROJECT", "role": "system-architect", "text": "epics.md v0.2: F-0/F-10, 005-ops/005-memory, I1a/I1b/I1-α, порядок 002→004→003"}, {"at": "2026-09-09T07:45:00+03:00", "initiative": "PROJECT", "role": "orchestrator", "text": "Гейт G2 показан пользователю (архитектура + эпики и команды)"}], "blockers": ["PROJECT: ждёт решения по гейту G2"], "risks": [{"id": "R-1", "title": "Секреты (GITHUB_TOKEN, DB_MCP_TOKEN) в git-истории (.mcp.env)", "probability": "высокая", "impact": "критическое", "status": "открыт"}, {"id": "R-2", "title": "Три несовместимых поколения дизайна GM (scope-GM, Living Worlds, Agent GM Core) без сквозного играбельного цикла", "probability": "высокая", "impact": "высокое", "status": "открыт"}, {"id": "R-3", "title": "Документация систематически расходится с кодом; Docs/user-stories не закоммичены", "probability": "высокая", "impact": "среднее", "status": "открыт"}, {"id": "R-4", "title": "Нереалистичные NFR латентности LLM (<100 мс) для локального Qwen3", "probability": "высокая", "impact": "среднее", "status": "открыт"}, {"id": "R-5", "title": "Возможный реальный API-ключ (sk-…) в shared/oracle/README.md и .mcp.env в индексе; .claude/worktrees в индексе", "probability": "высокая", "impact": "критическое", "status": "открыт"}], "releases": []};/*STATE-END*/</script>
+<script src="state.js"></script>
+<script>
+(function(){
+"use strict";
+var POLL_MS=5000, IDLE_MS=3*60*1000;
+var STAGES=["intake","requirements","analysis","architecture","planning","development","testing","integration","documentation","release","retro","done"];
+var GATE_AFTER={requirements:"G1",architecture:"G2",planning:"G3",release:"G4"};
+var GATES=["G1","G2","G3","G4"];
+var STAGE_ROLES={intake:[],requirements:["product-owner","business-analyst","domain-expert","product-analyst"],analysis:["system-analyst","ux-designer","tech-lead"],architecture:["system-architect","architect","security-engineer","devops-engineer"],planning:["tech-lead","project-manager","qa-engineer"],development:["developer","code-reviewer","tech-lead"],testing:["qa-engineer","tester","security-engineer"],integration:["tech-lead","devops-engineer","qa-engineer","tester","security-engineer"],documentation:["tech-writer"],release:["release-manager","devops-engineer","tester","product-owner"],retro:["project-manager"],done:[]};
+var ROLES=["product-owner","business-analyst","domain-expert","product-analyst","system-analyst","ux-designer","system-architect","architect","security-engineer","devops-engineer","project-manager","tech-lead","developer","code-reviewer","qa-engineer","tester","tech-writer","release-manager"];
+var TYPE_ORDER={project:0,epic:1,feature:2,bug:3};
+var TASK_STATES=["todo","in-progress","review","done"];
+var SEV=["blocker","critical","major","minor"];
+var SEV_CLASS={blocker:"s-crit",critical:"s-crit",major:"s-serious",minor:"s-warn"};
+var GATE_VISUAL={approved:["g-ok","check"],auto:["g-ok","check"],pending:["g-warn","clock"],returned:["g-crit","back"],"n/a":["g-na","dash"],"-":["g-ahead",""]};
+var I18N={
+ ru:{title:"дашборд команды",updated:"Обновлено",mode:"Режим",modes:{gates:"ключевые гейты","every-stage":"каждый этап",autonomous:"автономно"},stack:"Стек",elapsed:"В работе",
+  live:"LIVE",idle:"ожидание",finished:"завершено",
+  kpi_active:"Активные инициативы",kpi_tasks:"Задачи выполнены",kpi_defects:"Открытые дефекты",kpi_gates:"Гейты ждут решения",kpi_release:"Последний релиз",no_release:"ещё не было",kpi_time:"Время работы",kpi_agents:"Агентов сейчас",kpi_teams:"команд",
+  now:"Сейчас работают",now_hint:"экземпляры ролей, вызванные оркестратором",now_empty:"Никто не работает — команда ждёт решения или пауза",
+  pipeline:"Инициативы и этапы",pipeline_hint:"точка — этап, ромб — гейт",
+  filter_all:"Все",filter_project:"Проект",filter_epic:"Эпики",filter_feature:"Фичи",filter_bug:"Ошибки",show_done:"Показывать завершённые",
+  tasks:"Задачи по инициативам",tasks_table:"Таблица",tasks_chart:"Диаграмма",defects:"Дефекты по серьёзности",gates:"Гейты",team:"Роли",team_hint:"состояние ролей по этапам; ×N — число работающих экземпляров",
+  teams:"Команды",teams_hint:"по одной команде на эпик, работают параллельно",wave:"волна",members:"состав",agents_now:"сейчас",
+  timeline:"Журнал событий",risks:"Риски",releases:"Релизы",blockers:"Блокеры и ожидание пользователя",next:"Следующий шаг",none:"нет",
+  empty:"Данных пока нет — команда ещё не начала работу.",
+  stages:{intake:"Интейк",requirements:"Требования",analysis:"Анализ",architecture:"Архитектура",planning:"План",development:"Разработка",testing:"Тестирование",integration:"Интеграция",documentation:"Документация",release:"Релиз",retro:"Ретро",done:"Завершено"},
+  task_states:{todo:"К выполнению","in-progress":"В работе",review:"На ревью",done:"Готово"},
+  severities:{blocker:"Blocker",critical:"Critical",major:"Major",minor:"Minor"},
+  gate_states:{approved:"утверждён",pending:"ждёт решения",returned:"возвращён",auto:"авто","n/a":"не требуется","-":"впереди"},
+  types:{project:"проект",epic:"эпик",feature:"фича",bug:"ошибка"},
+  roles:{"product-owner":"Владелец продукта","business-analyst":"Бизнес-аналитик","domain-expert":"Доменный эксперт","product-analyst":"Продуктовый аналитик","system-analyst":"Системный аналитик","ux-designer":"UX/UI-дизайнер","system-architect":"Системный архитектор",architect:"Архитектор команды","security-engineer":"Безопасность","devops-engineer":"DevOps/SRE","project-manager":"Менеджер проекта","tech-lead":"Тимлид",developer:"Разработчик","code-reviewer":"Код-ревьюер","qa-engineer":"QA-инженер",tester:"Тестировщик","tech-writer":"Технический писатель","release-manager":"Релиз-менеджер",orchestrator:"Оркестратор",user:"Пользователь"},
+  role_states:{active:"работает сейчас",done:"этап пройден",idle:"ожидает"},
+  th:{id:"ID",title:"Название",todo:"К выполнению",progress:"В работе",review:"Ревью",done:"Готово",total:"Всего",risk:"Риск",prob:"Вероятность",impact:"Влияние",status:"Статус",version:"Версия",date:"Дата",contents:"Состав"},
+  generated:"Плагин dev-team · обновляется каждые 5 с"},
+ en:{title:"team dashboard",updated:"Updated",mode:"Mode",modes:{gates:"key gates","every-stage":"every stage",autonomous:"autonomous"},stack:"Stack",elapsed:"Elapsed",
+  live:"LIVE",idle:"idle",finished:"finished",
+  kpi_active:"Active initiatives",kpi_tasks:"Tasks done",kpi_defects:"Open defects",kpi_gates:"Gates awaiting decision",kpi_release:"Last release",no_release:"none yet",kpi_time:"Time elapsed",kpi_agents:"Agents now",kpi_teams:"teams",
+  now:"Working now",now_hint:"role instances invoked by the orchestrator",now_empty:"Nobody is working — waiting for a decision or paused",
+  pipeline:"Initiatives and stages",pipeline_hint:"dot = stage, diamond = gate",
+  filter_all:"All",filter_project:"Project",filter_epic:"Epics",filter_feature:"Features",filter_bug:"Bugs",show_done:"Show completed",
+  tasks:"Tasks by initiative",tasks_table:"Table",tasks_chart:"Chart",defects:"Defects by severity",gates:"Gates",team:"Roles",team_hint:"role state by stage; ×N = running instances",
+  teams:"Teams",teams_hint:"one team per epic, working in parallel",wave:"wave",members:"members",agents_now:"now",
+  timeline:"Event log",risks:"Risks",releases:"Releases",blockers:"Blockers and waiting on user",next:"Next step",none:"none",
+  empty:"No data yet — the team has not started.",
+  stages:{intake:"Intake",requirements:"Requirements",analysis:"Analysis",architecture:"Architecture",planning:"Plan",development:"Development",testing:"Testing",integration:"Integration",documentation:"Docs",release:"Release",retro:"Retro",done:"Done"},
+  task_states:{todo:"To do","in-progress":"In progress",review:"In review",done:"Done"},
+  severities:{blocker:"Blocker",critical:"Critical",major:"Major",minor:"Minor"},
+  gate_states:{approved:"approved",pending:"awaiting decision",returned:"returned",auto:"auto","n/a":"not required","-":"ahead"},
+  types:{project:"project",epic:"epic",feature:"feature",bug:"bug"},
+  roles:{"product-owner":"Product Owner","business-analyst":"Business Analyst","domain-expert":"Domain Expert","product-analyst":"Product Analyst","system-analyst":"System Analyst","ux-designer":"UX/UI Designer","system-architect":"System Architect",architect:"Team Architect","security-engineer":"Security","devops-engineer":"DevOps/SRE","project-manager":"Project Manager","tech-lead":"Tech Lead",developer:"Developer","code-reviewer":"Code Reviewer","qa-engineer":"QA Engineer",tester:"Tester","tech-writer":"Tech Writer","release-manager":"Release Manager",orchestrator:"Orchestrator",user:"User"},
+  role_states:{active:"working now",done:"stage passed",idle:"waiting"},
+  th:{id:"ID",title:"Title",todo:"To do",progress:"In progress",review:"Review",done:"Done",total:"Total",risk:"Risk",prob:"Probability",impact:"Impact",status:"Status",version:"Version",date:"Date",contents:"Contents"},
+  generated:"dev-team plugin · refreshes every 5 s"}
+};
+var ICONS={check:'<path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',clock:'<circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 4.5V8l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',back:'<path d="M9 3L4 8l5 5M4 8h9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',dash:'<path d="M4 8h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',bug:'<circle cx="8" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 5V3M4 9H2M14 9h-2M5 6L3.5 4.5M11 6l1.5-1.5M5 12l-1.5 1.5M11 12l1.5 1.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'};
+function ic(n){return n?'<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">'+(ICONS[n]||"")+'</svg>':"";}
+function h(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];});}
+function $(id){return document.getElementById(id);}
+function ts(v){var d=v?new Date(v):null;return d&&!isNaN(d)?d:null;}
+function fmtDur(ms){if(isNaN(ms))return"—";if(ms<0)ms=0;var s=Math.floor(ms/1000),m=Math.floor(s/60),hh=Math.floor(m/60),d=Math.floor(hh/24);if(d)return d+"d "+(hh%24)+"h";if(hh)return hh+"h "+String(m%60).padStart(2,"0")+"m";if(m)return m+"m "+String(s%60).padStart(2,"0")+"s";return s+"s";}
+function fmtDate(v){var d=ts(v);if(!d)return h(v||"");return d.toLocaleDateString(undefined,{month:"2-digit",day:"2-digit"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"});}
+function initials(name){return name.split(/[\s\/-]+/).filter(Boolean).slice(0,2).map(function(w){return w[0];}).join("").toUpperCase();}
+
+var lang="ru",typeFilter="all",showDone=false,showTable=false,S=null,lastUpdated=null;
+try{lang=localStorage.getItem("devteam-lang")||lang;}catch(e){}
+try{var th=localStorage.getItem("devteam-theme");if(th)document.documentElement.setAttribute("data-theme",th);}catch(e){}
+function T(){return I18N[lang]||I18N.en;}
+
+function normalize(raw){
+  var s=JSON.parse(JSON.stringify(raw||{}));
+  s.initiatives=(s.initiatives||[]).map(function(i){
+    i.id=i.id||"?";i.type=(i.type||(/^BUG/i.test(i.id)?"bug":/^PROJECT/i.test(i.id)?"project":/^EPIC/i.test(i.id)?"epic":"feature")).toLowerCase();
+    i.stage=STAGES.indexOf(i.stage)>=0?i.stage:"intake";
+    i.status=(i.status||(i.stage==="done"?"done":"active")).toLowerCase();
+    i.gates=i.gates||{};i.tasks=Array.isArray(i.tasks)?i.tasks:[];i.defects=Array.isArray(i.defects)?i.defects:[];
+    i.counts=TASK_STATES.reduce(function(a,k){a[k]=i.tasks.filter(function(t){return (t.status||"todo")===k;}).length;return a;},{});
+    if(!i.tasks.length&&i.taskCounts){i.counts=Object.assign({todo:0,"in-progress":0,review:0,done:0},i.taskCounts);}
+    i.openDefects=SEV.reduce(function(a,k){a[k]=i.defects.filter(function(d){return (d.severity||"").toLowerCase()===k&&!/^(fixed|closed|done|verified)$/i.test(d.status||"open");}).length;return a;},{});
+    return i;
+  });
+  s.initiatives.sort(function(a,b){var d=(TYPE_ORDER[a.type]||9)-(TYPE_ORDER[b.type]||9);if(d)return d;return String(a.epic||a.id).localeCompare(String(b.epic||b.id))||String(a.id).localeCompare(String(b.id));});
+  s.teams=s.teams||[];s.activity=s.activity||[];s.events=s.events||[];s.blockers=s.blockers||[];s.risks=s.risks||[];s.releases=s.releases||[];
+  return s;
+}
+function roleLabel(t,a){var rn=t.roles[a.role]||a.role||"?";return a.instance&&a.instance>1?rn+" #"+a.instance:(a.instance&&S&&S.activity.some(function(x){return x!==a&&x.role===a.role&&!x.finishedAt;})?rn+" #"+a.instance:rn);}
+function teamName(id){var tm=S&&S.teams.filter(function(x){return x.id===id;})[0];return tm?(tm.name||tm.id):id;}
+function gateState(i,g){
+  var v=i.gates[g];if(v&&typeof v==="object")v=v.status;if(v)return String(v).toLowerCase();
+  if(i.type==="bug"&&g!=="G4")return"n/a";
+  if(i.type==="feature"&&String(i.size||"").toUpperCase()==="S"&&g==="G2")return"n/a";
+  var idx=STAGES.indexOf(i.stage),gs=Object.keys(GATE_AFTER).filter(function(k){return GATE_AFTER[k]===g;})[0];
+  return idx>STAGES.indexOf(gs)?"approved":"-";
+}
+function total(o){return TASK_STATES.reduce(function(a,k){return a+(o[k]||0);},0);}
+
+function render(){
+  var t=T();if(!S)return;
+  document.documentElement.lang=lang;
+  document.querySelectorAll("[data-i]").forEach(function(el){el.textContent=t[el.getAttribute("data-i")]||"";});
+  document.title=(S.project||"dev-team")+" · "+t.title;
+  $("h-title").innerHTML=h(S.project||"dev-team")+' <span>· '+h(t.title)+'</span>';
+  var started=ts(S.startedAt),fin=ts(S.finishedAt);
+  $("h-sub").innerHTML='<span>'+h(t.updated)+': <b>'+fmtDate(S.updatedAt)+'</b></span><span>'+h(t.mode)+': <b>'+h(t.modes[S.autonomy]||S.autonomy||"gates")+'</b></span>'+(S.stack?'<span>'+h(t.stack)+': <b>'+h(S.stack)+'</b></span>':"");
+  // kpis
+  var inis=S.initiatives,active=inis.filter(function(i){return i.status!=="done";});
+  var done=0,tot=0,def={blocker:0,critical:0,major:0,minor:0},pending=0;
+  inis.forEach(function(i){done+=i.counts.done||0;tot+=total(i.counts);SEV.forEach(function(k){def[k]+=i.openDefects[k];});});
+  active.forEach(function(i){GATES.forEach(function(g){var gs=gateState(i,g);if(gs==="pending"||gs==="returned")pending++;});});
+  var defTotal=SEV.reduce(function(a,k){return a+def[k];},0),crit=def.blocker+def.critical;
+  var rel=S.releases[S.releases.length-1];
+  var elapsed=started?fmtDur((fin||new Date())-started):"—";
+  $("kpis").innerHTML=
+   '<div class="kpi"><div class="k">'+h(t.kpi_active)+'</div><div class="v">'+active.length+'<small>/ '+inis.length+'</small></div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_tasks)+'</div><div class="v">'+done+'<small>/ '+tot+'</small></div><div class="prog"><i style="width:'+(tot?done/tot*100:0).toFixed(1)+'%"></i></div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_defects)+'</div><div class="v'+(crit?" warn":"")+'">'+defTotal+'</div><div class="sub">'+SEV.filter(function(k){return def[k];}).map(function(k){return'<span class="'+SEV_CLASS[k]+'">'+t.severities[k]+' '+def[k]+'</span>';}).join("")+'</div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_gates)+'</div><div class="v'+(pending?" warn":"")+'">'+pending+'</div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_agents)+'</div><div class="v">'+S.activity.filter(function(a){return !a.finishedAt;}).length+(S.teams.length?'<small>'+S.teams.filter(function(x){return x.status!=="done";}).length+' '+h(t.kpi_teams)+'</small>':"")+'</div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_time)+'</div><div class="v" id="kpi-elapsed" style="font-size:22px">'+h(elapsed)+'</div><div class="sub">'+(started?fmtDate(S.startedAt):"")+'</div></div>'+
+   '<div class="kpi"><div class="k">'+h(t.kpi_release)+'</div><div class="v" style="font-size:22px">'+(rel?h(rel.version):h(t.no_release))+'</div><div class="sub">'+(rel?h(rel.date||""):"")+'</div></div>';
+  // now
+  var act=S.activity.filter(function(a){return !a.finishedAt;});
+  $("now").innerHTML=act.length?act.map(function(a){var rn=t.roles[a.role]||a.role||"?";return'<div class="act"><span class="avatar">'+h(initials(rn))+'</span><span><div class="who">'+h(roleLabel(t,a))+(a.team?' <span class="chip team">'+h(teamName(a.team))+'</span>':"")+'</div><div class="what">'+h([a.initiative,a.task,a.action].filter(Boolean).join(" · "))+'</div></span><span class="t" data-since="'+h(a.startedAt||"")+'">'+fmtDur(new Date()-(ts(a.startedAt)||new Date()))+'</span></div>';}).join(""):'<p class="empty">'+h(fin?t.finished:t.now_empty)+'</p>';
+  // teams
+  var secTeams=$("sec-teams");
+  if(S.teams.length){secTeams.hidden=false;
+    $("teams").innerHTML=S.teams.map(function(tm){
+      var ep=inis.filter(function(i){return i.id===tm.epic;})[0];
+      var mine=inis.filter(function(i){return i.team===tm.id||(ep&&i.epic===ep.id)||i.id===tm.epic;});
+      var tot2=0,dn=0;mine.forEach(function(i){tot2+=total(i.counts);dn+=i.counts.done||0;});
+      var nowA=act.filter(function(a){return a.team===tm.id;});
+      var members=Object.keys(tm.members||{}).map(function(r){return'<span class="chip">'+h(t.roles[r]||r)+(tm.members[r]>1?" ×"+tm.members[r]:"")+'</span>';}).join("");
+      return'<div class="teamcard'+(tm.status==="done"?" done":"")+'"><header><strong>'+h(tm.name||tm.id)+'</strong><span class="chip t-epic">'+h(tm.epic||"")+'</span>'+(ep?'<span class="stage-now">'+h(t.stages[ep.stage])+(ep.wave?' · '+h(t.wave)+' '+ep.wave:"")+'</span>':"")+'</header>'+
+        (tm.branch?'<div class="meta"><code>'+h(tm.branch)+'</code></div>':"")+
+        '<div class="members">'+members+'</div>'+
+        '<div class="tprog"><span class="prog"><i style="width:'+(tot2?dn/tot2*100:0).toFixed(1)+'%"></i></span><span class="bar-val">'+dn+'/'+tot2+'</span></div>'+
+        '<div class="tnow">'+(nowA.length?nowA.map(function(a){return'<span class="chip on">'+h(roleLabel(t,a))+(a.task?" · "+h(a.task):"")+'</span>';}).join(""):'<span class="hint">'+h(t.agents_now)+': '+h(t.none)+'</span>')+'</div></div>';
+    }).join("");
+  }else{secTeams.hidden=true;}
+  // filters
+  var fl=["all","project"].concat(S.teams.length||inis.some(function(i){return i.type==="epic";})?["epic"]:[],["feature","bug"]);
+  $("filters").innerHTML=fl.map(function(f){return'<button type="button" data-filter="'+f+'" aria-pressed="'+(typeFilter===f)+'">'+h(t["filter_"+f])+'</button>';}).join("")+'<label><input type="checkbox" id="show-done"'+(showDone?" checked":"")+'>'+h(t.show_done)+'</label>';
+  // pipeline
+  $("pipeline").innerHTML=inis.length?inis.map(function(i){
+    var cur=STAGES.indexOf(i.stage),cells="";
+    STAGES.slice(0,-1).forEach(function(st,idx){
+      if(st==="integration"&&i.type!=="epic"&&i.stage!=="integration")return;
+      var cls=i.status==="done"?"st-done":idx<cur?"st-done":idx===cur?"st-cur":"st-ahead";
+      cells+='<li class="stage '+cls+'" title="'+h(t.stages[st])+'"><span class="dot"></span><span class="lbl">'+h(t.stages[st])+'</span></li>';
+      if(GATE_AFTER[st]){var g=GATE_AFTER[st],gs=gateState(i,g),gv=GATE_VISUAL[gs]||GATE_VISUAL["-"];cells+='<li class="gate '+gv[0]+'" title="'+g+': '+h(t.gate_states[gs]||gs)+'"><span class="dia">'+ic(gv[1])+'</span><span class="glbl">'+g+'</span></li>';}
+    });
+    var stageT=i.stageStartedAt&&i.status!=="done"?'<span class="t" data-since="'+h(i.stageStartedAt)+'">'+fmtDur(new Date()-ts(i.stageStartedAt))+'</span>':"";
+    var tl=i.tasks.length?'<ul class="tasklist">'+i.tasks.map(function(x){var st=x.status||"todo";return'<li class="'+st+'" title="'+h(t.task_states[st]||st)+(x.assignee?" · "+h(t.roles[x.assignee]||x.assignee):"")+'"><i class="'+st+'"></i>'+h(x.id)+(x.title?' <span>'+h(x.title)+'</span>':"")+(st==="in-progress"&&x.startedAt?' <span class="t" data-since="'+h(x.startedAt)+'">'+fmtDur(new Date()-ts(x.startedAt))+'</span>':"")+'</li>';}).join("")+'</ul>':"";
+    var ctx=(i.type!=="epic"&&i.epic?'<span class="chip t-epic">'+h(i.epic)+'</span>':"")+(i.team?'<span class="chip team">'+h(teamName(i.team))+'</span>':"");
+    return'<article class="ini '+(i.status==="done"?"done":"active")+(i.type!=="epic"&&i.epic?" child":"")+'" data-type="'+i.type+'" data-status="'+(i.status==="done"?"done":"active")+'"><header><span class="chip t-'+i.type+'">'+h(t.types[i.type]||i.type)+'</span><strong class="iid">'+h(i.id)+'</strong><span class="ititle">'+h(i.title||"")+'</span>'+(i.size?'<span class="chip size">'+h(i.size)+'</span>':"")+ctx+'<span class="stage-now">'+h(t.stages[i.stage])+(i.type==="epic"&&i.wave?' · '+h(t.wave)+' '+i.wave:"")+stageT+'</span></header><ol class="pipe">'+cells+'</ol>'+tl+(i.next?'<p class="next"><span>'+h(t.next)+':</span> '+h(i.next)+'</p>':"")+'</article>';
+  }).join(""):'<p class="empty">'+h(t.empty)+'</p>';
+  // tasks
+  var withTasks=inis.filter(function(i){return total(i.counts);});
+  var tt=$("tasks-toggle");tt.textContent=showTable?t.tasks_chart:t.tasks_table;
+  if(!withTasks.length){$("tasks").innerHTML='<p class="empty">'+h(t.none)+'</p>';}
+  else{
+    var mx=Math.max.apply(null,withTasks.map(function(i){return total(i.counts);}))||1;
+    var legend='<div class="legend">'+TASK_STATES.map(function(k){return'<span class="lg"><i class="sw '+k+'"></i>'+h(t.task_states[k])+'</span>';}).join("")+'</div>';
+    var bars=withTasks.map(function(i){var tot2=total(i.counts);return'<div class="bar-row" data-type="'+i.type+'" data-status="'+(i.status==="done"?"done":"active")+'"><span class="bar-lbl"><strong>'+h(i.id)+'</strong> <em>'+h(i.title||"")+'</em></span><span class="bar">'+TASK_STATES.filter(function(k){return i.counts[k];}).map(function(k){return'<span class="seg '+k+'" style="width:'+(i.counts[k]/mx*100).toFixed(2)+'%" title="'+h(t.task_states[k])+': '+i.counts[k]+'"><b>'+i.counts[k]+'</b></span>';}).join("")+'</span><span class="bar-val">'+(i.counts.done||0)+'/'+tot2+'</span></div>';}).join("");
+    var rows=withTasks.map(function(i){return'<tr data-type="'+i.type+'" data-status="'+(i.status==="done"?"done":"active")+'"><td>'+h(i.id)+'</td><td>'+h(i.title||"")+'</td>'+TASK_STATES.map(function(k){return'<td class="num">'+(i.counts[k]||0)+'</td>';}).join("")+'<td class="num">'+total(i.counts)+'</td></tr>';}).join("");
+    $("tasks").innerHTML=legend+'<div id="tasks-chart"'+(showTable?" hidden":"")+'>'+bars+'</div><table class="tbl"'+(showTable?"":" hidden")+'><thead><tr><th>'+h(t.th.id)+'</th><th>'+h(t.th.title)+'</th><th>'+h(t.th.todo)+'</th><th>'+h(t.th.progress)+'</th><th>'+h(t.th.review)+'</th><th>'+h(t.th.done)+'</th><th>'+h(t.th.total)+'</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  // gates
+  $("gates").innerHTML=active.length?'<table class="tbl"><thead><tr><th>'+h(t.th.id)+'</th>'+GATES.map(function(g){return"<th>"+g+"</th>";}).join("")+'</tr></thead><tbody>'+active.map(function(i){return'<tr data-type="'+i.type+'"><td><strong>'+h(i.id)+'</strong></td>'+GATES.map(function(g){var gs=gateState(i,g),gv=GATE_VISUAL[gs]||GATE_VISUAL["-"];return'<td><span class="gcell '+gv[0]+'">'+(gv[1]?ic(gv[1]):"·")+'<span>'+h(t.gate_states[gs]||gs)+'</span></span></td>';}).join("")+'</tr>';}).join("")+'</tbody></table>':'<p class="empty">'+h(t.none)+'</p>';
+  // team
+  var rs={};ROLES.forEach(function(r){rs[r]="idle";});
+  active.forEach(function(i){var cur=STAGES.indexOf(i.stage);STAGES.forEach(function(st,idx){STAGE_ROLES[st].forEach(function(r){if(idx===cur)rs[r]="active";else if(idx<cur&&rs[r]!=="active")rs[r]="done";});});});
+  var cnt={};act.forEach(function(a){if(rs[a.role]!==undefined)rs[a.role]="active";cnt[a.role]=(cnt[a.role]||0)+1;});
+  $("team").innerHTML=ROLES.map(function(r){var rn=t.roles[r];return'<div class="role r-'+rs[r]+'" title="'+h(t.role_states[rs[r]])+'"><span class="avatar">'+h(initials(rn))+(cnt[r]>1?'<b class="cnt">×'+cnt[r]+'</b>':"")+'</span><span class="rname">'+h(rn)+'</span><span class="rstate">'+h(t.role_states[rs[r]])+(cnt[r]>1?' ×'+cnt[r]:"")+'</span></div>';}).join("");
+  // defects
+  var mxd=Math.max.apply(null,SEV.map(function(k){return def[k];}))||1;
+  $("defects").innerHTML='<div class="def-total">'+defTotal+'</div>'+SEV.map(function(k){return'<div class="def-row"><span class="def-lbl '+SEV_CLASS[k]+'">'+ic("bug")+h(t.severities[k])+'</span><span class="def-bar"><span class="def-fill '+SEV_CLASS[k]+'" style="width:'+(def[k]?def[k]/mxd*100:0).toFixed(1)+'%"></span></span><span class="def-val">'+def[k]+'</span></div>';}).join("");
+  // blockers
+  $("blockers").innerHTML=S.blockers.length?'<ul class="blockers">'+S.blockers.map(function(b){return"<li>"+h(typeof b==="string"?b:(b.text||JSON.stringify(b)))+"</li>";}).join("")+'</ul>':'<p class="empty">'+h(t.none)+'</p>';
+  // timeline
+  var ev=S.events.slice(-60).reverse();
+  $("timeline").innerHTML=ev.length?'<ol class="timeline">'+ev.map(function(e){var low=(e.text||"").toLowerCase(),cls=/утвержд|approved|принят|accepted|выпущен|released|готов|done/.test(low)?"tl-ok":/возвращ|returned|отклон|rejected|blocker|critical|ошибк|failed/.test(low)?"tl-crit":/ждёт|ожида|pending|вопрос|question/.test(low)?"tl-warn":"tl-neutral";return'<li class="'+cls+'"><time>'+fmtDate(e.at)+'</time>'+(e.initiative?'<span class="chip">'+h(e.initiative)+'</span>':"")+(e.role?'<span class="role">'+h(t.roles[e.role]||e.role)+'</span>':"")+'<span class="tl-text">'+h(e.text||"")+'</span></li>';}).join("")+'</ol>':'<p class="empty">'+h(t.none)+'</p>';
+  // risks
+  function lvl(v){v=String(v||"").toLowerCase();return/выс|high|крит/.test(v)?"s-crit":/сред|med/.test(v)?"s-warn":"s-ok";}
+  $("risks").innerHTML=S.risks.length?'<table class="tbl"><thead><tr><th>'+h(t.th.id)+'</th><th>'+h(t.th.risk)+'</th><th>'+h(t.th.prob)+'</th><th>'+h(t.th.impact)+'</th><th>'+h(t.th.status)+'</th></tr></thead><tbody>'+S.risks.slice(0,12).map(function(r){return'<tr><td>'+h(r.id||"")+'</td><td>'+h(r.title||"")+'</td><td><span class="pill '+lvl(r.probability)+'">'+h(r.probability||"")+'</span></td><td><span class="pill '+lvl(r.impact)+'">'+h(r.impact||"")+'</span></td><td>'+h(r.status||"")+'</td></tr>';}).join("")+'</tbody></table>':'<p class="empty">'+h(t.none)+'</p>';
+  // releases
+  $("releases").innerHTML=S.releases.length?'<table class="tbl"><thead><tr><th>'+h(t.th.version)+'</th><th>'+h(t.th.date)+'</th><th>'+h(t.th.contents)+'</th></tr></thead><tbody>'+S.releases.slice().reverse().map(function(r){return'<tr><td><strong>'+h(r.version)+'</strong></td><td>'+h(r.date||"")+'</td><td>'+(r.initiatives||[]).map(h).join(", ")+'</td></tr>';}).join("")+'</tbody></table>':'<p class="empty">'+h(t.none)+'</p>';
+  $("f-updated").textContent=fmtDate(S.updatedAt);
+  applyFilters();updateLive();
+}
+function applyFilters(){document.querySelectorAll("[data-type]").forEach(function(el){var ok=typeFilter==="all"||el.getAttribute("data-type")===typeFilter;if(el.getAttribute("data-status")==="done"&&!showDone)ok=false;el.hidden=!ok;});}
+function updateLive(){
+  var t=T(),el=$("live"),txt=$("live-text");if(!S)return;
+  var fin=ts(S.finishedAt),upd=ts(S.updatedAt),fresh=upd&&(new Date()-upd)<IDLE_MS;
+  el.className="live "+(fin?"finished":fresh?"on":"");
+  txt.textContent=fin?t.finished:fresh?t.live:t.idle+(upd?" · "+fmtDur(new Date()-upd):"");
+}
+function tick(){
+  if(!S)return;var now=new Date();
+  document.querySelectorAll("[data-since]").forEach(function(el){var d=ts(el.getAttribute("data-since"));if(d)el.textContent=fmtDur(now-d);});
+  var st=ts(S.startedAt),ke=$("kpi-elapsed");if(st&&ke&&!S.finishedAt)ke.textContent=fmtDur(now-st);
+  updateLive();
+}
+function adopt(raw){if(!raw)return;var u=raw.updatedAt||"";if(S&&u===lastUpdated)return;lastUpdated=u;S=normalize(raw);render();}
+function poll(){
+  var s=document.createElement("script");s.src="state.js?t="+Date.now();
+  s.onload=function(){s.remove();adopt(window.DEVTEAM_STATE);schedule();};
+  s.onerror=function(){s.remove();schedule();};
+  document.head.appendChild(s);
+}
+function schedule(){setTimeout(poll,(S&&S.finishedAt)?POLL_MS*6:POLL_MS);}
+document.addEventListener("click",function(e){
+  var b=e.target.closest("button[data-filter]");if(b){typeFilter=b.getAttribute("data-filter");render();return;}
+  if(e.target.id==="tasks-toggle"){showTable=!showTable;render();return;}
+  if(e.target.id==="theme"){var r=document.documentElement,cur=r.getAttribute("data-theme"),dark=cur?cur==="dark":matchMedia("(prefers-color-scheme: dark)").matches,next=dark?"light":"dark";r.setAttribute("data-theme",next);try{localStorage.setItem("devteam-theme",next);}catch(x){}return;}
+  if(e.target.id==="lang"){lang=lang==="ru"?"en":"ru";try{localStorage.setItem("devteam-lang",lang);}catch(x){}render();return;}
+});
+document.addEventListener("change",function(e){if(e.target.id==="show-done"){showDone=e.target.checked;applyFilters();}});
+adopt(window.DEVTEAM_STATE||window.DEVTEAM_SNAPSHOT||{initiatives:[]});
+if(S&&S.language&&!localStorage.getItem("devteam-lang")){lang=String(S.language).slice(0,2)==="ru"?"ru":"en";render();}
+setInterval(tick,1000);schedule();
+})();
+</script>
+</body>
+</html>

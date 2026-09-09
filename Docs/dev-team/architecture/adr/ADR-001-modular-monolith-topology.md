@@ -1,0 +1,45 @@
+# ADR-001: Модульный монолит — один Go-модуль, контексты как пакеты, число процессов как параметр деплоя; судьба 15 сервисов
+
+Статус: предложено (к утверждению на G2) · Дата: 2026-09-09 · Автор: system-architect#1
+Связи: OQ-A-04 (решено р1: одна машина, границы под рост), OQ-A-12 (политика workspace), OQ-A-15 (гигиена), OQ-A-17 (новый: удаление vs заморозка); FR-010, FR-014, FR-080, NFR-070, NFR-073, NFR-075, NFR-080, NFR-081; аудит `overview.md` §8–§9 (T2, T4, T9, T10, T13).
+
+## Контекст
+
+As-is: 15 микросервисов в 22 Go-модулях workspace на одной машине одного разработчика; из них 3 реализованы, 6 частично, 4 in-memory прототипа, 2 неработоспособны; ~30 разрывов издатель → потребитель; дубли клиентов LLM/MinIO ×4, движков правил ×3, Dockerfile ×5; CI на сборку отсутствует. Требования MVP-1: 1 мир, 1–3 региона, ≤ 6 игроков, ≤ 20 агентов (NFR-080, NFR-083); стек должен уместиться на RTX 4090 / 128 ГБ вместе с LLM (NFR-073); «число процессов — параметр деплоя, а не архитектуры» (NFR-075, решение р1 по OQ-A-04). Видение требует статуса «в пути / заморожен / удалить» для каждого сервиса (vision.md, цель 4).
+
+## Рассмотренные варианты
+
+| Вариант | Плюсы | Минусы |
+|---|---|---|
+| A. Оставить 15 сервисов, довести каждый | ничего не переносить | 15 процессов ради ≤ 6 игроков; 30 разрывов контрактов; дубли; сборка/тесты по 22 модулям; каждый прототип надо доводить до персистентности |
+| B. Сократить до 6–8 сервисов с чёткими контрактами, отдельные модули | привычная микросервисная раскладка | по-прежнему N модулей и N Dockerfile; межпроцессная задержка на критическом пути механики (≤ 0,5 с); replay и трасса по нескольким процессам сложнее |
+| **C. Модульный монолит: один модуль, контексты — пакеты `internal/<ctx>`, один бинарник с флагом `--contexts`, общение контекстов только через шину; деплой MVP-1 — 3 процесса + бот** | одна сборка и `go test ./...`; e2e в одном процессе без Docker; границы контекстов сохранены (пакеты + шина), поэтому позже любой контекст выносится в свой процесс без изменения кода домена; минимальный Dockerfile | нужна дисциплина границ (импорты между `internal/*` запрещены линтером); один процесс `core` — одна точка отказа (приемлемо на одной машине) |
+| D. Один процесс на всё (включая gateway) | проще некуда | ПДн-хранилище связок в одном процессе с LLM-промптами и состоянием мира — хуже для NFR-041; нельзя перезапускать ядро без потери long-poll соединений бота |
+
+## Решение
+
+1. **Один Go-модуль** `multiverse-core.io` (`go 1.25`, `toolchain` пин на текущий патч; обновление до 1.26+ — отдельная задача). `go.work` удаляется; замороженные сервисы остаются со своими `go.mod`, но **не входят** в сборку (не в `go.work`, compose, Makefile), каталог получает `FROZEN.md` с причиной и эпиком возврата.
+2. **Раскладка** (ориентир; детализирует архитектор команды):
+   - `cmd/multiverse` — один бинарник, флаг `--contexts=gateway|state,mechanics,swarm,llm,laws|memory|all`, `--mode=live|replay`;
+   - `cmd/telegram-bot`, `cmd/mvctl` (CLI оператора/исследователя);
+   - `internal/gateway`, `internal/state`, `internal/mechanics`, `internal/swarm`, `internal/llm` (+`guardian`, `prompt`, `providers/*`, `filter`), `internal/laws`, `internal/memory`, `internal/replay`;
+   - `shared/eventbus`, `shared/jsonpath`, `shared/entity`, `shared/contracts` (реестр типов + загрузка схем), `shared/agent` (типы блупринтов и уровней), `shared/objstore` (единственная обёртка MinIO), `shared/env`, `shared/logging`;
+   - `blueprints/`, `rules/`, `laws/`, `schemas/events/`, `api/gateway.openapi.yaml`, `testdata/recordings/`, `ops/metrics/`.
+3. **Правила зависимостей**: `internal/<a>` не импортирует `internal/<b>`, кроме явных библиотечных зависимостей `swarm → mechanics`, `swarm → laws`, `swarm → llm`; все прочие связи — через шину и `shared/contracts`. Проверяется `depguard`/`go vet`-правилом в CI.
+4. **Деплой MVP-1**: процессы `gateway` (:8088), `core` (state+mechanics+swarm+llm+laws), `memory` (:8082, профиль `memory`), `telegram-bot`; инфраструктура Redpanda, MinIO, Qdrant, Neo4j (профиль `memory`), Ollama (профиль `gpu`).
+5. **Судьба сервисов** (таблица `overview.md` §16): переписать — game-service, entity-manager, rule-engine; вывести — narrative-orchestrator (после миграции, S5), ban-of-world, reality-monitor; заморозить — world-generator, universe-genesis-oracle, ontological-archivist, cultivation-module, plan-manager, city-governor, entity-actor, evolution-watcher; оставить и доработать — semantic-memory. Удаление кода ban-of-world/reality-monitor и мёртвых пакетов (`shared/schema`, `shared/redis`, `fake_deps`, `test_minio.go`, дубли Dockerfile) — по OQ-A-17 (рекомендация: удалить; история git сохраняет).
+
+## Последствия
+
+- Позитивные: одна команда сборки, один CI-пайплайн, e2e без Docker, контракты между контекстами — те же события, что и между процессами (NFR-081); объём кода ядра сокращается (дубли ×4 → ×1).
+- Негативные: миграция раскладки — разовая механическая работа (EPIC-001); ветки `claude/*`, `gm-*` устаревают — заморозить; при выносе контекста в отдельный процесс понадобится Redis для горячего контекста роя (ADR-004 отложил).
+- Что придётся сделать: EPIC-001 (единый модуль, `--contexts`, линтер границ, compose с профилями, CI), `FROZEN.md` в 8 каталогах, обновить CLAUDE.md/AGENTS.md/README по факту (OQ-A-13, NFR-095).
+
+## Дополнение 2026-09-09 (сведение A3 шаг 4; `architecture/consolidation.md`)
+
+1. **Версия Go**: `go 1.26` в директиве `go.mod` и `toolchain go1.26.<последний патч>` (на 2026-09-09 поддерживаются 1.26 и 1.27; 1.25 вне окна поддержки — stdlib без security-фиксов, `govulncheck` красный с первого дня). Builder-образ `golang:1.26-bookworm` по патчу из `build/versions.env`. Переход на 1.27 — отдельной задачей после MVP-1 (Dependabot `gomod` уведомляет). Пункт 1 решения читать как «`go 1.26`».
+2. **Границы импортов (п. 3, уточнение)**: разрешены библиотечные зависимости `swarm → mechanics`, `swarm → laws`, `swarm → llm`, **`state → mechanics`** (чистая библиотека инвариантов `mechanics.Invariants()`; иначе инварианты дублируются в двух пакетах) и **`cmd/multiverse → internal/replay`** (единственный импортёр: `EventClock`/`NullTimers` внедряются через `shared/runtime.Deps`). Все контексты получают `Clock/Timers/Journal/Mode` только через `Deps`; `time.Now()` в `internal/*` запрещён (`forbidigo`). Правила закодированы в `.golangci.yml` (`depguard`), проверяются в job `unit`.
+3. **Новые foundation-пакеты**: `shared/clock` (интерфейсы `Clock`, `Timers`, `Manual*` для тестов) и `shared/runtime` (`Deps`, `Context`, регистрация контекстов, HTTP-сервер процесса с `/health` и монтированием `/v1/admin/*` контекстами). Владелец — EPIC-001 → tech-lead#1 (`plan/ownership.md`).
+4. **HTTP у процесса `core`**: у каждого процесса `cmd/multiverse` есть HTTP-сервер `MV_<PROCESS>_ADDR` (`gateway` :8088, `core` :8090, `memory` :8082) — `/health` (NFR-030) и служебные маршруты контекстов (`/v1/admin/agents*`, `/v1/admin/llm/usage`). Наружу публикуются только на `127.0.0.1` (ADR-009 дополнение п. 3). Диаграмма `overview.md` §13 обновлена.
+5. **Судьба кода — решение пользователя (OQ-A-17)**: рекомендация «удалить» **отклонена**. Весь код, выводимый из сборки (ban-of-world, reality-monitor, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}`, `shared/agent/tools/*` кроме реестра, `fake_deps/`, `test_minio.go`, а позже — narrative-orchestrator после S5, game-service/entity-manager/rule-engine/semantic-memory после переноса), перемещается в **`services/_archive/<исходный путь>`** с файлом `ARCHIVED.md` (причина, коммит, эпик возврата если есть); каталог вне `go.mod`, compose, Makefile и линтера; `go build ./...` его не видит (нет `go.work`, свои `go.mod` остаются как есть и могут не собираться). **Ничего не удаляется** без явного решения пользователя. Удаляются из индекса только не-код по OQ-A-15: бинарники (`*.exe`), логи (`mcp_*.log`), `.claude/worktrees/*` (gitlink-записи на чужой диск), секреты (`.env`, `.mcp.env`); дубли Dockerfile — в `_archive/build/`. Восемь доменных сервисов остаются на месте с `FROZEN.md` (заморозка, не архив).
+6. **Compose-профили**: `memory`, `gpu`, `dev`, `legacy`, **`bot`** (telegram-bot только при заданном `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; `env_file` с токеном — только у сервиса бота). Профиль `legacy` включает as-is `narrative-orchestrator` **и** as-is `semantic-memory` + `chromadb` (оркестратор жёстко ходит в `/v1/context-with-events` без деградации — проверено по коду `orchestrator.go:117,177`); Chroma уходит из целевого стека, но живёт в профиле `legacy` до S5 и удаляется вместе с ним (ADR-004 дополнение). Legacy `semantic-memory` публикуется на `:8083`, чтобы не конфликтовать с целевым `memory` (:8082).

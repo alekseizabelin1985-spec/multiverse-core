@@ -1,0 +1,25 @@
+{
+  "artifactsDir": "Docs/dev-team",
+  "language": "ru",
+  "autonomy": "gates",
+  "projectName": "multiverse-core",
+  "stack": "Go 1.24/1.25 workspace, Redpanda (Kafka), MinIO, ChromaDB, Neo4j, TimescaleDB, Ollama+Qwen3, Docker Compose",
+  "hasUI": false,
+  "git": {
+    "branches": true,
+    "commits": "ask"
+  },
+  "parallelism": {
+    "maxTeams": 3,
+    "maxAgentsPerRole": 3,
+    "maxParallelAgents": 6
+  },
+  "counters": {
+    "feature": 0,
+    "bug": 0,
+    "epic": 0,
+    "team": 0,
+    "adr": 21,
+    "task": 0
+  }
+}
