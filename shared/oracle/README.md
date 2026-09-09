@@ -11,7 +11,7 @@
 |-----------|--------------|----------------------------|------------|
 | `ORACLE_URL` | ✅ | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions` | URL endpoint |
 | `ORACLE_MODEL` | ✅ | `qwen-plus` | Или `qwen3-max`, `qwen-turbo` и т.д. |
-| `ORACLE_API_KEY` | ✅ | `sk-4659b9ed72ba489a81244ba02659b3de` | Ключ авторизации |
+| `ORACLE_API_KEY` | ✅ | `sk-xxxxxxxxxxxxxxxxxxxxxxxx` | Ключ авторизации |
 | `ORACLE_TIMEOUT_MS` | ❌ | `10000` | Таймаут запроса (мс) |
 | `ORACLE_MAX_TOKENS` | ❌ | `1024` | Ограничение длины ответа |
 
@@ -26,7 +26,7 @@ GM формирует HTTP-запрос:
 
     POST /compatible-mode/v1/chat/completions
     Host: dashscope-intl.aliyuncs.com
-    Authorization: Bearer sk-4659b9ed72ba489a81244ba02659b3de
+    Authorization: Bearer sk-xxxxxxxxxxxxxxxxxxxxxxxx
     Content-Type: application/json
 
     {
@@ -65,7 +65,7 @@ GM формирует HTTP-запрос:
 ```bash
 export ORACLE_URL="https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
 export ORACLE_MODEL="qwen-plus"
-export ORACLE_API_KEY="sk-4659b9ed72ba489a81244ba02659b3de"
+export ORACLE_API_KEY="<your-key>"
 export ORACLE_TIMEOUT_MS=10000
 
 ./narrative-orchestrator \

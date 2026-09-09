@@ -1,0 +1,10 @@
+# .gitleaksignore — точечные ложные срабатывания (infrastructure.md §4.5 п. 1:
+# «inline # gitleaks:allow или fingerprint в .gitleaksignore, не расширение allowlist»).
+# Каждая строка — fingerprint находки с обоснованием.
+
+# Docs/dev-team/architecture/components/swarm-llm-laws.md §9.1, таблица провайдеров:
+# правило generic-api-key срабатывает на текст ячейки строки `providers/ollama`
+# (текст ячейки с параметрами генерации: max_tokens и num_ctx со значением по умолчанию),
+# гасит любую находку generic-api-key в строке 504. Файл — владение architect#2.
+be33e9373b8e4b5e15078e3707e77ffff10d81b2:Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:504
+Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:504

@@ -1,8 +1,34 @@
+# secrets & local config
 .env
-
+.env.*
+!.env.example
+.mcp.env
+!.mcp.env.example
+.claude/settings.local.json
+.claude/worktrees/
+# build & artifacts
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+/backups/
+*.db
+*.db-wal
+*.db-shm
+# logs
+*.log
+# IDE / AI tooling (локальное)
+.idea/
+.vscode/
+.kilo*/
+.kilocodemodes
+.roo/
+.roomodes
 .qwen/
 gha-creds-*.json
-
-# dev-team
-.claude/worktrees/
 Docs/dev-team/.dashboard.port
+# OS
+.DS_Store
+Thumbs.db
