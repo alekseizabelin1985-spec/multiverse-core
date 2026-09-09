@@ -1,354 +1,258 @@
-version: '3.8'
+# =============================================================================
+# docker-compose.yml — core of the MVP-1 topology (EPIC-001 F-6a, task T-004)
+# =============================================================================
+# Source of truth: Docs/dev-team/architecture/infrastructure.md v0.3 §1.2–§1.4,
+# §3.1.1, §5.1, §5.2; ADR-001 add. 4/6, ADR-005 add. 2, ADR-021.
+#
+# How to run it (infrastructure.md §1.1, §9.1):
+#   COMPOSE_ENV_FILES=.env,build/versions.env   (declared in .env / .env.example)
+#   docker compose up -d --wait                 (`make up` after T-008)
+# Version pins never live in this file — only ${...} out of build/versions.env.
+#
+# House rules enforced by scripts/compose-lint.sh (§3.1.1, written in T-008):
+#   1. every image carries an explicit tag out of build/versions.env, no latest;
+#   2. every published port is bound to 127.0.0.1 (SEC-13) — consoles only in
+#      profile `dev`;
+#   3. no default passwords: secrets appear as ${VAR:?} and nowhere else;
+#   4. MV_TELEGRAM_BOT_TOKEN reaches the telegram-bot service only (D-10);
+#   5. there is no `llama-server` service — the LLM runs natively on the host at
+#      127.0.0.1:1234 and containers reach it through host.docker.internal
+#      (ADR-005 add. 2 §7).
+#
+# Scope of T-004 (F-6a) is the always-on core plus the optional `gpu` profile.
+# The profiles `memory`, `dev`, `bot`, `legacy`, the init containers
+# (redpanda-init, minio-init) and the full Makefile belong to T-008 (F-6b); the
+# as-is compose file of the 15 services was moved, not deleted, to
+# services/_archive/build/docker-compose.as-is.yml (U-1) and is the source for
+# the `legacy` profile sections.
+# =============================================================================
+
+# Log rotation of the platform: 50m x 5 (ADR-006 add. 5); the telegram bot gets
+# 10m x 3 in T-008.
+x-logging: &platform-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+# Every process is the same image with a different --contexts set (ADR-001,
+# NFR-075); build/Dockerfile carries no HEALTHCHECK because the port depends on
+# the role, so each service declares its own probe against its own binary.
+x-platform: &platform
+  image: multiverse-core:${MV_IMAGE_TAG:-dev}
+  build:
+    context: .
+    dockerfile: build/Dockerfile
+    args:
+      GO_VERSION: ${GO_VERSION}
+      VERSION: ${MV_IMAGE_TAG:-dev}
+  restart: unless-stopped
+  logging: *platform-logging
 
 services:
-  # ========== Событийная шина ==========
+  # ========================= event bus (always on) ===========================
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
-    ports:
-      - "9092:9092"   # Kafka API
-      - "8081:8081"   # Schema Registry
-      - "9644:9644"   # Admin API
+    image: ${REDPANDA_IMAGE:?set REDPANDA_IMAGE in build/versions.env}
+    # Two listeners (§1.4): `internal` serves the containers, `external` serves
+    # `go run` on the host and mvctl, which publishes to the bus directly.
     command:
       - redpanda
       - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
       - --overprovisioned
-      - --smp 1
-      - --memory 1G
-      - --reserve-memory 0M
-      - --node-id 0
-      - --check=false
-      - --kafka-addr PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr PLAINTEXT://redpanda:9092 # ← говорить клиентам: "подключайтесь сюда"
-
-  redpanda-console:
-    image: docker.redpanda.com/redpandadata/console:latest
-    env_file:
-      - .env
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
     ports:
-      - "8092:8080"   # Kafka API  
-    depends_on:
-      - redpanda
-    
-  redpanda-init:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
-    depends_on:
-      - redpanda
-    command: >
-      sh -c "
-        sleep 10 &&
-        rpk topic create
-          player_events
-          world_events
-          game_events
-          system_events
-          scope_management
-          narrative_output
-          --brokers redpanda:9092
-      "
+      - "127.0.0.1:19092:19092"
+      - "127.0.0.1:9644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    # Replaces the as-is `sleep 10` of redpanda-init (§5.1).
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    logging: *platform-logging
 
-  # ========== Хранение снапшотов ==========
+  # ===================== object store (always on, ADR-021) ===================
   minio:
-    image: minio/minio
-    ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console
+    # Built from source, not pulled: see build/minio.Dockerfile. `make
+    # minio-image` builds the same image outside compose.
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+    build:
+      context: .
+      dockerfile: build/minio.Dockerfile
+      args:
+        MINIO_BUILDER_IMAGE: ${MINIO_BUILDER_IMAGE}
+        MINIO_TAG: ${MINIO_TAG}
+        MINIO_REPO: ${MINIO_REPO}
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-
-  # ========== Векторная БД (Semantic Memory) ==========
-  chromadb:
-    image: chromadb/chroma:latest
+      # No defaults on purpose (§3.1.1 rule 3): an unset credential must stop
+      # the stack, not silently recreate the well known as-is account.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env (>= 16 chars)}
     ports:
-      - "8000:8000"
+      # The console (9001) is published only in profile `dev` (SEC-33, T-008).
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - minio-data:/data
+    # The image ships the same probe; repeated here so that `depends_on` reads
+    # in one place and does not depend on the image being rebuilt.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    logging: *platform-logging
+
+  # ========================= platform (always on) ============================
+  gateway:
+    <<: *platform
+    command: ["--contexts=gateway"]
     environment:
-      IS_PERSISTENT: "true"
-      ANONYMIZED_TELEMETRY: "false"
-    volumes:
-      - chroma_data:/chroma/chroma
-
-  # ========== Граф знаний ==========
-  neo4j:
-    image: neo4j:5.18
+      MV_ENV: ${MV_ENV:-dev}
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+      MV_MODE: ${MV_MODE:-live}
+      MV_BUS: ${MV_BUS:-redpanda}
+      MV_BUS_VALIDATE_ON_READ: ${MV_BUS_VALIDATE_ON_READ:-true}
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+      MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+      MV_MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+      MV_MINIO_USE_SSL: ${MV_MINIO_USE_SSL:-false}
+      MV_WORLD_ID: ${MV_WORLD_ID:-dark-forest-world}
+      # Wave 0: cmd/multiverse reads the address of the process HTTP server from
+      # MV_CORE_ADDR whatever the role (serve.go, D-7); EPIC-004 moves the
+      # gateway onto MV_GATEWAY_ADDR, and this line disappears with it.
+      MV_CORE_ADDR: ${MV_GATEWAY_ADDR:-:8088}
+      MV_GATEWAY_ADDR: ${MV_GATEWAY_ADDR:-:8088}
+      MV_GATEWAY_DATA_DIR: ${MV_GATEWAY_DATA_DIR:-/data}
+      MV_GATEWAY_CLIENT_IDS: ${MV_GATEWAY_CLIENT_IDS:-telegram-bot,mvctl}
+      MV_GATEWAY_ACTOR_KIND_CLIENTS: ${MV_GATEWAY_ACTOR_KIND_CLIENTS:-mvctl}
+      MV_CORE_URL: ${MV_CORE_URL:-http://core:8090}
     ports:
-      - "7474:7474"   # HTTP
-      - "7687:7687"   # Bolt
+      - "127.0.0.1:8088:8088"
+    volumes:
+      # Named volume, never a bind mount: links.db holds player identifiers
+      # (ADR-004 add. 4, T-8).
+      - gateway-data:/data
+    healthcheck:
+      # The image has neither shell nor curl (§2.3): the binary probes itself.
+      test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:8088/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      # T-008 repoints these at redpanda-init / minio-init
+      # (condition: service_completed_successfully, §5.1).
+      redpanda:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  core:
+    <<: *platform
+    command: ["--contexts=state,mechanics,laws,llm,swarm"]
+    # The LLM is a native process on the host, outside compose (ADR-005 add. 2
+    # §7): this is the only way containers reach 127.0.0.1:1234.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4j_data:/data
+      MV_ENV: ${MV_ENV:-dev}
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+      MV_MODE: ${MV_MODE:-live}
+      MV_BUS: ${MV_BUS:-redpanda}
+      MV_BUS_VALIDATE_ON_READ: ${MV_BUS_VALIDATE_ON_READ:-true}
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+      MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+      MV_MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+      MV_MINIO_USE_SSL: ${MV_MINIO_USE_SSL:-false}
+      MV_WORLD_ID: ${MV_WORLD_ID:-dark-forest-world}
+      MV_CORE_ADDR: ${MV_CORE_ADDR:-:8090}
+      MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS:-operator}
+      # Empty value = memory is off, a documented degradation (FR-035); the
+      # `memory` profile of T-008 fills it in.
+      MV_MEMORY_URL: ${MV_MEMORY_URL:-}
+      MV_SNAPSHOT_EVERY_FACTS: ${MV_SNAPSHOT_EVERY_FACTS:-200}
+      MV_GM_PATH: ${MV_GM_PATH:-agent}
+      MV_LAWS_BREACH_PHASE: ${MV_LAWS_BREACH_PHASE:-false}
+      MV_LLM_PROVIDER: ${MV_LLM_PROVIDER:-openai_compat}
+      MV_LLM_URL: ${MV_LLM_URL:-http://host.docker.internal:1234}
+      MV_LLM_API_KEY: ${MV_LLM_API_KEY:-}
+      MV_LLM_NUM_CTX: ${MV_LLM_NUM_CTX:-8192}
+      MV_LLM_STORE_PROMPTS: ${MV_LLM_STORE_PROMPTS:-false}
+      MV_LLM_CLOUD_ENABLED: ${MV_LLM_CLOUD_ENABLED:-false}
+      MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS: ${MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS:-false}
+      MV_LLM_CLOUD_BUDGET_USD_PER_DAY: ${MV_LLM_CLOUD_BUDGET_USD_PER_DAY:-0}
+    # No published port on purpose: the admin API of `core` is reached through
+    # the gateway proxy (ADR-009 п. 9, threat-model T-14). Compose's internal
+    # network is enough for gateway -> core; publish it only for local debugging.
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
-  # ========== Метрики (TimescaleDB) ==========
-  timescaledb:
-    image: timescale/timescaledb:latest-pg16
+  # ===================== optional LLM runtime (profile gpu) ==================
+  # Only needed when MV_LLM_PROVIDER=ollama or for embeddings (ADR-005 add. 2
+  # §8, §6.5). The default runtime, llama-server, is native and has no service
+  # here on purpose. Ollama tuning (OLLAMA_KEEP_ALIVE, OLLAMA_MAX_LOADED_MODELS,
+  # OLLAMA_NUM_PARALLEL, OLLAMA_ORIGINS) belongs to T-008 together with the rest
+  # of the profiles; the image already binds to its own container interface, so
+  # nothing is overridden here (SEC-15: OLLAMA_HOST is never set to 0.0.0.0 by
+  # this file).
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
     ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_DB: metrics
-      POSTGRES_USER: metrics
-      POSTGRES_PASSWORD: metrics
+      - "127.0.0.1:11434:11434"
     volumes:
-      - timescale_data:/var/lib/postgresql/data
-
-  # ========== Сборка и запуск вашего сервиса ==========
-  entity-manager:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=entity-manager    
-    command: ./entity-manager
-    depends_on:
-      - redpanda
-      - minio
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - MINIO_ENDPOINT=minio:9000
-    #  - MINIO_ACCESS_KEY=minioadmin
-    #  - MINIO_SECRET_KEY=minioadmin
-    env_file:
-      - .env
-    # Раскомментируйте для отладки:
-    # stdin_open: true
-    # tty: true
-  narrative-orchestrator:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=narrative-orchestrator
-    command: ./narrative-orchestrator
-    depends_on:
-      - redpanda
-      - semantic-memory
-      #- qwen3-service
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - SEMANTIC_MEMORY_URL=http://semantic-memory:8080
-    #  - ORACLE_URL=http://qwen3-service:11434/v1/chat/completions
-    #  - ORACLE_URL=http://192.168.3.12:1234/v1/chat/completions
-  semantic-memory:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=semantic-memory
-        - GO_BUILD_TAGS=chroma_v2_enabled
-        - BUILD_CGO=1  # ← включаем CGO только здесь
-    command: ./semantic-memory
-    depends_on:
-      - redpanda
-      - minio
-      - chromadb
-    ports:
-      - "8082:8082"
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - CHROMA_URL=http://chromadb:8000
-    #  - NEO4J_URI=neo4j://neo4j:7687
-    #  - NEO4J_USER=neo4j
-    #  - NEO4J_PASSWORD=password
-    #  - PORT=8080
-  ontological-archivist:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=ontological-archivist
-    command: ./ontological-archivist
-    depends_on:
-      - redpanda
-      - chromadb
-      - neo4j
-    ports:
-      - "8083:8083"
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - CHROMA_URL=http://chromadb:8000
-    #  - NEO4J_URI=neo4j://neo4j:7687
-    #  - NEO4J_USER=neo4j
-    #  - NEO4J_PASSWORD=password
-    #  - PORT=8080
-  plan-manager:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=plan-manager
-    command: ./plan-manager
-    depends_on:
-      - redpanda
-    env_file:
-      - .env  
-  world-generator:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=world-generator
-    command: ./world-generator
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env 
-  universe-genesis-oracle:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=universe-genesis-oracle
-    command: ./universe-genesis-oracle
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env       
-  cultivation-module:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=cultivation-module
-    command: ./cultivation-module
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env  
-  # ========== ИИ: Qwen3 через Ollama ==========
-#  qwen3-pull:
-#    image: ollama/ollama:latest
-#    volumes:
-#      - ollama_data:/root/.ollama
-#    command: [ "pull", "qwen3"]
-#    profiles: ["init"]  # ← запускается только при необходимости
-  qwen3-service:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
+      - ollama-data:/root/.ollama
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]  
-    #depends_on:
-    #  - qwen3-pull
-    # Загружаем модель при старте
-    
-    # Для GPU (опционально):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-      
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_storage:/qdrant/storage
-    environment:
-      - QDRANT__SERVICE__PORT=6333
-      - QDRANT__GRPC__PORT=6334
-    restart: unless-stopped
+              capabilities: [gpu]
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "http://localhost:6333/health", "-O", "/dev/null" ]
-      interval: 30s
+      test: ["CMD-SHELL", "ollama ps >/dev/null 2>&1 || exit 1"]
+      interval: 15s
       timeout: 10s
-      retries: 3
-  # ========== Game Service ==========
-  game-service:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=game-service
-    command: ./game-service
-    depends_on:
-      - redpanda
-      - entity-manager
-    ports:
-      - "8088:8088"
-    env_file:
-      - .env
-    environment:
-      - HTTP_ADDR=:8088
-      - CACHE_TTL=5m
-
-  # ========== Entity Actor Service ==========
-  entity-actor:
-    build:
-      context: .
-      dockerfile: ./services/entity-actor/Dockerfile
-      args:
-        - SERVICE=entity-actor
-    command: ./entity-actor
-    depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Evolution Watcher Service ==========
-  evolution-watcher:
-    build:
-      context: .
-      dockerfile: ./services/evolution-watcher/Dockerfile
-      args:
-        - SERVICE=evolution-watcher
-    command: ./evolution-watcher
-    depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Rule Engine Service ==========
-  rule-engine:
-    build:
-      context: .
-      dockerfile: ./services/rule-engine/Dockerfile
-      args:
-        - SERVICE=rule-engine
-    command: ./rule-engine
-    depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Утилита для работы с Kafka ==========
-  kafkacat:
-    image: confluentinc/cp-kafkacat:latest
-    depends_on:
-      - redpanda
-    entrypoint: /bin/sh
-    command: -c "echo 'Waiting for Redpanda to be ready...' && while ! nc -z redpanda 9092; do sleep 1; done && echo 'Redpanda is ready!' && tail -f /dev/null"
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *platform-logging
 
 volumes:
-  minio_data:
-  chroma_data:
-  neo4j_data:
-  timescale_data:
-  ollama_data:  # ← для кэша моделей Ollama
-  qdrant_storage:
+  # Target volumes are named apart from the as-is ones (`redpanda_data`,
+  # `minio_data`, `ollama_data`): with the same COMPOSE_PROJECT_NAME the old
+  # data — including the as-is MinIO root credentials — would otherwise be
+  # mounted silently on the first `up` (§5.5, D-8; review T-004, Mi-2).
+  # `make archive-legacy` copies the as-is volumes before they are removed.
+  redpanda-data:
+  minio-data:
+  gateway-data:
+  ollama-data:

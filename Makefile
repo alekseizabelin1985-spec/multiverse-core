@@ -2,6 +2,31 @@
 PROJECT_NAME := multiverse-core
 DOCKER_IMAGE := $(PROJECT_NAME)
 
+# Pinned versions of every image and toolchain (infrastructure.md §2.4). This is
+# the only place they come from: never write a tag into a recipe.
+include build/versions.env
+
+GIT_SHA := $(shell git rev-parse --short HEAD)
+
+# -----------------------------------------------------------------------------
+# Images (EPIC-001 F-6a, task T-004). The rest of the target set of
+# infrastructure.md §2.2 — up/down/health/ci/compose-lint/llm-* — and the
+# removal of the as-is workspace targets below land in T-008 (F-6b), which
+# rewrites this file as a whole.
+# -----------------------------------------------------------------------------
+
+# Platform image: one image, three binaries; `command` in compose picks the role.
+.PHONY: image
+image:
+	docker build -f build/Dockerfile --build-arg GO_VERSION=$(GO_VERSION) --build-arg VERSION=$(GIT_SHA) -t multiverse-core:$(GIT_SHA) -t multiverse-core:dev .
+
+# MinIO built from source (ADR-021 variant B): no upstream image exists for the
+# tag that carries the CVE-2025-62506 fix. The first build takes about five
+# minutes, later ones come from the BuildKit cache.
+.PHONY: minio-image
+minio-image:
+	docker build -f build/minio.Dockerfile --build-arg MINIO_TAG=$(MINIO_TAG) --build-arg MINIO_REPO=$(MINIO_REPO) --build-arg MINIO_BUILDER_IMAGE=$(MINIO_BUILDER_IMAGE) -t $(MINIO_IMAGE) .
+
 # Services
 SERVICES := \
 	entity-manager \
@@ -128,6 +153,8 @@ help:
 	@echo "  make test-service SERVICE=<n>   Run tests for specific service"
 	@echo "  make test-shared                Run tests for shared module"
 	@echo "  make sync                       Sync go workspace"
+	@echo "  make image                      Build the platform image (build/Dockerfile)"
+	@echo "  make minio-image                Build MinIO from source (build/minio.Dockerfile)"
 	@echo ""
 	@echo "Available services:"
 	@echo "  $(SERVICES)"

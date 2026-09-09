@@ -1,0 +1,73 @@
+# .dockerignore — what never enters a build context of this repository
+# (infrastructure.md §2.3). Smaller context = faster builds, but the first
+# reason is safety: .env, local IDE state and the archive must not be baked
+# into an image by accident.
+#
+# The platform image (build/Dockerfile) builds ./cmd/... of the root module and
+# copies the data directories (blueprints/, rules/, laws/, config/), so *.md is
+# deliberately NOT excluded — blueprints are data, not documentation.
+
+# --- VCS, CI and team artifacts ---
+.git
+.gitignore
+.gitattributes
+.github
+Docs/
+plans/
+reports/
+memory/
+PULL_REQUEST.md
+
+# --- Secrets and local configuration (never in an image) ---
+.env
+.env.*
+**/.env.*
+!.env.example
+.mcp.env
+.mcp.env.example
+.mcp.json
+.claude/
+.qwen/
+.gigacode/
+.kilo/
+.kilocode/
+.kilocodemodes
+.roo/
+.roomodes
+.idea/
+.vscode/
+.ai/
+
+# --- Separate Go modules: not part of the root module, not in the image ---
+# services/ holds the 8 frozen services (FROZEN.md) and services/_archive/**
+# (U-1: archived, never deleted). The `legacy` profile builds its own images
+# from build/legacy.Dockerfile; when T-008 wires that profile up it must give
+# the build its own context or re-include the two directories it needs here.
+services/
+
+# --- Build artifacts, data and local runtime state ---
+bin/
+dist/
+backups/
+ops/
+testdata/recordings/
+coverage.*
+**/coverage.*
+*.exe
+**/*.exe
+*.test
+**/*.test
+*.out
+**/*.out
+*.log
+**/*.log
+*.db
+**/*.db
+*.db-wal
+**/*.db-wal
+*.db-shm
+**/*.db-shm
+
+# --- OS noise ---
+.DS_Store
+Thumbs.db
