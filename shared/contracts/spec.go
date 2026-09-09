@@ -61,6 +61,19 @@ type Spec struct {
 	Schema *jsonschema.Schema
 }
 
+// The settings every topic of the platform shares (infrastructure.md v0.3
+// §5.1, D-9, ADR-007 p. 4). They are constants rather than fields of TopicSpec
+// because no topic deviates from them: one broker, one partition, and a daily
+// segment without which retention never fires at this traffic — a segment
+// becomes eligible for deletion only once it is closed, and the default
+// segment is a gibibyte while the platform writes a few megabytes a month.
+const (
+	TopicPartitions    = 1
+	TopicReplicas      = 1
+	TopicSegmentMS     = 24 * 60 * 60 * 1000
+	TopicCleanupPolicy = "delete"
+)
+
 // TopicSpec describes a topic of the platform: the single source for
 // redpanda-init and for mvctl contracts topics (foundation.md §6).
 type TopicSpec struct {
@@ -69,4 +82,9 @@ type TopicSpec struct {
 	// ReplayRead reports whether the topic is read during a replay. Analytics
 	// and dead letters are not: they describe a run, they do not constitute it.
 	ReplayRead bool
+	// MaxMessageBytes overrides the broker default for a topic that carries
+	// heavy payloads; zero leaves the broker default in place. Only
+	// llm_records needs it — a prompt and its completion travel whole
+	// (infrastructure.md v0.3 §5.1, decision ОВ-37).
+	MaxMessageBytes int64
 }

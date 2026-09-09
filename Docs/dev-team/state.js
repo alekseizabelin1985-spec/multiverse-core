@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-10T08:10:00+03:00",
+  "updatedAt": "2026-09-10T13:00:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -53,7 +53,7 @@ window.DEVTEAM_STATE =
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
       "branch": "epic/EPIC-001-foundation",
-      "next": "Коммит T-008 + T-009 → T-010 (mvctl), T-011 (shared/entity v2), T-012 (CI)",
+      "next": "Коммит T-010 + T-011 → T-012 (CI) ∥ T-013 (замер моделей, стенд)",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -157,6 +157,26 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T04:10:00+03:00",
           "finishedAt": "2026-09-10T06:40:00+03:00",
           "reviewIterations": 1,
+          "wave": 0
+        },
+        {
+          "id": "T-010",
+          "title": "F-4c каркас cmd/mvctl: contracts check/topics, env check, storage init",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-10T08:30:00+03:00",
+          "finishedAt": "2026-09-10T12:20:00+03:00",
+          "reviewIterations": 1,
+          "wave": 0
+        },
+        {
+          "id": "T-011",
+          "title": "F-10a shared/entity v2 (модель сущности)",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-10T08:30:00+03:00",
+          "finishedAt": "2026-09-10T13:00:00+03:00",
+          "reviewIterations": 2,
           "wave": 0
         }
       ],
@@ -1022,6 +1042,66 @@ window.DEVTEAM_STATE =
       "action": "итерация 2 по ревью профилей и скриптов",
       "startedAt": "2026-09-10T07:20:00+03:00",
       "finishedAt": "2026-09-10T08:10:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-010",
+      "action": "cmd/mvctl: contracts check/topics, env check, storage init",
+      "startedAt": "2026-09-10T08:30:00+03:00",
+      "finishedAt": "2026-09-10T09:30:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-011",
+      "action": "shared/entity v2: модель сущности и тесты",
+      "startedAt": "2026-09-10T08:30:00+03:00",
+      "finishedAt": "2026-09-10T10:20:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-010",
+      "action": "ревью mvctl",
+      "startedAt": "2026-09-10T10:20:00+03:00",
+      "finishedAt": "2026-09-10T11:00:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-011",
+      "action": "ревью модели сущности",
+      "startedAt": "2026-09-10T10:20:00+03:00",
+      "finishedAt": "2026-09-10T11:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-010",
+      "action": "доработка по ревью mvctl",
+      "startedAt": "2026-09-10T11:00:00+03:00",
+      "finishedAt": "2026-09-10T12:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-011",
+      "action": "итерация 2 по ревью модели сущности",
+      "startedAt": "2026-09-10T11:40:00+03:00",
+      "finishedAt": "2026-09-10T13:00:00+03:00"
     }
   ],
   "events": [
@@ -1774,10 +1854,76 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-008 итерация 2 принята: линтер ловит все фикстуры, qdrant healthy, make up деградирует без LLM"
+    },
+    {
+      "at": "2026-09-10T08:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит eda1b3b (T-008 + T-009, contract-change)"
+    },
+    {
+      "at": "2026-09-10T08:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельно: developer#1 → T-010 (mvctl), developer#2 → T-011 (shared/entity v2)"
+    },
+    {
+      "at": "2026-09-10T09:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-010: cmd/mvctl (contracts check/topics, env check, storage init), покрытие 75–94 %; ревью после T-011 (дерево временно красное)"
+    },
+    {
+      "at": "2026-09-10T10:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-011: shared/entity v2 (операции, канонический хэш, статусы), покрытие 83,9 %"
+    },
+    {
+      "at": "2026-09-10T10:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельные ревью: #1 → T-010 (mvctl), #2 → T-011 (entity)"
+    },
+    {
+      "at": "2026-09-10T11:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-010: принять (0 Critical/Major, 8 Minor)"
+    },
+    {
+      "at": "2026-09-10T11:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-010 короткая доработка: Mi-1/2/3/4/6/8"
+    },
+    {
+      "at": "2026-09-10T11:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-011: вернуть (3 Major — пустой changed[] при сдвиге state_hash, порча списков при set по индексу, некорректный change при remove по индексу)"
+    },
+    {
+      "at": "2026-09-10T11:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-011 итерация 2: M-1..M-3 + Mi-1/2/7/8/10"
+    },
+    {
+      "at": "2026-09-10T12:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-010 принята после доработки: 6 Minor закрыты, покрытие выросло"
+    },
+    {
+      "at": "2026-09-10T13:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-011 итерация 2 принята: покрытие 86,9 %, property-тест-страж на changed[] ⟺ state_hash"
     }
   ],
   "blockers": [
-    "EPIC-001: ждёт подтверждения коммита T-008 + T-009"
+    "EPIC-001: ждёт подтверждения коммита T-010 + T-011"
   ],
   "risks": [
     {

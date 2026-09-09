@@ -210,11 +210,9 @@ linters:
           - forbidigo
           - staticcheck
           - unused
-      # shared/entity: the entity model v2 with tests is F-10 (T-011); the
-      # timestamps move to shared/clock there.
-      - path: shared/entity/
-        linters:
-          - forbidigo
+      # shared/entity is no longer listed either: F-10 (T-011) rewrote it as the
+      # model v2, which has no clock at all — every timestamp of an entity is
+      # the timestamp of the event that caused it (ADR-003 p. 6).
       # Demo programs kept next to the packages they document; F-9 (T-019)
       # decides whether they stay.
       - path: shared/[a-z]+/examples/

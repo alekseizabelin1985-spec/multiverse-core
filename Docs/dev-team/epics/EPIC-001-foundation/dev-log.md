@@ -2533,3 +2533,617 @@ compose-парсер их тоже снимает. Прогон `set -a; . ./.en
 - Предупреждение M-3 печатается по-русски по §6.3 — см. отклонение в п. 3.
 - Прогон `make` по-прежнему не выполнялся: `make` на машине владельца не установлен (ОВ-42).
   Рецепты проверены построчно в bash, включая новый самотест `compose-lint`.
+
+---
+
+## developer#1 · T-010 · F-4c «Каркас `cmd/mvctl` + `contracts check/topics`, `env check`, `storage init`» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `eda1b3b` (T-008 + T-009). Параллельно developer#2 ведёт
+T-011 (`shared/entity/**`) — файлово не пересекаемся. Основание: `tasks.md` §1 и T-010;
+`epics/EPIC-001-foundation/design.md` §4.1 (реестр подкоманд, проверки (а)–(д));
+`architecture/components/foundation.md` v0.2 §6, §10, §12; `architecture/contracts.md` v0.4 §0
+(`Spec.Publishers`), §16 п. 4 (`Spec.Reserved`) и п. 7; `architecture/infrastructure.md` v0.3 §4.2,
+§5.1, §5.2; `plan/decomposition-review.md` §5.2 п. 4; журнал: ОВ-27, ОВ-28, ОВ-37, ревью T-006
+(«проверка Publishers на фикстурах») и ревью T-009 (Mi-4, `Spec.Reserved`).
+
+### 1. Что сделано
+
+**`cmd/mvctl/main.go` — реестр подкоманд.** Таблица `cli.Command{Name, Summary, Owner, Run}` на
+стандартном `flag`, без cobra. Реализованы `contracts`, `env`, `storage`, `version`; зарезервированы
+десять имён с указанием эпика-владельца: `world` (EPIC-002), `blueprint`, `laws`, `record`
+(EPIC-003), `golden`, `llm`, `memory`, `privacy`, `report`, `trace` (EPIC-005). Зарезервированное
+имя печатает «not implemented in this build (EPIC-00N)» и возвращает **2**, а не 0: сборка, где
+команды нет, не должна выглядеть для скрипта как пройденная проверка. Дубль имени — паника при
+сборке реестра (два эпика не узнают о конфликте на слиянии).
+
+**`cmd/mvctl/internal/cli` — общий каркас.** Коды возврата (`0` ок, `1` найдены расхождения,
+`2` ошибка использования или команда отсутствует в сборке), `FlagSet`/`Parse` (`-h` — не ошибка,
+`flag` не зовёт `os.Exit`), `Report` с человекочитаемым и `--json` выводом. Разделение потоков:
+находки и итог по находкам — в stderr, полезная нагрузка — в stdout, поэтому
+`mvctl contracts topics --format=rpk > init.sh` даёт файл команд и ничего кроме.
+
+**`contracts check`** — проверки (а)–(д) `design.md` §4.1 поверх структуры `Input{Specs, Topics,
+SchemaFiles, KnownSources}`, а не поверх `contracts.Default()`: только так тест может подложить
+фантом и увидеть, что команда его ловит. Пять правил: `schemas` (реестр компилируется; имя файла —
+`<type>.v<n>.json`), `registry` (фантомы **в обе стороны** + расхождение версии схемы + схема у
+`Deprecated`-типа), `sources` (издатель и ≥ 1 потребитель, владелец схемы, **все значения
+`Publishers`/`Consumers` — реальные источники конверта**), `topics` (тип идёт в топик карты; топик
+карты несёт типы, кроме `dead_letters`; `retention.ms > 0`; дубль в карте), `policies` (политика
+типа = политика его топика на восьми синтетических конвертах).
+
+**`contracts topics`** — печать целевой конфигурации (имя, партиции, реплики, `retention.ms` в днях,
+`segment.ms`, `max.message.bytes`, читается ли в replay) и `--format=rpk` — пары
+`rpk topic create` / `rpk topic alter-config`, ровно те, что выполняет `build/redpanda-init.sh`
+(создание для чистого кластера, `alter-config` для существующего — это и делает init идемпотентным).
+
+**`env check`** — полная сверка манифеста `shared/env` с `.env.example` в обе стороны через
+`env.CheckExampleFile` (объявлено, но нет в файле; есть в файле, но не объявлено; секрет с
+значением; обязательная с значением; устаревшая; значение вне enum; значение не того типа).
+Флаг `--file` меняет проверяемый файл, `--env` дополнительно валидирует **весь** манифест против
+окружения процесса (ОВ-27: процесс при старте проверяет только переменные включённых контекстов,
+полная проверка — здесь). Значение секрета не печатается ни в одной ветке — закреплено тестом.
+
+**`storage init`** — `EnsureBucket(ops-artifacts)` через `shared/objstore` с опциями из
+`objstore.BucketOptionsFor` (одна таблица правил на `EnsureBucket`, `minio-init` и CLI) плюс отчёт
+`Capabilities()`. `--store=minio|memory`. Идемпотентен: повторный запуск ничего не меняет и не
+трогает уже лежащие объекты. Отсутствие versioning/ILM у сервера — примечание в выводе, а не ошибка
+(ADR-021 п. 2, D-6). Бакеты мира создаёт `mvctl world init` (EPIC-002).
+
+**`shared/contracts` (точечно, ОВ-37).** В `TopicSpec` добавлено поле `MaxMessageBytes` (0 —
+брокерский дефолт), у `llm_records` — 4 МиБ; экспортированы константы, общие для всех топиков:
+`TopicPartitions=1`, `TopicReplicas=1`, `TopicSegmentMS=86400000` (D-9), `TopicCleanupPolicy="delete"`.
+Добавлена `KnownSources()` — список значений `Event.Source`, против которого `contracts check`
+проверяет реальность источников из `Publishers`/`Consumers`.
+
+**`shared/env` + `.env.example` (ОВ-28).** Дефолт `MV_CORE_ADMIN_CLIENTS` — `operator,mvctl`:
+`mvctl` добавляет себя в allow-list, потому что его подкоманды `world`/`laws`/`snapshot` ходят в
+`/v1/admin/*`.
+
+**`Makefile`.** Из цели `contracts` убрана строка `mvctl blueprint validate blueprints/`: команда
+принадлежит EPIC-003, имя зарезервировано и возвращает 2, из-за чего цель падала бы на никогда не
+написанной команде. Причина и момент возврата строки записаны комментарием над целью.
+
+### 2. Решения по ходу
+
+1. **Проверка (г) сверяет политику с топиком, а не саму с собой.** Первая редакция строила фикстуры
+   из самой `spec.Policy` и потому не ловила главный случай — тип на `player_events` с пустой
+   политикой (пустой `ActorKinds` = «принимаю всех», внутренне непротиворечиво). Введена карта
+   `topicPolicies`: `player_events` → `PlayerEventsPolicy`, `llm_records` и `narrative_output` →
+   `SwarmPolicy` (api-contracts §2.0, foundation §6). Остальные четыре топика смешанные (автор
+   правит законы через CLI и тик роя живут в `system_events`), правила уровня топика у них нет —
+   их политики закреплены поимённо тестами `shared/contracts` (T-009).
+2. **`--json` печатает и `details`.** Человеку нужен список топиков, скрипту — те же данные
+   структурой; дублировать разбор человекочитаемой таблицы никто не должен.
+3. **Ошибка использования и недоступный сервер — разные коды.** `--store=s3` → 2 (опечатка в
+   командной строке), MinIO без ключей или без ответа → 1 (есть что читать в отчёте).
+4. **Фикстуры политик строятся в коде, а не читаются из файла.** Под проверкой политика, а не
+   payload: заполняются только `meta.actor_kind` и `meta.agent`. Схемы payload проверяет `Validate`
+   в тестах `shared/contracts` по примерам `api-contracts.md` §2.3.
+5. **`env check` по умолчанию смотрит на `.env.example`, а не на окружение.** Иначе цель `contracts`
+   в CI (где нет `.env`) падала бы на обязательных ключах MinIO; полная проверка машины — `--env`.
+
+### 3. Отклонения от дизайна
+
+- **`design.md` §4.1 называет подкоманду EPIC-005 `llmusage`**; в задании оркестратора — `llm`.
+  Зарезервировано имя `llm` (форма `mvctl llm usage`); при расхождении переименование —
+  одна строка в реестре. Вопрос владельцу EPIC-005 — см. §5.
+- **Строка `mvctl blueprint validate` удалена из цели `contracts`** (см. §1). Общий файл `Makefile`
+  правится через tech-lead#1 — правка минимальна и без неё DoD «`make contracts` зелёный»
+  недостижим.
+- **Расширение API `shared/env` признаком «нужна контексту X»** (замечание ревьюера T-007 к ОВ-27,
+  отнесённое «в объём T-010/EPIC-002») **не сделано**: сторона, которой признак нужен, — старт
+  `cmd/multiverse` с включёнными контекстами, а это задача подключения контекстов EPIC-002.
+  `mvctl env check` своей половины ОВ-27 (полная проверка) не требует такого признака.
+
+### 4. Результаты DoD
+
+| Проверка | Результат |
+|---|---|
+| `go build ./cmd/... ./shared/...`, `go vet` (без `shared/entity`) | зелёные |
+| `go test -short -count=1 ./cmd/mvctl/...` | 5 пакетов `ok` |
+| Покрытие: `cmd/mvctl` / `cli` / `contracts` / `env` / `storage` | 75,0 % / 94,1 % / 94,1 % / 87,9 % / 93,2 % |
+| `go test -short -count=1 ./shared/contracts/... ./shared/env/... ./shared/objstore/... ./shared/runtime/... ./cmd/multiverse/...` | все `ok` |
+| `go test -tags integration ./cmd/mvctl/internal/storage/...` | `ok` — `ops-artifacts` создан на живом MinIO (`multiverse-core/minio:RELEASE.2025-10-15T17-29-55Z`), повторный запуск не тронул объект |
+| `golangci-lint run ./cmd/... ./shared/contracts/... ./shared/env/...` | `0 issues` |
+| `go test ./shared/contracts/... -run TestSchemasValid` | `ok` |
+
+Ручной прогон (цель `contracts` построчно — `make` на машине не установлен, ОВ-42):
+
+```
+$ go run ./cmd/mvctl contracts check
+contracts check: 65 types, 8 topics, 58 schema files checked            # код 0
+
+$ go run ./cmd/mvctl contracts topics
+topic             retention    segment  partitions  max.message.bytes  replay
+player_events           30d         1d           1                 -    true
+game_events             30d         1d           1                 -    true
+world_events            30d         1d           1                 -    true
+system_events           30d         1d           1                 -    true
+narrative_output        30d         1d           1                 -    true
+llm_records             90d         1d           1           4194304    true
+analytics_events       180d         1d           1                 -   false
+dead_letters            30d         1d           1                 -   false
+contracts topics: 8 topics                                              # код 0
+
+$ go run ./cmd/mvctl contracts topics --format=rpk    # 16 строк; первая и пара llm_records:
+rpk topic create player_events -p 1 -r 1 -c cleanup.policy=delete -c retention.ms=2592000000 -c segment.ms=86400000
+rpk topic create llm_records -p 1 -r 1 -c cleanup.policy=delete -c retention.ms=7776000000 -c segment.ms=86400000 -c max.message.bytes=4194304
+rpk topic alter-config llm_records --set cleanup.policy=delete --set retention.ms=7776000000 --set segment.ms=86400000 --set max.message.bytes=4194304
+
+$ go run ./cmd/mvctl env check
+env check: 69 variables declared, compared with .env.example            # код 0
+
+$ go run ./cmd/mvctl storage init --store=memory
+bucket ops-artifacts ready (no rules)
+note: the store does not support versioning; the rule was skipped
+note: the store does not support lifecycle rules; expiry was skipped
+storage init: 1 bucket ready                                            # код 0
+```
+
+Отрицательные прогоны (unit, синтетический реестр): спек без файла схемы, файл схемы без спека,
+расхождение версии, тип без издателя/потребителя, выдуманный источник в `Publishers`, тип на
+топике вне карты, топик без типов, тип на `dead_letters`, политика `player_events`, принимающая
+`actor_kind=system` или конверт с `meta.agent`, запись `llm_records` без агента — каждый даёт
+код **1** и именованную находку. Зарезервированный тип (`Spec.Reserved`) фантомом не считается,
+но опечатку в его `Publishers` команда всё равно ловит.
+
+### 5. Открытые вопросы
+
+- **ОВ-46.** Имя подкоманды EPIC-005: `llm` (задание оркестратора) или `llmusage` (`design.md`
+  §4.1)? Сейчас зарезервировано `llm`.
+- **ОВ-47.** `mvctl privacy scan testdata/` нужен job'у `security` уже в T-012 (F-7), а команда —
+  EPIC-005 (T-139) и сейчас возвращает 2. Кто пишет заглушку `privacy scan` до EPIC-005 —
+  T-012 (devops) или отдельная задача?
+- **ОВ-48.** Строка `mvctl blueprint validate blueprints/` возвращается в цель `contracts` вместе
+  с командой (EPIC-003). Зафиксировать это в задаче EPIC-003, иначе цель тихо останется урезанной.
+- **ОВ-49 (перенос из ревью T-007, ОВ-31).** Перевод `cmd/multiverse/serve.go` на `logging.Init`
+  был продублирован в DoD T-010, но `cmd/multiverse/**` — не область T-010 (общий файл, tech-lead#1)
+  и не относится к `mvctl`. Оставлен задаче подключения контекстов EPIC-002.
+
+### 6. Риски и допущения
+
+- **`go build ./...` в корне сейчас красный** из-за `shared/entity` (T-011, developer#2 в работе:
+  `undefined: TypeWorld`, `AttrHP`, `e.Payload`). Проверки прогонялись по пакетам своей области.
+  Общий прогон — после приёмки T-011.
+- **Соответствие `--format=rpk` и `build/redpanda-init.sh` держит тест**, который читает список
+  топиков из самого скрипта и сверяет имена и retention с реестром. Сам скрипт остаётся
+  рукописным: генерация его из `mvctl` — предложение в бэклог.
+- **`topicPolicies` — вторая запись правила**, первая живёт в конструкторах `shared/contracts`
+  (`playerEvent`, `swarmEvent`). Расхождение поймает эта же проверка (она сверяет реестр с картой),
+  но карту придётся править при появлении топика с новым правилом уровня топика.
+- **Допущение.** `KnownSources()` перечисляет источники вручную рядом с константами. Новый источник
+  без записи в список даст ложную находку — заметно сразу на первом же прогоне `contracts check`.
+
+---
+
+## developer#2 · T-011 · F-10a «`shared/entity` v2 (модель сущности)» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation` (HEAD на старте `eda1b3b`). Основание:
+`architecture/components/state-and-mechanics.md` v0.2 §3 (+ §4.5, §4.10 и дополнение сведения 3),
+`analysis/data-model.md` v0.2.1 §3, `architecture/contracts.md` v0.4 C-02 v1.2,
+`schemas/events/entity.*.v1.json`, ADR-011, ADR-013, ADR-003 п. 6.
+Параллельно developer#1 вёл T-010 (`cmd/mvctl/**`) — его файлы не трогались.
+Коммит не выполнялся (`git.commits: ask`); изменения подготовлены в индексе.
+
+### 1. Что сделано
+
+Пакет переписан целиком (as-is `Entity{Payload, Set/Get/AddToStringSlice}` с `time.Now()` внутри
+методов удалён; в едином модуле у него не осталось импортёров — `services/**` живут вне модуля).
+
+| Файл | Содержимое |
+|---|---|
+| `entity.go` | `Entity`, `HistoryEntry`, `LastChange`, `Ref` (+`EventRef`/`RefFrom`/`EventEntity`), `New`, `Clone`, `CheckVersion`/`ErrVersionConflict`, `Commit`, `SetFactEventID`, обрезка `History` до 50 |
+| `ops.go` | `OpKind{set,inc,append,remove}`, `Op`, `Change`, `ChangeSet`+`Propose`, `ApplyOps`, `ErrInvalidOp`+`Reason*`, `ReservedPaths` |
+| `path.go` | половина грамматики путей «на запись» (`splitPath`, `setIn`, `deleteIn`, `asAnySlice`); чтение и глубокое копирование делегированы `shared/jsonpath` |
+| `attrs.go` | типизированные геттеры **всех** атрибутов `data-model.md` §3 (World, Region, Character, NPC, Item, Group, Encounter) + `Attr*` общего назначения |
+| `types.go` | константы типов, статусов, `actor_kind`, состояний группы/встречи, `participation`, имён атрибутов; `IsTerminalStatus`, `IsTerminal`, `StatusTransitionAllowed` |
+| `hash.go` | `CanonicalJSON`, `StateHash`, `sameCanonical` |
+| `README.md` | переписан (был текст ответа ассистента про «Живой Мультиверсум», к модели v2 отношения не имел) |
+
+Три свойства, зафиксированные тестами: часов в пакете нет (время приходит аргументом),
+`ApplyOps` работает на копии и сущность не двигает, политика (владение, инварианты, причины
+отказа) остаётся за `internal/state`.
+
+### 2. Решения по ходу и отклонения от §3
+
+1. **Половина грамматики путей написана здесь, а не взята из `jsonpath`.** `jsonpath.Accessor.Set`
+   ходит только по map: `members[0]` он превратил бы в ключ `"0"`, а удаления элемента списка у
+   него нет. Чтение (`GetAny`, `Has`, `Get*`) и глубокое копирование (`Clone`) переиспользуются
+   как есть; на запись — `splitPath`/`setIn`/`deleteIn` с той же грамматикой. Тест
+   `TestPathGrammarMatchesJSONPath` прибивает половины друг к другу: что записала операция,
+   `jsonpath` читает по тому же пути. Свести обе половины в `shared/jsonpath` — предложение в
+   бэклог EPIC-002 (пакет не в карте владения этой волны).
+2. **No-op определяется канонической равностью, а не `reflect.DeepEqual`** (§3.2 называет
+   `DeepEqual`). Причина: `inc` пишет `int64`, а с провода приходит `float64`, поэтому
+   `inc -3` + `inc +3` дал бы `changed: [{hp, 10, 10}]` и лишний рост версии. Сравнение идёт по
+   `CanonicalJSON`-форме значения, то есть «не изменилось» = «не сдвинуло `state_hash`». Строго
+   шире `DeepEqual`, ложных изменений не пропускает.
+3. **`CanonicalJSON` сортирует ключи на всех уровнях, включая верхний** — форма получается
+   `{"attributes":…,"id":…,"type":…,"version":…}`, а не в порядке перечисления §3.3. §3.3 говорит
+   «с отсортированными ключами»; одно правило, применённое везде, — единственное, что сможет
+   воспроизвести вторая реализация. **На сверку architect#1**: если порядок полей верхнего уровня
+   считается частью контракта, правка — три строки.
+4. **`Change.Old` пишется всегда, `null` при отсутствии старого значения** (§3.2: «`old` или
+   `null`»), включая элемент `append`, где схема разрешает `old` вовсе отсутствовать. Схему это
+   не нарушает (`"old": true`).
+5. **`inc` записывает `int64`.** Хэш от этого не зависит (§3.3 «числа как int64/float64 без
+   экспоненты» — `10` и `10.0` пишутся одинаково), но в `changed[].new` тип виден.
+6. **`remove` со значением: путь в `changed[]` — путь списка** (`inventory`), `old`/`new` — список
+   до и после. C-02 задаёт путь элемента только для `append`.
+7. **`set` по индексу за пределами списка — `invalid_op`** (`ReasonBadIndex`): список растит
+   `append`, молча дописывать «дырки» модель не станет.
+8. **`remove` отсутствующего ключа — `invalid_op`** (по таблице §3.2 «по пути нет ключа/списка»),
+   а `remove` отсутствующего элемента списка — no-op без ошибки.
+9. **Clamp `hp`** срабатывает, когда последний сегмент пути — `hp`, а границей берётся соседний
+   `hp_max` (по тому же родителю). Без `hp_max` остаётся только нижняя граница 0.
+10. **Значение операции проверяется через `json.Marshal`** — это и есть точное определение
+    «JSON-совместимо»: отсекаются `NaN`/`Inf`, каналы, функции, циклы.
+11. **Сверх §3 добавлено** (сигнатуры §3 при этом совпадают дословно): `New`, `Commit`,
+    `SetFactEventID`, `CheckVersion`/`ErrVersionConflict`, `ChangeSet`/`Propose`/`ChangeSet.Ref`,
+    `Ref.EventRef`/`RefFrom`/`EventEntity`, геттеры `attrs.go`, `StatusTransitionAllowed`.
+    `Commit` кодирует шаг §4.5 п. 10 (версия +1 только при непустом `changed`, `updated_at` из
+    предложения, `last_change`, запись в `history` с обрезкой), `SetFactEventID` — п. 12.
+12. **Снято временное исключение `forbidigo` для `shared/entity`** в `.golangci.yml` (ОВ-12):
+    в модели v2 `time.Now` нет ни в одной функции. `golangci-lint run ./...` = 0 issues.
+
+### 3. Что оставлено EPIC-002
+
+- Проверка обязательных атрибутов при создании (§4.5 `entity.create.proposed`) — решение State,
+  а не модели; в модели её нет намеренно (см. открытый вопрос 1 — списки атрибутов в двух
+  документах расходятся).
+- Какие пути допустимы над терминальной сущностью (`died_at`, `killed_by`, `loot_claimed_by`,
+  `encounter_id`, §4.5 п. 5) — правило State.
+- `OwnershipRules`, инварианты, причины отказа (`unknown_entity`, `level_violation`,
+  `law_violation`, `dead_entity`, `duplicate_entity`) — `internal/state` + `shared/contracts`.
+- Свести половины грамматики путей в `shared/jsonpath` (`Set`/`Delete` с индексами).
+
+### 4. Как проверено
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | ok |
+| `go vet ./...` | ok |
+| `go test -short -count=1 ./...` | все пакеты `ok` (20 пакетов) |
+| `go test -short -count=1 -cover ./shared/entity/` | **coverage: 83.9 %** (порог 60 %) |
+| `golangci-lint run ./...` | **0 issues** (после снятия исключения `forbidigo`) |
+| `gofmt -l shared/entity/`, `golangci-lint fmt --diff ./...` | пусто |
+| `pre-commit run --files <12 своих файлов>` | 8 хуков Passed |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| `-race` | не запускался — недоступен в окружении (общий DoD §1 п. 2 в этой части n/a) |
+
+Состав тестов: `ops_test.go` — все четыре операции, no-op, «первый `old` / последний `new`»,
+пустой список ops, зарезервированные пути (таблица по `ReservedPaths` + `_intent` + `history[0]`),
+11 краевых случаев формата (`ReasonUnknownOp`, `ReasonEmptyPath`, `ReasonBadPath`,
+`ReasonNotNumber`, `ReasonNotInteger`, `ReasonNotList`, `ReasonMissingPath`, `ReasonNotJSON`,
+`ReasonBadIndex`), индексные пути, дедуп `append` по `item_id`, сверка грамматики с `jsonpath`;
+`entity_test.go` — независимость `Clone`, конфликт версий, `Commit` (рост версии и его отсутствие),
+обрезка `History` до 50, `SetFactEventID`, `Ref` ⇄ `eventbus.EntityRef`, таблица переходов статуса
+(`alive → abandoned` разрешён, из `dead`/`abandoned`/`ascended_final` — нет);
+`hash_test.go` — стабильность `CanonicalJSON` на 64 пересборках карты, независимость от
+`updated_at`/`history`/`last_change`/`last_event_id`, единый формат числа, независимость
+`StateHash` от порядка; `attrs_test.go` — геттеры всех типов сущностей, отсутствующие атрибуты и
+атрибуты неверной формы; `schema_test.go` — компиляция `schemas/events/entity.*.v1.json` и
+проверка в обе стороны (модель → payload `create.proposed`/`created`/`update.proposed`/`updated`/
+`update.rejected`; payload из схемы → декодирование в `ChangeSet` → `ApplyOps` → `Commit` → факт).
+
+### 5. Открытые вопросы
+
+1. **Атрибуты региона расходятся в двух документах.** `data-model.md` §3.2 требует `npc_ids[]` и
+   `players_present[]`; таблица фикстур `state-and-mechanics.md` §4.10 пишет `npcs: []` и
+   `encounter_chance`, а `players_present` не упоминает. Геттеры сделаны по `data-model.md`
+   (`NPCIDs`, `PlayersPresent`) плюс `EncounterChance` из §4.10. **Нужно решение architect#1 до
+   T-016** (фикстуры) — иначе фикстура и геттер разойдутся по имени ключа.
+2. **Форма `scope` в атрибутах.** `_common.json#/$defs/ScopeRef` — объект `{id, type}`,
+   §4.10 пишет строку `solo:{id}`. `Entity.Scope()` читает обе; какая из них канонична для
+   объекта сущности — вопрос к architect#1 (в фикстурах T-016 должна быть одна).
+3. **`name` не входит в `ReservedPaths`** (§3.2 его не перечисляет), хотя у `Entity` есть поле
+   `Name`. Это осознанно: у региона `name` — обязательный **атрибут** (§4.10). Но `set path=name`
+   тогда пишет атрибут, не трогая `Entity.Name`. Подтвердить.
+4. **`HistoryEntry` без `changed[]`.** `data-model.md` §3 описывает `history[]` как
+   `{version, event_id, changed[], at}`, Go-структура §3.1 — как `{Version, EventID, ProposalID, At}`.
+   Реализована Go-структура §3.1 (плюс json-теги). Если `changed[]` в истории нужен — это рост
+   объекта до 50 копий списка изменений, решение architect#1.
+5. Порядок ключей верхнего уровня в `CanonicalJSON` — см. отклонение 3.
+
+### 6. Допущения
+
+- `Entity.Attributes` приходят из JSON, то есть числа — `float64`, списки — `[]any`. Код терпит
+  и «сделанные в Go» `[]string`/`int` (`asAnySlice`, `asInt64`), но глубокое копирование
+  `jsonpath.Clone` для нестандартных срезов (`[]string`) копирует по ссылке. На пути с провода
+  это недостижимо; фикстуры T-016 — JSON, так что тоже.
+- `StatusTransitionAllowed` описывает только переходы статуса. Кто имеет право их предлагать
+  (`level_violation` при `meta.agent` для `cause=forget`) — проверка State.
+
+## developer#1 · T-010 · доработка по ревью #1 · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `eda1b3b`, изменения в индексе. Задача уже принята
+(Critical 0, Major 0); это закрытие Minor, назначенных оркестратором: **Mi-1, Mi-2, Mi-3, Mi-4,
+Mi-6, Mi-8**. Mi-5 и Mi-7, а также N-1…N-5 — в бэклог по решению оркестратора. Файлы T-011
+(`shared/entity/**`, `.golangci.yml`) не трогал, `review.md` не трогал.
+
+### 1. Что исправлено
+
+**Mi-1 — фантом схемы прошлой версии стал виден (`cmd/mvctl/internal/contracts/check.go`).**
+`checkRegistry` держал файлы схем в `map[тип]` — на один тип помещался один файл, и при паре
+`x.v1.json` + `x.v2.json` в карте оставался последний по алфавиту. Карта переключена на ключ
+**имя файла** (`files[name]`), рядом ведётся `byType[тип] → []имя` для проверок, которым нужен
+весь набор файлов типа. По спеку удаляется ровно `SchemaFile(spec.Type, spec.SchemaVersion)`;
+остаток карты печатается по-разному в зависимости от того, зарегистрирован ли тип:
+
+- тип зарегистрирован → «a schema version of X nobody registers any more: the registry is at
+  version N» (новый текст, ровно случай Mi-1);
+- тип не зарегистрирован → прежнее «schema file of a type nobody registered (X)».
+
+Дрейф версии (файл есть, но не тот) и `deprecated` с файлом схемы гасят **все** файлы своего типа
+(`forget`), иначе одна и та же находка печаталась бы дважды. Тест — четвёртый подслучай
+`TestPhantomTypeAndPhantomSchema` («schema version left behind by a bump»): файлы заданы в порядке
+глоба (`llm.output.v1.json` перед `v2`), спек на `v2`, ожидается ровно одна находка про `v1`.
+
+Проверено и на живом дереве: временный `schemas/events/player.looked.v2.json` при реестре на `v1`
+даёт `[registry] player.looked.v2.json: a schema version of player.looked nobody registers any
+more: the registry is at version 1`, код возврата 1; файл удалён, дерево чистое.
+
+**Mi-2 — сверка с `build/redpanda-init.sh` расширена (`topics_test.go`).**
+`TestRPKMatchesTheInitScript` больше не сверяет только имена и `retention.ms`. Из скрипта
+вычитываются все числовые присваивания (`SEGMENT_MS`, три `RETENTION_*`, `LLM_MAX_MESSAGE_BYTES`),
+аргументы создания (`create_args=(-p N -r M`), `cleanup.policy` из `-c` (и сверка, что `--set`
+ставит ту же), ссылка `-c "segment.ms=${SEGMENT_MS}"`, а в строках таблицы `TOPICS` — переменная
+ретенции и `max.message.bytes=${VAR}`. Дальше по каждой строке реестра сверяются шесть значений:
+`retention.ms`, `max.message.bytes`, партиции, реплики, `segment.ms`, `cleanup.policy`.
+Литеральные значения ретенции из теста убраны — они теперь берутся из скрипта и сверяются с
+реестром.
+
+**Расхождений между скриптом и реестром не нашлось** — обе стороны совпали на всех шести
+значениях для всех восьми топиков, править не пришлось ни ту, ни другую. Что тест ловит дрейф,
+проверено намеренной порчей скрипта (`SEGMENT_MS=43200000`, `LLM_MAX_MESSAGE_BYTES=2097152`,
+`-p 2`): 13 ошибок; скрипт восстановлен из индекса, `git status build/redpanda-init.sh` чист.
+
+**Mi-3 — `--format=rpk` стал пригодным как скрипт (выбран первый вариант; `topics.go`).**
+Вариант «снять обещание» отвергнут: команда объявлена в `design.md` §4.1 единым источником
+конфигурации кластера, и справочный список этой роли не несёт. Правки на две строки, как и
+оценивал ревьюер:
+
+1. Флаг `--brokers` со значением по умолчанию `sharedenv.KafkaBrokers.String()`
+   (`MV_KAFKA_BROKERS`, на хосте `127.0.0.1:19092`); адрес пишется в каждую команду как
+   `-X brokers=…` — та же форма флага, что в скрипте (rpk v26 не понимает `--brokers`). Пустое
+   значение при `--format=rpk` — ошибка использования (код 2), а не скрипт с пустым адресом.
+2. `rpk topic create … || true`: под `sh -e` создание существующего топика иначе обрывает второй
+   прогон. Create, упавший по настоящей причине, всё равно виден — следующей же командой идёт
+   `alter-config` того же топика, и ей нечего менять.
+
+Комментарий к `RPK` и к `FormatRPK` переписан: идемпотентность даёт не «безусловный запуск пары»,
+а эта пара плюс `|| true` — то, что в скрипте делает обёртка `if … else log "exists"`.
+`TestRPKOutputIsRunnable` проверяет три эталонные строки, наличие `-X brokers=` в каждой строке и
+`|| true` у каждого `create`; добавлен `TestRPKWithoutABrokerIsAUsageError`.
+
+**Mi-4 — заметка о деградации печатается только по делу (`storage/storage.go`).**
+`Init` считает по бакетам прогона, просил ли хоть один versioning (`opts.Versioned`) и хоть один
+lifecycle (`opts.ExpireDays > 0 || opts.NoncurrentExpireDays > 0`), и печатает заметку только на
+пересечении «просили» × «сервер не умеет». Для `ops-artifacts` (без правил, `infrastructure.md`
+§5.2) `mvctl storage init --store=memory` теперь печатает одну строку `bucket ops-artifacts ready
+(no rules)` и итог. `TestMissingCapabilitiesAreANoteNotAFailure` переписан на бакеты с правилами
+(`entities-w1`, `prompts-w1` — те, что появятся у `mvctl world init` в EPIC-002) и проверяет обе
+заметки; добавлен `TestNoNoteWhenThereIsNothingToSkip` на молчание. Подмена набора бакетов — через
+хелпер `withBuckets` с `t.Cleanup`.
+
+**Mi-6 — `knownSources` связан с константами `Source*` (`shared/contracts/sources_test.go`).**
+Явная таблица в тесте не выбрана: её пришлось бы вести руками так же, как и сам список, — забытая
+строка просто переехала бы на файл дальше. Константы читаются из `sources.go` через `go/ast`
+(`parser.ParseFile` по имени файла, рабочий каталог теста — каталог пакета), полнота проверяется в
+обе стороны: каждая `Source*` есть в `KnownSources()`, каждое значение `KnownSources()` объявлено
+константой, плюс проверка на дубль. Проверено удалением `SourceLegacy` из списка: падает
+`shared/contracts` — свой пакет, а не чужой job. Добавлен `TestKnownSourcesIsACopy`.
+Комментарий у `knownSources` теперь называет тест как то, что держит список полным.
+
+**Mi-8 — описание `MV_CORE_ADMIN_CLIENTS` (`shared/env/vars.go`).** Оговорка «a client is added
+when it needs the routes» противоречила собственному значению по умолчанию. Новый текст: список по
+умолчанию — тот, с которым платформа поставляется, и `mvctl` в нём **заранее**; ни одна подкоманда
+этой сборки в `/v1/admin/*` не ходит, `world`, `laws`, `snapshot` приходят в EPIC-002/003 (ОВ-28).
+Значение (`operator,mvctl`) не менялось, `.env.example` не менялся.
+
+### 2. Что не делалось
+
+- **Mi-5** (`--json` смешивает стили ключей `objstore.Capabilities`) — в бэклог по решению
+  оркестратора.
+- **Mi-7** (пометка `contract-change` для констант топиков и `KnownSources()`) — метку ставит
+  оркестратор при коммите.
+- **N-1…N-5** — в бэклог.
+
+### 3. Результаты DoD
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | ок |
+| `go vet ./...` | ок |
+| `go test -short -count=1 ./...` | ок, 20 пакетов, 0 падений |
+| `golangci-lint run ./...` | `0 issues.` |
+| `gofmt -l` по изменённым файлам | пусто |
+| Покрытие `cmd/mvctl` | 75,0 % (было 75,0) |
+| Покрытие `cmd/mvctl/internal/cli` | 94,1 % (было 94,1) |
+| Покрытие `cmd/mvctl/internal/contracts` | 94,5 % (было 94,1) |
+| Покрытие `cmd/mvctl/internal/env` | 87,9 % (было 87,9) |
+| Покрытие `cmd/mvctl/internal/storage` | 96,8 % (было 93,2) |
+| Покрытие `shared/contracts` | 81,7 % (было 81,5) |
+| `go run ./cmd/mvctl contracts check` | `65 types, 8 topics, 58 schema files checked`, код 0 |
+| `go run ./cmd/mvctl contracts topics --format=rpk` | 16 команд (8 create + 8 alter), код 0 |
+| `go run ./cmd/mvctl storage init --store=memory` | `bucket ops-artifacts ready (no rules)` + итог, без заметок, код 0 |
+
+Вывод `contracts topics --format=rpk --brokers=redpanda:9092` (первые две строки из шестнадцати):
+
+```
+rpk topic create player_events -X brokers=redpanda:9092 -p 1 -r 1 -c cleanup.policy=delete -c retention.ms=2592000000 -c segment.ms=86400000 || true
+rpk topic alter-config player_events -X brokers=redpanda:9092 --set cleanup.policy=delete --set retention.ms=2592000000 --set segment.ms=86400000
+```
+
+`-race` не проверялся (недоступен локально, ОВ-5) — в CI, T-012.
+
+### 4. Открытые вопросы
+
+1. **Предложение из бэклога стало дешевле.** Раз вывод `--format=rpk` теперь исполним и несёт
+   адрес брокера, генерация `build/redpanda-init.sh` из этой команды (предложение devops в бэклоге,
+   решение ОВ-49) сводится к «сгенерировать тело цикла, оставив в скрипте только ожидание
+   брокера». Пока это не сделано, `TestRPKMatchesTheInitScript` — единственное, что держит две
+   стороны вместе; теперь он держит все шесть значений, а не два.
+2. **Дубль типа во входе `Check`** (N-4 ревью) не исправлялся и с новой картой ведёт себя так же:
+   второй спек того же типа не найдёт файл (первый его уже удалил) и даст находку с неверной
+   причиной. В бэклог вместе с N-4.
+
+### 5. Риски и допущения
+
+- `--brokers` по умолчанию читает `MV_KAFKA_BROKERS`, то есть вывод команды зависит от окружения.
+  Это осознанно (адрес брокера в платформе объявлен один раз, в манифесте `shared/env`); тесты
+  задают `--brokers` явно и от окружения не зависят.
+- Разбор `build/redpanda-init.sh` регулярками привязан к его нынешней форме: переписанный на
+  другой синтаксис скрипт даст `t.Fatal` с текстом «no longer …», а не молчаливое «зелено».
+  Это лучший из доступных вариантов, пока скрипт пишется руками.
+- `withBuckets` подменяет пакетную переменную `storagecmd.PlatformBuckets`; тесты пакета не
+  параллельны, `t.Cleanup` возвращает исходный список.
+
+---
+
+## developer#2 · T-011 · итерация 2 (доработка по ревью #1) · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `eda1b3b`, изменения в индексе, коммита нет. Вердикт ревью
+— «вернуть» (Critical 0, Major 3, Minor 11, Nit 5). Закрыты назначенные оркестратором **M-1, M-2,
+M-3, Mi-1, Mi-2, Mi-7, Mi-8, Mi-10**. Mi-3…Mi-6, Mi-9, Mi-11 и N-1…N-5 — в бэклог и на ревизию
+architect#1. Область правок — только `shared/entity/**` и эта запись; файлы T-010
+(`cmd/mvctl/**`, `shared/contracts/sources.go`, `shared/env/vars.go`) и `review.md` не трогал.
+
+### 1. Что исправлено
+
+**M-1 — «изменилось, но `changed[]` пуст» (`ops.go`).** Корень был в том, что `changeTracker`
+копил пары `old`/`new` по ходу и в конце отбрасывал запись по `sameCanonical(old, new)`: «пути не
+было» и «по пути `null`» дают одну каноническую форму `null`, поэтому настоящее изменение
+отбрасывалось вместе с no-op.
+
+Трекер переписан на то, чем он и должен быть: **упорядоченный набор путей, о которых операция
+отчитывается**. Значения не накапливаются — в `changes(before, after)` каждый путь читается из
+сущности «как была» (`e.Attributes`; `ApplyOps` их и так не трогает) и из копии «как стала», и
+запись отбрасывается только когда `hadOld == hasNew && sameCanonical(old, updated)`. Признак
+существования у `readPath` был всегда — теперь он используется с обеих сторон, а не выбрасывается
+через `_`.
+
+Побочно это дало «первый `old`, последний `new`» без отдельной ветки и закрыло Mi-1 (ниже).
+
+Три сценария ревью проверяются `TestApplyOpsSeesTheDifferenceBetweenAbsentAndNull`; каждый
+дополнительно требует, чтобы `state_hash` действительно сдвинулся, иначе тест не доказывал бы
+ничего.
+
+**Страж класса — `TestChangedListAndStateHashMoveTogether`** (предложение 2 из бэклога ревью):
+на семнадцати наборах операций (включая три с `null`, `append`+`remove` одного элемента, возврат
+скаляра на место после подмены его map, повтор `append` по `item_id`, удаление по индексу)
+проверяется, что «`len(changed) > 0`» и «`StateHash` до ≠ `StateHash` после» — одно и то же
+событие в обе стороны. Версия при этом держится фиксированной: под тестом атрибуты, а не
+`Commit`. Мутация «вернуть сравнение только по значению» валит и его, и три сценария выше
+(проверено).
+
+**M-2 — индексный сегмент по объекту (`path.go`).** В `setIn`:
+
+- ветка `map[string]any` отвергает целочисленный токен (`isIndex`) ошибкой `errIndexOnObject` →
+  `ErrInvalidOp{Reason: ReasonIndexOnPath}` («index into an object»). Список растит только
+  `append` (решение 7), поэтому `set members[0]` при отсутствующем `members` — это `invalid_op`,
+  а не молчаливый `{"members":{"0":…}}`;
+- ветка `default` перед откатом к «создать map» нормализует не-`[]any` срез (`foreignSlice` →
+  `asAnySlice`), поэтому `set tags[0]` над `[]string` больше не съедает список целиком.
+
+Тесты проверяют **тип контейнера** после операции, а не чтение по тому же пути:
+`TestApplySetRefusesAnIndexIntoAnObject` (четыре пути, плюс проверка, что отказанная операция
+ничего не записала) и `TestApplySetIntoAListBuiltInGoKeepsTheList` (`attrs["tags"].([]any)` и
+оба элемента). В `TestPathGrammarMatchesJSONPath` добавлена проверка типа контейнера для
+индексных случаев и пометка: читающая половина (`jsonpath.navigate`) разрешает `[0]` на map как
+ключ `"0"`, то есть **согласованность половин не является доказательством корректности**; чинится
+в EPIC-002. Та же оговорка внесена в шапку `path.go`.
+
+**M-3 — `remove` по индексу пишет изменение на родительском пути (`ops.go`, `path.go`).**
+`listPathOf` отвечает, адресует ли путь элемент списка (последний сегмент в скобках И под ним
+действительно `[]any` с таким индексом), и если да — отчёт идёт по пути списка. Дальше работает
+общий механизм M-1: `old`/`new` — список до и после. `TestApplyRemoveByIndexReportsTheList`
+проверяет форму записи и, главное, что **буквальное применение `changed[]`** к копии исходной
+сущности (`replayChanged`: `set` по пути, `remove` при `new == null`) даёт тот же `StateHash`,
+что и фактическое применение.
+
+**Mi-1 — фантомная запись при `append` + `remove` одного элемента.** Отдельной правки не
+потребовалось: после M-1 путь `inventory[0]` читается «до» и «после» как отсутствующий, путь
+`inventory` — как `[]` с обеих сторон, обе записи отбрасываются. Зафиксировано
+`TestApplyAppendThenRemoveOfTheSameItemIsANoOp`, включая то, что `Commit` не двигает версию.
+
+**Mi-2 — golden-значения (`hash_test.go`).** `TestCanonicalJSONAndStateHashGolden`: фиксированная
+сущность `goldenEntity()` (целое, число «с провода», дробь, `bool`, `null`, вложенный объект,
+список с `null`, не-ASCII строка, версия 7) и два литерала — вся каноническая строка и
+`sha256:9a5c1fa6…`. Теперь правка кодировщика обязана спорить с текстом теста, а не молча
+обесценивать сохранённые `snapshot.state_hash`.
+
+**Mi-7 — `Commit` копирует карту (`entity.go`).** `e.Attributes = cloneAttrs(attrs)`; в
+док-комментарии сказано почему (overlay §4.5 п. 8 живёт у вызывающего между шагами 7 и 10).
+`TestCommitCopiesTheAttributesItIsGiven` мутирует карту после `Commit` и проверяет, что сущность
+не поехала.
+
+**Mi-8 — недостающие геттеры (`attrs.go`, `types.go`).** `Epoch()` (§3.1), `SpawnedBy()` с типом
+`SpawnSource{Agent, TickEventID}` (§3.4), `OpenedByEventID()`/`ClosedByEventID()` (§3.7); новые
+константы `AttrSpawnedBy`, `AttrOpenedByEventID`, `AttrClosedByEventID`.
+`last_session_ended_at` геттера не получил намеренно — по §3.3 это проекция
+`analytics.session.ended`, которая может жить в game-service; причина записана строкой в
+`attrs.go` и в разделе README «Что пакет намеренно не делает».
+Тест — `TestAttributesThatOnlyHadANameBefore`, включая поведение на сущности без этих атрибутов.
+
+**Mi-10 — обратное направление для `entity.create.proposed` (`schema_test.go`).**
+`TestSchemaCreatePayloadBuildsTheModel`: payload написан руками, валидируется схемой, разбирается
+в `attributes` и `New`, проверяется геттерами (в том числе новым `SpawnedBy` и объектной формой
+`scope`), затем выходит обратно как валидный `entity.created`. Пять типов теперь закрыты в обе
+стороны.
+
+### 2. Что не делалось (в бэклог / к architect#1)
+
+- **Mi-3** (`json.Number` с экспонентой в канонической форме), **Mi-4** (HTML-экранирование
+  `<`, `>`, `&` не описано в §3.3 как правило межреализационного контракта), **Mi-5** (пути `a[]`
+  и `a[x]` не отвергаются), **Mi-6** (экспортированные изменяемые срезы `ReservedPaths`, `Types`,
+  `TerminalStatuses`), **Mi-9** (две шкалы `participation` одним набором констант),
+  **Mi-11** (`HistoryEntry` при пустом `changed`), **N-1…N-5**.
+- Читающая половина грамматики (`shared/jsonpath.navigate` разрешает `[0]` на map) — заявка в
+  EPIC-002, как решил оркестратор. До неё `changed[].old` для списка, построенного в Go как
+  `[]string`, читается как `null` (сам факт изменения при этом фиксируется) — оговорено в
+  комментарии `TestApplySetIntoAListBuiltInGoKeepsTheList`.
+
+### 3. Результаты DoD
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | ок |
+| `go vet ./...` | ок |
+| `go test -short -count=1 ./...` | ок, падений нет |
+| `golangci-lint run ./...` | `0 issues.` (без `nolint`) |
+| Покрытие `shared/entity` | **86,9 %** (было 83,9 %, порог итерации 83 %) |
+| `gofmt -l shared/entity` | пусто |
+| `pre-commit run --files <изменённые>` | ок |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| Мутационная проверка стражей | снятие проверки существования валит 6 подтестов; снятие `isIndex`/`foreignSlice`/`listPathOf` валит 6 подтестов M-2 и тест M-3 |
+
+`-race` в окружении недоступен (ОВ-5) — в CI, T-012.
+
+### 4. Открытые вопросы
+
+1. **`ReasonIndexOnPath` — новая константа причины** в публичной поверхности пакета
+   (`shared/entity` меняется через системного архитектора с пометкой `contract-change`).
+   Расширение, а не изменение: на провод всё так же уходит `invalid_op`, текст различает случай
+   для разработчика. Нужна отметка при коммите.
+2. **`SpawnSource`, `AttrSpawnedBy`, `AttrOpenedByEventID`, `AttrClosedByEventID`** — тоже
+   расширение публичной поверхности по DoD «геттеры всех атрибутов §3»; та же отметка.
+3. Вопросы ревью к architect#1 (`ReservedPaths` по первому сегменту, `HistoryEntry` при пустом
+   `changed`, C-03 `ChangesFor`/`ActorFromEntity`) остаются открытыми — их я не трогал.
+
+### 5. Риски и допущения
+
+- **Строгость `set` по индексу выросла.** Целочисленный токен на map теперь отвергается всегда,
+  включая точечную форму `a.0` (после `splitPath` она неотличима от `a[0]`). Атрибутов с
+  числовыми ключами в `data-model.md` §3 нет, а грамматика §3.2 числовой сегмент трактует как
+  индекс, поэтому считаю поведение верным; если где-то в фикстурах T-016 появится объект с
+  ключом `"0"`, записать в него через `set` будет нельзя.
+- **Отчёт по путям, а не по значениям.** `changed[]` теперь всегда описывает разницу между
+  исходной сущностью и итоговой копией. Для последовательности «`append` A, `append` B,
+  `remove` A» это даёт две записи (`inventory[0]` с новым значением B и `inventory` со списком),
+  избыточные, но при буквальном применении по порядку дающие верный результат.
+- **Стоимость `Commit`.** Копирование карты — лишний глубокий обход на каждое применение.
+  В штатном потоке `ApplyOps` и так возвращает свежую копию, так что это вторая копия на ход;
+  при профиле T-018 (`p95` применения) это первое место, куда стоит посмотреть.
+- Мутационные проверки прогонялись на рабочем дереве с немедленным восстановлением файла из
+  копии; итоговое дерево совпадает с тем, что в индексе после `git add`.
