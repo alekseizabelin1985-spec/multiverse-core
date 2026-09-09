@@ -16,6 +16,8 @@ import (
 	"sync"
 
 	"multiverse-core.io/shared/clock"
+	"multiverse-core.io/shared/contracts"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // Mode selects how the process consumes time and events.
@@ -52,12 +54,19 @@ func OK() Status { return Status{Status: StatusOK} }
 // dependency the process did not build fails in Start.
 //
 // Fields are added by the tasks that create the packages behind them:
-// Bus and Journal in F-4a (T-005), Store and Env in F-5 (T-007),
-// Contracts in F-4b (T-006).
+// Store and Env in F-5 (T-007).
 type Deps struct {
-	Clock  clock.Clock
-	Timers clock.Timers
-	Mode   Mode
+	// Bus publishes events and opens live subscriptions; Journal reads a
+	// topic by offset for the catch-up after a snapshot (C-01).
+	Bus     eventbus.Bus
+	Journal eventbus.Journal
+	// Contracts is the event registry the contexts validate against
+	// (foundation.md §3, contracts.md C-01). The process passes
+	// contracts.Default(); a test passes contracts.New over a fixture tree.
+	Contracts *contracts.Registry
+	Clock     clock.Clock
+	Timers    clock.Timers
+	Mode      Mode
 	// IDs generates event identifiers (uuid or a deterministic sequence).
 	IDs func() string
 	Log *slog.Logger

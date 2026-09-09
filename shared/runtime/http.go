@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
-	"strings"
 	"time"
+
+	"multiverse-core.io/shared/env"
 )
 
 // ShutdownTimeout is the grace period the process HTTP server gets on Stop.
@@ -18,13 +18,13 @@ const ShutdownTimeout = 5 * time.Second
 const (
 	ActorKindHeader = "X-Actor-Kind"
 	ClientIDHeader  = "X-Client-Id"
-
-	// EnvAdminClients holds the comma separated client ids allowed on
-	// /v1/admin/*; see AdminOnly and .env.example.
-	EnvAdminClients = "MV_CORE_ADMIN_CLIENTS"
-	// DefaultAdminClients is the list used when EnvAdminClients is unset.
-	DefaultAdminClients = "operator"
 )
+
+// EnvAdminClients names the variable holding the comma separated client ids
+// allowed on /v1/admin/*; see AdminOnly. The value is read through the
+// manifest of shared/env, which is where its default and its documentation
+// live (NFR-074).
+var EnvAdminClients = env.CoreAdminClients.Name()
 
 // actorKinds is the actor_kind enum of the envelope (C-01, ADR-007 p. 1).
 var actorKinds = map[string]struct{}{
@@ -101,7 +101,7 @@ func (h *HTTP) Err() <-chan error { return h.errored }
 // AdminOnly rejects requests that do not come from a client allowed on
 // /v1/admin/*. Admission is decided by the client, not by the kind of actor
 // (ADR-009 p. 9, C-06): X-Client-Id must be listed in MV_CORE_ADMIN_CLIENTS
-// (comma separated, DefaultAdminClients when unset), and a missing or unlisted
+// (comma separated, "operator" when unset), and a missing or unlisted
 // one is rejected. X-Actor-Kind is optional and only validated against the
 // envelope enum human|ci|sim|system: it grants nothing on its own, the operator
 // proxied by the gateway arrives with human. Contexts wrap their own
@@ -110,7 +110,7 @@ func (h *HTTP) Err() <-chan error { return h.errored }
 //
 // The allow-list is read once, when the middleware is built.
 func AdminOnly(next http.Handler) http.Handler {
-	allowed := adminClients(envOr(EnvAdminClients, DefaultAdminClients))
+	allowed := adminClients(env.CoreAdminClients.List())
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, ok := allowed[r.Header.Get(ClientIDHeader)]; !ok {
 			forbid(w, "admin routes require header "+ClientIDHeader+" of a client listed in "+EnvAdminClients)
@@ -126,14 +126,12 @@ func AdminOnly(next http.Handler) http.Handler {
 	})
 }
 
-// adminClients parses the allow-list. Empty entries are dropped, so a request
-// without X-Client-Id never matches.
-func adminClients(list string) map[string]struct{} {
-	allowed := make(map[string]struct{})
-	for _, id := range strings.Split(list, ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			allowed[id] = struct{}{}
-		}
+// adminClients indexes the allow-list. Empty entries are already dropped by
+// env.Var.List, so a request without X-Client-Id never matches.
+func adminClients(list []string) map[string]struct{} {
+	allowed := make(map[string]struct{}, len(list))
+	for _, id := range list {
+		allowed[id] = struct{}{}
 	}
 	return allowed
 }
@@ -142,18 +140,4 @@ func forbid(w http.ResponseWriter, reason string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": reason})
-}
-
-// EnvAddr reads a listen address from the environment, falling back to def.
-//
-// Reading the environment lives here because the linter forbids os.Getenv
-// outside shared/*; shared/env (F-5, T-007) replaces this helper with the
-// declared manifest.
-func EnvAddr(key, def string) string { return envOr(key, def) }
-
-func envOr(key, def string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return def
 }

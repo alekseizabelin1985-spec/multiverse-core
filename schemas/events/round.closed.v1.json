@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/round.closed.v1.json",
+  "title": "round.closed payload",
+  "description": "The gateway closed a round. The payload is self-contained: the encounter agent does not wait for player.defended from another topic (api-contracts.md 2.3.3, ADR-020).",
+  "type": "object",
+  "properties": {
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "round": {
+      "type": "object",
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "close_reason": { "type": "string", "enum": ["all_acted", "timeout", "explicit"] }
+      },
+      "required": ["seq", "close_reason"],
+      "additionalProperties": false
+    },
+    "acted": {
+      "type": "array",
+      "description": "Players who acted, in the order the gateway accepted their actions.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": { "$ref": "_common.json#/$defs/EntityRef" },
+          "name": { "type": "string" },
+          "event": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "type": { "type": "string", "minLength": 1 }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["entity", "event"],
+        "additionalProperties": false
+      }
+    },
+    "auto_defended": { "type": "array", "items": { "$ref": "_common.json#/$defs/EntityWithName" } },
+    "idle": { "type": "array", "items": { "$ref": "_common.json#/$defs/EntityWithName" } },
+    "closed_at": { "$ref": "_common.json#/$defs/Timestamp" }
+  },
+  "required": ["round", "acted", "auto_defended", "idle", "closed_at"],
+  "additionalProperties": false
+}

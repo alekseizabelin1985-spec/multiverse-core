@@ -185,10 +185,11 @@ linters:
       - services/
     rules:
       # The owners of time and the environment, and only they: shared/clock
-      # implements the time interfaces, shared/runtime and shared/env (F-5,
-      # T-007) are the only readers of the environment. Every other shared/*
-      # package is subject to the ban like a context is (foundation.md §4, §8).
-      - path: shared/(clock|runtime|env)/
+      # implements the time interfaces and shared/env is the only reader of the
+      # environment (F-5, T-007 moved the last os.LookupEnv of shared/runtime
+      # onto the manifest). Every other shared/* package is subject to the ban
+      # like a context is (foundation.md §4, §8).
+      - path: shared/(clock|env)/
         linters:
           - forbidigo
         text: (os\.(Getenv|LookupEnv|Environ|ExpandEnv)|time\.(Now|After|Tick|NewTimer|NewTicker|Since|Until))

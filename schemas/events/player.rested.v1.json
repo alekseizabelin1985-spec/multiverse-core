@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/player.rested.v1.json",
+  "title": "player.rested payload",
+  "description": "A player rested outside an encounter. The gateway publishes the matching entity.update.proposed with cause=rest (contracts.md C-02 v1.1).",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "action": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "key_hash": { "type": "string" }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity"],
+  "additionalProperties": false
+}

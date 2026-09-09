@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/entity.create.proposed.v1.json",
+  "title": "entity.create.proposed payload",
+  "description": "A proposal to create an entity with its full initial attribute set (contracts.md C-02, api-contracts.md 2.3.4). meta.agent is mandatory when an agent proposes.",
+  "type": "object",
+  "properties": {
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional here, unlike entity.update.proposed: State echoes it in entity.update.rejected reason=duplicate_entity when the publisher sent one."
+    },
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "attributes": { "type": "object" },
+    "cause": {
+      "type": "string",
+      "description": "Union of api-contracts.md 2.3.4 and the Causes column of state-and-mechanics.md 4.6: every cause a row of contracts.OwnershipRules allows must be publishable.",
+      "enum": ["combat", "rest", "move", "loot", "spawn", "tick", "group", "create", "bootstrap", "forget",
+               "leave", "flee", "death", "resolve", "init", "author"]
+    }
+  },
+  "required": ["entity", "attributes", "cause"],
+  "additionalProperties": false
+}

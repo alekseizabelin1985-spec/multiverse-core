@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/_envelope.json",
+  "title": "Event envelope",
+  "description": "The wire envelope of every event (contracts.md C-01 v1.1, api-contracts.md 2.1). The payload is checked separately against the schema of the type, so it is only required to be an object here.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "timestamp": { "$ref": "_common.json#/$defs/Timestamp" },
+    "source": { "type": "string", "minLength": 1 },
+    "world": { "$ref": "_common.json#/$defs/WorldRef" },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "schema_version": { "type": "integer", "minimum": 1 },
+        "correlation_id": { "type": "string", "minLength": 1 },
+        "causation_id": { "type": "string", "minLength": 1 },
+        "causation_type": { "type": "string", "minLength": 1 },
+        "actor_kind": { "type": "string", "enum": ["human", "ci", "sim", "system"] },
+        "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+        "replay": { "type": "boolean" },
+        "locale": { "type": "string", "minLength": 1 },
+        "gm_path": { "type": "string", "enum": ["agent", "legacy"] }
+      },
+      "required": ["schema_version", "correlation_id", "actor_kind", "replay", "locale", "gm_path"],
+      "additionalProperties": false
+    },
+    "payload": { "type": "object" },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "minLength": 1 },
+          "to": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "directed": { "type": "boolean" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["from", "to", "type"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["id", "type", "timestamp", "source", "meta", "payload"],
+  "additionalProperties": false
+}

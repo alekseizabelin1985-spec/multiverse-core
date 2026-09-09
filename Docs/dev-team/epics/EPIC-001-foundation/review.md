@@ -1244,3 +1244,734 @@ contract-тест сравнит разные `DeadLetter.Consumer`. Вынес�
   на брокере в T-014.
 - Проверка `source ∈ Spec.Publishers` в `Route` отсутствует — соответствует решению оркестратора
   (ОВ-18: проверка статическая, job `contracts`/T-010).
+
+---
+
+## T-006 · ревью #1 · 2026-09-09 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Ветка `epic/EPIC-001-foundation`, HEAD `dfc0498` (T-005), изменения **в индексе**
+(`git diff --cached`), коммита нет. Ревьюировались только файлы T-006:
+
+| Действие | Путь |
+|---|---|
+| A | `shared/contracts/{spec.go,registry.go,contracts.go,sources.go,ownership.go}` + `{registry,validate,ownership}_test.go` |
+| A | `schemas/embed.go`, `schemas/events/{_common.json,_envelope.json}` + 25 схем типов блоков «а» и «б» |
+| M | `go.mod`/`go.sum` — в части `github.com/santhosh-tekuri/jsonschema/v6 v6.0.3` |
+| M | `dev-log.md` — запись «developer#1 · T-006» |
+
+Файлы T-007 (`shared/{env,objstore,logging}`, `shared/runtime/http*.go`,
+`cmd/multiverse/{serve,health}.go`, `.golangci.yml`) и не-staged правки других ролей
+не рассматривались — их смотрит второй ревьюер.
+
+Основание: `tasks.md` §1 (общий DoD) и §4 (T-006, T-009); `architecture/contracts.md` v0.4 §0,
+C-01 v1.1, C-02 v1.2, C-13, C-14, §16 п. 6–7; `architecture/components/foundation.md` v0.2 §6;
+`architecture/components/state-and-mechanics.md` §4.4, §4.6; `analysis/api-contracts.md` v0.2.1
+§2.1–§2.3; ADR-007, ADR-013; `journal.md` — решения оркестратора по ОВ-17/ОВ-18 и по ОВ T-006
+(ОВ-20…ОВ-24).
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 1 · Minor: 10 · Nit: 6.
+
+Работа сделана добротно: реестр и схемы соответствуют C-01, foundation §6 и §2.2/§2.3
+`api-contracts.md`, состав типов полон (8 `player.*` + 7 `group.*` + 2 `round.*` + 8 блока «б» =
+25 схем при 25 не-deprecated `Spec`), «нет фантомов» проверяется в обе стороны, негативных фикстур
+достаточно, все прогоны зелёные, покрытие 79,6 % (порог 60 %). Решения оркестратора по ОВ-17
+(`Spec` встраивает `eventbus.TypeSpec`), ОВ-18 (`source ∈ Publishers` — статическая проверка),
+ОВ-22 (`scope` в `round.opened` не добавлять) и требование T-005 (`gm_path` в `required` с enum
+`agent|legacy`) выполнены дословно.
+
+Возврат — из-за одного Major: три из восьми схем `player.*` потеряли общее поле `action`
+(с `key_hash`), которое §2.3.1 даёт всем типам семейства; при `additionalProperties: false` это
+жёсткий отказ штатному издателю. Правка — три схемы, объём минут. Остальное — Minor/Nit; часть
+Minor закрывается не кодом, а открытыми вопросами к system-architect (Mi-3, Mi-5, Mi-8) и
+назначением владельца (Mi-7).
+
+### Проверенные пункты DoD
+
+| Критерий T-006 | Результат |
+|---|---|
+| `go test ./shared/contracts/... -run TestSchemasValid` | ✔ перепроверено ревьюером, PASS |
+| каждый пример §2.3 блоков «а»/«б» валиден против своей схемы | ✔ `TestPayloadExamples`, 25 примеров; тест сам сверяет «примеров = типов со схемой» |
+| «нет фантомов» в обе стороны | ✔ `TestNoPhantoms` (тип без файла и файл без типа), deprecated исключены явно |
+| `OwnershipRules` — уровни + пустые `object`/`monitor` + строка gateway | ✔ `TestOwnershipRulesCoverEveryProposer`, `TestGatewayRow`, `TestOwnershipRulesAreACopy`; см. Mi-9 |
+| у каждого `Spec` непустой `Publishers`; таблица типов с несколькими издателями | ✔ `TestEveryTypeHasPublisherAndConsumer`, `TestPublishersOfSharedTypes` (5 типов) |
+| `cause` содержит `forget` в `entity.*.proposed`/`entity.updated` | ✔ `TestCauseForget`; см. Mi-4 про остальные значения |
+| покрытие ≥ 60 % | ✔ **79,6 %** (перепроверено) |
+
+| Общий DoD §1 | Результат (перепроверено ревьюером) |
+|---|---|
+| `golangci-lint run ./...` | ✔ `0 issues` |
+| `gofmt -l shared/contracts schemas` | ✔ пусто |
+| `go build ./... && go vet ./...` | ✔ |
+| `go test -short -count=1 ./...` | ✔ 11 пакетов `ok`, ни одного `FAIL` |
+| `go test -race` | n/a локально (ОВ-5), в CI T-012 |
+| `gitleaks git --staged --redact .` | ✔ `no leaks found` |
+| dev-log заполнен | ✔ 8 разделов, отклонения и ОВ-20…ОВ-24 записаны; см. N-4 |
+| изменений вне карты владения нет | ✔ `shared/contracts/**`, `schemas/**` — EPIC-001 |
+| пин `jsonschema/v6 v6.0.3` | ✔ в блоке прямых зависимостей, `go list -m` подтверждает; `xeipuuv/gojsonschema` в корневом `go.mod` отсутствует (foundation §6) |
+
+### Замечания
+
+**M-1 (Major). `schemas/events/player.entered_region.v1.json:7`,
+`player.left_region.v1.json:7`, `player.said.v1.json:7` — потеряно общее поле `action`.**
+`api-contracts.md` §2.3.1 задаёт **одну** форму payload на всё семейство `player.*`; пометка
+«только `player.said`» стоит единственный раз — у `text`, у `action{type, key_hash}` её нет.
+В поставке `action` есть в `player.{looked,rested,attacked,flee_attempted,defended}`, но
+отсутствует в `entered_region`, `left_region`, `said`. При `additionalProperties: false` это не
+«необязательное поле», а отказ: все три события рождаются из `POST /v1/players/{id}/actions`
+(§1.4: `enter`, `leave`, `say` — все с `action_key`), и `key_hash` — след идемпотентности,
+который gateway логично кладёт в payload наравне с `look`/`rest`. Правило разное для типов
+одного семейства, в dev-log §3/§4 как решение не зафиксировано.
+*Правка*: добавить в три схемы блок `action` в том же виде, что в `player.looked.v1.json`
+(`{type: string minLength 1, key_hash: string}`, `required: [type]`), либо — если решено, что
+`key_hash` в payload не едет вовсе — убрать `action` из всех восьми и записать это отклонение
+от §2.3.1 в dev-log с ОВ к system-analyst.
+
+**Mi-1 (Minor). `shared/contracts/contracts.go:133` — `Validate` для deprecated-типа возвращает
+`nil`, не проверив конверт.** `foundation.md` §6 про legacy-типы говорит «валидируется только
+конверт», а здесь не валидируется ничего. Сегодня дыры нет: `eventbus.Route`
+(`shared/eventbus/registry.go:150`) и `Delivery.deliver` (`shared/eventbus/delivery.go:131`) зовут
+`ev.ValidateEnvelope()` **до** `Registry.Validate`. Но пакетная `contracts.Validate` экспортирована
+и предназначена в том числе для `mvctl contracts check` (T-010) и фикстур: прямой вызов признает
+валидным legacy-событие с пустыми `id`/`source` и нулевым `timestamp`.
+`TestLegacyTypesCarryNoSchema` это поведение закрепляет.
+*Правка*: `if spec.Deprecated { return ev.ValidateEnvelope() }` и негативный подтест (legacy без `id`).
+
+**Mi-2 (Minor). `shared/contracts/contracts.go:115` (`All`) и `:106` (`Spec`) отдают `Spec` с
+общими backing-массивами `Publishers`/`Consumers`.** `slices.Clone(r.ordered)` копирует только
+внешний срез; `spec.Publishers[0] = …` у любого потребителя правит пакетную `definitions`
+глобально и во всех горутинах — реестр читается из нескольких (шина при `Publish` и при чтении).
+Сам `Registry` после `New` иммутабелен, и это единственная лазейка; контраст очевиден с
+`OwnershipRules()` (`shared/contracts/ownership.go:146`), где копия сделана глубокой намеренно и
+покрыта тестом `TestOwnershipRulesAreACopy`.
+*Правка*: клонировать `Publishers`/`Consumers` в `All`/`Spec` тем же приёмом, что в
+`OwnershipRules()`, либо явно объявить срезы неизменяемыми в godoc `Spec` и добавить тест-«часовой».
+
+**Mi-3 (Minor). `schemas/events/entity.create.proposed.v1.json:20` — поле `proposer` не
+представимо, а `OwnershipRules` его различает.** §2.3.4 прямо называет `proposer=system` при
+загрузке фикстур (`mvctl world init --fixtures`, UC-036); в схеме поля нет, а
+`additionalProperties: false` запрещает его прислать. При этом `shared/contracts/ownership.go:126–140`
+содержит две разные строки — `author` (`mvctl`) и `system` (bootstrap), — которые по конверту не
+различаются (в обоих случаях `source = mvctl`, `meta.agent = nil`). Значит либо строки дублируют
+друг друга и одна лишняя, либо в payload нужен `proposer`. В dev-log вопрос не поднят
+(ОВ-21 закрывает соседний `proposal_id`, но не этот).
+*Правка*: завести ОВ к system-architect/EPIC-002 (T-052): чем State отличает `author` от `system`;
+до ответа — либо добавить `proposer: {enum: [gateway, author, system]}` (опц.), либо свести две
+строки таблицы в одну.
+
+**Mi-4 (Minor). Внутренняя несогласованность поставки: `shared/contracts/ownership.go:68,84,96,131,138`
+допускает `cause ∈ {leave, flee, death, resolve, init, author}`, схемы `entity.*` их отвергают.**
+enum в `entity.create.proposed`/`entity.update.proposed`/`entity.updated` —
+`combat|rest|move|loot|spawn|tick|group|create|bootstrap|forget` (§2.3.4), таблица владения — по
+§4.6. Итого в одном пакете правило владения разрешает причину, которую схема того же пакета
+отклонит. Решение оркестратора по **ОВ-20** (журнал, 2026-09-09) — расширить enum до объединения
+§2.3.4 и §4.6, правку вносит T-009 или EPIC-002 T-052; в T-006 она не внесена, и это соответствует
+решению. *Дефектом T-006 не считаю*, фиксирую как факт и как риск: если правка не попадёт в
+DoD T-009, State не сможет опубликовать штатные причины, а тест «копия ↔ `levels.go`» (T-202) её
+не поймает — он сверяет таблицу с таблицей, а не таблицу со схемой.
+*Правка*: внести в DoD T-009 пункт «enum `cause` = объединение §2.3.4 и §4.6» и тест
+«каждое значение `Causes` из `OwnershipRules()` присутствует в enum `cause` схем `entity.*`».
+
+**Mi-5 (Minor). `schemas/events/_common.json:27` — `WorldRef` не фиксирует `entity.type`.**
+`api-contracts.md` §2.1 задаёт `world{entity{id, type: world}}`; в схеме `type` — любая непустая
+строка, то есть `world.entity.type = "region"` пройдёт. То же у `ScopeRef` (`_common.json:34`):
+в MVP-1 это `solo`/`group`, ограничения нет. Смысл `additionalProperties: false` — ловить
+опечатки издателя; здесь опечатка в типе мира/скоупа проходит, хотя `AgentRef.level`
+(`_common.json:47`) пять значений enum'ом честно перечисляет.
+*Правка*: `WorldRef.entity.type` → `{"const": "world"}`; для `ScopeRef.type` — enum
+`["solo", "group"]` либо явная строка в dev-log, что тип скоупа сознательно оставлен открытым.
+
+**Mi-6 (Minor). `schemas/events/_envelope.json:48` и `:43` — `additionalProperties: false` на
+конверте и на `meta` противоречит обещанию совместимости C-01/ADR-007 п. 3.**
+`foundation.md` §6 требует запрета лишних полей **на верхнем уровне payload**; godoc
+`eventbus.Event` (`shared/eventbus/types.go:77`) и ADR-007 п. 3 обещают «новые поля добавляются
+без слома существующих потребителей». С текущим конвертом добавление любого поля в `Event` или
+в `Meta` делает невалидными **все** события до правки схемы, то есть совместимое по ADR изменение
+становится несовместимым. Решение осознанное (dev-log §1), но противоречие не оговорено.
+*Правка*: либо `additionalProperties: true` на конверте (оставив `false` на `meta` и на payload),
+либо абзац в dev-log/запрос к system-architect: «расширение конверта = синхронная правка
+`_envelope.json`, помечается `contract-change`».
+
+**Mi-7 (Minor). `runtime.Deps.Contracts` не добавлен, отклонение не записано.**
+`shared/runtime/runtime.go:56` (комментарий T-003) прямо говорит: «Store и Env в F-5 (T-007),
+**Contracts в F-4b (T-006)**»; C-01 и `foundation.md` §3 перечисляют `Contracts` в составе `Deps`;
+dev-log T-003 §6 п. 1 зафиксировал это как временное отклонение с указанием задачи-владельца.
+В T-006 поле не появилось и в §4 «Отклонения» не упомянуто; ни один контекст сегодня реестр не
+получает (`grep contracts.Default` вне пакета — пусто). Функционально не блокирует —
+`contracts.Default()` синглтон, — но лишает контексты возможности подменить реестр фикстурой
+в тестах, ради чего поле и заводилось.
+*Правка*: не в T-006 (файл вне списка задачи), а решением оркестратора: назначить поле
+`Deps.Contracts` конкретной задаче (T-010 — там уже есть `contracts check`, либо отдельная правка
+через tech-lead#1) и снять пометку с комментария `runtime.go:56`.
+
+**Mi-8 (Minor). `schemas/events/group.{created,joined,left,disbanded}.v1.json` не называют
+затронутого игрока.** Схемы дословно повторяют §2.3.2 (`group`, `leader`, `members[]`, `cause`),
+и это правильно как буква; но потребитель `group.joined`/`group.left` вынужден вычислять
+«кто именно вошёл/вышел» диффом `members[]` против собственной проекции, а §2.1 объявляет
+`entity{entity{id,type},name}` общим доменным полем «основная сущность». При
+`additionalProperties: false` gateway (EPIC-004) не сможет добавить `entity` без правки схемы.
+*Правка*: ОВ к system-analyst/EPIC-004 (T-301) по образцу ОВ-22 — добавить `entity` в перечень
+полей §2.3.2 и в схемы, либо зафиксировать, что дифф `members[]` — намеренный контракт.
+
+**Mi-9 (Minor). `shared/contracts/ownership.go:52–63` — в перечне «условий §4.6, не укладывающихся
+в форму правила» пропущено одно.** Комментарий называет три (hp gateway только при `cause=rest`;
+`status` gateway только `alive → abandoned`; исключения строк `*`), а §4.6 содержит и четвёртое:
+строка `task`/`player` — «`position` (только `flee`)». В копии `Paths` содержит `position`, а
+`Causes` — `combat, loot, flee, death`, то есть агент встречи по таблице может двигать игрока с
+`cause=combat`. По C-02 State читает **только** эту копию, поэтому потерянное условие State
+неоткуда взять.
+*Правка*: дописать условие в комментарий `ownership.go` (и, при ревизии, в `levels.go` T-202).
+
+**Mi-10 (Minor). `shared/contracts/contracts.go:166` — `Validate` маршалит событие в JSON на
+каждый вызов, замера нет.** `json.Marshal` + `jsonschema.UnmarshalJSON` выполняются и при
+публикации, и при чтении (`MV_BUS_VALIDATE_ON_READ=true` по умолчанию), то есть дважды на событие
+end-to-end; на чтении исходный JSON уже есть в руках адаптера и повторно кодируется из структуры.
+Компиляция схем закеширована корректно (`sync.OnceValues`, `contracts.go:184`) — претензий нет.
+Оценка `foundation.md` §6 (20–50 мкс) не подтверждена; dev-log §8 честно это признаёт и уносит
+в T-014. Ставлю Minor, а не Nit, потому что цена платится на каждом событии в обе стороны.
+*Правка*: `go test -bench` на `Validate` в этой же задаче (десяток строк) либо явный пункт в
+DoD T-014; при неудовлетворительном замере — вариант `ValidateRaw([]byte)` для пути чтения.
+
+**N-1 (Nit). `schemas/events/group.{joined,left,disbanded}.v1.json` отформатированы иначе, чем
+остальные 22 схемы** (развёрнутый JSON, 66 строк против ~30). Правила форматирования JSON в
+проекте нет (в `.pre-commit-config.yaml` нет ни `pretty-format-json`, ни `check-json`), поэтому
+Nit; но каталог схем — предмет глазного ревью контрактов тремя другими эпиками.
+Привести к компактному стилю остальных файлов.
+
+**N-2 (Nit). `shared/contracts/sources.go:52` — `retention180` выбивается из ряда**
+`retention30d`/`retention90d`. Переименовать в `retention180d`.
+
+**N-3 (Nit). `shared/contracts/contracts.go:145` — в сообщении об ошибке payload нет `ev.ID`.**
+Путь внутри документа jsonschema/v6 даёт (`at "/changes/0/ops/0/op": value must be one of …`),
+тип есть, идентификатора события нет — а при разборе `dead_letters` ищут именно его.
+`fmt.Errorf("%w %s (%s): %w", ErrInvalidPayload, ev.Type, ev.ID, err)`.
+
+**N-4 (Nit). dev-log §5 — «17 тестов, 107 подтестов».** Фактически `go test -v ./shared/contracts/`
+даёт 17 тестов и 45 подтестов (62 строки `PASS:`). Поправить цифру, чтобы она не расходилась с
+последующими прогонами.
+
+**N-5 (Nit). `schemas/events/group.created.v1.json:26` и `group.disbanded.v1.json` допускают весь
+enum `cause` из семи значений** там, где семантически возможны `create` и `disband`. Сужение
+enum по типу события даёт ту же защиту от опечаток издателя, что и `additionalProperties: false`.
+
+**N-6 (Nit). `shared/contracts/ownership.go:22` — константа `AnyCause` объявлена, но ни одна
+строка таблицы её не использует** (строки `author`/`system` перечисляют `init, author` явно).
+Либо применить в этих строках, либо удалить, чтобы не подсказывать несуществующее правило.
+
+### Предложения в бэклог
+
+1. **T-009**: тест «каждое значение `Causes` из `OwnershipRules()` есть в enum `cause` схем
+   `entity.*`» — закрывает Mi-4 навсегда, а не однократной правкой enum.
+2. **T-010 (`mvctl contracts check`)**: проверка `source ∈ Spec.Publishers` на фикстурах; а также
+   «у каждого `TopicSpec` есть хотя бы один `Spec`» (сейчас `world_events`, `narrative_output`,
+   `llm_records`, `dead_letters` пусты — законно до T-009, после должно стать ошибкой).
+3. **T-014**: бенчмарк `contracts.Validate` (Mi-10) и сверка семантики `Registry.ValidateEnvelope`
+   (JSON-схема) с `eventbus.Event.ValidateEnvelope` (Go) — сейчас первая отвергает legacy-конверт
+   без `meta`, вторая принимает; это законно, но в godoc не оговорено.
+4. **EPIC-002 (T-052) / EPIC-004 (T-301)**: при ревизии учесть `entity.created.version: const 1`
+   (dev-log §4) и опциональный `entity.created.proposal_id` — последнего в §2.3.4 нет, поле
+   добавлено сверх контракта (совместимо, но в отклонениях не записано).
+5. **system-architect**: `eventbus.Entity` (`shared/eventbus/payload_types.go:30`) несёт `version`,
+   `created_at`, `updated_at`, `world`, `metadata`, которых нет в
+   `_common.json#/$defs/EntityWithName`; при `additionalProperties: false` payload, собранный
+   старым билдером `EventPayload.WithEntity`, будет отклонён, как только заполнят любое из этих
+   полей. Либо привести билдер к `EntityRef` + `name`, либо расширить `EntityWithName`
+   (пометка `contract-change`).
+
+### Риски и допущения
+
+- Ревью по индексу, не по коммиту; `-race` не запускался (ОВ-5, нет gcc). Разбор
+  потокобезопасности по коду: `Registry` после `New` не мутируется (карта и срез только читаются),
+  `defaultRegistry` — `sync.OnceValues`, компилированные `*jsonschema.Schema` при `Validate`
+  состояние не меняют (валидатор v6 держит контекст в стеке вызова). Единственное разделяемое
+  изменяемое состояние — backing-массивы `Publishers`/`Consumers`, отдаваемые наружу без копии
+  (Mi-2); гонки сегодня нет только потому, что потребителей у пакета ещё нет.
+- Полнота «нет фантомов» проверена ревьюером независимо: 25 файлов `*.v1.json` ↔ 25 не-deprecated
+  `Spec`; 9 legacy-типов (`player.moved`, `player.used_skill`, `gm.{created,deleted,merged,split}`,
+  `narrative.generate`, `violation.detected`, `time.syncTime`) внесены как `Deprecated` без схемы —
+  ровно перечень `foundation.md` §6; обоснование (профиль `legacy` иначе не опубликует ничего)
+  принимаю, решение ОВ-23 «в T-009 не дублировать» зафиксировано в журнале.
+- Топики и retention сверены с §2.2 построчно: 8 топиков, 30/90/180 дн., `analytics_events` и
+  `dead_letters` не читаются в replay. Маршрутизация сверена полностью для блоков «а»/«б»:
+  `group.entered_region`/`left_region` → `player_events` (а не `game_events`), `dice.rolled` →
+  `game_events`, `snapshot.created` → `system_events`, `analytics.replay.completed` →
+  `analytics_events` — всё по §2.2.
+- `go.mod`/`go.sum`: пин `jsonschema/v6 v6.0.3` внесён корректно и в блок **прямых** зависимостей.
+  В том же staged-дифе `minio-go/v7 v7.3.0` и `testcontainers-go v0.44.0` стоят в блоке
+  `// indirect`, хотя импортируются напрямую (`shared/objstore`, T-007), и `klauspost/compress`
+  поднят `1.15.9 → 1.19.2` — следствие невыполненного `go mod tidy` (ОВ-24/ОВ-29, отложен
+  оркестратором до приёмки подволны 0.3). К T-006 не относится, фиксирую как факт: после `tidy`
+  блоки перестроятся — повторно проверить, что `jsonschema/v6` остался прямым.
+- `additionalProperties: false` ложных срабатываний в текущем наборе не даёт: конверт, собранный
+  `eventbus.NewRoot`/`Derive`, проходит `_envelope.json` полностью (поля `Event` и `Meta`
+  совпадают со схемой один в один, `omitempty` расставлены согласованно, `ensurePayload` не даёт
+  `payload: null`). Единственный найденный источник ложного отказа — M-1 (и, на перспективу,
+  п. 5 бэклога).
+- Тест равенства `shared/agent/levels.go ↔ OwnershipRules` появится только в EPIC-003 T-202;
+  до него копия проверяется «изнутри», а расхождение с §4.6 ловится глазами — Mi-9 как раз такой
+  случай, найденный ручной сверкой таблицы с §4.6.
+- Ничего не правил и не коммитил: изменена только эта запись в `review.md`.
+
+---
+
+## T-007 · ревью #1 · 2026-09-09 · code-reviewer#2 (TEAM-1)
+
+### Границы ревью
+
+Ветка `epic/EPIC-001-foundation`, HEAD `dfc0498`, изменения в индексе (коммита нет).
+В границах — только файлы T-007 (F-5):
+
+- `shared/env/**` (`env.go`, `vars.go`, `infra.go`, `example.go` + тесты);
+- `shared/objstore/**` (`objstore.go`, `buckets.go`, `memory.go`, `minio.go` + unit- и
+  integration-тесты);
+- `shared/logging/**` (`logging.go` + тесты);
+- правки `shared/runtime/http.go` и `http_test.go` (удаление `EnvAddr`/`envOr`, чтение манифеста);
+- `cmd/multiverse/serve.go`, `cmd/multiverse/health.go`;
+- `.golangci.yml` (сужение исключения `forbidigo`);
+- запись «developer#2 · T-007» в `dev-log.md`; добавленные зависимости `go.mod`.
+
+**Вне границ** (смотрит code-reviewer#1): `shared/contracts/**`, `schemas/**` (T-006). Находки в
+этих файлах в отчёт T-007 не включались.
+
+Основания: `tasks.md` §1 (общий DoD) и T-007 с дополнением сведения 3;
+`architecture/components/foundation.md` v0.2 §7, §8; `architecture/infrastructure.md` v0.3 §4.1,
+§4.2, §5.2, §7.1; ADR-021 п. 1–4; ADR-009 п. 4, п. 9; ADR-005 доп. 2 п. 1–3, п. 5;
+`architecture/threat-model.md` (T-02, T-06, T-08, §4.2, SEC-02/06/14/22/28);
+`plan/ownership.md` v0.4 §1 (строки 9, 11, 12, 35); `journal.md` от 2026-09-10 (решения
+оркестратора по ОВ-25…ОВ-29).
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 1 · Minor: 10 · Nit: 6.
+
+Задача сделана добротно: манифест полон и сверен в обе стороны, секреты не выводятся ни на одном
+пути, редакция логов работает по ключу и по шаблону, integration-тест `objstore` действительно
+поднимает собранный образ MinIO и проверяет versioning/ILM, `os.Getenv` вне `shared/env` устранён
+полностью. Возврат — из-за одного Major: две реализации `objstore.Client` расходятся в поведении
+`Delete` несуществующего объекта, причём расходятся вопреки тому, что записано в doc-комментарии
+самого интерфейса. Правка на две строки плюс кейс в тесте; остальное — Minor/Nit, часть из них
+уместно закрыть в этой же итерации, часть — в T-008/T-010/T-012.
+
+### Что проверено прогоном (машина владельца, `GOFLAGS=-buildvcs=false`)
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | ✔ 0 |
+| `go vet ./...` | ✔ 0 |
+| `go test -short -count=1 ./...` | ✔ 15 пакетов `ok` |
+| `go test -cover ./shared/env/ ./shared/objstore/ ./shared/logging/` | ✔ 94,6 % · 65,0 % · 98,4 % (порог 60 %) |
+| `go test -tags integration ./shared/objstore/` | ✔ `ok 5,483s` (testcontainers, `multiverse-core/minio:RELEASE.2025-10-15T17-29-55Z`) |
+| `golangci-lint run ./...` | ✔ `0 issues` |
+| `gitleaks git --staged --redact .` | ✔ `no leaks found` |
+| `pre-commit run --files <22 файла T-007>` | ✔ 8 хуков `Passed` |
+| `-race` | не прогонялся (нет cgo/gcc — по решению оркестратора уходит в CI, T-012) |
+
+Заявленные в `dev-log.md` §5 цифры подтверждены полностью; расхождений с фактом нет.
+
+### Проверенные пункты DoD
+
+**DoD задачи T-007**
+
+1. `objstore` по ADR-021 п. 2 — интерфейс ровно `Put/Get/Stat/List/Delete/EnsureBucket/Capabilities`,
+   без multipart, presigned, object lock и уведомлений. ✔
+2. Две реализации сразу (`Memory` + `minio-go/v7 v7.3.0`). ✔ (с оговоркой M-1)
+3. `EnsureBucket` сам включает versioning и ILM по `BucketOptionsFor` — проверено на живом сервере:
+   `entities-integration` → `Versioning=Enabled` + `NoncurrentDays=30`; `prompts-integration` →
+   versioning выключен + `Expiration.Days=30` (SEC-22); `ops-artifacts` → `GetBucketLifecycle`
+   возвращает ошибку, то есть правил нет; повторный вызов идемпотентен. ✔ (частично — Mi-10)
+4. `buckets.go` с `entities-*`, `snapshots-*`, `prompts-*`, `ops-artifacts` и единой таблицей. ✔
+5. `env.Declare` с обязательным префиксом `MV_`, `DeclareExternal`, сверка с `.env.example`. ✔
+6. `logging` — slog с обязательными полями, `BusMiddleware`, редакция внешних ID и токенов. ✔
+   (обязательное поле времени называется `time`, а не `ts` — Mi-9)
+7. **Сведение 3, LLM-блок**: `MV_LLM_PROVIDER` с enum `openai_compat|ollama|anthropic|recorded|fake`
+   и дефолтом `openai_compat`, `MV_LLM_URL`, `MV_LLM_API_KEY` (`Secret`), `MV_LLM_MODELS_DIR`
+   (`Tooling`), `MV_LLM_CLOUD_ENABLED` — все на месте. ✔
+8. **Сведение 3, `OLLAMA_*`**: условная обязательность реализована (`RequiredWhen`), тест
+   `TestValidateOllamaBlockIsRequiredOnlyForTheOllamaProvider` закрывает оба направления — при
+   `openai_compat` отсутствие блока не ошибка, при `ollama` ошибка называет и `MV_OLLAMA_URL`, и
+   `OLLAMA_MAX_LOADED_MODELS`, и причину «`MV_LLM_PROVIDER` is ollama». ✔
+9. **Сведение 3, устаревшие**: `MV_OPENAI_API_KEY`/`MV_DEEPSEEK_API_KEY` через `DeclareDeprecated`,
+   в `.env.example` их нет, `Deprecated()` сообщает имя и замену **без значения** (проверено
+   тестом). ✔
+10. unit: `Memory` целиком включая `Capabilities()`; `Declare` отклоняет имя без `MV_`; «внешний ID
+    и токен не попадают в лог». ✔
+11. integration с `-tags integration`, образ из `build/versions.env`, `Capabilities()={true,true}`. ✔
+12. `.env.example` дополнен всеми объявленными переменными. ✔ — **сверено независимо от кода
+    задачи**: манифест 68 переменных (57 `MV_*` + 11 внешних), в `.env.example` 68 присваиваний,
+    множества совпадают точно; `.env.example` совпадает с `infrastructure.md` §4.2 в обе стороны с
+    единственным добавлением `MV_CORE_ADMIN_CLIENTS` (внесено в T-003).
+13. Покрытие ≥ 60 % по всем трём пакетам. ✔
+
+**Общий DoD §1**
+
+1. `golangci-lint run` чист, `gofmt`/`goimports` без диффа (хук `golangci-lint-fmt` зелёный). ✔
+2. `go build`/`go vet`/`go test -short -count=1` зелёные; `-race` — n/a локально, в CI (T-012). ✔ (с оговоркой)
+3. Тесты написаны в той же задаче, 30 тест-функций на три пакета, негативные случаи есть,
+   недетерминированности нет (паузы ретраев — через `clock.Timers`, `Memory` — через `clock.Clock`). ✔
+4. `gitleaks` — 0 находок. ✔
+5. `dev-log.md` заполнен: экземпляр, задача, что сделано, отклонения, ОВ-25…ОВ-29. ✔
+6. Соответствие критериям историй — в границах F-5 проверяется NFR-074 (сверка манифеста, ✔) и
+   NFR-041 (редакция, ✔ с оговоркой Mi-3).
+7. Карта владения — правки в `shared/runtime`, `cmd/multiverse`, `.golangci.yml`, `go.mod` вне
+   списка файлов T-007 и не отмечены как отклонение (Mi-7); добавление зависимостей в `go.mod`
+   отмечено в отчёте, как требует `ownership.md` §1 строка 9. ✔ с оговоркой
+8. CI — n/a до T-012.
+
+### Сверка с решениями оркестратора (`journal.md`, 2026-09-10)
+
+| Решение | Состояние |
+|---|---|
+| ОВ-25: имя `MV_MINIO_USE_SSL` | ✔ взято; `foundation.md` §7 и `design.md` §8 остаются с `MV_MINIO_SECURE` — правка документов за architect/devops |
+| ОВ-26: `MV_CONTEXTS`/`MV_ID_SOURCE` — флаги, не env | ✔ в манифест не внесены |
+| ОВ-27: `env.Validate` вызывает `cmd/multiverse`, но только для включённых контекстов | ✘ не реализовано (решение появилось после сдачи задачи). Важно для T-010: **текущий API этого не выражает** — у `Var` есть только `scope=process\|tooling`, признака «нужна контексту X» нет, а `Validate` проверяет манифест целиком. Реализация ОВ-27 потребует расширения `shared/env` (общий код) — учесть в объёме T-010/EPIC-002 |
+| ОВ-28: `MV_CORE_ADMIN_CLIENTS` по умолчанию `operator` | ✔ дефолт не менялся, fail-closed сохранён |
+| ОВ-29/ОВ-24: `go mod tidy` после приёмки 0.3 | ✘ ещё не сделан — см. Mi-8 |
+| Централизованный `vars.go` вместо `foundation.md` §8 | ✔ принят; следствие — `ownership.md` §1 строка 35 («владелец процесса/контекста объявляет через `shared/env.Declare`») и `foundation.md` §8 теперь противоречат коду, их надо править (бэклог, п. 1) |
+| T-005: «передавать `SkipValidateOnRead = !MV_BUS_VALIDATE_ON_READ`» | переменная объявлена, doc-комментарий фиксирует правило; провод пока некому — потребителей шины в волне 0 нет, ожидается в T-010/T-018 |
+
+### Замечания
+
+#### Major
+
+**M-1. `objstore`: `Delete` несуществующего объекта — `Memory` и MinIO ведут себя по-разному.**
+`shared/objstore/objstore.go:76-78` (doc `Client.Delete`), `shared/objstore/memory.go:129-137`,
+`shared/objstore/minio.go:165-174`.
+
+Контракт интерфейса записан прямо в коде: «Delete removes the object; removing one that is not
+there is ErrNotFound, so a caller that means to be idempotent says so». `Memory.Delete` его
+соблюдает, `minioClient.Delete` — нет: S3 `DeleteObject` отвечает `204` и на отсутствующий ключ,
+поэтому `RemoveObject` возвращает `nil`.
+
+Проверено прогоном против собранного образа MinIO (временный тест, в индекс не добавлялся):
+
+```
+minio  Delete(missing) = <nil>                                          ErrNotFound=false
+memory Delete(missing) = objstore: object not found: entities-parity/…  ErrNotFound=true
+```
+
+Почему это Major, а не Minor:
+
+- это ровно тот класс расхождений, который `memory.go:17-19` обещает не допускать («fails the same
+  way the server does, so a unit test written against it does not pass while the integration test
+  against MinIO fails»), причём расхождение здесь в обратную, более опасную сторону: unit-тест на
+  `Memory` **зелёный** там, где продакшен молча делает другое;
+- потребитель — EPIC-002 (State: удаление сущности, ротация снапшотов K=5), который по плану пишет
+  unit-тесты на `Memory`. Код вида `if errors.Is(err, ErrNotFound) { /* уже удалено */ }` будет
+  протестирован и не сработает ни разу на живом хранилище;
+- ни unit-, ни integration-тест этот кейс не покрывают, то есть расхождение не зафиксировано.
+
+Как исправить (предпочтительно первый вариант — он дешевле и соответствует семантике S3):
+
+а) принять идемпотентность: убрать проверку существования из `Memory.Delete` (оставив
+   `ErrNoBucket`), переписать doc `Client.Delete` на «удаление отсутствующего объекта — не ошибка»,
+   поправить `TestMemoryDelete`/`TestMemoryReportsMissingObjectAndBucket` и **добавить кейс в
+   `integration_test.go`**, чтобы контракт был закреплён с обеих сторон;
+б) либо сохранить `ErrNotFound` и добавить в `minioClient.Delete` предварительный `StatObject` —
+   но это лишний round-trip на каждом удалении и гонка между Stat и Remove; не рекомендую.
+
+#### Minor
+
+**Mi-1. `cmd/multiverse health`: дефолт `--url` собирается конкатенацией listen-адреса.**
+`cmd/multiverse/health.go:26`.
+
+Было: `fs.String("url", "http://"+defaultCoreAddr+"/health", …)`, где `defaultCoreAddr` —
+константа `127.0.0.1:8090`. Стало: `"http://"+env.CoreAddr.String()+"/health"`. Но `MV_CORE_ADDR` —
+адрес **прослушивания**, а не адрес клиента, и его штатное значение по `infrastructure.md` §4.2,
+`.env.example` и `.github/ci.env:59` — `:8090`. Тогда дефолт превращается в `http://:8090/health` —
+URL с пустым хостом.
+
+Проверено экспериментом: `http.Client.Get("http://:PORT/health")` даёт `200` только когда прокси не
+настроен; на этой машине заданы `HTTP_PROXY=http://127.0.0.1:10808` и
+`NO_PROXY=localhost,127.0.0.1,::1,.local` — пустой хост под `NO_PROXY` не подпадает, запрос уходит
+в прокси и возвращает **503 Service Unavailable** вместо опроса локального сервера. При
+`MV_CORE_ADDR=0.0.0.0:8090` получится `http://0.0.0.0:8090/health`, что на Windows не соединяется.
+
+Контейнеры не задеты: `docker-compose.yml:152` и `:207` передают `--url` явно
+(`http://127.0.0.1:8088/health` и `http://127.0.0.1:8090/health`). Страдает ручной запуск
+`multiverse health` на хосте — то есть ровно тот сценарий, ради которого подкоманда и делалась.
+
+Как исправить: разобрать адрес и подставить хост для клиента —
+`host, port, err := net.SplitHostPort(env.CoreAddr.String())`; при `host == ""`, `"0.0.0.0"` или
+`"::"` использовать `127.0.0.1`. Одна функция на 6 строк плюс табличный тест.
+
+**Mi-2. `shared/logging`: цена одной строки лога выросла вчетверо, аллокаций — в десять раз.**
+`shared/logging/logging.go:196-206` (`Redact`), `:210-222` (`redactAttr`).
+
+`Redact` прогоняет два `regexp.ReplaceAllString` по **каждой** строковой паре, включая `msg` и
+атрибуты `service`/`version`. `ReplaceAllString` копирует строку в новый буфер даже когда
+совпадений нет (`replaceAll` всегда делает `append(buf, src[lastMatchEnd:]...)` и `string(...)`),
+поэтому платятся не только два прохода regexp, но и две лишние аллокации на строку.
+
+Замер (13900K, `-benchtime=200000x`, `Output: io.Discard`, временный бенчмарк, в индекс не
+добавлялся):
+
+```
+BenchmarkRedactNoMatch        2634 ns/op   290 B/op    6 allocs/op   // строка 60 символов, совпадений нет
+BenchmarkLogLine              2162 ns/op   403 B/op   21 allocs/op   // logging.New + 2 строковых атрибута
+BenchmarkLogLinePlainSlog      548 ns/op    96 B/op    2 allocs/op   // тот же JSONHandler без ReplaceAttr
+```
+
+Для `info`-уровня на горячем пути обработки событий это заметно. Замечание не о микрооптимизации:
+редакция обязана остаться, но её надо сделать бесплатной в типичном случае «совпадений нет».
+
+Как исправить: в `Redact` — быстрый выход до аллокации, `if !re.MatchString(s) { continue }`
+(`MatchString` не аллоцирует), либо ещё дешевле — предфильтр
+`if strings.IndexByte(s, ':') < 0 && !strings.Contains(s, "sk-") { return s }` перед циклом по
+шаблонам. Существующий `TestRedact` изменений не потребует.
+
+**Mi-3. `shared/logging`: список ключей редакции не покрывает ПДн, названные в threat-model.**
+`shared/logging/logging.go:35-46`.
+
+Покрыто `infrastructure.md` §7.1 (`external_id`, `token`, `authorization`, `api_key`, `text`) плюс
+разумные соседи. Не покрыто то, что threat-model перечисляет прямо: `chat_id`, `first_name`
+(T-06 «библиотека бота логирует обновления: username, chat_id, текст», T-08 «`username`,
+`first_name`, `chat_id`, `update_id` в чистом виде», §4.2 «Telegram user id, `chat_id`» — оба
+пункта оценены **Major**). `username` есть, `chat_id`/`first_name`/`last_name` — нет.
+
+Как исправить: добавить в `sensitiveKeys` ключи `chat_id`, `first_name`, `last_name`, `update_id`.
+Правка в четыре строки; в `dev-log.md` §7 автор сам записал этот класс риска («ключ, названный
+иначе, пройдёт») — здесь речь не о гипотетическом ключе, а о четырёх поимённо названных в
+threat-model.
+
+**Mi-4. Обязательность инфраструктурных переменных потеряна в манифесте.**
+`shared/env/infra.go:24-33`.
+
+`infrastructure.md` §4.2 помечает `MINIO_ROOT_USER` и `MINIO_ROOT_PASSWORD` как «обязательна»,
+`NEO4J_PASSWORD` — «обязательна при профиле memory». В `infra.go` у всех трёх нет ни `Required()`,
+ни `RequiredWhen()` — только `Tooling()` и `Secret()`. Флаг ничего бы не сломал: `validate`
+(`env.go:410-412`) снимает безусловную обязательность именно у `scope=tooling`, то есть
+`Required()+Tooling()` — это «в манифесте записано, процесс не валится». Зато без флага
+`mvctl env check` (T-010) не сможет выполнить проверку «(г) обязательные переменные без дефолта»
+из §4.2 по этим трём именам, и единственной страховкой остаётся `${VAR:?}` в compose.
+
+Как исправить: добавить `Required()` к `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`; для
+`NEO4J_PASSWORD` условие «профиль memory» через `RequiredWhen` не выражается (`COMPOSE_PROFILES` —
+список, а `conditionMet` сравнивает значение целиком) — либо оставить как есть с комментарием,
+либо завести отдельный вид условия. Второе — кандидат в бэклог, не в эту задачу.
+
+**Mi-5. `Validate` не проверяет тип значения — ошибка вылезает в рантайме, а не в `env check`.**
+`shared/env/env.go:400-420`.
+
+Валидация смотрит только на «пусто/не пусто» и на enum. Значения `MV_SNAPSHOT_EVERY_FACTS=abc`,
+`MV_TELEGRAM_POLL_TIMEOUT_S=25s`, `MV_LLM_CLOUD_ENABLED=yes` проходят `Validate` без единой жалобы
+и падают только при первом `Int()`/`Bool()`/`Duration()` — то есть уже внутри процесса, а не в
+`mvctl env check`, ради которого весь манифест и заведён. Для `MV_LLM_CLOUD_ENABLED` это заметно:
+по ADR-005 доп. 2 п. 3 переменная — гейт облачного эндпоинта, и «не распарсилось» не должно
+решаться в момент первого вызова LLM.
+
+Как исправить: добавить в `Var` объявленный вид (`string|int|bool|duration`), задаваемый опцией и
+проверяемый в `validate`. Дешёвый паллиатив на сейчас — `OneOf("true","false")` на булевых
+переменных манифеста.
+
+**Mi-6. Пустое значение не может перебить непустой дефолт — для allow-list это ловушка.**
+`shared/env/env.go:277-288` (`rawFrom`), `:262` (`StringFrom`), `:296-310` (`ListFrom`).
+
+`rawFrom` трактует set-but-empty как unset, поэтому `MV_CORE_ADMIN_CLIENTS=` возвращает дефолт
+`operator`, а не пустой список. Оператор, который хочет закрыть `/v1/admin/*`, обнулив список,
+получит обратное: доступ клиенту `operator` останется. То же с `MV_GATEWAY_CLIENT_IDS=`.
+Поведение унаследовано от `runtime.envOr` из T-003 (там было так же), так что регрессии нет, но в
+`shared/env` оно стало правилом для всех 68 переменных и нигде не описано.
+
+Как исправить: минимум — записать это в doc-комментарии `String`/`List` вместе с рецептом («чтобы
+закрыть список, задайте несуществующий идентификатор»); лучше — для списков различать unset и
+empty (`ListFrom` возвращает `nil` при заданном пустом значении, а дефолт применяет только при
+unset).
+
+**Mi-7. Правки вне списка файлов T-007 не отмечены как отклонение.**
+`shared/runtime/http.go`, `shared/runtime/http_test.go`, `cmd/multiverse/serve.go`,
+`cmd/multiverse/health.go`, `.golangci.yml`, `go.mod`.
+
+`tasks.md` T-007 «Файлы» перечисляет только `shared/{objstore,env,logging}/**`. По `ownership.md`
+v0.4 §1 строка 11 `shared/runtime/**` — «общий код (часть C-01 v1.1) … правки — запрос»; изменён
+публичный API пакета: удалены экспортированные `EnvAddr` и `DefaultAdminClients`,
+`EnvAdminClients` из `const` стал `var`. По существу возражений нет — удаление `EnvAddr` было
+заранее согласовано в T-003 (в комментарии к хелперу прямо написано «shared/env (F-5, T-007)
+replaces this helper»), а без этого пункт «`os.Getenv` вне `shared/env` устранён» невыполним. Но:
+
+- в `dev-log.md` §3 «Отклонения от дизайна» расширение списка файлов не зафиксировано (в §1 оно
+  описано как факт, без пометки «вне списка»);
+- по прецеденту T-005 коммит с изменением публичного API общего кода помечается `contract-change`
+  (`contracts.md` §16 п. 3) — здесь пометки нет;
+- `tasks.md` T-007 «Файлы» стоит расширить, иначе история правок общего кода не читается.
+
+Как исправить: внести отклонение в `dev-log.md` §3 и пометить коммит; решение о правке `tasks.md` —
+за tech-lead#1 (аналог ОВ-6 из T-003).
+
+**Mi-8. `go.mod`: прямые зависимости помечены `// indirect`.** `go.mod:16-79`.
+
+`github.com/minio/minio-go/v7 v7.3.0` — прямая зависимость `shared/objstore/minio.go`,
+`testcontainers-go` и `modules/minio` — прямые зависимости `integration_test.go`, но все три стоят
+во втором блоке `require` с `// indirect`. Причина известна и объявлена (ОВ-29: `go mod tidy` не
+запускался, потому что в дереве параллельно шла T-006), решение оркестратора — выполнить после
+приёмки подволны 0.3. Фиксирую как незакрытое: пока `tidy` не прогнан, `go mod tidy -diff` (или
+`git diff --exit-code go.mod go.sum`) в job `unit`/`contracts` T-012 будет красным, и это
+единственная причина.
+
+**Mi-9. Обязательные поля строки лога расходятся с `infrastructure.md` §7.1.**
+`shared/logging/logging.go:69-88`, `shared/logging/logging_test.go:78-80`.
+
+§7.1 перечисляет `ts, level, service, context, msg, correlation_id, event_id, event_type,
+agent.level?, handled, version`. `slog.JSONHandler` пишет поле времени как **`time`**, а не `ts`;
+переименования через `ReplaceAttr` нет, и тест `TestLoggerCarriesTheRequiredFields` закрепляет
+именно `time`. Отдельно: `version` объявлено обязательным, но `Init(service, level)` его не ставит
+(`Options.Version` пуст → атрибут не добавляется), а линкер пока ничего не штампует.
+
+Как исправить: либо добавить в `redactAttr` переименование `slog.TimeKey → "ts"` (одна ветка) и
+завести `-ldflags -X` для версии в `build/Dockerfile` (T-004), либо поправить §7.1 на `time` и
+пометить `version` как «появляется с F-7». Решение — за tech-lead#1/devops; сейчас документ и код
+расходятся молча, и `jq`-рецепты из §7.1 писались под другой ключ.
+
+**Mi-10. `EnsureBucket` не приводит уже существующий бакет к объявленным правилам.**
+`shared/objstore/minio.go:180-217`.
+
+Метод сходится только в одну сторону: versioning **включается** при `opts.Versioned=true`, но
+никогда не снимается при `false` (нет `SuspendVersioning`), а lifecycle не удаляется, когда правил
+нет (`lifecycleOf` возвращает `nil` → вызова просто не происходит). Между тем бакеты создают двое:
+`EnsureBucket` и `build/minio-init.sh` (T-008), плюс возможен `mc` вручную. Если `prompts-{world}`
+окажется создан с versioning, платформа этого не заметит и не исправит, а SEC-22 требует обратного
+(«для `prompts-*` versioning выключен»). Integration-тест проверяет только сценарий с чистым
+бакетом, поэтому расхождение не поймается.
+
+Как исправить: при `opts.Versioned == false` проверять `GetBucketVersioning` и вызывать
+`SuspendVersioning`, если включён (либо явно записать в doc-комментарии, что приведение к правилам
+делается только при создании, и вынести сходимость в `mvctl storage check`); добавить кейс «бакет
+создан с versioning → `EnsureBucket` его снял» в `integration_test.go`. Согласовать с T-008, чтобы
+`minio-init.sh` брал правила из той же таблицы `BucketOptionsFor`, как обещает её doc-комментарий.
+
+#### Nit
+
+**N-1. `TestMinIOReportsAMissingBucket` — слабая и небезопасная проверка.**
+`shared/objstore/integration_test.go:208-217`. При `err == nil` тест не падает с внятным
+сообщением, а паникует на `err.Error()`. Второй дизъюнкт
+`strings.Contains(err.Error(), "NoSuchBucket")` делает проверку `translate` необязательной: тест
+останется зелёным, даже если маппинг в `ErrNoBucket` сломается и наружу пойдёт сырая ошибка
+сервера. Оставить только `errors.Is(err, objstore.ErrNoBucket)`.
+
+**N-2. `Memory` игнорирует `context.Context` во всех методах.** `shared/objstore/memory.go:57`,
+`:82`, `:101`, `:113`, `:124`, `:130`. У `minioClient` отменённый контекст даёт ошибку, у `Memory` —
+нет. Тот же класс расхождения, что M-1, но безобидный: строка
+`if err := ctx.Err(); err != nil { return err }` в начале каждого метода выровняла бы поведение и
+позволила тестам EPIC-002 проверять отмену на фейке.
+
+**N-3. `runtime.EnvAdminClients` — экспортированная изменяемая переменная вместо константы.**
+`shared/runtime/http.go:24-28`. `var EnvAdminClients = env.CoreAdminClients.Name()` — на месте
+бывшей константы теперь пакетный `var`, который любой импортёр может переприсвоить; используется
+он только в тексте ответа `403`. Проще звать `env.CoreAdminClients.Name()` по месту в `forbid(...)`
+и не заводить экспортированное имя вовсе.
+
+**N-4. Исключение `forbidigo` шире необходимого.** `.golangci.yml:188-192`. Правило
+`path: shared/(clock|env)/` с текстом `(os\.(…)|time\.(…))` разрешает пакету `shared/env` ещё и
+`time.Now`/`time.After`, которые ему не нужны (проверено: в `shared/env` их нет). Само сужение
+дыры не открыло — grep по `shared/{runtime,logging,objstore,contracts}` не находит ни одного
+запрещённого вызова вне тестов, и `golangci-lint run ./...` даёт `0 issues`. Можно разнести на два
+правила (`shared/clock/` → time, `shared/env/` → os), чтобы исключение было ровно по обязанности.
+
+**N-5. Пустое значение чувствительного ключа превращается в `[redacted]`.**
+`shared/logging/logging.go:211-213`. `redactAttr` подменяет значение, не глядя на него, поэтому
+`slog.String("token", "")` даст `"token":"[redacted]"` — в логе появляется намёк на токен там, где
+его не было. Проверять `a.Value.String() != ""` перед подменой.
+
+**N-6. Расхождение в значении `MV_LLM_URL` между документами.** `tasks.md` T-007 (сведение 3)
+называет `http://host.docker.internal:1234/v1`, `infrastructure.md` v0.3 §4.2 и `.env.example` —
+`http://host.docker.internal:1234` без `/v1`. Реализация взяла второе (источник истины, тот же
+принцип, что в ОВ-25), это правильно. Но расхождение стоит закрыть до EPIC-003: провайдеру
+`openai_compat` важно, добавляет он `/v1` сам или ждёт его в переменной.
+
+### Отдельно проверено и признано неверным подозрением
+
+- **Утечка горутины в `minioClient.List`.** `List` выходит из `range` по каналу при первой ошибке,
+  не отменяя контекст, а продюсер `minio-go` пишет в канал через `select` с `ctx.Done()` — то есть
+  ранний выход мог бы подвесить горутину до отмены контекста вызывающего. Проверено по исходникам
+  `minio-go v7.3.0` (`api-list.go:774-807`; `listObjectsV2` — `yield(ObjectInfo{Err: err}); return`):
+  ошибка в итераторе **терминальна**, после неё продюсер сам завершается и закрывает канал. Утечки
+  нет, замечание не выставляю. На будущее: если в `List` появится ранний выход по лимиту или
+  `break` не по ошибке, понадобится `lctx, cancel := context.WithCancel(ctx); defer cancel()`.
+- **Секреты на путях логирования и ошибок.** Прочитаны все пути, где значение переменной может
+  попасть в текст: `Var.errf` (`env.go:386-392`) кладёт `Value` только при `!v.secret`;
+  `Error.Error()` при `Secret` печатает «value withheld»; `Validate` наследует то же;
+  `Deprecated()` сообщает имя и причину, значения не читает; `objstore.New` (`minio.go:66-72`)
+  называет только имена переменных; `ConfigFromEnv` значения не логирует. Тесты
+  `TestSecretValueNeverReachesTheError`, `TestValidateRealManifestNeedsTheObjectStoreCredentials`,
+  `TestDeprecatedNamesAreReportedWhenStillPresent` это закрепляют. Замечаний нет, ADR-009 п. 4
+  соблюдён.
+- **Паника на этапе объявления** (`Declare`/`DeclareExternal`/`DeclareDeprecated`) — оправдана: все
+  пять условий (нет префикса, невалидное имя, пустое описание, дубль, `Required` с дефолтом) —
+  ошибки программиста, видимые при загрузке пакета, до того как процесс что-либо обслужит; каждая
+  покрыта тестом через `isolate`+`mustPanic`. Потокобезопасность реестра: все операции под
+  `sync.RWMutex`, `Manifest`/`Lookup`/`DeprecatedNames` возвращают копии, вложенных захватов нет
+  (`Validate` вызывает `Manifest` до цикла, `conditionMet`→`Lookup` берёт `RLock` уже после
+  возврата) — дедлока нет.
+- **`AdminOnly` не сломан.** Логика допуска не изменилась: список читается один раз при построении
+  middleware, `X-Client-Id` сверяется со списком из `MV_CORE_ADMIN_CLIENTS` (дефолт `operator`,
+  fail-closed), `X-Actor-Kind` необязателен и только валидируется по enum `human|ci|sim|system`.
+  Единственная разница — `env.Var.List()` дополнительно обрезает пробелы у значения целиком (было —
+  только у элементов); поведение эквивалентно. Все кейсы `TestAdminOnly` и
+  `TestAdminOnlyReportsReason` из T-003 сохранены и зелёные; удалён только `TestEnvAddr` вместе с
+  удалённым хелпером. Поведение `/health` не менялось: `runtime.Routes`/`Aggregate` не тронуты,
+  `cmd/multiverse` изменил лишь источник адреса (следствие — Mi-1).
+- **Ретраи `objstore` — только транзиентные.** `retryable` (`minio.go:281-296`) исключает
+  `ErrNotFound`, `ErrNoBucket` и `context.Canceled`, повторяет только `code==0` (сетевая), `429` и
+  `5xx`; `List` не ретраится осознанно; `wait` проверяет `ctx.Err()` до постановки таймера (в
+  комментарии объяснено, почему `select` по двум готовым каналам не годится) и работает через
+  `clock.Timers`, поэтому тесты ретраев детерминированы и не спят. `context.DeadlineExceeded`
+  формально попадает в «транзиентные» (`code==0`), но следующий же `wait` возвращает `ctx.Err()`,
+  так что цикл ограничен — отдельного замечания не выставляю.
+
+### Предложения в бэклог
+
+1. **Привести `foundation.md` §8 и `ownership.md` v0.4 §1 (строка 35) в соответствие с принятым
+   централизованным `vars.go`.** Оба документа предписывают «владелец процесса/контекста объявляет
+   через `shared/env.Declare`» рядом со своим кодом; код делает иначе, и решение оркестратора это
+   утвердило. Пока документы не поправлены, разработчик EPIC-002/003/004 по инструкции добавит
+   `Declare` у себя. Отчасти это поймается (`CheckExample` сообщит «present in .env.example but not
+   declared», если пакет не импортирован `mvctl`), но диагностика будет непонятной. Владелец:
+   architect#1 при ревизии §8, tech-lead#1 — по `ownership.md`.
+2. **Расширить `shared/env` признаком «нужна такому-то контексту»** — без него решение ОВ-27
+   («`env.Validate` при старте проверяет только включённые контексты») не реализуемо. Кандидат:
+   опция `ForContexts("state","memory")` и `env.ValidateFor(src, contexts…)`. Владелец: T-010
+   совместно с EPIC-002; `shared/env` — общий код.
+3. **Согласовать `build/minio-init.sh` (T-008) с `BucketOptionsFor`.** Doc-комментарий таблицы
+   обещает, что init-контейнер и платформа читают правила из одного места; сейчас это обещание
+   ничем не подкреплено, а расхождение versioning на `prompts-*` — прямое нарушение SEC-22 (см.
+   Mi-10). Кандидат в DoD T-008: `minio-init.sh` вызывает `mvctl storage init` либо правила в нём
+   сверяются тестом.
+4. **`privacy-scan` (NFR-041, EPIC-005) обязателен независимо от редакции.** Разделяю оценку автора
+   в `dev-log.md` §7: редакция работает по фиксированному списку ключей и двум шаблонам, поэтому
+   ключ с другим именем и токен другого формата (JWT `eyJ…`, `Bearer` без `sk-`, секрет MinIO,
+   пароль Neo4j) пройдут. Mi-3 закрывает поимённо названные в threat-model случаи, но не класс.
+5. **Запретить `MV_LOG_LEVEL=debug` при `MV_ENV=prod`** (`infrastructure.md` §7.1 «`debug` не
+   включается в `prod`»). Сейчас это только текст в описании переменной. Кандидат: правило в
+   `mvctl env check` (T-010) — кросс-проверка двух переменных, та же механика, что `RequiredWhen`.
+6. **Замерить паузы ретраев `objstore` (100 мс / 500 мс).** Взяты из `foundation.md` §7 («3
+   попытки»), значения не обосновывались (`dev-log.md` §7 это признаёт). Кандидат в замер
+   T-014/EPIC-005 вместе с NFR по задержкам.
+
+### Риски и допущения
+
+- `-race` локально не прогонялся (нет cgo/gcc) — по решению оркестратора уходит в CI (T-012).
+  Гонки в границах T-007 вероятнее всего в реестре `shared/env` (пакетное состояние, а `isolate` в
+  тестах подменяет его целиком) и в `objstore.Memory` (`sync.RWMutex` + копирование тел). Оба места
+  написаны так, чтобы `-race` их покрывал; `isolate` дополнительно требует, чтобы тесты
+  `shared/env` никогда не звали `t.Parallel()` — сейчас не зовут, но это ничем не защищено.
+- Integration-тест `objstore` поднимает **три** контейнера MinIO (по одному на тест-функцию);
+  локально это 5,5 с, в CI на холодном образе будет заметно дороже. Если job `integration` T-012
+  упрётся в 10 минут (§1 п. 8) — кандидат на общий контейнер через `TestMain`.
+- Покрытие `shared/objstore` 65 % — самое низкое из трёх, и почти весь непокрытый код это
+  `minioClient.Put/Get/Stat/List/Delete/EnsureBucket`, проверяемые только под тегом `integration`.
+  Это осознанный размен (unit-тесты покрывают `translate`, `retryable`, `retry`, `lifecycleOf`,
+  `New`, `ConfigFromEnv`), но он же объясняет, почему M-1 не был замечен: расхождение живёт ровно в
+  той части, которую видит только integration-тест. Отсюда рекомендация закреплять контракт
+  `Delete` **обеими** сторонами.
+- Сверку манифеста с `.env.example` я проверил дважды: тестом задачи
+  (`TestRepositoryExampleMatchesTheManifest`) и независимо — выгрузкой `env.Manifest()` во временный
+  пакет и сравнением множеств имён с `.env.example` и с `infrastructure.md` §4.2. Совпадение точное
+  (68 = 68). Временные файлы (`shared/env/tmpdump/`, `shared/objstore/zz_tmp_*`,
+  `shared/logging/zz_bench_tmp_test.go`) удалены, в индекс не добавлялись; рабочее дерево после
+  ревью — в том же состоянии, `git status` не изменился.
+- Файлы T-006 (`shared/contracts/**`, `schemas/**`) не смотрел; они присутствуют в индексе и
+  участвуют в прогонах `go build`/`go test`/`golangci-lint`, но все прогоны зелёные, так что
+  разделение областей на результат не повлияло.
+- Ничего не правил и не коммитил: изменена только эта запись в `review.md`.

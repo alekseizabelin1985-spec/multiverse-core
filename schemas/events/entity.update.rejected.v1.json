@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/entity.update.rejected.v1.json",
+  "title": "entity.update.rejected payload",
+  "description": "State refused a proposal (contracts.md C-02 v1.2). atomic=true yields one rejection per package, atomic=false one per entity.",
+  "type": "object",
+  "properties": {
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "reason": {
+      "type": "string",
+      "enum": ["version_conflict", "unknown_entity", "level_violation", "law_violation", "invalid_op", "dead_entity", "duplicate_entity"]
+    },
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "details": {
+      "type": "object",
+      "properties": {
+        "expected_version": { "type": "integer", "minimum": 0 },
+        "actual_version": { "type": "integer", "minimum": 0 },
+        "invariant_id": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["proposal_id", "reason"],
+  "additionalProperties": false
+}

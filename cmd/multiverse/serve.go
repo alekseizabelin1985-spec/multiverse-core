@@ -17,14 +17,9 @@ import (
 	"github.com/google/uuid"
 
 	"multiverse-core.io/shared/clock"
+	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/runtime"
 )
-
-// coreAddrEnv is the address of the HTTP server of the process; there is no
-// flag for it (foundation.md §2, D-7).
-const coreAddrEnv = "MV_CORE_ADDR"
-
-const defaultCoreAddr = "127.0.0.1:8090"
 
 type serveOptions struct {
 	contexts []string
@@ -127,7 +122,7 @@ func serve(opts serveOptions, stdout, stderr io.Writer) error {
 		deps.Clock, deps.Timers = clock.Real{}, clock.RealTimers{}
 	}
 
-	srv := runtime.NewHTTP(runtime.EnvAddr(coreAddrEnv, defaultCoreAddr), runtime.Aggregate(contexts))
+	srv := runtime.NewHTTP(env.CoreAddr.String(), runtime.Aggregate(contexts))
 	deps.Mux = srv.Mux
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

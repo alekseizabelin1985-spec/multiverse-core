@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/snapshot.created.v1.json",
+  "title": "snapshot.created payload",
+  "description": "A stateful context wrote a snapshot and its latest.json pointer (contracts.md C-14 v1.1, api-contracts.md 2.3.12).",
+  "type": "object",
+  "properties": {
+    "component": { "type": "string", "enum": ["state", "swarm", "gateway"] },
+    "snapshot": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "seq": { "type": "integer", "minimum": 0 },
+        "taken_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "cursor": {
+          "type": "object",
+          "description": "Next unread offset per topic read by the component.",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "laws_version": { "type": "string", "minLength": 1 },
+        "state_hash": { "type": "string", "minLength": 1 },
+        "size_bytes": { "type": "integer", "minimum": 0 },
+        "key": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "seq", "taken_at", "cursor", "laws_version", "state_hash", "size_bytes", "key"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["component", "snapshot"],
+  "additionalProperties": false
+}

@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/_common.json",
+  "title": "Common payload definitions",
+  "description": "Shapes shared by every event schema (api-contracts.md 2.1, foundation.md 6). Referenced as _common.json#/$defs/<name>.",
+  "$defs": {
+    "EntityRef": {
+      "type": "object",
+      "description": "Truncated reference to an entity: identity only.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "type"],
+      "additionalProperties": false
+    },
+    "EntityWithName": {
+      "type": "object",
+      "description": "Entity reference plus the display name known to the publisher.",
+      "properties": {
+        "entity": { "$ref": "#/$defs/EntityRef" },
+        "name": { "type": "string" }
+      },
+      "required": ["entity"],
+      "additionalProperties": false
+    },
+    "WorldRef": {
+      "type": "object",
+      "properties": { "entity": { "$ref": "#/$defs/EntityRef" } },
+      "required": ["entity"],
+      "additionalProperties": false
+    },
+    "ScopeRef": {
+      "type": "object",
+      "description": "Scope is a concept of its own, not an entity: solo:{player_id} or group:{group_id} in MVP-1.",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "required": ["id", "type"],
+      "additionalProperties": false
+    },
+    "AgentRef": {
+      "type": "object",
+      "description": "The swarm agent that produced the event (meta.agent).",
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "level": { "type": "string", "enum": ["global", "domain", "task", "object", "monitor"] },
+        "blueprint": { "type": "string", "minLength": 1 },
+        "blueprint_version": { "type": "string" }
+      },
+      "required": ["id", "level", "blueprint"],
+      "additionalProperties": false
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 timestamp in UTC."
+    },
+    "Money": {
+      "type": "object",
+      "description": "Amount in the minor unit of a currency; no floating point on the wire.",
+      "properties": {
+        "amount": { "type": "integer" },
+        "currency": { "type": "string", "minLength": 1 }
+      },
+      "required": ["amount", "currency"],
+      "additionalProperties": false
+    }
+  }
+}

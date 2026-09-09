@@ -105,6 +105,27 @@ func TestAdminOnly(t *testing.T) {
 	}
 }
 
+// Emptying the allow-list closes /v1/admin/*, it does not reopen it: the
+// operator who writes MV_CORE_ADMIN_CLIENTS= means nobody, and an empty value
+// therefore beats the shipped default (review T-007 Mi-6).
+func TestAdminOnlyAdmitsNobodyWhenTheAllowListIsEmptied(t *testing.T) {
+	t.Setenv(runtime.EnvAdminClients, "")
+	handler := runtime.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	for _, clientID := range []string{"operator", "ci-harness", ""} {
+		req := httptest.NewRequest(http.MethodGet, "/v1/admin/agents", nil)
+		if clientID != "" {
+			req.Header.Set(runtime.ClientIDHeader, clientID)
+		}
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("client %q = %d, want %d", clientID, rec.Code, http.StatusForbidden)
+		}
+	}
+}
+
 func TestAdminOnlyReportsReason(t *testing.T) {
 	handler := runtime.AdminOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
@@ -118,20 +139,5 @@ func TestAdminOnlyReportsReason(t *testing.T) {
 	}
 	if !strings.Contains(body["error"], runtime.ClientIDHeader) {
 		t.Fatalf("error = %q, want it to name %s", body["error"], runtime.ClientIDHeader)
-	}
-}
-
-func TestEnvAddr(t *testing.T) {
-	const key = "MV_TEST_ADDR"
-	if got := runtime.EnvAddr(key, "127.0.0.1:8090"); got != "127.0.0.1:8090" {
-		t.Fatalf("unset: EnvAddr = %q, want the default", got)
-	}
-	t.Setenv(key, "")
-	if got := runtime.EnvAddr(key, "127.0.0.1:8090"); got != "127.0.0.1:8090" {
-		t.Fatalf("empty: EnvAddr = %q, want the default", got)
-	}
-	t.Setenv(key, "0.0.0.0:9090")
-	if got := runtime.EnvAddr(key, "127.0.0.1:8090"); got != "0.0.0.0:9090" {
-		t.Fatalf("set: EnvAddr = %q, want the environment value", got)
 	}
 }

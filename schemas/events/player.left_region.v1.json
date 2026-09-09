@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/player.left_region.v1.json",
+  "title": "player.left_region payload",
+  "description": "A solo player left a region (api-contracts.md 2.3.1). A group moves with group.entered_region only.",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "action": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "key_hash": { "type": "string" }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "target": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "position": {
+      "type": "object",
+      "properties": {
+        "from": { "type": ["string", "null"] },
+        "to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["to"],
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity", "target", "position"],
+  "additionalProperties": false
+}

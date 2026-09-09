@@ -7,9 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 
+	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -22,7 +24,7 @@ const healthTimeout = 3 * time.Second
 func runHealth(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("multiverse health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	url := fs.String("url", "http://"+defaultCoreAddr+"/health", "health endpoint to probe")
+	url := fs.String("url", defaultHealthURL(), "health endpoint to probe")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -39,6 +41,26 @@ func runHealth(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// defaultHealthURL turns the listen address of the process into one a client
+// can dial. MV_CORE_ADDR is a bind address and its shipped value is ":8090"
+// (infrastructure.md §4.2), so a plain concatenation yields "http://:8090/health"
+// — a URL with no host, which no NO_PROXY entry matches and which therefore
+// leaves through HTTP_PROXY instead of reaching the local server. A wildcard
+// bind is dialled on loopback for the same reason: the probe runs beside the
+// process it probes.
+func defaultHealthURL() string {
+	addr := env.CoreAddr.String()
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return "http://" + addr + "/health"
+	}
+	switch host {
+	case "", "0.0.0.0", "::":
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port) + "/health"
 }
 
 func probe(url string) (runtime.Status, error) {

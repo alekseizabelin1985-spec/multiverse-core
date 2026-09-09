@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/entity.created.v1.json",
+  "title": "entity.created payload",
+  "description": "State created an entity (contracts.md C-02). The fact is published after the successful write to object storage.",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "version": { "type": "integer", "const": 1 },
+    "attributes": { "type": "object" },
+    "proposal_id": { "type": "string", "minLength": 1 }
+  },
+  "required": ["entity", "version", "attributes"],
+  "additionalProperties": false
+}

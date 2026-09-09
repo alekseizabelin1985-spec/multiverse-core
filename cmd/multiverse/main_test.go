@@ -182,6 +182,32 @@ func TestRunHealth(t *testing.T) {
 	}
 }
 
+// The default --url must be dialable, not merely a copy of the bind address:
+// the shipped MV_CORE_ADDR is ":8090", and "http://:8090/health" is routed
+// through HTTP_PROXY instead of to the local process (review T-007 Mi-1).
+func TestDefaultHealthURLSubstitutesLoopbackForAWildcardHost(t *testing.T) {
+	tests := map[string]struct {
+		addr string
+		want string
+	}{
+		"empty host":     {":8090", "http://127.0.0.1:8090/health"},
+		"any ipv4":       {"0.0.0.0:8090", "http://127.0.0.1:8090/health"},
+		"any ipv6":       {"[::]:8090", "http://127.0.0.1:8090/health"},
+		"explicit host":  {"127.0.0.1:8090", "http://127.0.0.1:8090/health"},
+		"named host":     {"core:8090", "http://core:8090/health"},
+		"ipv6 host":      {"[::1]:8090", "http://[::1]:8090/health"},
+		"without a port": {"core", "http://core/health"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("MV_CORE_ADDR", tc.addr)
+			if got := defaultHealthURL(); got != tc.want {
+				t.Fatalf("defaultHealthURL() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRunDB(t *testing.T) {
 	tests := map[string]struct {
 		args []string

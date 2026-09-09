@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/dice.rolled.v1.json",
+  "title": "dice.rolled payload",
+  "description": "A roll made by the mechanics library (contracts.md C-03, api-contracts.md 2.3.5). Published before combat.decided; the cause is the player action or round.closed the seed derives from.",
+  "type": "object",
+  "properties": {
+    "roll": {
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "minimum": 0, "description": "Index of the roll inside its cause event; part of the seed." },
+        "formula": { "type": "string", "minLength": 1 },
+        "seed": { "type": "integer", "minimum": 0, "description": "Seed(causeEventID, roll.index) = first 8 bytes of SHA-256, big endian." },
+        "result": { "type": "integer" },
+        "natural": { "type": "integer" }
+      },
+      "required": ["index", "formula", "seed", "result", "natural"],
+      "additionalProperties": false
+    },
+    "purpose": {
+      "type": "string",
+      "enum": ["hit", "damage", "flee", "npc_hit", "npc_damage", "encounter_chance", "background"]
+    },
+    "roller": { "$ref": "_common.json#/$defs/EntityWithName" }
+  },
+  "required": ["roll", "purpose", "roller"],
+  "additionalProperties": false
+}
