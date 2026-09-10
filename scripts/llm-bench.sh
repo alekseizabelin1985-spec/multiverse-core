@@ -47,6 +47,23 @@ set -euo pipefail
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
+# The address of the endpoint is derived in one place for the whole project —
+# the same file scripts/llm-server.sh uses. Before T-404 review #1 this script
+# had its own rule (it trimmed a trailing /v1, it did NOT rewrite
+# host.docker.internal and it did NOT fall back from /health to /v1/models), and
+# on the owner's stand that made `make bench` refuse to run against a server
+# that was answering (review M-1).
+#
+# Its absence is reported as one English line naming the file, not as a shell
+# error about a path (review Mi-3).
+llm_lib="$repo_root/scripts/lib/llm-endpoint.sh"
+if [ ! -f "$llm_lib" ]; then
+  echo "bench: $llm_lib is missing — it holds the only rule that turns MV_LLM_URL into an address, and no script of this project can read the variable without it" >&2
+  exit 2
+fi
+# shellcheck source=scripts/lib/llm-endpoint.sh
+. "$llm_lib"
+
 matrix="$repo_root/ops/metrics/bench-matrix.json"
 prompts="$repo_root/testdata/bench/prompts.jsonl"
 out_dir="$repo_root/ops/metrics"
@@ -635,36 +652,46 @@ for config in "${config_list[@]}"; do
     printf -v "$key" '%s' "$value"
   done <"$tmpdir/config.env"
 
-  url=${!url_env:-}
-  [ -n "$url" ] || die "$url_env is empty; configuration $config expects the endpoint there (see .env.example and ops/metrics/README.md)"
-  url=${url%/}
-  # Both http://host:1234 and http://host:11434/v1 are legal values of the
-  # variable: llama-server serves /v1/... at the root, Ollama's OpenAI layer
-  # lives under /v1. Normalising here keeps .env free of a special case.
-  base=${url%/v1}
+  llm_endpoint_resolve_var "$url_env" ||
+    die "${LLM_EP_ERROR#llm: } (configuration $config expects the endpoint there; see .env.example and ops/metrics/README.md)"
+  # $url is the address as configured (what the report shows), $base is the same
+  # address as reachable from this machine (host.docker.internal rewritten to
+  # 127.0.0.1). Both http://host:1234 and http://host:11434/v1 are legal values
+  # of the variable — llama-server serves /v1/... at the root, Ollama's OpenAI
+  # layer lives under /v1 — and the module trims the trailing /v1 for both.
+  # Both go into the report: `url` as the variable was set and `probe_url` as it
+  # was knocked on. Writing only the probe made two stands incomparable — from
+  # `url=http://127.0.0.1:18993` nobody can tell whether the machine was
+  # configured with the container alias or with loopback (review Mi-6).
+  url=$LLM_EP_RAW
+  base=$LLM_EP_PROBE
 
   cell_n=${n_per_cell:-10}
   [ "$limit" -gt 0 ] && cell_n=$limit
 
   # --- the server has to be there, and loaded (§6.3) --------------------------
-  code=$(curl -s -o "$tmpdir/health.json" -w '%{http_code}' --max-time 5 "$base/health" 2>/dev/null) || code=000
+  # /health belongs to llama.cpp and not to the contract: the module falls back
+  # to /v1/models, the endpoint the platform actually needs, exactly as
+  # scripts/llm-server.sh does. Without that fallback this gate declared the
+  # owner's running server dead, because it answers /health with 404 (M-1).
+  llm_health_probe "$base"
   waited=0
-  while [ "$code" = "503" ] && [ "$waited" -lt 180 ]; do
+  while [ "$LLM_HEALTH_CODE" = "503" ] && [ "$waited" -lt 180 ]; do
     # 503 is "loading the model", a state and not a failure; a 27B on a cold
     # page cache takes tens of seconds even with mmap.
     printf 'bench: %s/health = 503 (model loading), waited %ss\n' "$base" "$waited" >&2
     sleep 5
     waited=$((waited + 5))
-    code=$(curl -s -o "$tmpdir/health.json" -w '%{http_code}' --max-time 5 "$base/health" 2>/dev/null) || code=000
+    llm_health_probe "$base"
   done
-  case "$code" in
+  case "$LLM_HEALTH_CODE" in
   200) : ;;
-  000) die "no answer from $base/health — the LLM process is not running. Start it: make llm-up (config $config expects $url_env=$url)" ;;
+  000) die "no answer from $base — the LLM process is not running. Start it: make llm-up (config $config expects $url_env=$url)" ;;
   503) die "$base/health is still 503 after 180 s — the model has not finished loading; check ops/llm-server.log" ;;
-  *) die "$base/health answered $code — this is not a llama-server / OpenAI-compatible endpoint (config $config, $url_env=$url)" ;;
+  *) die "$base$LLM_HEALTH_VIA answered $LLM_HEALTH_CODE — this is not a llama-server / OpenAI-compatible endpoint (config $config, $url_env=$url)" ;;
   esac
 
-  curl -s -o "$tmpdir/models.json" --max-time 10 "$base/v1/models" >/dev/null 2>&1 || true
+  llm_curl -o "$tmpdir/models.json" --max-time 10 "$base/v1/models" >/dev/null 2>&1 || true
   py models "$tmpdir/models.json" >"$tmpdir/models.txt" || : >"$tmpdir/models.txt"
 
   first_call=0
@@ -676,10 +703,13 @@ for config in "${config_list[@]}"; do
     # the CUDA kernels; folding it into the percentiles would make every run
     # depend on how long ago the server came up.
     first_start=$(now_ms)
-    first_code=$(curl -s -o "$tmpdir/first.json" -w '%{http_code}' --max-time 120 \
+    # llm_curl, not curl: the key travels in a curl config on stdin instead of
+    # the argument list, where every process on the machine can read it (SEC-22,
+    # ADR-009 p. 4), and a key containing a quote or a backslash is escaped
+    # rather than silently mangled (review Mi-3).
+    first_code=$(llm_curl -o "$tmpdir/first.json" -w '%{http_code}' --max-time 120 \
       -X POST "$base/v1/chat/completions" \
       -H 'Content-Type: application/json; charset=utf-8' \
-      ${MV_LLM_API_KEY:+-H "Authorization: Bearer $MV_LLM_API_KEY"} \
       --data-binary "{\"model\":\"$narrative_model\",\"max_tokens\":1,\"stream\":false,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}" 2>/dev/null) || first_code=000
     first_call=$(($(now_ms) - first_start))
     [ "$first_code" = "200" ] || printf 'bench: warm-up call answered %s (first_call_ms is still recorded)\n' "$first_code" >&2
@@ -722,10 +752,9 @@ for config in "${config_list[@]}"; do
       while IFS=$'\t' read -r idx prompt_id text_paths; do
         [ -n "$idx" ] || continue
         start=$(now_ms)
-        http=$(curl -s -o "$tmpdir/resp.json" -w '%{http_code}' --max-time "$timeout" \
+        http=$(llm_curl -o "$tmpdir/resp.json" -w '%{http_code}' --max-time "$timeout" \
           -X POST "$base/v1/chat/completions" \
           -H 'Content-Type: application/json; charset=utf-8' \
-          ${MV_LLM_API_KEY:+-H "Authorization: Bearer $MV_LLM_API_KEY"} \
           --data-binary "@$bodies_dir/body-$idx.json" 2>/dev/null) || http=000
         latency=$(($(now_ms) - start))
 
@@ -798,7 +827,7 @@ for config in "${config_list[@]}"; do
   report="$out_dir/bench-$safe_config-$stamp.json"
   py report "$report" "$requests_csv" "$cells_csv" \
     "config=$config" "provider=$provider" "placement=$placement" \
-    "server_mode=${server_mode:-}" "url=$base" "num_ctx=$num_ctx" \
+    "server_mode=${server_mode:-}" "url=$url" "probe_url=$base" "num_ctx=$num_ctx" \
     "kv_cache=$kv_cache" "llamacpp_build=$build" "vram_used_mb=${vram:-}" \
     "first_call_ms=$first_call" "n_per_cell=$cell_n" "repeats=$repeats" \
     "runs_required=${runs_required:-3}" "started_at=$started_at" \

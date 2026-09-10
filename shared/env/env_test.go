@@ -268,6 +268,7 @@ func TestImageCredentialsAreRequiredInTheManifestButNotForAProcess(t *testing.T)
 
 	withoutTheImageCredentials := MapSource(map[string]string{
 		"MV_MINIO_ACCESS_KEY": "key", "MV_MINIO_SECRET_KEY": "secret",
+		"MV_LLM_URL": "http://127.0.0.1:8888",
 	})
 	if err := Validate(withoutTheImageCredentials); err != nil {
 		t.Fatalf("Validate = %v, want nil: a process must not need the credentials of the image", err)
@@ -364,6 +365,7 @@ func TestValidateRequiredAndEnum(t *testing.T) {
 func TestValidateOllamaBlockIsRequiredOnlyForTheOllamaProvider(t *testing.T) {
 	openaiCompat := MapSource(map[string]string{
 		"MV_LLM_PROVIDER":     "openai_compat",
+		"MV_LLM_URL":          "http://127.0.0.1:8888",
 		"MV_MINIO_ACCESS_KEY": "key",
 		"MV_MINIO_SECRET_KEY": "secret",
 	})
@@ -394,14 +396,16 @@ func TestValidateOllamaBlockIsRequiredOnlyForTheOllamaProvider(t *testing.T) {
 	}
 }
 
-// The required MinIO credentials are the only unconditional requirement of the
-// manifest; a process without them cannot reach the object store at all.
-func TestValidateRealManifestNeedsTheObjectStoreCredentials(t *testing.T) {
+// The unconditional requirements of the manifest: the object store credentials
+// and the LLM address. The credentials cannot be guessed and neither can the
+// address — MV_LLM_URL lost its default in T-404 review #2, because a default
+// meant the platform had an address exactly where the wrapper said it had none.
+func TestValidateRealManifestNeedsTheObjectStoreCredentialsAndTheLLMAddress(t *testing.T) {
 	err := Validate(MapSource(map[string]string{}))
 	if err == nil {
 		t.Fatal("Validate accepts an empty environment")
 	}
-	for _, want := range []string{"MV_MINIO_ACCESS_KEY", "MV_MINIO_SECRET_KEY"} {
+	for _, want := range []string{"MV_MINIO_ACCESS_KEY", "MV_MINIO_SECRET_KEY", "MV_LLM_URL"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Validate error = %q, want it to mention %q", err, want)
 		}
@@ -409,10 +413,30 @@ func TestValidateRealManifestNeedsTheObjectStoreCredentials(t *testing.T) {
 	if strings.Contains(err.Error(), "withheld") == false {
 		t.Fatalf("Validate error = %q, want the credentials reported without their values", err)
 	}
+	// The address is not a secret: an operator who has to fix it must see what
+	// is being complained about.
+	if strings.Contains(err.Error(), "MV_LLM_URL: withheld") {
+		t.Fatalf("Validate error = %q, want MV_LLM_URL reported as a plain variable", err)
+	}
 
-	full := MapSource(map[string]string{"MV_MINIO_ACCESS_KEY": "key", "MV_MINIO_SECRET_KEY": "secret"})
+	full := MapSource(map[string]string{
+		"MV_MINIO_ACCESS_KEY": "key",
+		"MV_MINIO_SECRET_KEY": "secret",
+		"MV_LLM_URL":          "http://127.0.0.1:8888",
+	})
 	if err := Validate(full); err != nil {
-		t.Fatalf("Validate with the credentials set = %v, want nil", err)
+		t.Fatalf("Validate with the credentials and the address set = %v, want nil", err)
+	}
+
+	// A required variable set to an empty value is still empty: the case that
+	// used to differ between the platform and the wrappers.
+	blank := MapSource(map[string]string{
+		"MV_MINIO_ACCESS_KEY": "key",
+		"MV_MINIO_SECRET_KEY": "secret",
+		"MV_LLM_URL":          "",
+	})
+	if err := Validate(blank); err == nil || !strings.Contains(err.Error(), "MV_LLM_URL") {
+		t.Fatalf("Validate with an empty MV_LLM_URL = %v, want it reported", err)
 	}
 }
 

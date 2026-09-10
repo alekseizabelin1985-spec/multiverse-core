@@ -147,7 +147,12 @@ for lineno, line in enumerate(io.open(path, encoding="utf-8"), 1):
         comment = ""
         continue
     if stripped.startswith("#"):
-        comment = stripped
+        # The whole contiguous block, not just its last line: the marker belongs
+        # to the comment above the variable, and which line of that comment
+        # carries it is the author's business. Keeping only the last line made
+        # the marker invisible whenever an explanation followed it, and rule 7
+        # then declared a filled clean machine unfilled (T-404).
+        comment = f"{comment} {stripped}" if comment else stripped
         continue
     key, sep, rest = line.partition("=")
     if not sep:

@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T11:45:00+03:00",
+  "updatedAt": "2026-09-11T15:30:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -316,6 +316,26 @@ window.DEVTEAM_STATE =
           "assignee": "владелец + оркестратор",
           "startedAt": "2026-09-11T10:20:00+03:00",
           "finishedAt": "2026-09-11T11:10:00+03:00",
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-404",
+          "title": "Эксплуатационная обвязка LLM не должна предполагать llama.cpp",
+          "status": "in-progress",
+          "assignee": "devops-engineer",
+          "startedAt": "2026-09-11T12:40:00+03:00",
+          "finishedAt": "2026-09-11T13:20:00+03:00",
+          "reviewIterations": 2,
+          "wave": 1
+        },
+        {
+          "id": "T-405",
+          "title": "Стенд паритета двух реализаций скриптов — в репозиторий и в CI",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1
         }
@@ -1592,6 +1612,46 @@ window.DEVTEAM_STATE =
       "action": "приёмка волны 0",
       "startedAt": "2026-09-11T08:35:00+03:00",
       "finishedAt": "2026-09-11T09:15:00+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-404",
+      "action": "единый источник адреса LLM",
+      "startedAt": "2026-09-11T12:40:00+03:00",
+      "finishedAt": "2026-09-11T13:20:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-404",
+      "action": "ревью единого источника адреса",
+      "startedAt": "2026-09-11T13:20:00+03:00",
+      "finishedAt": "2026-09-11T13:55:00+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-404",
+      "action": "итерация 2: общий модуль вывода адреса",
+      "startedAt": "2026-09-11T13:55:00+03:00",
+      "finishedAt": null
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-404",
+      "action": "итерация 3 по пяти существенным",
+      "startedAt": "2026-09-11T15:30:00+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -3010,6 +3070,78 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "make health строгий = 0: gateway, memory, core и LLM отвечают"
+    },
+    {
+      "at": "2026-09-11T12:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Владелец: провайдером LLM может быть любой совместимый с OpenAI, включая облачные"
+    },
+    {
+      "at": "2026-09-11T12:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-404: обвязка предполагает llama.cpp в пяти местах, среда выполнения уже провайдер-независима"
+    },
+    {
+      "at": "2026-09-11T12:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит 18cf577: три дефекта, найденные только исполнением"
+    },
+    {
+      "at": "2026-09-11T12:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-404: единый источник адреса LLM — порт становится производной от MV_LLM_URL"
+    },
+    {
+      "at": "2026-09-11T13:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-404: адрес LLM теперь читается из одной переменной, обвязка стала провайдер-зависимой"
+    },
+    {
+      "at": "2026-09-11T13:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "MV_LLM_PORT убрана из .env владельца; env check, llm-health и строгий health — код 0"
+    },
+    {
+      "at": "2026-09-11T13:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-404 на независимом ревью: паритет двух скриптов и утечка ключа"
+    },
+    {
+      "at": "2026-09-11T13:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-404: вернуть — единой стала переменная, а не правило; правило продублировано в четырёх скриптах"
+    },
+    {
+      "at": "2026-09-11T13:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Владелец: принимать обе формы адреса — дописывать /v1 только если его нет"
+    },
+    {
+      "at": "2026-09-11T15:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-404 ревью #2: вернуть — свой стенд на 69 входов нашёл шесть расхождений, которых не было у автора"
+    },
+    {
+      "at": "2026-09-11T15:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "ПРОИСШЕСТВИЕ: агент остановил живой LLM владельца, опознав процесс по имени. Владелец перезапустил"
+    },
+    {
+      "at": "2026-09-11T15:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-404 итерация 3: доверие к номеру процесса, сравнение строк, мёртвая диагностика, ключ, обязательный адрес"
     }
   ],
   "blockers": [],

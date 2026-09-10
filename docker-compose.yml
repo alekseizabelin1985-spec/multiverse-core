@@ -257,7 +257,16 @@ services:
       MV_GM_PATH: ${MV_GM_PATH:-agent}
       MV_LAWS_BREACH_PHASE: ${MV_LAWS_BREACH_PHASE:-false}
       MV_LLM_PROVIDER: ${MV_LLM_PROVIDER:-openai_compat}
-      MV_LLM_URL: ${MV_LLM_URL:-http://host.docker.internal:1234}
+      # No default here, and the reason is the defect this task exists for: a
+      # default made compose a third source of truth for one address. The
+      # platform and the tooling now agree that an absent MV_LLM_URL means "no
+      # address configured"; a default of :1234 would hand containers an address
+      # nobody else believes in, and the stack would look configured while the
+      # LLM was never reachable (T-404). The variable is marked [required] in
+      # .env.example, so a clean machine fills it before the first `make up`.
+      # Quoted: the message carries a colon, and an unquoted scalar would make
+      # YAML read it as a nested mapping.
+      MV_LLM_URL: "${MV_LLM_URL:?MV_LLM_URL is required (T-404) - put the address of your LLM in .env}"
       MV_LLM_API_KEY: ${MV_LLM_API_KEY:-}
       MV_LLM_NUM_CTX: ${MV_LLM_NUM_CTX:-8192}
       MV_LLM_STORE_PROMPTS: ${MV_LLM_STORE_PROMPTS:-false}

@@ -101,8 +101,29 @@ var (
 	LLMProvider = Declare("MV_LLM_PROVIDER", "openai_compat",
 		"LLM provider implementation (C-15 v1.1); openai in the cloud is this one with another URL and key",
 		OneOf("openai_compat", "ollama", "anthropic", "recorded", "fake"))
-	LLMURL = Declare("MV_LLM_URL", "http://127.0.0.1:1234",
-		"LLM endpoint; from a container http://host.docker.internal:1234")
+	// The value may be written with or without a trailing /v1 — vendors hand
+	// out the address both ways, and scripts/lib/llm-endpoint.{sh,psm1} reduce
+	// it to the base address themselves and say so, rather than sending the
+	// operator to edit the value by hand (owner's decision, journal
+	// 2026-09-11). The path under the base is appended by whoever calls, so a
+	// value carrying /v1 must not be appended to twice.
+	//
+	// REQUIRED, with no default. It used to declare http://127.0.0.1:1234, and
+	// that made the one case the task exists to close — the line deleted from
+	// .env — have TWO answers: the platform silently talked to 1234 while
+	// make llm-health said there was no address (T-404 review #2 M-4,
+	// orchestrator decision). An LLM address cannot be guessed; a quiet default
+	// pointing at a port anything on this machine may hold is exactly the trap
+	// the task started from.
+	LLMURL = Declare("MV_LLM_URL", "",
+		"LLM endpoint, the base address of an OpenAI-compatible server; a "+
+			"trailing /v1 is accepted and trimmed. From a container "+
+			"http://host.docker.internal:<port>. Required and without a "+
+			"default: the single source of truth for the address AND for the "+
+			"rule that reads it — scripts/lib/llm-endpoint.* derive the port "+
+			"llama-server binds, the address make llm-health probes and the "+
+			"address make bench measures from this value, and never from a "+
+			"second variable (T-404)", Required())
 	LLMAPIKey = Declare("MV_LLM_API_KEY", "",
 		"LLM key; empty for the local llama-server, set only for a cloud endpoint", Secret())
 	LLMNumCtx = Declare("MV_LLM_NUM_CTX", "8192",
@@ -135,10 +156,17 @@ var (
 		"model directory for the router mode of llama-server (--models-dir, without -m)", Tooling())
 	LLMSlotSavePath = Declare("MV_LLM_SLOT_SAVE_PATH", "",
 		"directory llama-server saves slot state to", Tooling())
+	// LLMHost is not a duplicate of the host in MV_LLM_URL: one says what the
+	// local server listens on, the other says where a client knocks, and they
+	// are allowed to differ (a container knocks at host.docker.internal while
+	// the server binds loopback). The port was the duplicate and is gone: it is
+	// read out of MV_LLM_URL (T-404).
 	LLMHost = Declare("MV_LLM_HOST", "127.0.0.1",
-		"interface llama-server binds; never published outside the host (SEC-15)", Tooling())
-	LLMPort = Declare("MV_LLM_PORT", "1234",
-		"port llama-server binds", Tooling(), IsInt())
+		"interface llama-server binds; loopback only, never published outside the "+
+			"host (SEC-15) — a non-loopback value makes make llm-up refuse to "+
+			"start, because llama-server has no authentication in front of it. "+
+			"The port it binds is not declared here — it comes from MV_LLM_URL",
+		Tooling())
 	LLMSlots = Declare("MV_LLM_SLOTS", "1",
 		"--parallel of llama-server", Tooling(), IsInt())
 	LLMNGL = Declare("MV_LLM_NGL", "99",
@@ -195,4 +223,15 @@ func init() {
 		"removed in infrastructure.md v0.3: use MV_LLM_URL and MV_LLM_API_KEY with MV_LLM_PROVIDER=openai_compat")
 	DeclareDeprecated("MV_DEEPSEEK_API_KEY",
 		"removed in infrastructure.md v0.3: use MV_LLM_URL and MV_LLM_API_KEY with MV_LLM_PROVIDER=openai_compat")
+
+	// The address had two sources of truth: the platform read MV_LLM_URL while
+	// the scripts assembled their own from MV_LLM_HOST and MV_LLM_PORT. They
+	// drifted on the owner's stand — the server listened on 8888, MV_LLM_URL
+	// said 8888, MV_LLM_PORT still said 1234, and make llm-health reported a
+	// dead LLM while it was serving. The port is now derived from MV_LLM_URL;
+	// the name stays declared retired so that an operator whose .env still
+	// carries it is told to delete the line instead of being ignored (T-404).
+	DeclareDeprecated("MV_LLM_PORT",
+		"the port is part of MV_LLM_URL, which is the only source of the address (T-404); "+
+			"MV_LLM_HOST stays and means the interface the local server binds")
 }

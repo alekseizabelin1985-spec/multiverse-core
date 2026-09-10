@@ -58,7 +58,9 @@ param(
   [string]   $Matrix = 'ops/metrics/bench-matrix.json',
   [string]   $Prompts = 'testdata/bench/prompts.jsonl',
   [string]   $OutDir = 'ops/metrics',
-  [int]      $NumCtx = [int]($env:MV_LLM_NUM_CTX ?? 8192),
+  # Filled below from Get-LlmEnv: `??` does not react to an empty string, so
+  # MV_LLM_NUM_CTX= used to arrive here as 0 (review Mi-9).
+  [int]      $NumCtx = 0,
   [ValidateSet('f16', 'q8_0')]
   [string]   $KvCache = 'f16',
   [string]   $Placement = 'native',
@@ -70,6 +72,28 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
+
+# The address of the endpoint is derived in one place for the whole project -
+# the same module scripts/llm-server.ps1 uses. Before T-404 review #1 this
+# script had its own rule (it trimmed a trailing /v1, it did NOT rewrite
+# host.docker.internal and it did NOT fall back from /health to /v1/models), and
+# on the owner's stand that made `make bench` refuse to run against a server
+# that was answering (review M-1).
+#
+# Its absence is reported as one English line naming the file, not as a
+# localised .NET error record — the console settings that would have made that
+# record readable live INSIDE the module (review Mi-3).
+$llmModule = Join-Path $PSScriptRoot 'lib/LlmEndpoint.psm1'
+if (-not (Test-Path $llmModule)) {
+  # The two console settings of the module, repeated here and only here: this is
+  # the one path on which the module is not loaded, so without them the em dash
+  # of the line below and a Cyrillic path both come out as mojibake.
+  [Threading.Thread]::CurrentThread.CurrentUICulture = 'en-US'
+  try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+  [Console]::Error.WriteLine("bench: $llmModule is missing — it holds the only rule that turns MV_LLM_URL into an address, and no script of this project can read the variable without it")
+  exit 2
+}
+Import-Module $llmModule -Force
 
 function Resolve-RepoPath([string]$Path) {
   if ([IO.Path]::IsPathRooted($Path)) { return $Path }
@@ -83,6 +107,8 @@ function Stop-Bench([string]$Message) {
   Write-Host "bench: $Message" -ForegroundColor Red
   exit 2
 }
+
+if (-not $PSBoundParameters.ContainsKey('NumCtx')) { $NumCtx = [int](Get-LlmEnv 'MV_LLM_NUM_CTX' '8192') }
 
 $matrixPath = Resolve-RepoPath $Matrix
 $promptsPath = Resolve-RepoPath $Prompts
@@ -190,8 +216,9 @@ function Get-VramUsedMb {
   }
 }
 
-$headers = @{}
-if ($env:MV_LLM_API_KEY) { $headers['Authorization'] = "Bearer $env:MV_LLM_API_KEY" }
+# One rule for the key, shared with scripts/llm-server.ps1: sent only when there
+# is one, never printed (ADR-009 p. 4).
+$headers = Get-LlmHeaders
 
 New-Item -ItemType Directory -Force -Path $outPath | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
@@ -203,7 +230,10 @@ $csvPath = Join-Path $outPath "bench-$stamp.csv"
 # without them two rows of the same cell are indistinguishable. Appending keeps
 # every reader of the documented prefix working.
 $csvHeader = 'config,provider,placement,model,phase,num_ctx,kv_cache,n,first_call_ms,p50_ms,p95_ms,prompt_tok,completion_tok,cached_tok,tps,valid_json_ratio,cjk_ratio,latin_ratio,lang_pass_ratio,vram_used_mb,llamacpp_build,verdict,repeat,started_at'
-$csvHeader | Set-Content -Path $csvPath -Encoding utf8
+# LF, not CRLF: the two implementations are supposed to write the SAME file,
+# and Set-Content on Windows ends every line with CR LF while the bash twin
+# ends it with LF. A byte comparison of two stands failed on that alone.
+[IO.File]::WriteAllText($csvPath, "$csvHeader`n", [Text.UTF8Encoding]::new($false))
 
 $build = Get-LlamaBuild
 Write-Host "bench: build $build, prompts $promptsPath, matrix $matrixPath"
@@ -246,46 +276,51 @@ foreach ($configName in $Configs) {
   $cfg = $property.Value
   $serverMode = [string](Get-Prop $cfg 'server_mode' '')
   $urlEnv = $cfg.url_env
-  $url = [Environment]::GetEnvironmentVariable($urlEnv)
-  if (-not $url) {
-    Stop-Bench "$urlEnv is empty; configuration $configName expects the endpoint there (see .env.example and ops/metrics/README.md)"
+  $ep = Resolve-LlmEndpoint -Var $urlEnv
+  if ($ep.Error) {
+    Stop-Bench "$($ep.Error -replace '^llm: ', '') (configuration $configName expects the endpoint there; see .env.example and ops/metrics/README.md)"
   }
-  # Both http://host:1234 and http://host:11434/v1 are legal values: llama-server
-  # serves /v1/... at the root, the OpenAI layer of Ollama lives under /v1.
-  $base = $url.TrimEnd('/')
-  if ($base.EndsWith('/v1')) { $base = $base.Substring(0, $base.Length - 3) }
+  # $url is the address as configured (what the report shows), $base is the same
+  # address as reachable from this machine (host.docker.internal rewritten to
+  # 127.0.0.1). Both http://host:1234 and http://host:11434/v1 are legal values
+  # of the variable - llama-server serves /v1/... at the root, the OpenAI layer
+  # of Ollama lives under /v1 - and the module trims the trailing /v1 for both.
+  # Both go into the report: `url` as the variable was set and `probe_url` as it
+  # was knocked on. Writing only the probe made two stands incomparable - from
+  # `url=http://127.0.0.1:18993` nobody can tell whether the machine was
+  # configured with the container alias or with loopback (review Mi-6).
+  $url = $ep.Raw
+  $base = $ep.Probe
 
   # --- the server has to be there, and loaded (§6.3) --------------------------
-  $code = 0
+  # /health belongs to llama.cpp and not to the contract: the module falls back
+  # to /v1/models, the endpoint the platform actually needs, exactly as
+  # scripts/llm-server.ps1 does. Without that fallback this gate declared the
+  # owner's running server dead, because it answers /health with 404 (M-1).
+  $health = Invoke-LlmHealthProbe $base
   $waited = 0
-  while ($true) {
-    try {
-      $health = Invoke-WebRequest -Uri "$base/health" -TimeoutSec 5 -SkipHttpErrorCheck
-      $code = [int]$health.StatusCode
-    } catch {
-      $code = 0
-    }
+  while ($health.Code -eq 503 -and $waited -lt 180) {
     # 503 is "loading the model", a state and not a failure: a 27B on a cold
     # page cache takes tens of seconds even with mmap.
-    if ($code -ne 503 -or $waited -ge 180) { break }
     Write-Host "bench: $base/health = 503 (model loading), waited ${waited}s"
     Start-Sleep -Seconds 5
     $waited += 5
+    $health = Invoke-LlmHealthProbe $base
   }
   # if/elseif rather than switch: `break` inside a switch that sits inside a
   # loop is a well-known trap, and the difference would only show up on a stand
   # with several configurations.
-  if ($code -eq 0) {
-    Stop-Bench "no answer from $base/health — the LLM process is not running. Start it: make llm-up (config $configName expects $urlEnv=$url)"
-  } elseif ($code -eq 503) {
+  if ($health.Code -eq 0) {
+    Stop-Bench "no answer from $base — the LLM process is not running. Start it: make llm-up (config $configName expects $urlEnv=$url)"
+  } elseif ($health.Code -eq 503) {
     Stop-Bench "$base/health is still 503 after 180 s — the model has not finished loading; check ops/llm-server.log"
-  } elseif ($code -ne 200) {
-    Stop-Bench "$base/health answered $code — this is not a llama-server / OpenAI-compatible endpoint (config $configName, $urlEnv=$url)"
+  } elseif ($health.Code -ne 200) {
+    Stop-Bench "$base$($health.Via) answered $($health.Code) — this is not a llama-server / OpenAI-compatible endpoint (config $configName, $urlEnv=$url)"
   }
 
   $models = @()
   try {
-    $models = @((Invoke-RestMethod -Uri "$base/v1/models" -Headers $headers -TimeoutSec 10).data.id)
+    $models = @((Invoke-RestMethod -Uri "$base/v1/models" -Headers $headers -TimeoutSec 10 -NoProxy -SkipHeaderValidation).data.id)
   } catch {
     # An endpoint without /v1/models is measurable; it only costs the check
     # below, which is a convenience and not a requirement.
@@ -311,14 +346,25 @@ foreach ($configName in $Configs) {
       messages             = @(@{ role = 'user'; content = 'ping' })
     } | ConvertTo-Json -Depth 10
     $watch = [Diagnostics.Stopwatch]::StartNew()
+    # The STATUS CODE is judged, not just the exception: -SkipHttpErrorCheck
+    # means a 404 from a server with another set of endpoints never reaches the
+    # catch, so this call used to stay silent where the bash twin reported the
+    # code (review Mi-5 — the same defect as Mi-7 of review #1, which was fixed
+    # in llm-server.* and not carried into the bench). Same sentence as the twin.
+    $warmCode = '000'
     try {
-      Invoke-WebRequest -Uri "$base/v1/chat/completions" -Method Post -Headers $headers `
+      $warmResponse = Invoke-WebRequest -Uri "$base/v1/chat/completions" -Method Post -Headers $headers `
         -ContentType 'application/json; charset=utf-8' `
-        -Body ([Text.Encoding]::UTF8.GetBytes($warmBody)) -TimeoutSec 120 -SkipHttpErrorCheck | Out-Null
+        -Body ([Text.Encoding]::UTF8.GetBytes($warmBody)) -TimeoutSec 120 -SkipHttpErrorCheck `
+        -NoProxy -SkipHeaderValidation
+      $warmCode = [string][int]$warmResponse.StatusCode
     } catch {
-      Write-Host 'bench: warm-up call failed (first_call_ms is still recorded)'
+      $warmCode = '000'
     }
     $firstCall = [int]$watch.ElapsedMilliseconds
+    if ($warmCode -ne '200') {
+      Write-Host "bench: warm-up call answered $warmCode (first_call_ms is still recorded)"
+    }
 
     foreach ($phase in @('tick', 'phase2', 'phase2-group3')) {
       $model = if ($phase -eq 'tick') { $cfg.tick } else { $cfg.narrative }
@@ -330,7 +376,12 @@ foreach ($configName in $Configs) {
       # mode, wrong pull), not a measurement — skipping loudly beats measuring
       # whatever the server substitutes.
       if ($models.Count -gt 0 -and $models -notcontains $model) {
-        Write-Host "bench: model $model is not in $base/v1/models — phase $phase skipped (server mode $serverMode?)"
+        # ${serverMode}, not $serverMode: PowerShell reads a question mark as
+        # part of a variable name, so this line used to THROW under Set-StrictMode
+        # ("the variable '$serverMode?' has not been set") on the one path where
+        # it is printed — a skipped phase ended the run with a stack trace and
+        # exit 1, while the bash twin printed the sentence and exited 2.
+        Write-Host "bench: model $model is not in $base/v1/models — phase $phase skipped (server mode ${serverMode}?)"
         continue
       }
 
@@ -378,7 +429,8 @@ foreach ($configName in $Configs) {
         try {
           $response = Invoke-WebRequest -Uri "$base/v1/chat/completions" -Method Post -Headers $headers `
             -ContentType 'application/json; charset=utf-8' `
-            -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec $timeout -SkipHttpErrorCheck
+            -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec $timeout -SkipHttpErrorCheck `
+            -NoProxy -SkipHeaderValidation
           $status = [int]$response.StatusCode
           if ($status -eq 200) { $answer = $response.Content | ConvertFrom-Json }
         } catch {
@@ -498,7 +550,7 @@ foreach ($configName in $Configs) {
         $validJsonRatio, $cjkRatio, $latinRatio, $langPassRatio, $vram, $build,
         $verdict, $repeat, $startedAt
       ) -join ','
-      $row | Add-Content -Path $csvPath -Encoding utf8
+      [IO.File]::AppendAllText($csvPath, "$row`n", [Text.UTF8Encoding]::new($false))
       $cellLog.Add([ordered]@{
           config           = $configName
           provider         = $cfg.provider
@@ -554,7 +606,8 @@ foreach ($configName in $Configs) {
       provider       = $cfg.provider
       placement      = $Placement
       server_mode    = $serverMode
-      url            = $base
+      url            = $url
+      probe_url      = $base
       num_ctx        = $NumCtx
       kv_cache       = $KvCache
       llamacpp_build = $build
