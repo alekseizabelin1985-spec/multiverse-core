@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T09:15:00+03:00",
+  "updatedAt": "2026-09-11T11:45:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -312,10 +312,10 @@ window.DEVTEAM_STATE =
         {
           "id": "T-403",
           "title": "Стендовый прогон команд README на чистой машине",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
+          "status": "done",
+          "assignee": "владелец + оркестратор",
+          "startedAt": "2026-09-11T10:20:00+03:00",
+          "finishedAt": "2026-09-11T11:10:00+03:00",
           "reviewIterations": 0,
           "wave": 1
         }
@@ -2950,14 +2950,69 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "tech-lead",
       "text": "Волну 1 можно начинать сейчас: бридж-блок не зависит ни от make, ни от живого стенда"
-    }
-  ],
-  "blockers": [
+    },
     {
-      "at": "2026-09-11T06:05:00+03:00",
-      "text": "GNU make не установлен на машине владельца: цели Makefile не выполнялись ни разу, CI их тоже не вызывает. Нужен прогон владельцем: make -n up PROFILES=bot, make -n up PROFILES=memory,legacy, make compose-lint, затем make up на чистой машине."
+      "at": "2026-09-11T09:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит волны 0: 69d1aed, 108 файлов, хуки пройдены, дерево после коммита зелёное"
+    },
+    {
+      "at": "2026-09-11T10:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "make установлен: три цели прогнаны, логика T-397 подтверждена исполнением"
+    },
+    {
+      "at": "2026-09-11T10:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Дефект: цель test жёстко требовала детектор гонок вопреки решению ОВ-5 — make ci падал до первого теста"
+    },
+    {
+      "at": "2026-09-11T10:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "make ci зелёный. Остался make up: в .env пусты пять из шести обязательных переменных"
+    },
+    {
+      "at": "2026-09-11T11:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "make up = 0: стек поднят, три контекста отвечают ok, LLM даёт предупреждение и не роняет запуск"
+    },
+    {
+      "at": "2026-09-11T11:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Три дефекта найдены только исполнением: -race без cgo, ложный FAIL ядра из-за подмены путей, нечитаемое предупреждение"
+    },
+    {
+      "at": "2026-09-11T11:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-403 закрыт: критерии готовности эпика по make ci и make up закрыты"
+    },
+    {
+      "at": "2026-09-11T11:45:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "LLM на 8888: у сервера нет /health — проверка переведена на точку, названную контрактом"
+    },
+    {
+      "at": "2026-09-11T11:45:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Путь контейнер → LLM проверен с ключом платформы: полный список моделей"
+    },
+    {
+      "at": "2026-09-11T11:45:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "make health строгий = 0: gateway, memory, core и LLM отвечают"
     }
   ],
+  "blockers": [],
   "risks": [
     {
       "id": "R-01",

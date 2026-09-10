@@ -75,10 +75,30 @@ function Invoke-Health {
   # code is returned rather than thrown.
   try {
     $r = Invoke-WebRequest -Uri "$baseUrl/health" -Method Get -TimeoutSec 5 -SkipHttpErrorCheck
-    return [int]$r.StatusCode
+    $code = [int]$r.StatusCode
   } catch {
     return 0
   }
+
+  # /health belongs to llama.cpp, not to the contract. What the platform
+  # actually depends on is the OpenAI-compatible surface (ADR-005), and a
+  # server can serve that without /health: measured on the owner's machine,
+  # a running server answered /props and /v1/models with 200 and /health with
+  # 404, so the stack was reported down while it was up. A 404 therefore falls
+  # back to the endpoint the contract names; anything else keeps its own
+  # meaning, and 503 still means "the model is still loading" (T-403).
+  if ($code -eq 404) {
+    try {
+      $m = Invoke-WebRequest -Uri "$baseUrl/v1/models" -Method Get -TimeoutSec 5 -SkipHttpErrorCheck
+      if ([int]$m.StatusCode -eq 200) {
+        $script:healthVia = '/v1/models'
+        return 200
+      }
+    } catch {
+      return 404
+    }
+  }
+  return $code
 }
 
 function Get-PinnedBuild {
@@ -107,9 +127,10 @@ switch ($Action) {
   }
 
   'health' {
+    $script:healthVia = '/health'
     $code = Invoke-Health
     switch ($code) {
-      200 { Write-Host "llm: $baseUrl/health = 200 ok" }
+      200 { Write-Host "llm: $baseUrl$script:healthVia = 200 ok$(if ($script:healthVia -ne '/health') { ' (this server has no /health; judged by the endpoint the contract needs)' })" }
       503 { Write-Host "llm: $baseUrl/health = 503 loading (the model is still being read)" }
       0 { Write-Host "llm: $baseUrl/health unreachable — the process is not running (make llm-up)" }
       default { Write-Host "llm: $baseUrl/health = $code" }

@@ -133,9 +133,19 @@ build: ## Build every binary of the platform into bin/
 lint: ## golangci-lint over the module
 	@golangci-lint run
 
+# ОВ-5 (ADR-012): the race detector runs in CI on Linux, and locally the target
+# runs without it. It is not a preference — -race needs cgo and a C toolchain,
+# and on a machine without one the flag does not weaken the run, it aborts the
+# whole target before a single test executes ("-race requires cgo"). Silently
+# dropping it would be worse than the flag: the line below says out loud which
+# of the two runs happened, so nobody reads a green local run as a race-checked
+# one.
+RACE := $(shell go env CGO_ENABLED 2>/dev/null | grep -q '^1$$' && command -v "$$(go env CC 2>/dev/null)" >/dev/null 2>&1 && echo -race)
+
 .PHONY: test
-test: ## Unit tests: short, race, no network
-	@go test -short -race -count=1 -coverprofile=coverage.out ./...
+test: ## Unit tests: short, no network; -race only where cgo is available (ОВ-5)
+	@$(if $(RACE),echo "test: with the race detector",echo "test: WITHOUT the race detector (no cgo toolchain); CI runs it on Linux — ОВ-5")
+	@go test -short $(RACE) -count=1 -coverprofile=coverage.out ./...
 	# The floor CI applies (job `unit`); packages that do not exist yet are a
 	# warning, not a failure (ADR-010 p. 5). Through bash and not as a program:
 	# the executable bit lives in the tree, and a script that loses it fails
@@ -278,7 +288,14 @@ health: ## /health of every process plus the LLM and the age of the backup
 	done
 	# The admin port of core is deliberately not published (T-14): probe it
 	# from inside its own container.
-	if $(COMPOSE) exec -T core /multiverse health --url http://127.0.0.1:8090/health >/dev/null 2>&1; then
+	#
+	# MSYS_NO_PATHCONV=1 is not decoration. Under Git Bash the argument
+	# /multiverse is an absolute path inside the container, but MSYS rewrites it
+	# to a Windows path before docker ever sees it, and the probe dies with
+	# `stat C:/Program Files/Git/multiverse: no such file`. The service is fine;
+	# only the probe is broken, so `make up` reported FAIL on a healthy core.
+	# The variable is unknown to Linux shells and ignored there (T-403).
+	if MSYS_NO_PATHCONV=1 $(COMPOSE) exec -T core /multiverse health --url http://127.0.0.1:8090/health >/dev/null 2>&1; then
 		printf '%-16s ok\n' core
 	else
 		printf '%-16s FAIL\n' core
@@ -291,7 +308,12 @@ health: ## /health of every process plus the LLM and the age of the backup
 			# §6.3: an unreachable LLM degrades the narrative, it does not fail
 			# the stack, so `make up` stays at zero. The wording is the one the
 			# design prescribes.
-			echo "warning: LLM недоступен, нарратив деградирует (FR-080); подними процесс: make llm-up" >&2
+			# In English, and not because the design prescribed the Russian
+			# wording — it did. The Windows console renders the UTF-8 of this
+			# file as CP1251, so the operator saw mojibake exactly where the
+			# message mattered. The Russian wording lives in the runbook, where
+			# it renders (T-403).
+			echo "warning: the LLM is unreachable, the narrative degrades (FR-080); start it with: make llm-up" >&2
 		fi
 	fi
 	latest=$$(ls -t "$(BACKUP_DIR)"/minio-*.tgz 2>/dev/null | head -n 1 || true)
