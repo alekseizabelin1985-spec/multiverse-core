@@ -1,291 +1,251 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Инструкции для Claude Code (claude.ai/code) при работе с этим репозиторием.
 
-## Project Overview
+## Обзор проекта
 
-**Multiverse-Core** is a sophisticated event-driven distributed system for managing complex virtual worlds and narratives. Built with Go 1.25, it combines Redpanda (Kafka-compatible) for event streaming, ChromaDB for vector search, Neo4j for graph knowledge, MinIO for object storage, and Qwen3 AI for generative narrative.
+**Multiverse-Core** — событийная платформа «живых миров» на Go 1.26: единый модуль
+(`module multiverse-core.io`, `go.work` не используется), один бинарник платформы
+`cmd/multiverse` и оператор-CLI `cmd/mvctl`. Шина — Redpanda (Kafka API); объектное
+хранилище — MinIO (собственная сборка из исходников); опционально — Qdrant + Neo4j
+(память) и локальный LLM (`llama-server`/Ollama) для нарратива.
 
-**Key Philosophy**: Worlds are not programmed but born, evolving organically through player actions while maintaining internal consistency.
+**Ключевой принцип** (ADR-001, NFR-075): число процессов — параметр деплоя, а не
+архитектуры. Контексты платформы (`state`, `mechanics`, `swarm`, `llm`, `laws`,
+`gateway`, `memory`) — пакеты одного модуля с общим интерфейсом
+`runtime.Context{Start, Stop, Health}`; какие из них подняты в конкретном процессе,
+решает флаг `--contexts` у `cmd/multiverse`, а не отдельная сборка на сервис.
 
-## Architecture
+**Статус кода**: репозиторий проходит переход на эту раскладку (`EPIC-001
+«Фундамент»`, `Docs/dev-team/epics/EPIC-001-foundation/`). На данный момент
+`state/mechanics/swarm/llm/laws/gateway/memory` зарегистрированы как заглушки
+(`cmd/multiverse/contexts.go`) и отвечают `/health: ok`, не реализуя домен —
+доменные пакеты `internal/state`, `internal/swarm`, `internal/gateway` и т. д.
+появляются по мере выполнения своих эпиков (EPIC-002…EPIC-005). Реализован пока
+только `internal/mechanics` (типы механики, `Load` правил, RNG — без `Resolve`).
 
-### High-Level Structure
+## Архитектура
+
+### Карта каталогов
 
 ```
 multiverse-core/
-├── go.work                    # Go workspace (15 services + shared)
-├── services/                  # Individual microservices
-│   ├── entity-manager/        # Hierarchical entities with history
-│   ├── narrative-orchestrator/ # Living narratives (GM)
-│   ├── world-generator/       # World/region/ontology generation
-│   └── ... (12 more services)
-├── shared/                    # Shared Go packages
-│   ├── config/                # Configuration management
-│   ├── entity/                # Entity structure
-│   ├── eventbus/              # Kafka/Redpanda client
-│   ├── intent/                # Intent recognition
-│   ├── minio/                 # MinIO client
-│   ├── oracle/                # Oracle HTTP client
-│   └── ... (5 more packages)
-├── Docs/                      # Documentation
-├── configs/                   # Service YAML configs
-├── docker-compose.yml         # Full stack orchestration
-└── Makefile                   # Build/test/run commands
+├── go.mod                     # module multiverse-core.io, go 1.26 (без go.work)
+├── cmd/
+│   ├── multiverse/             # бинарник платформы: serve (--contexts/--mode/--bus/--recording),
+│   │                            # health --url, db backup|check
+│   └── mvctl/                  # CLI оператора: contracts, env, storage, privacy, version (реализованы);
+│                                # world, blueprint, laws, record, golden, llm, memory, report, trace
+│                                # зарезервированы под будущие эпики (cmd/mvctl/main.go — реестр)
+├── internal/
+│   └── mechanics/              # типы механики C-03, Load(rules/*.yaml), формулы, RNG
+├── shared/                     # общий код единого модуля (не отдельные Go-модули)
+│   ├── eventbus/                # конверт события (Meta, World, Scope), Bus/Journal, DLQ, kafka
+│   ├── jsonpath/                 # универсальный доступ по dot-path к map[string]any
+│   ├── contracts/                # реестр типов событий, JSON Schema 2020-12, OwnershipRules
+│   ├── entity/                   # модель сущности v2 (Op/ApplyOps/StateHash/History)
+│   ├── objstore/                 # интерфейс объектного хранилища (minio + in-memory)
+│   ├── env/                      # реестр переменных окружения (префикс MV_)
+│   ├── logging/                  # slog с обязательными полями, редакция секретов
+│   ├── runtime/                  # HTTP-сервер процесса, Context{Start/Stop/Health}
+│   ├── clock/                    # Clock/Timers (реальные и управляемые для тестов)
+│   ├── agent/                    # каркас роя агентов GM (типы, парсер MD-блупринтов);
+│   │                              # целевой рантайм — internal/swarm (EPIC-003)
+│   └── testkit/                  # membus, contract-тест шины, фейки для тестов и e2e
+│       ├── membus/, contract/     # in-memory Bus/Journal + contract-тест против kafka
+│       ├── state/, mechanics/     # FakeState, FixedMechanics (заглушки до EPIC-002)
+│       ├── gateway/, swarm/       # Harness, FakeNarrator (заглушки до EPIC-003/004)
+│       └── containers.go, versions.go
+├── schemas/events/              # JSON-схемы событий — источник для shared/contracts
+├── rules/dark-forest.yaml        # детерминированная механика (Load, формулы, статы)
+├── testdata/fixtures/            # фикстуры мира для mvctl world init (EPIC-002) и e2e
+├── build/                        # Dockerfile платформы, legacy.Dockerfile, minio.Dockerfile,
+│                                  # minio-init.sh, redpanda-init.sh, versions.env
+├── docker-compose.yml             # профили: (default) / memory / gpu / dev
+├── docker-compose.bot.yml         # профиль bot; подключает Makefile по PROFILES=...
+├── docker-compose.legacy.yml      # профиль legacy; подключает Makefile по PROFILES=...
+├── Makefile                       # единая точка входа оператора (`make help`)
+└── services/                      # код вне единого модуля (свои go.mod) — см. ниже
+    └── _archive/                  # архив выведенного из сборки кода (git mv, не удаление)
 ```
 
-### Infrastructure Stack
+### Статус кода в `services/`
 
-| Component | Purpose |
-|-----------|---------|
-| **Redpanda** | Event streaming (9 topics including player_events, world_events, narrative_output) |
-| **MinIO** | Object storage (entities, snapshots, schemas) |
-| **ChromaDB** | Vector database for semantic memory |
-| **Neo4j** | Graph database for relationships |
-| **TimescaleDB** | Time-series metrics |
-| **Ollama + Qwen3** | AI model for narrative generation |
+`services/*` — отдельные Go-модули (собственный `go.mod` в каждом), поэтому
+`go build ./...` из корня их не видит. Подробности и обоснование по каждой строке —
+[`services/_archive/README.md`](services/_archive/README.md).
 
-### Event Bus Topics
+| Статус | Каталоги | Смысл |
+|---|---|---|
+| Источник переписывания | `entity-manager`, `rule-engine`, `game-service` | референс при переносе на `internal/state`/`internal/mechanics`/`internal/gateway`; после переноса — в архив |
+| Legacy (профиль compose `legacy`) | `narrative-orchestrator`, `semantic-memory` | работают as-is под флагом `MV_GM_PATH=legacy`, пока рой GM не заменит нарратив (EPIC-003 I2) |
+| Заморожен (`FROZEN.md` в каталоге) | `world-generator`, `universe-genesis-oracle`, `ontological-archivist`, `cultivation-module`, `plan-manager`, `city-governor`, `entity-actor`, `evolution-watcher` | вне MVP-1; возврат — EPIC-006…EPIC-010 |
+| Архив (`services/_archive/**`) | `ban-of-world`, `reality-monitor`, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}` и др. | функциональность заменена (`internal/mechanics`, `shared/objstore`, `shared/env`, законы мира); ничего не удалено, история — `git log --follow` |
 
-- `player_events` - Player actions
-- `world_events` - World state changes
-- `game_events` - Game mechanics
-- `system_events` - System operations
-- `scope_management` - Scope lifecycle
-- `narrative_output` - Narrative results
+### Инфраструктура
 
-### Core Services (15 total)
+| Компонент | Назначение |
+|---|---|
+| **Redpanda** | шина событий (Kafka API); топики платформы — `shared/eventbus/topics.go` |
+| **MinIO** | объектное хранилище состояния/снапшотов; собственный образ (`build/minio.Dockerfile`, ADR-021) |
+| **Qdrant** | векторный поиск (профиль `memory`) — заменяет ChromaDB в целевой архитектуре |
+| **Neo4j** | графовая память (профиль `memory`) |
+| **llama-server (llama.cpp)** | основной LLM-рантайм — нативный процесс вне compose (`make llm-up`), провайдер `openai_compat` |
+| **Ollama** | опциональный второй LLM-рантайм (`MV_LLM_PROVIDER=ollama`), профиль compose `gpu` |
+| **ChromaDB** | только профиль `legacy`, вместе с as-is `semantic-memory`; в целевой архитектуре не используется |
 
-| Service | Stateful | Purpose |
-|---------|----------|---------|
-| `entity-manager` | ✅ | Hierarchical entities with history, MinIO storage |
-| `narrative-orchestrator` | ✅ | Living narratives from scope events |
-| `world-generator` | ❌ | Generate worlds/regions via Qwen3 |
-| `ban-of-world` | ✅ | Reality integrity guardian |
-| `city-governor` | ✅ | City economy, quests, NPCs |
-| `cultivation-module` | ✅ | Player cultivation, ascension |
-| `reality-monitor` | ✅ | Metrics aggregation |
-| `plan-manager` | ✅ | Plane transitions (DAG) |
-| `semantic-memory` | ✅ | Event indexing (ChromaDB + Neo4j) |
-| `ontological-archivist` | ✅ | Schema storage (MinIO) |
-| `game-service` | ✅ | HTTP player API (port 8088) |
-| `entity-actor`, `evolution-watcher`, `rule-engine`, `universe-genesis-oracle` | 4 more |
+TimescaleDB и Redis в целевой архитектуре не используются (заменены CSV/CLI-метриками
+и снапшотом состояния в памяти соответственно).
 
-**Recovery Pattern**: Snapshot (MinIO) + Event Replay (Redpanda)
-
-## Build/Lint/Test Commands
-
-### Makefile Commands
+## Команды сборки/линта/теста
 
 ```bash
-# Build
-make build                      # Build all services (Docker)
-make build-service SERVICE=<n>  # Build specific service locally
-make build-all                  # Build all services locally
+# Сборка
+make build                      # go build -o bin/ ./cmd/...  (multiverse, mvctl)
+make image                      # docker build -f build/Dockerfile . — образ платформы
+make minio-image                # docker build -f build/minio.Dockerfile . — MinIO из исходников
 
-# Run
-make up                         # Start all services (Docker Compose)
-make run SERVICE=<name>         # Start specific service
-make down                       # Stop all services
+# Запуск
+make llm-up / llm-down / llm-health   # нативный llama-server вне compose
+make up                         # docker compose up -d --wait + health (LLM не строго)
+make down                       # остановить контейнеры, тома сохраняются
+make health                     # /health каждого процесса + LLM + возраст бэкапа
+make logs SERVICE=<имя>         # docker compose logs -f --tail=200
 
-# Logs
-make logs                       # All service logs
-make logs-service SERVICE=<n>   # Specific service logs
-
-# Test
-make test                       # Run all tests
-make test-service SERVICE=<n>   # Test specific service
-make test-shared                # Test shared module
-
-# Maintenance
-make clean                      # Clean build artifacts
-make sync                       # Sync Go workspace
+# Тесты
+make test                       # go test -short -race ./... + порог покрытия internal/*
+make test-integration           # testcontainers: Redpanda, MinIO (наш образ), Qdrant, Neo4j
+make test-e2e                   # e2e в одном процессе, --bus=memory
+make contracts                  # mvctl contracts check / env check + валидность JSON-схем
+make ci / make ci-full          # всё из CI (без Docker) / с test-integration
+make lint                       # golangci-lint run
+make secrets-scan               # gitleaks по диапазону ветки + содержимому индекса (не рабочей копии)
 ```
 
-### Direct Go Commands
+Полный список — `make help`. Версии образов и инструментов — только в
+[`build/versions.env`](build/versions.env) (единственный источник; читают Makefile,
+`docker-compose.yml`, `shared/testkit.Versions()`).
+
+### Прямые команды Go
 
 ```bash
-# Sync workspace
-go work sync
-
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Test specific module
-cd services/entity-manager && go test ./...
+go build ./...                  # весь корневой модуль (без services/*, у них свои go.mod)
+go vet ./...
+go test -short -race ./...
+go run ./cmd/multiverse --contexts=all --bus=memory   # один процесс, шина в памяти, без Docker
+go run ./cmd/mvctl contracts check                    # реестр типов событий без «фантомов»
 ```
 
-### Docker Commands
+## Паттерны и соглашения кода
 
-```bash
-# Build single service locally
-cd services/narrative-orchestrator && CGO_ENABLED=0 GOOS=linux go build -o ../../bin/narrative-orchestrator ./cmd/
+### Запреты линтера (`forbidigo` в `.golangci.yml`)
 
-# Docker build
-docker build --build-arg SERVICE=narrative-orchestrator -t multiverse-core:narrative-orchestrator .
+Четыре запрещённых семейства вызовов — каждое ловится `golangci-lint run` и валит
+`make lint`/`make ci`:
 
-# Start infrastructure only
-docker-compose up redpanda minio chromadb neo4j timescaledb
+| Запрещено | Вместо этого | Почему |
+|---|---|---|
+| `os.Getenv`, `os.LookupEnv`, `os.Environ`, `os.ExpandEnv` | `shared/env` (реестр `MV_*`) | переменная должна попасть в манифест и в `.env.example` (NFR-074) |
+| `time.Now` | `shared/clock.Clock` | иначе повтор партии (replay) не воспроизводим |
+| `time.After`, `time.Tick`, `time.NewTimer`, `time.NewTicker`, `time.Since`, `time.Until` | `shared/clock.Timers` | иначе таймеры идут по настенному времени и replay не воспроизводим |
+| `log.Print*`, `log.Fatal*`, `log.Panic*` | `log/slog` (`shared/logging`) | платформа отдаёт только структурные JSON-логи |
 
-# Run service locally with infrastructure in Docker
-KAFKA_BROKERS=localhost:9092 MINIO_ENDPOINT=localhost:9000 go run services/narrative-orchestrator/cmd/main.go
-```
+### Конверт события (`shared/eventbus`)
 
-## Code Patterns & Conventions
-
-### 🔀 Hierarchical Event Access (NEW — PREFERRED)
-
-**Always use `event.Path()` for reading event data** — it provides universal, type-safe access with fallback support:
+Сквозные поля события — в конверте (`Meta`), а не в payload: `World`, `Scope` —
+поля верхнего уровня `Event`, `Meta` несёт `correlation_id`/`causation_id`/
+`actor_kind`/`agent`/`replay`/`locale`/`gm_path`. Публикатор строит событие
+конструкторами, а не вручную:
 
 ```go
-// ✅ PREFERRED: Universal access via jsonpath
-func handler(event eventbus.Event) {
-    pa := event.Path()  // *jsonpath.Accessor
-    
-    // Extract with fallback: new structure → old structure → default
-    entityID, _ := pa.GetString("entity.id")
-    if entityID == "" {
-        entityID, _ = pa.GetString("entity_id")  // fallback
-    }
-    
-    // World/Scope: use helper functions for both structures
-    worldID := eventbus.GetWorldIDFromEvent(event)  // payload.world.id OR world_id
-    scope := eventbus.GetScopeFromEvent(event)      // payload.scope:{id,type} OR scope_id
-    
-    // Type-safe getters for any depth
-    level, _ := pa.GetInt("entity.stats.level")
-    active, _ := pa.GetBool("entity.active")
-    tags, _ := pa.GetSlice("entity.tags")
-    
-    // Array access by index
-    firstTag, _ := pa.GetString("entity.tags[0]")
-    
-    // Quick existence check
-    if pa.Has("quest.objectives") { /* ... */ }
-}
+// Корневое событие цепочки (нет причины) — этот вызов ставит новый
+// correlation_id, ActorKind и GMPath по умолчанию.
+root := eventbus.NewRoot("player.attacked", "gateway", worldID, scope, eventbus.ActorHuman, payload)
+
+// Производное событие наследует World/Scope и трассу причины (Correlation/Causation),
+// а также Timestamp — это нужно для побайтового повтора при replay (NFR-061).
+fact := eventbus.Derive(root, "combat.decided", "core/mechanics", payload,
+    eventbus.WithAgent(eventbus.AgentRef{ID: "encounter-wolf:solo:p1", Level: "task"}))
+
+bus.Publish(ctx, fact)
 ```
 
-### 📝 Creating Events with Hierarchical Structure
-
-**Use the builder pattern for new events** — ensures consistent, LLM-friendly structure:
-
-```go
-// ✅ PREFERRED: Builder + hierarchical structure
-payload := eventbus.NewEventPayload().
-    WithEntity("player-123", "player", "Вася").
-    WithScope("city-xyz", "city").        // solo/group/city/region/quest
-    WithWorld("world-abc")
-
-// Add custom fields with dot-notation for flexibility
-eventbus.SetNested(payload.GetCustom(), "action", "talk")
-eventbus.SetNested(payload.GetCustom(), "dialogue.text", "Hello!")
-
-// Optional: add hierarchical paths explicitly for LLM clarity
-eventbus.SetNested(payload.GetCustom(), "entity.id", "player-123")
-eventbus.SetNested(payload.GetCustom(), "world.id", "world-abc")
-
-event := eventbus.NewStructuredEvent("player.talked", "entity-actor", "world-abc", payload)
-bus.Publish(ctx, eventbus.TopicWorldEvents, event)
-```
-
-### ⚠️ Deprecated Patterns (Still Supported, But Avoid in New Code)
+Чтение payload — через `event.Path()` (`*jsonpath.Accessor`, универсальный доступ
+по dot-path к `map[string]any`); это НЕ относится к `World`/`Scope`, которые —
+поля события, а не payload:
 
 ```go
-// ❌ AVOID in new code (still works for backward compatibility):
-entityID := event.Payload["entity_id"].(string)  // panics if missing/wrong type!
-worldID := event.WorldID                          // top-level field, not in payload
-
-// ✅ USE instead:
 pa := event.Path()
-entityID, _ := pa.GetString("entity.id")  // safe + fallback support
-worldID := eventbus.GetWorldIDFromEvent(event)  // unified access
+level, _ := pa.GetInt("stats.level")
+if pa.Has("objectives") { /* ... */ }
+
+worldID := eventbus.GetWorldIDFromEvent(event) // event.World.Entity.ID, либо legacy-фолбэк из payload
 ```
 
-### 🎭 LLM Prompt Generation (Narrative Orchestrator)
+`GetWorldIDFromEvent`, `GetEntityIDWithFallback`, `GetTargetEntityID` — совместимость
+со старыми (as-is/legacy) продюсерами, у которых `world`/`entity`/`target` лежали
+плоскими ключами внутри payload; в новом коде эти поля читаются из `Event.World`/
+`Event.Scope` напрямую, а не через fallback-цепочку.
 
-**Prompts must use hierarchical JSON schema** — see `prompt_builder.go` for exact format:
+Любое изменение публичного API `shared/eventbus` (конверт, `Bus`, `Journal`) —
+**только через системного архитектора** (пометка `contract-change`,
+`Docs/dev-team/plan/ownership.md`).
 
-```json
-{
-  "type": "player.entered_region",
-  "world": {"entity": {"id": "world-abc", "type": "world"}},
-  "scope": {"id": "solo-xyz", "type": "solo"},
-  "entity": {"entity": {"id": "player-123", "type": "player"}, "name": "Вася"},
-  "target": {"entity": {"id": "region-456", "type": "region"}, "name": "Тёмный лес"},
-  "payload": {"description": "...", "weather": "пасмурно"}
-}
-```
+### Реестр типов событий (`shared/contracts`)
 
-**Rules for AI-generated events**:
-- `world.entity.id` is REQUIRED (type="world")
-- `scope:{id,type}` is OPTIONAL (separate concept, no entity wrapper)
-- `entity:{entity:{id,type},name}` is the standard entity format
-- `trigger:{event:{id,type}}` for event references
-- Always validate JSON structure before publishing
+Каждый публикуемый тип события должен быть зарегистрирован (`Spec{Type, Topic,
+Schema, Publishers, Consumers, Policy}`) и иметь файл JSON-схемы в
+`schemas/events/*.v1.json` (JSON Schema 2020-12, `santhosh-tekuri/jsonschema/v6`).
+`go run ./cmd/mvctl contracts check` ловит рассинхронизацию («тип без схемы» и
+наоборот) — запускать после добавления или переименования типа события.
 
-### 📦 Universal `jsonpath` Package
+### Универсальный доступ `shared/jsonpath`
 
-The `shared/jsonpath` package works with ANY `map[string]any` data, not just events:
+Пакет работает с любым `map[string]any`, не только с событиями:
 
 ```go
 import "multiverse-core.io/shared/jsonpath"
 
-// Works with configs, API responses, any JSON-like data
 acc := jsonpath.New(anyData)
-
-// All the same getters:
 val, _ := acc.GetString("config.db.host")
 port, _ := acc.GetInt("server.ports[0]")
-meta, _ := acc.GetMap("user.profile")
-
-// Debug: list all available paths
-for _, path := range acc.GetAllPaths() {
-    fmt.Println(path)  // config, config.db, config.db.host, ...
-}
+for _, path := range acc.GetAllPaths() { fmt.Println(path) }
 ```
 
-**Read**: [`shared/jsonpath/README.md`](shared/jsonpath/README.md) for full API reference.
+Подробный API — [`shared/jsonpath/README.md`](shared/jsonpath/README.md); формат
+конверта и правила эволюции схем — [`shared/eventbus/README.md`](shared/eventbus/README.md).
 
-### Oracle Integration
+### Тестовые заглушки (`shared/testkit`)
 
-All services use custom HTTP client with retry logic:
-```go
-shared/oracle/Client - Ascension Oracle, Universe Genesis Oracle
-```
+До реализации своих эпиков команды используют общие заглушки на in-memory шине
+(`shared/testkit/membus`): `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`,
+`testkit/gateway.Harness`, `testkit/swarm.FakeNarrator`. Сигнатуры заглушек совпадают
+с целевыми реализациями — замена не требует правок у потребителей (проверяется
+компиляцией тестов-потребителей). Contract-тест шины (`shared/testkit/contract`)
+гоняет один и тот же набор проверок против `membus` и настоящей Redpanda.
 
-### Testing Patterns
+## Рабочий процесс разработки
 
-Tests use minimal mocks and follow naming convention:
-```bash
-services/narrative-orchestrator/narrativeorchestrator/prompt_builder_test.go
-services/world-generator/worldgenerator/generator_test.go
-```
+1. Клонировать репозиторий, установить Go 1.26, Docker Desktop, GNU make
+   (`winget install ezwinports.make` на Windows).
+2. `cp .env.example .env`, заполнить всё, что помечено `[required]` в комментарии
+   над переменной в `.env.example` — правило, а не фиксированный список: состав
+   меняется вместе с файлом (сейчас шесть переменных).
+3. `make minio-image && make up && make health` — поднять инфраструктуру и пустые
+   контексты платформы.
+4. Сборка — одна цель на весь модуль: `make build` (`go build -o bin/ ./cmd/...`).
+   Целей `make build-service SERVICE=<имя>` и `make build-all` (для набора отдельных
+   сервисов из `go.work`) в текущей раскладке нет — модуль один.
 
-## Development Workflow
+Подробности — [`README.md`](README.md) («Запуск за 5 команд») и
+[`Docs/ops/runbook.md`](Docs/ops/runbook.md) (эксплуатация, LLM, восстановление).
 
-### Setting Up Environment
+### Ключевые файлы
 
-1. Clone repository
-2. Copy `.env.example` to `.env` and configure
-3. Start infrastructure: `docker-compose up -d`
-4. Build and run: `make build-all` then `make run SERVICE=narrative-orchestrator`
-
-### Service-Specific Guidance
-
-Each service has its own `AGENTS.md` file:
-- `services/entity-manager/AGENTS.md`
-- `services/narrative-orchestrator/AGENTS.md`
-- `services/world-generator/AGENTS.md`
-- And 12 more service-specific guides
-
-See [AGENTS.md](AGENTS.md) for cross-service patterns.
-
-### Key Files to Reference
-
-- [docker-compose.yml](docker-compose.yml) - Full infrastructure stack
-- [go.work](go.work) - Workspace configuration
-- [Configs](configs/) - Service YAML configurations
-- [Docs/](Docs/) - Architecture documentation, feature guides
+- [`docker-compose.yml`](docker-compose.yml) — стек по умолчанию и профили `memory`/`gpu`/`dev`;
+  профили `bot` и `legacy` — в `docker-compose.bot.yml`/`docker-compose.legacy.yml`, Makefile
+  подключает их по `PROFILES=...` (врезка «Профили `bot` и `legacy`» в README.md).
+- [`build/versions.env`](build/versions.env) — единственный источник версий образов и toolchain.
+- [`.env.example`](.env.example) — полный список переменных окружения (сверяется `mvctl env check`).
+- [`Docs/dev-team/`](Docs/dev-team/) — архитектура, ADR, контракты, эпики и задачи
+  (артефакты команды разработки; ведёт оркестратор процесса, не редактировать вручную).

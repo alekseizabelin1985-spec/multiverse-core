@@ -3147,3 +3147,2815 @@ architect#1. Область правок — только `shared/entity/**` и 
   при профиле T-018 (`p95` применения) это первое место, куда стоит посмотреть.
 - Мутационные проверки прогонялись на рабочем дереве с немедленным восстановлением файла из
   копии; итоговое дерево совпадает с тем, что в индексе после `git add`.
+
+---
+
+## developer#1 · T-012 · F-7 «CI `.github/workflows/go.yml` и hardening» · 2026-09-09
+
+Ветка `epic/EPIC-001-foundation` (HEAD на момент старта `fd93a6a`). Основание:
+`architecture/infrastructure.md` v0.3 §3.1, §3.1.1, §3.2, §2.4, §12; ADR-010 (+ доп. п. 1, 3, 5);
+`architecture/threat-model.md` T-15, T-24, T-26, T-35, T-36 / SEC-01, SEC-23, SEC-25;
+`epics/EPIC-001-foundation/tasks.md` §1 и раздел T-012; `journal.md` ОВ-5, ОВ-9, ОВ-47, ОВ-49.
+Работа по инструкциям devops-engineer. Коммит не выполнялся (`git.commits: ask`), `push` не
+делался — изменения подготовлены в индексе. Параллельно developer#2 вёл T-013
+(`scripts/llm-bench.*`, `ops/metrics/**`, `testdata/bench/**`) — эти файлы не трогались.
+
+### 1. `.github/workflows/go.yml` — состав
+
+Семь job'ов: шесть блокирующих (`unit`, `integration`, `e2e`, `contracts`, `security`,
+`compose-lint`) + `image` (без push, только `push` в `main`/`integration/mvp-1`).
+
+| Job | Шаги | Таймаут |
+|---|---|---|
+| `unit` | checkout → пины из `build/versions.env` → setup-go (`go-version-file: go.mod`, кэш) → **сверка `toolchain` в go.mod с `GO_VERSION`** (ОВ-9) → `go mod verify` → `go mod tidy -diff` → `go build ./...` → `go vet ./...` → golangci-lint-action (`version: ${GOLANGCI_LINT_VERSION}`) → `go test -short -race -count=1 -coverprofile` → `scripts/coverage-gate.sh 60 internal/{state,mechanics,swarm,llm,replay}` → артефакт `coverage.out` | 15 мин |
+| `integration` | setup-go → buildx → сборка `${MINIO_IMAGE}` из `build/minio.Dockerfile` с `cache-from/to: type=gha,mode=max`, `load: true`, `push: false` → `go test -tags integration -count=1 -timeout 15m ./...`, `TESTCONTAINERS_RYUK_DISABLED=false` | 25 мин |
+| `e2e` | setup-go → `go test -tags e2e -count=1 -timeout 10m ./...` → артефакт `ops/metrics/sessions/*.json` (`if-no-files-found: ignore`) | 15 мин |
+| `contracts` | setup-go → `mvctl contracts check` → `mvctl env check` → `go test ./shared/contracts/... -run TestSchemasValid` | 10 мин |
+| `security` | checkout `fetch-depth: 0` → gitleaks-action (история; `GITLEAKS_VERSION` из пина, `GITLEAKS_CONFIG=.gitleaks.toml`, **без** `GITLEAKS_LICENSE` — U-9) → `gitleaks dir` рабочего дерева из образа `zricethezav/gitleaks:${GITLEAKS_VERSION}` → `mvctl privacy scan testdata/` → govulncheck-action (**блокирующий**) | 15 мин |
+| `compose-lint` | `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` → `scripts/compose-lint.sh` → отрицательные фикстуры `testdata/compose-lint/bad-*.yml` → hadolint `build/Dockerfile` и `build/minio.Dockerfile` | 10 мин |
+| `image` | buildx → `build/Dockerfile` с кэшем `type=gha`, `push: false` | 20 мин |
+
+Hardening: `permissions: {contents: read}` на workflow, `security-events: write` — только у
+`security`; `concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}`; все `uses:`
+пинятся по SHA коммита с комментарием версии (SHA получены через `api.github.com/.../git/ref/tags`
+2026-09-09, аннотированный тег golangci-lint-action разыменован до коммита); версии инструментов
+и образов берутся из `build/versions.env`, литералов версий в шагах нет.
+
+Пины действий: `actions/checkout@3d3c42e…` (v7.0.1), `actions/setup-go@b7ad1dad…` (v7.0.0),
+`actions/upload-artifact@043fb46d…` (v7.0.1), `docker/setup-buildx-action@37fe6310…` (v4.3.0),
+`docker/build-push-action@53b7df96…` (v7.3.0), `golangci/golangci-lint-action@ba0d7d2e…` (v9.3.0),
+`gitleaks/gitleaks-action@e0c47f4f…` (v3.0.0), `golang/govulncheck-action@032d4551…` (v1.1.0),
+`hadolint/hadolint-action@06be81ba…` (v3.5.0). `actions/cache` не используется — кэш модулей даёт
+`setup-go` (`cache: true`), отдельный шаг был бы вторым кэшем того же каталога.
+
+### 2. `mvctl privacy scan` — минимальная реализация (ОВ-47)
+
+`cmd/mvctl/internal/privacy/`: `scanner.go` (правила и обход), `privacy.go` (подкоманда),
+тесты `scanner_test.go`, `privacy_test.go`. Регистрация в `cmd/mvctl/main.go`: строка
+`cli.Reserved("privacy", …, "EPIC-005")` заменена на настоящую команду (**файл реестра —
+через tech-lead#1**, отмечено в отчёте), `main_test.go` обновлён (`privacy` переехал из списка
+зарезервированных в список реализованных, добавлен прогон `privacy scan ../../testdata`).
+
+Правила (те же, что тест NFR-041 по ADR-010 доп. п. 1): токен Telegram-бота
+(`<8–10 цифр>:<32–48 символов>`), числовой внешний ID за ключом, который его называет
+(`external_id`, `chat_id`, `telegram_id`, `tg_id`, `from_id`, `user_id`), username за ключом
+(`username`, `first_name`, `last_name`, `nick_name`) и в свободном тексте (`@handle`), e-mail,
+ключ провайдера (`sk-`/`pk-`, `ghp_…`, `xox…`). Ключ ищется с ведущим `(?:^|[^a-z0-9])`, а не
+`\b`: подчёркивание — словесный символ, и `\b` никогда не срабатывает в `MV_TEST_USER_ID`.
+Плейсхолдеры не считаются находками (`xxxx`, `example`, `fixture`, `ci-only`, повтор одной цифры,
+фикстурные игроки `player-A/B/C` и `ci-harness` — SEC-23). Бинарные файлы (NUL в первых 8 КБ) и
+файлы > 16 МБ пропускаются с отметкой. Коды выхода — общие для `mvctl`: 0 / 1 (находки) /
+2 (ошибка командной строки, в т. ч. несуществующий путь); `--json` печатает отчёт `cli.Report`.
+Значение находки **никогда не печатается целиком** (`Redact`: два первых символа + длина) —
+транскрипт CI иначе становится вторым местом, где живёт идентификатор; на это есть отдельный тест.
+По умолчанию (без аргумента) сканируется `testdata` — то же, что делает job.
+
+Вывод команды на текущем дереве:
+
+```
+$ go run ./cmd/mvctl privacy scan testdata/
+privacy scan: no external identifiers in testdata/ (6 files read)   # exit 0
+$ go run ./cmd/mvctl privacy scan --json testdata/
+{ "command": "privacy scan", "status": "ok",
+  "summary": "no external identifiers in testdata/ (6 files read)",
+  "findings": [], "details": {"roots": ["testdata/"], "files_scanned": 6} }
+```
+
+Шесть файлов — четыре фикстуры `compose-lint`, их README и `testdata/bench/prompts.jsonl`
+(T-013, developer#2): файл только читается сканером, не изменяется.
+
+### 3. Остальные файлы
+
+- **`.github/dependabot.yml`**: `gomod` (еженедельно, minor+patch одной группой, лимит 5),
+  `github-actions` (еженедельно, все действия одной группой — обновляет SHA-пины),
+  `docker` (ежемесячно, каталог `/build` — три Dockerfile). Без `reviewers:` (поле объявлено
+  устаревшим в пользу CODEOWNERS). В комментарии зафиксировано, что `build/versions.env`
+  Dependabot не видит и сверяется оператором вручную (§9.5).
+- **`.github/CODEOWNERS`**: `* @alekseizabelin1985-spec` + отдельные строки `/blueprints/`,
+  `/laws/`, `/config/`, `/schemas/`, `/shared/`, `/build/`, `/.github/`, `/docker-compose.yml`,
+  `/Makefile`; `/services/_archive/` — строка без владельца (архив из ревью исключён).
+- **`scripts/coverage-gate.sh`**: порог по пакетам из профиля покрытия (не из
+  `go tool cover -func`: там строка на функцию, и невзвешенное среднее — не покрытие пакета).
+  Несуществующий пакет — предупреждение и `exit 0`; пакет без операторов — предупреждение;
+  нарушение порога — `exit 1`; неверные аргументы или отсутствующий профиль — `exit 2`.
+- **`Makefile`**: `test` теперь пишет `coverage.out` и вызывает `coverage-gate.sh` (как job
+  `unit`); добавлена цель `privacy-scan`; она включена в `ci`. Больше в Makefile ничего не
+  менялось (цель `bench` developer#2 не затронута).
+- **Удалён `.github/workflows/validate-blueprints.yml`** (§3.2: заменён job `contracts`).
+  `qwen-*.yml` (5 файлов) не тронуты; их группы `concurrency` с нашей не пересекаются.
+- **`.gitleaks.toml`**: добавлен один узкий allowlist. Шаг `gitleaks dir` сканирует рабочее
+  дерево целиком, и `generic-api-key` срабатывал на строке документации, которая называет
+  переменную окружения, а не её значение (`num_ctx=LLM_NUM_CTX`,
+  `architecture/components/swarm-llm-laws.md` §9.1). Правило действует на `secret` целиком и
+  требует, чтобы значение было именем переменной проекта в верхнем регистре
+  (`MV_|LLM_|OLLAMA_|MINIO_|NEO4J_|QDRANT_|REDPANDA_`). Каталоги `Docs/`, `testdata/`, README из
+  проверки по-прежнему не исключаются (условие F-1).
+
+### 4. Отклонения от дизайна и почему
+
+1. **`lint` и `build` — шаги job `unit`, а не отдельные job'ы.** В задании оркестратора job'ы
+   перечислены как «lint, build, unit, …», в `infrastructure.md` §3.1 и в DoD T-012 — шесть job'ов,
+   где `build`/`vet`/`lint` входят в `unit`, и именно эти шесть имён идут в required checks.
+   Сделано по документу; расщепление добавило бы два прогона `setup-go` (+2–3 мин и минуты Actions).
+2. **`cat build/versions.env >> $GITHUB_ENV` → `grep -E '^[A-Z][A-Z0-9_]*=' … >> $GITHUB_ENV`.**
+   Раннер разбирает `$GITHUB_ENV` построчно и падает на строке без `=`; в `versions.env` больше
+   тридцати строк комментариев. Смысл шага сохранён.
+3. **Фильтр путей — только на `push`.** `pull_request` запускается без `paths`. Workflow,
+   пропущенный по фильтру путей, не публикует свои checks, а required check, который никогда не
+   публикуется, блокирует PR навсегда — «документационный» PR оказался бы единственным, который
+   нельзя влить. На `push` фильтр задан через `paths` с отрицаниями (`'**'`, `'!Docs/**'`,
+   `'!**/*.md'`, `'blueprints/**/*.md'`), потому что GitHub запрещает `paths` и `paths-ignore`
+   в одном фильтре, а блупринты — данные, а не документация (§3.1).
+4. **`gitleaks dir` — отдельным шагом через образ `zricethezav/gitleaks:${GITLEAKS_VERSION}`.**
+   `gitleaks-action` сканирует историю (диапазон PR/ветки) и не умеет `dir`; рабочее дерево
+   покрывается вторым шагом теми же правилами и той же версией — это ровно то, что делает
+   `make secrets-scan` локально (ОВ-8).
+5. **hadolint — `failure-threshold: error`** (по умолчанию `info`). На `build/minio.Dockerfile`
+   hadolint даёт три warning и один info (DL4006 `pipefail`, DL3062 `go install` без версии,
+   DL3025 `CMD` не в JSON-форме, DL3066 нечисловой UID) — это сознательные решения ADR-021
+   (сборка из архивных исходников). Файлы не мои (T-004), правки не вносил — см. §8.
+6. **`govulncheck` — сразу блокирующий, без `continue-on-error`**: условие ADR-010 доп. п. 5
+   («до перевода go.mod на 1.26») выполнено в T-003, `go.mod` уже `go 1.26 / toolchain go1.26.8`.
+7. **`mvctl blueprint validate blueprints/` в job `contracts` не добавлен** — по ОВ-48 строка
+   возвращается вместе с командой в EPIC-003 (A4/T-204); сегодня зарезервированное имя выходит с
+   кодом 2 и валило бы job. Причина записана комментарием прямо в job.
+8. **`.pre-commit-config.yaml` не менялся.** Ограничение golangci-lint изменёнными пакетами уже
+   обеспечено выбором хука (`golangci-lint`, а не `golangci-lint-full`) в T-001; трогать общий
+   файл во время параллельной работы двух разработчиков — лишний риск.
+
+### 5. Что проверено локально (эмуляция шагов job'ов)
+
+| Проверка | Команда | Результат |
+|---|---|---|
+| Синтаксис workflow | `actionlint` (v1.7.12, `go install …@latest`) по всему `.github/workflows` | 0 замечаний (включая `qwen-*.yml`) |
+| YAML | `yaml.safe_load` для `go.yml`, `dependabot.yml` | разбираются; job'ы `unit, integration, e2e, contracts, security, compose-lint, image`; `permissions {contents: read}`; `concurrency ci-${{ github.ref }}` |
+| `unit`: сверка toolchain | `awk '/^toolchain /' go.mod` ↔ `GO_VERSION` | `go1.26.8` = `go1.26.8` |
+| `unit`: `go mod verify` | — | `all modules verified` |
+| `unit`: `go mod tidy -diff` | — | на Windows даёт полный diff `go.sum` **из-за CRLF** (`git ls-files --eol`: `i/lf w/crlf`); после нормализации файла в LF — diff пуст. На Linux-раннере файл LF, шаг зелёный. Рабочее дерево возвращено `git checkout -- go.mod go.sum` |
+| `unit`: build/vet/lint | `go build ./...`, `go vet ./...`, `golangci-lint run ./...` | ок, ок, `0 issues.` |
+| `unit`: тесты | `go test -short -count=1 -coverprofile=coverage.out ./...` | все пакеты `ok`; `cmd/mvctl/internal/privacy` — 86,8 % |
+| `unit`: порог покрытия | `scripts/coverage-gate.sh 60 internal/{state,…}` | пять пакетов «does not exist yet — skipped», `exit 0`; на существующих проверено отдельно: `cmd/mvctl/internal` 92,6 % (порог 60 — pass, порог 99 — `exit 1`), без аргументов — `exit 2` |
+| `contracts` | `mvctl contracts check`, `mvctl env check`, `go test ./shared/contracts/... -run TestSchemasValid` | `65 types, 8 topics, 58 schema files`; `69 variables`; `ok` |
+| `e2e` | `go test -tags e2e -count=1 -timeout 10m ./...` | ок (сценариев ещё нет — T-018) |
+| `security`: privacy-scan | `go run ./cmd/mvctl privacy scan testdata/` | `no external identifiers … (6 files read)`, exit 0 |
+| `security`: govulncheck | `go install golang.org/x/vuln/cmd/govulncheck@v1.1.4`, `govulncheck ./...` | `No vulnerabilities found` (0 достижимых; 3 в требуемых модулях не вызываются) |
+| `security`: gitleaks | `gitleaks git --staged --redact .` | `no leaks found` |
+| `security`: gitleaks по содержимому индекса | `git checkout-index -a --prefix=<tmp>/` + `gitleaks dir` (то, что видит раннер после checkout) | `no leaks found` после allowlist (§3); до него — одна находка в `components/swarm-llm-laws.md` |
+| `security`: gitleaks по рабочему дереву | `gitleaks dir --redact .` | 6 находок, **все в неотслеживаемых и игнорируемых файлах**: `.env` (2), `.claude/worktrees/frosty-bell/` (3), `build/.legacy-src/` (1). В checkout CI их нет; локальный `make secrets-scan` из-за них красный — предложение в бэклог (§8 п. 6) |
+| `compose-lint` | `docker compose --env-file build/versions.env --env-file .github/ci.env config -q`; `scripts/compose-lint.sh`; отрицательные фикстуры | `config ok`; `15 services, 6 rules`; все четыре `bad-*.yml` отвергнуты |
+| `compose-lint`: hadolint | `docker run --rm -i hadolint/hadolint hadolint --failure-threshold error -` для обоих Dockerfile | оба проходят на `error`; на пороге по умолчанию `minio.Dockerfile` падает (см. §4 п. 4) |
+| pre-commit | `pre-commit run --files <изменённые>` | ок |
+
+`-race` локально не прогонялся: решение ОВ-5 («-race только в CI»), на Windows он требует gcc.
+`make ci` не запускался — `make` на машине не установлен (эквивалент выполнен командами выше).
+
+### 6. Что проверится только на GitHub (push не делался)
+
+- Фактические зелёные шесть job'ов на PR и их суммарная длительность ≤ 10 мин.
+- Кэш `type=gha` образа MinIO: второй прогон `integration` ≤ 1 мин (DoD T-012).
+- Поведение `gitleaks-action` v3 на приватном личном репозитории без `GITLEAKS_LICENSE`
+  и приём им `GITLEAKS_VERSION` без ведущей `v` (шаг «Read the pinned versions» отдельно
+  экспортирует `GITLEAKS_VERSION_PLAIN`).
+- Совместимость `golangci-lint-action` v9.3.0 с `.golangci.yml` v2 (проверка схемы `verify: true`).
+- `docker/build-push-action` с `load: true` и образом для testcontainers.
+- Работа фильтра `paths` с отрицаниями на реальном событии `push`.
+
+### 7. Инструкции пользователю (настройки репозитория, руками)
+
+1. **Branch protection `main`**: required checks `unit`, `integration`, `e2e`, `contracts`,
+   `security`, `compose-lint`; линейная история; без force-push; **Require review from Code Owners
+   — включить**.
+2. **Branch protection `integration/mvp-1`**: те же шесть required checks, линейная история, без
+   force-push; **«Require review from Code Owners» НЕ включать** и апрув не требовать — владелец
+   единственный человек в проекте и не может апрувить собственный PR, требование заблокирует его
+   самого (§3.2, U-9). `CODEOWNERS` при этом продолжает работать как напоминание и история.
+3. Required checks завести **после первого зелёного прогона** workflow: GitHub предлагает имена
+   проверок из уже виденных прогонов.
+4. Проверить, что репозиторий приватный на личном аккаунте (лимит Actions 2 000 мин/мес,
+   `gitleaks-action` без лицензии). При переходе на организацию — нужен `GITLEAKS_LICENSE`
+   или замена шага на запуск gitleaks из образа (второй шаг job `security` уже так и сделан).
+5. Dependabot включается автоматически при появлении `.github/dependabot.yml`; убедиться, что в
+   Settings → Code security включены Dependabot alerts/security updates.
+6. Скриншот/лог включённой branch protection приложить сюда же (DoD T-012) — сделать может только
+   владелец.
+
+### 8. Открытые вопросы и предложения в бэклог
+
+1. **Двойной прогон CI на PR из ветки эпика.** Триггеры по §3.1 включают `push` в `epic/**` и
+   `pull_request`; один и тот же коммит считается дважды (~20 мин вместо 10 на лимите 2 000
+   мин/мес). Предложение devops: сузить `push` до `main` и `integration/**`, оставив ветки эпиков
+   на `pull_request`. Решение — за devops-engineer/tech-lead#1, в файле сделано по документу.
+2. **hadolint по умолчанию красный на `build/minio.Dockerfile`** (DL4006, DL3062, DL3025). Файл
+   принадлежит T-004; предложение — отдельная задача: `SHELL -o pipefail`, версия у `go install`,
+   `CMD` в JSON-форме, после чего можно опустить порог до `warning`.
+3. **`.gitattributes` не фиксирует `eol=lf` для `go.mod`/`go.sum`** — из-за этого локальный
+   `go mod tidy -diff` на Windows всегда «грязный» (см. §5). Предложение: строка
+   `go.mod text eol=lf` / `go.sum text eol=lf` (файл F-1, отдельная задача).
+4. **ОВ-49 (генерация `redpanda-init.sh` из `contracts topics --format=rpk`)** — оставлено в
+   бэклоге devops, в T-012 не делалось: это меняет файл T-008 и не входит в DoD задачи.
+5. **`cmd/mvctl/main.go` — реестр подкоманд** менялся (строка `privacy`), файл идёт «только через
+   tech-lead#1»: нужна явная отметка при приёмке.
+6. **`make secrets-scan` (`gitleaks dir .`) красный на машине владельца**: gitleaks не читает
+   `.gitignore` и находит секреты в `.env`, `build/.legacy-src/` и `.claude/worktrees/`. По ОВ-8
+   цель должна сканировать содержимое индекса (`git ls-files`), а не рабочую копию; правка цели —
+   в файле T-008, отдельной задачей devops.
+7. **Фикстура теста** `MV_LLM_API_KEY=sk-abcabc…` намеренно низкоэнтропийная: первый вариант
+   (`sk-abcdef0123456789abcdef`) отклонялся хуком gitleaks в pre-commit. Правило сканера при этом
+   проверяется тем же образом.
+
+### 9. Риски и допущения
+
+- Пины SHA действий получены 2026-09-09 через GitHub API; аннотированный тег
+  `golangci-lint-action@v9.3.0` разыменован до коммита `ba0d7d2e…` (иначе `uses:` по SHA тега не
+  резолвится). Дальше пины обновляет Dependabot.
+- `gitleaks-action` v3 распространяется под собственной лицензией (EULA в `action.yml`);
+  бесплатен для личных репозиториев — допущение U-9, подтверждённое владельцем. Резервный путь
+  (gitleaks из образа) в job уже присутствует вторым шагом.
+- `govulncheck-action` ставит `govulncheck@latest`, а не пин `golang.org/x/vuln v1.8.0` из §2.4:
+  у действия нет входа для версии. Локально проверено на v1.1.4 — находок нет.
+- Job `integration` собирает MinIO из `MINIO_REPO` (сейчас upstream `minio/minio`, форк владельца
+  ещё не создан — открытый вопрос T-004). Если upstream исчезнет, job упадёт на сборке образа.
+- Оценка «≤ 10 мин» относится к параллельным job'ам с прогретым кэшем; первый прогон
+  `integration` дольше на сборку MinIO (~5 мин) — это заложено в §3.1.
+
+---
+
+## developer#2 · T-013 (подготовка) · F-8 «Матрица замера LLM и `ops/metrics/baseline.md`» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, HEAD `fd93a6a`. Основание: `architecture/infrastructure.md`
+v0.3 §6.3, §6.4, §6.5; `architecture/overview.md` §18.1; ADR-005 дополнение 2 (п. 4–7);
+`requirements/nfr.md` v0.5 (NFR-002, NFR-022, NFR-076, NFR-090, «Что измерить первым»);
+`project/metrics.md` §7 (B1–B5); `epics/EPIC-001-foundation/tasks.md` §5 T-013.
+Коммит не выполнялся (`git.commits: ask`) — изменения подготовлены в индексе.
+
+**Объём задачи**: подготовительная часть. Сам замер — ручной, на стенде владельца (U-12):
+GPU и модель есть только там. Параллельно developer#1 вёл T-012 (`.github/**`, `CODEOWNERS`,
+`cmd/mvctl/internal/privacy/**`) — эти файлы не трогались.
+
+### 1. Что сделано
+
+| Файл | Что это |
+|---|---|
+| `testdata/bench/prompts.jsonl` | 30 строк: 10 ситуаций «Тёмного леса» × фазы `tick` / `phase2` / `phase2-group3`. Поля: `id`, `situation`, `phase`, `schema_name`, `schema` (JSON Schema 2020-12), `max_tokens`, `text_paths`, `system`, `user` |
+| `ops/metrics/bench-matrix.json` | конфигурации E / E+ / C / A (`provider`, `url_env`, модели на фазу, `server_mode`, KV, `num_ctx`, ожидание по VRAM), пороги NFR-002 / NFR-090 / B3 / NFR-076 / tps, `decision_order: [E, C, A]`, `runs_required: 3`, пустые `results.*` и `decision` |
+| `scripts/llm-bench.sh` | основной прогон (Git Bash, без PowerShell и без `jq`) |
+| `scripts/llm-bench.ps1` | тот же замер для машины с `pwsh` 7; колонки CSV идентичны |
+| `ops/metrics/baseline.md` | шаблон отчёта: стенд, таблицы результатов по E/C/A/E+, вердикт по NFR, наблюдения, решение по U-2 с чек-листом последствий, «как повторить» |
+| `ops/metrics/README.md` | инструкция пользователю: что нужно на машине, как поднять сервер, как запустить в Git Bash, три прогона, что прислать, как читать таблицу |
+| `ops/models.txt` | секции `gguf` (комментарии — файлы качаются вручную) и `ollama` (теги для `make models`/`make warm`) |
+
+Скрипт замера: промпты → `POST {base}/v1/chat/completions` с `response_format: json_schema`
+(`strict: true`, схема из строки промпта) и `chat_template_kwargs.enable_thinking=false`;
+семплинг non-thinking из матрицы; метрики из `usage` (в т. ч. `prompt_tokens_details.cached_tokens`)
+и `timings.predicted_ms` (tps считается по времени сервера, а не по часам клиента);
+VRAM — `nvidia-smi`; билд llama.cpp — из `MV_LLM_BIN --version`, иначе пин `LLAMACPP_BUILD`
+с пометкой `(pin)`. Сервер скрипт не поднимает и не перенастраивает (§6.4 правило 1) — `--num-ctx`
+и `--kv-cache` только записываются в отчёт.
+
+Выход: `ops/metrics/bench-<дата>.csv` (22 колонки §6.4 + `repeat`, `started_at`),
+`ops/metrics/bench-<конфигурация>-<дата>.json` (те же ячейки плюс каждый запрос) и таблица в stdout.
+Коды возврата: `0` — замер прошёл (в том числе с `verdict=fail`), `2` — замерить нельзя
+(нет сервера, нет файла, неизвестная конфигурация, все фазы пропущены).
+
+### 2. Решения по ходу
+
+1. **Язык проверяется на тексте, а не на всём ответе.** В скелете §6.4 доля латиницы считалась по
+   всему JSON — тогда `kind`, `player-A`, `region.event_occurred` дают > 10 % латиницы, и любой
+   структурированный ответ «проваливает» NFR-090. Введено поле `text_paths` в каждой строке
+   промпта (`text` для нарратива, `events[].summary` для тика); скрипт извлекает только эти строки —
+   так же, как шлюз проверяет `Call.TextPaths` (`swarm-llm-laws.md` §9.2). Проверено на макете:
+   ответ с идентификаторами в прозе даёт `lang_pass=0`, ответ без них — `1`.
+2. **Имена персонажей в промптах.** В `<names>` каждой ситуации заданы русские имена
+   (player-A → Вася и т. д.) и правило «идентификаторы в текст не переносить»: иначе замер языка
+   мерил бы не модель, а формат входных данных.
+3. **`n_per_cell = 10`, а не 20** (см. отклонения).
+4. **`verdict` для фазы группы получает суффикс `*`** — порог группы из 3 ещё не зафиксирован
+   (NFR-002, `metrics.md` §7 B1), поэтому её вердикт справочный и не блокирует конфигурацию.
+5. **Ошибочный запрос валит ячейку.** Если хоть один вызов не дал ответа (таймаут, 5xx), фаза
+   получает `fail`: конфигурация, которая отваливается на пятой части промптов, не проходит
+   NFR-002 независимо от p95 доехавших ответов.
+6. **Схемы ответов — v0 внутри `prompts.jsonl`.** Каталога `schemas/agent/` ещё нет (владелец —
+   EPIC-003), поэтому схемы (`tick-region.v0`, `narrative-turn.v0`, `narrative-round.v0`) заданы
+   в строках промптов. Форма согласована с `swarm-llm-laws.md` §8.1 п. 3 (`events[]{type, summary, ops[]}`)
+   и с `narrative.output` (`kind`, `text`); при появлении `schemas/agent/*.json` строки промптов
+   должны ссылаться на них — заявка ниже.
+
+### 3. Отклонения от дизайна
+
+1. **`n_per_cell = 10` вместо 20** (`infrastructure.md` §6.4). В наборе 10 ситуаций на фазу;
+   повтор того же промпта внутри прогона обслуживается кэшем префикса llama.cpp
+   (`usage.prompt_tokens_details.cached_tokens`) и мерил бы кэш, а не модель, занижая p95.
+   Объём выборки набирается тремя прогонами: `runs_required: 3` × 10 = 30 измерений на ячейку.
+   Причина записана прямо в `bench-matrix.json` (`_n_per_cell`).
+2. **`.sh` использует `python3`, а не `jq` + `awk`** (§6.4 правило 6). `jq` на машине владельца нет
+   (и ставить его ради замера не просили); `python3` есть и уже используется другими проверками.
+   Весь HTTP по-прежнему на `curl` — измеряется тот же путь. Python-помощник встроен в скрипт
+   (heredoc во временный файл), отдельного файла нет.
+3. **Две дополнительные колонки CSV в конце — `repeat`, `started_at`.** Один запуск может содержать
+   несколько проходов (`--repeats`), и без них две строки одной ячейки неразличимы. Колонки
+   добавлены **после** документированных 22, поэтому любой читатель префикса §6.4 продолжает работать.
+4. **JSON-отчёт на конфигурацию** (`bench-<конфигурация>-<дата>.json`) — сверх §6.4, по заданию
+   оркестратора: CSV сводит ячейки, JSON хранит каждый запрос (латентность, токены, кэш, язык,
+   ошибка), чтобы странный p95 можно было объяснить, не повторяя прогон.
+5. **`--repeats` по умолчанию 1.** DoD требует три прогона «в разные моменты» — это три запуска
+   скрипта с перезапуском сервера между ними, а не три прохода подряд; флаг оставлен для случая,
+   когда оператор хочет несколько проходов не отходя от машины. Скрипт в конце печатает напоминание
+   про `runs_required`.
+6. **CSV пишется один на запуск, JSON — на конфигурацию.** В §6.4 упомянут только CSV
+   (`bench-<date>.csv`); имя и формат сохранены.
+
+### 4. Проверки DoD
+
+| Проверка | Результат |
+|---|---|
+| `bash -n scripts/llm-bench.sh` | зелёный |
+| `bash scripts/llm-bench.sh --configs E` без сервера | `bench: no answer from …/health — the LLM process is not running. Start it: make llm-up`, код **2**; пустой CSV за собой не оставляет |
+| Полный прогон против макета llama-server (`/health`, `/v1/models`, `/v1/chat/completions` с `usage`/`timings`) | 30 запросов, 3 строки CSV, JSON-отчёт, таблица; код 0 |
+| Ошибочные пути: неизвестная конфигурация, пустой `MV_OLLAMA_URL`, модель не из `/v1/models`, сервер, отвечающий 500 | во всех случаях понятное сообщение и код 2, файлов-«огрызков» не остаётся |
+| `--repeats 2 --num-ctx 16384 --kv-cache q8_0` | 6 строк, `repeat` 1 и 2, параметры ячейки в строках |
+| `python3 -c "import json;json.load(open('ops/metrics/bench-matrix.json'))"` | проходит |
+| 30 строк `prompts.jsonl`: обязательные поля + `Draft202012Validator.check_schema` | 30/30 |
+| Распределение по фазам | `tick` 10, `phase2` 10, `phase2-group3` 10 |
+| `pre-commit run --files <7 файлов>` | Passed (gitleaks, large files, EOF, merge-conflict, mixed line ending); Go-хуки — n/a |
+| `gitleaks git --staged --redact .` | `no leaks found`, код 0 |
+| `go build ./... && go vet ./...` | зелёные (Go-код не менялся — контрольный прогон) |
+| `go test -short -count=1 ./...` | все пакеты `ok` |
+| `scripts/llm-bench.ps1` | **синтаксис проверен статически** (`[Parser]::ParseFile` — no parse errors на копии, где единственный оператор PS7 `??` заменён на литерал; сам PS7 на машине не установлен). **Поведение не проверено** — см. риски |
+
+### 5. Что требуется от пользователя на стенде
+
+1. **PowerShell 7 для замера не нужен**: `bash scripts/llm-bench.sh` работает в Git Bash.
+2. Поднять сервер: `make llm-up` (или `MV_LLM_NUM_CTX=16384 make llm-up` для второй ячейки),
+   убедиться `make llm-health` = 200.
+3. Запустить замер с **loopback**-адресом: в `.env` `MV_LLM_URL` указывает на
+   `host.docker.internal` (это адрес из контейнеров), а скрипт идёт с хоста:
+   `MV_LLM_URL=http://127.0.0.1:1234 bash scripts/llm-bench.sh --configs E`.
+4. Повторить трижды в разные моменты (между прогонами `make llm-down && make llm-up`).
+5. Прислать все `ops/metrics/bench-*.csv` и `bench-*.json`, вывод `make llm-health` и заметку,
+   было ли на GPU что-то ещё (`nvidia-smi` считает всю карту).
+6. Порядок: сначала E. Прошла — C и A не нужны. Не прошла — C (нужен Ollama и
+   `MV_OLLAMA_URL=http://127.0.0.1:11434/v1`), затем A.
+
+Как читать результат: колонка `verdict` по фазе `phase2` — это и есть ответ «проходит ли E»;
+`fail` — не поломка скрипта, а результат замера. `n/a` у фазы `tick` (для неё порога нет),
+`*` — справочный порог группы. Подробности — `ops/metrics/README.md` §5.
+
+### 6. Открытые вопросы и предложения
+
+1. **`ops/*.pid` не в `.gitignore`.** `make llm-up` кладёт `ops/llm-server.pid`, и он попадает в
+   `git status` как untracked (`ops/llm-server.log` закрыт правилом `*.log`). Файл `.gitignore`
+   принадлежит F-1 — предложение: строка `/ops/*.pid` (и, если результаты замера решено не хранить
+   в git, `/ops/metrics/bench-*.csv`, `/ops/metrics/bench-*.json`).
+2. **Хранить ли результаты прогонов в git.** `baseline.md` и `README.md` написаны в предположении
+   «да, CSV/JSON коммитятся рядом с `baseline.md`» (иначе решение по U-2 нечем подтвердить).
+   Подтвердить у tech-lead#1.
+3. **`.gitattributes` не задаёт `eol=lf` для `*.jsonl`, `*.ps1`, `*.json`.** Из-за `* text=auto`
+   рабочая копия получает CRLF; скрипты это переживают (`strip`, `Get-Content`), но для
+   `testdata/bench/*.jsonl` лучше зафиксировать `eol=lf`, как для `*.sh`. Файл F-1 — предложение.
+4. **`ops/models.txt` создан здесь**, хотя во фрагменте карты владения у меня был только
+   `ops/metrics/**`: файл прямо перечислен в составе T-013 и нужен целям `make models`/`make warm`,
+   которые уже ссылаются на него (T-008). Отметить при приёмке.
+5. **Схемы `schemas/agent/*.json` (EPIC-003).** Когда они появятся, строки `prompts.jsonl` должны
+   ссылаться на них (или генерироваться из них), иначе замер и рантайм разойдутся. Заявка
+   tech-lead#2 / architect#1.
+6. **`make bench` без аргументов** запускает `.ps1` при наличии `pwsh`, иначе `.sh` (T-008); обе
+   ветки используют конфигурацию E по умолчанию — расхождения нет.
+
+### 7. Риски и допущения
+
+- **`scripts/llm-bench.ps1` не выполнялся ни разу**: PowerShell 7 на машине нет (ОВ-43), Windows
+  PowerShell 5.1 не понимает синтаксис PS7. Проверен только разбор AST. Первый запуск на стенде
+  делать с `-Limit 2` и сверять колонки с `.sh` — расхождение колонок ловится ревью F-8.
+- Логика `.sh` проверена против **макета** сервера, а не llama-server: совпадают формы `usage`,
+  `usage.prompt_tokens_details.cached_tokens`, `timings.predicted_ms`, `choices[0].message.content`
+  и коды `/health`. Если реальный билд отдаёт `timings` иначе, `tps` окажется 0 — это видно в
+  таблице сразу и чинится одной строкой в разборе.
+- `p95` при n = 10 — это максимум выборки (nearest-rank, без интерполяции); одинаково в обоих
+  скриптах. Решение опирается на три прогона, а не на один.
+- `nvidia-smi` показывает VRAM всей карты, а не процесса: посторонняя нагрузка завышает колонку.
+  Поэтому в `baseline.md` есть строка «что ещё занимало GPU».
+- Ожидание по VRAM для E (16–19 ГБ) взято из ADR-005 доп. 2 (13,1 ГБ весов + KV 256 КиБ/токен) и в
+  матрице помечено `advisory`: это ориентир для «часть слоёв ушла в RAM», а не порог приёмки.
+
+---
+
+## developer#2 · T-014 · F-5t «`shared/testkit` ядро и contract-тест шины» · 2026-09-09
+
+**Ворота волны 1.** Один набор поведенческих тестов зелёный и на `membus`, и на живой Redpanda
+(testcontainers, образ `REDPANDA_IMAGE` из `build/versions.env`).
+
+### 1. Состав `shared/testkit`
+
+| Файл / пакет | Что |
+|---|---|
+| `testkit.go` | `Dedup` (псевдоним `eventbus.Dedup`) + `NewDedup`, `Epoch`, `Deterministic(t, prefix)` (последовательные ID + `clock.Manual`, откат в `t.Cleanup`), `Wall()` (реальные часы для замеров), `After(d)` (таймаут-плечо `select` через `clock.RealTimers`, чтобы не нарушать запрет `time.After`) |
+| `versions.go` | `Versions()` / `Version(name)` / `MustVersion(name)` — пины из `build/versions.env` через `env.ParseExample` (тот же парсер, что читает `.env.example`); `RepoRoot()` / `Path(...)` — корень репозитория по `runtime.Caller` + `go.mod`, чтобы тест не считал `../..` |
+| `containers.go` (тег `integration`) | `StartRedpanda(ctx, topics...)` — образ из пина, режим `dev-container`, `auto_create_topics_enabled=false`, создание топиков платформы, ожидание ответа на metadata-запрос; `Terminate`, `CreateTopics`, `Container()` для `testcontainers.CleanupContainer` |
+| `membus/` | in-process `Bus` + `Journal`: топик — append-only срез, офсет — индекс, группа — курсор. Публикация через `eventbus.Route`, чтение через `eventbus.Delivery` — **второго набора правил нет**. Плюс `Chaos{Duplicate}` (`--chaos=duplicate`), `Append` (сырая запись мимо валидации), `Records`/`DeadLetters` (чтение `dead_letters`, который нельзя читать журналом) |
+| `contract/` | `contract.Run(t, Target)` — 15 поведенческих проверок; `membus_test.go` (без тега) и `redpanda_integration_test.go` (тег `integration`) — только сборка цели, ни одного утверждения |
+
+Contract-тест офсето-относительный: каждая проверка берёт `End` как базу, публикует в **свой** мир
+и свою consumer group и игнорирует чужое. Поэтому один и тот же файл работает и на чистом `membus`,
+и на брокере, который уже хранит события предыдущих проверок.
+
+Проверки: порядок и `Position` в `Subscribe`; отказ публиковать неизвестный тип, битый конверт и
+payload не по схеме; политика `player_events` (`actor_kind=system` и `meta.agent` отвергаются);
+политика топиков роя (`tick.fired` без `meta.agent` отвергается, с ним принимается);
+`ReadRange` строго по возрастанию офсета, без дыр, под-диапазон, пустой диапазон; монотонность
+`End` (+1 на событие, чтение не двигает); остановка `ReadRange` на конце журнала; `Tail` до
+`ctx.Done()` с офсетами и `nil` на выходе; возобновление группы с курсора; `Dedup` (повтор не
+обрабатывается дважды); невалидное при чтении → `dead_letters`, `Attempts=0`, обработчик не вызван;
+недекодируемое сообщение → `dead_letters` с `raw`; повтор ×3 → ровно **4** вызова обработчика,
+`Attempts=4`, следующее событие обрабатывается (DLQ не блокирует топик); `Subscribe` при штатной
+остановке возвращает `nil`; фактическая задержка одиночной публикации.
+
+### 2. Найденные расхождения membus ↔ kafka и как починены
+
+1. **`ReadRange` за концом журнала: kafka висел, membus возвращал сразу.** `Kafka.ReadRange`
+   упирался в `FetchMessage`, который ждёт следующего сообщения, — запрос `[base, base+1000)` на
+   топике с одним событием не завершался до истечения контекста. `membus` знает свою длину и
+   возвращался мгновенно. Починено в `shared/eventbus/kafka.go`: `ReadRange` читает `End` и
+   обрезает `to` до конца журнала (`[from, min(to, End))`). Догоняющее чтение обязано завершаться,
+   продолжает следить `Tail`. Мутационная проверка: без обрезки подтест
+   `JournalStopsAtTheEndOfTheJournal` падает на Redpanda через 60 с ожидания.
+2. **`Subscribe` не закрывал reader при остановке — группа не отпускала партицию.**
+   `Kafka.Subscribe` делал `defer k.untrack(reader)`, но не `reader.Close()`. Reader kafka-go живёт
+   своими горутинами и остаётся членом consumer group до `Close`, поэтому следующая подписка той же
+   группы ждала ребаланса, который отдавал единственную партицию старому, уже никому не нужному
+   читателю. `membus`, у которого курсор — число, продолжал сразу. Проявилось как флак подтеста
+   `AGroupResumesFromItsCursor`: сначала 3,3 с, потом 60 с (таймаут). Починено:
+   `defer k.closeReader(reader)`. После правки подтест 0,63 с, весь прогон на Redpanda 19 с → 12 с.
+   Побочно закрыта утечка горутин и соединений в каждом штатно остановленном контексте.
+3. **`Close()` у membus подвешивал читателей и возвращал не тот результат.** Первая версия будила
+   читателей подменой broadcast-канала, но цикл `Tail`/`Subscribe` не проверял закрытие и засыпал
+   снова; после исправления первым порывом было вернуть `ErrClosed`. Это расходится с kafka: там
+   `Close` закрывает readers, `FetchMessage` падает с `io.ErrClosedPipe`, и `eventbus.stopped`
+   превращает это в `nil` (решение Mi-1 по ревью T-005 — штатная остановка возвращает `nil`).
+   Починено в membus: канал `done`, закрываемый `Close`, в `select` каждого читателя, возврат
+   `nil`. Тест `TestCloseReleasesReaders` держит обе половины.
+4. **Топик, которого нет.** Брокер платформы работает с `auto_create_topics_enabled=false`, а
+   writer — с `AllowAutoTopicCreation=false`; membus, создающий топик по первой записи, скрыл бы от
+   потребителя целый класс ошибок конфигурации. Приведено: `membus.Config.Topics` — список
+   существующих топиков, всё прочее → `ErrNoTopic`; пустой список оставлен как «мягкий» режим для
+   unit-тестов чужих пакетов и явно описан как более снисходительный, чем брокер. Contract-тест
+   всегда передаёт реальный список `contracts.Topics()`.
+
+### 3. Замеренная задержка публикации
+
+На живой Redpanda (`--mode dev-container`, локальный Docker Desktop), 5 одиночных публикаций после
+прогрева, худшая из них: **4,0 / 9,1 / 17,0 мс** в трёх прогонах при бюджете 300 мс (NFR-001).
+То есть правка M-1 из ревью T-005 (`kafkaBatchSize=1`, `kafkaBatchTimeout=10ms`) работает: дефолты
+kafka-go дали бы около 1 с на событие. Проверка живёт в contract-тесте
+(`PublishOfOneEventIsNotBatched`) и на `membus` только печатает значение — в процессе она измеряет
+append к срезу.
+
+### 4. Отклонения от дизайна
+
+1. **`containers.go` содержит только Redpanda.** `foundation.md` §9 перечисляет ещё minio, qdrant,
+   neo4j. MinIO уже поднимается в `shared/objstore/integration_test.go` через модуль
+   testcontainers (T-007), qdrant и neo4j не нужны никому до профиля `memory` (EPIC-005). Писать
+   непроверяемые стартеры «на будущее» — заведомо неверный код: три образа тянуть незачем, а
+   ошибку в них найдёт не эта задача. Заявка на них — в задачу, которой они понадобятся.
+2. **Contract-тест лежит в `shared/testkit/contract/`, а не в `shared/eventbus/bus_contract_test.go`**
+   (как в `foundation.md` §9). Причина: файл в каталоге `shared/eventbus` не может быть общим для
+   двух реализаций без того, чтобы `eventbus` знал про `testkit`; `tasks.md` T-014 в списке файлов
+   и так называет `shared/testkit/contract/**`. Обе цели (`membus` и Redpanda) собираются в одном
+   пакете `contract_test`, различаясь только тегом сборки.
+3. **`go.mod`: `github.com/moby/moby/api` переведён из indirect в direct** (версия та же, `go.sum`
+   не менялся). Причина: `testcontainers.ContainerRequest.HostConfigModifier` принимает
+   `*container.HostConfig` этого модуля, а фиксированная привязка порта нужна потому, что брокер
+   обязан объявить (`--advertise-kafka-addr`) адрес, по которому клиент до него дотянется, — а
+   динамический порт Docker сообщает уже после старта.
+
+### 5. Как проверял
+
+- `go build ./... && go vet ./... && go test -short -count=1 ./...` — зелёные.
+- `go test -tags integration -count=1 ./shared/testkit/... ./shared/eventbus/...` — зелёные,
+  два прогона подряд без флака (14,4 с на пакет `contract`).
+- `golangci-lint run ./...` — 0 issues (с тегами `integration`, `e2e`).
+- Покрытие (`scripts/coverage-gate.sh 60`): `shared/testkit` 81,1 %, `shared/testkit/membus` 83,6 %,
+  `shared/testkit/contract` 81,3 %, `shared/eventbus` 66,9 %.
+- Мутационные проверки: снятие обрезки `to` в `ReadRange` валит `JournalStopsAtTheEndOfTheJournal`
+  на Redpanda; снятие `closeReader` возвращает флак `AGroupResumesFromItsCursor`; возврат
+  `ErrClosed` из membus при `Close` валит `TestCloseReleasesReaders`.
+- `-race` локально недоступен (см. риски).
+
+### 6. Открытые вопросы
+
+1. **`ReadRange` теперь делает лишний round-trip `End` на каждый вызов.** Для догоняющего чтения это
+   незаметно, но если EPIC-002 будет читать журнал маленькими окнами в цикле, стоит добавить
+   вариант с уже известным `End`. Подтвердить у architect#1 при ревизии C-01.
+2. **Правки в `shared/eventbus/kafka.go` — общий код.** Публичный API не менялся, изменилось
+   поведение `ReadRange` за концом журнала и закрытие reader при остановке подписки. Нужна ли
+   пометка `contract-change` при коммите — решает tech-lead#1.
+3. **Стартеры minio/qdrant/neo4j в `containers.go`** — см. отклонение 1: подтвердить, что их пишет
+   задача-потребитель.
+4. **`membus` без списка топиков мягче брокера.** Оставлено сознательно (удобство unit-тестов
+   чужих пакетов). Если это признают риском, режим убирается одной строкой и `Topics` становится
+   обязательным.
+
+### 7. Риски и допущения
+
+- **`-race` не прогонялся**: локально недоступен (общий DoD §1 п. 2 требует его). В CI job `unit`
+  он прогоняется — на нём и проверять; в `membus` разделяемое состояние закрыто мьютексами, курсор
+  группы держится на время доставки, поле `done` только закрывается.
+- **`StartRedpanda` резервирует свободный порт и отпускает его до старта контейнера** — окно гонки
+  есть. Убрать его нельзя: объявляемый адрес нужен до старта брокера. На практике окно — доли
+  секунды; при конфликте контейнер не стартует с внятной ошибкой Docker, а не молча.
+- **Contract-тест на Redpanda делит один брокер на все 15 проверок.** Это сознательно: пересоздание
+  топиков между проверками в Redpanda асинхронно и само по себе флакует. Изоляция — по миру и
+  группе; если какая-то будущая проверка потребует пустого журнала, она поднимает свой брокер.
+- **`dev-container`** — однонодовый профиль без fsync-проверок. Он не проверяет поведение при
+  репликации, но MVP-1 и в продакшене однонодовый, одна партиция (ADR-007 п. 4).
+
+---
+
+## developer#1 · T-012 · итерация 2 (исправления по ревью #1) · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `fd93a6a`, изменения в индексе, коммита нет. Вердикт ревью
+— «вернуть» (Critical 1, Major 3, Minor 9, Nit 6). Закрыты назначенные оркестратором **C-1, M-2,
+M-3, M-4, Mi-1, Mi-2, Mi-3, Mi-4, Mi-5, Mi-6, Mi-7, Mi-9**. **Mi-8 и N-1…N-6 — в бэклог**
+(решение оркестратора), туда же — отдельная задача на пины и права в `qwen-*.yml` (вне области
+T-012 по §3.2). Область правок: `.github/workflows/go.yml`, `Makefile`, `.gitleaks.toml`,
+`scripts/coverage-gate.sh` (режим), `cmd/mvctl/internal/privacy/**`, `build/Dockerfile` (одна
+строка), `shared/env/vars.go` + `.env.example` (одна строка) и эта запись. Файлы developer#2
+(`shared/testkit/**`, `shared/eventbus/**`, `scripts/llm-bench.*`, `ops/**`, `testdata/bench/**`)
+и `review.md` не трогал.
+
+### 1. C-1 — режим `scripts/coverage-gate.sh`
+
+`git update-index --chmod=+x scripts/coverage-gate.sh` — бит хранится в дереве и от
+`core.fileMode` рабочей копии не зависит. Проверка: `git ls-files -s scripts/*.sh` →
+`compose-lint.sh` и `coverage-gate.sh` — `100755`.
+
+Доказательство, что чинит именно то место (тот же приём, что у ревьюера, но на **новом**
+содержимом индекса): `git archive $(git write-tree) scripts/coverage-gate.sh` распакован в
+контейнере `bash:5` → `-rwxrwxr-x`; запуск как программы даёт `usage: …` и код **2**, а не
+`Permission denied` / 126.
+
+Страховка от повторения: оба вызова переведены на явный интерпретатор — шаг job `unit`
+(`bash scripts/coverage-gate.sh 60 …`) и рецепт `test` в `Makefile`. Тогда потеря бита ломает
+не CI, а только запуск `./scripts/…` вручную. Критерий «все `scripts/*.sh` — `100755`» ревьюер
+предложил в общий DoD/pre-commit — остаётся в бэклоге (предложение 3 ревью); отмечу здесь, что
+`scripts/llm-bench.sh` (T-013, developer#2) в индексе сейчас `100644`.
+
+### 2. M-2 — триггер `push`
+
+`on.push.branches` сужен до `main` и `'integration/**'` (решение оркестратора от 2026-09-10,
+п. 1). `epic/**` и `feature/agent-gm-core` из `push` убраны, в `pull_request.branches` оставлены
+без изменений: там это **целевые** ветки PR, и сужение отрезало бы PR в ветку эпика от проверок.
+Двойного счёта больше нет: коммит в ветке эпика проходит CI один раз — через `pull_request`.
+Группы `concurrency` править не потребовалось: группа одна (`ci-${{ github.ref }}`), и после
+сужения `push` для одного коммита остаётся ровно один активный ref (`refs/pull/N/merge`);
+пересечения с группами `qwen-*.yml` нет (проверено ревьюером, не менялось).
+
+### 3. M-3 — права job `security`
+
+Добавлено `pull-requests: read`: `gitleaks-action` **до** сканирования читает
+`GET /repos/{owner}/{repo}/pulls/{pull_number}/commits`, а объявленный блок `permissions`
+обнуляет всё неперечисленное. Плюс `GITLEAKS_ENABLE_COMMENTS: 'false'` — комментарии на PR
+требуют уже `pull-requests: write` в единственном job'е, работающем с секретами, и при одном
+человеке-владельце не дают ничего сверх красного чека.
+
+### 4. M-4 — allowlist в `.gitleaks.toml` откачен, путь сделан относительным
+
+Блок `[[allowlists]]` с `regexTarget = "secret"` удалён; `.gitleaks.toml` побайтно вернулся к
+состоянию F-1 (`git diff HEAD -- .gitleaks.toml` пуст) — §4.5 п. 1 запрещает именно расширение
+allowlist, а не широту правила. Вместо него шаг job'а получил относительные аргументы:
+`dir --no-banner --redact --config=.gitleaks.toml .` (рабочий каталог контейнера уже `/repo`),
+и fingerprint из `.gitleaksignore` совпадает.
+
+Проверено на **содержимом индекса** (`git checkout-index -a --prefix=<tmp>/`), gitleaks v8.30.1:
+
+| Форма вызова | Результат |
+|---|---|
+| `gitleaks dir --config=<abs>/.gitleaks.toml <abs>` | `leaks found: 1`, код **1** |
+| `cd <tmp> && gitleaks dir --config=.gitleaks.toml .` | `no leaks found`, код **0** |
+| тот же относительный вызов в запинованном образе `zricethezav/gitleaks:v8.30.1` (как в job'е) | `no leaks found`, код 0 |
+
+То есть находка гасится существующим fingerprint'ом, а не новым послаблением.
+
+### 5. Mi-1 — `security-events: write` убрано
+
+Выбран первый из двух предложенных ревью вариантов. SARIF действительно никуда не выгружается:
+`gitleaks-action` кладёт его в артефакт workflow, а артефакт отключён
+(`GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'`); `govulncheck-action` печатает текст. Добавлять
+`github/codeql-action/upload-sarif` в этой задаче не стал: это ещё одно действие (ещё один пин,
+ещё одно право) ради данных, которые на приватном репозитории личного аккаунта во вкладке
+Security всё равно не работают полноценно. Комментарии в шапке файла и над job'ом приведены в
+соответствие: право теперь одно и объяснено — чтение PR для сканера.
+
+### 6. Mi-2 — `MINIO_COMMIT` в сборку образа
+
+В `build-args` job'а `integration` добавлено `MINIO_COMMIT=${{ env.MINIO_COMMIT }}`. Источник
+истины снова один — `build/versions.env` (NFR-071); до правки CI после первого же обновления
+пина молча собирал бы коммит из дефолта `ARG` в `build/minio.Dockerfile`.
+
+### 7. Mi-3 и Mi-4 — сканер `privacy`
+
+Правила выровнены с `shared/logging.credentialPatterns` и расширены на каноническую форму
+апдейта Telegram:
+
+- **токен бота**: было `\b\d{8,10}:[A-Za-z0-9_-]{32,48}\b`, стало
+  `(?i)\b(?:bot)?\d{6,}:[A-Za-z0-9_-]{30,}` — ровно то, что редактирует логгер. Семизначный и
+  одиннадцатизначный идентификаторы, а также форма `bot<digits>:` из URL Bot API теперь ловятся
+  (три новых случая в таблице теста);
+- **ключ провайдера**: `sk-`/`pk-` с `{16,}` → `{8,}` (бound логгера); `ghp_`/`xox…` — как были;
+- **числовой ID**: в альтернативу ключей добавлен `update_?id` (в `sensitiveKeys` логгера он
+  есть с ревью T-007, в сканере не было);
+- **новое правило на вложенную форму**:
+  `(?is)"(?:from|chat|user|sender)"\s*:\s*\{[^{}]*?"id"\s*:\s*"?(\d{5,15})` — `{"from":{"id":…}}`,
+  `{"chat":{"id":…}}`, `{"user":{"id":"…"}}`. `[^{}]` удерживает совпадение внутри одного
+  объекта; голый `{"id":…}` сознательно **не** ловится — на JSONL метрик и схемах это дало бы
+  поток ложных срабатываний, а структурный разбор JSON остаётся за EPIC-005 (T-139).
+
+Из комментария к `rules` убрано утверждение «те же правила, что тест NFR-041»; вместо него —
+явная запись, что совпадают именно два «credential»-шаблона, и почему списки ключей всё ещё
+разные. Единого экспортируемого источника ключей не делал: он живёт в `shared/logging`
+(`sensitiveKeys` не экспортирован), а этот файл вне владения задачи; предложение — в бэклог
+T-139, туда же, где структурный разбор.
+
+Отрицательная половина таблицы дополнена тремя случаями, страхующими расширение правил:
+`{"chat": {"id": 000000000}}` (повтор цифры), объект без `id`, метка времени с двоеточием.
+`TestScanTheShippedTestdata` (реальный `testdata/`) остался зелёным — ложных срабатываний на
+фикстурах T-013 расширение не дало.
+
+### 8. Mi-5 — второй `-X` в `build/Dockerfile` (ОВ-30)
+
+`go build -ldflags "-s -w -X main.version=${VERSION} -X multiverse-core.io/shared/logging.Version=${VERSION}"`
+— как в `LDFLAGS` `Makefile`. Иначе поле `version` каждой строки лога контейнера оставалось `dev`
+(§7.1, NFR-041). Комментарий вынесен **над** инструкцией `RUN`, а не внутрь продолжения строки:
+комментарий в середине continuation парсеры принимают, но hadolint и читатель — по-разному.
+Файл `build/**` — владение EPIC-001, правка в одну строку, вынесена tech-lead#1 в отчёте.
+
+### 9. Mi-6 — `ci-harness` в `MV_CORE_ADMIN_CLIENTS`
+
+Умолчание в `shared/env/vars.go`: `operator,mvctl` → `operator,mvctl,ci-harness`; то же значение
+в `.env.example`; описание переменной дополнено («ci-harness — client id сценариев e2e с T-018»).
+Выбран вариант с умолчанием, а не переменная окружения в job'е `e2e`: обязательство от
+2026-09-09 сформулировано как «добавить в умолчание», сценариев e2e ещё нет, а переменная в
+job'е потерялась бы при первом переносе сценариев. `.github/ci.env`
+(`MV_CORE_ADMIN_CLIENTS=operator`) **не трогал** — файл T-004, там осознанно узкий список для
+`docker compose config`. `mvctl env check` после правки зелёный (69 переменных).
+
+### 10. Mi-7 — `make secrets-scan` по содержимому индекса (ОВ-8)
+
+Второй шаг цели переписан: `git checkout-index -a --prefix=<tmp>/`, затем
+`cd <tmp> && gitleaks dir --no-banner --redact --config=.gitleaks.toml .`, с `trap` на удаление
+каталога. Это решает сразу два: цель перестаёт краснеть на неотслеживаемых `.env`,
+`build/.legacy-src/` и `.claude/worktrees/` (в чекауте CI их нет), и относительный путь чинит
+`.gitleaksignore` — тот же корень, что у M-4. Прогон рецепта (`make` в окружении нет, выполнено
+то же тело в bash): `gitleaks git` — `no leaks found`, `gitleaks dir` по индексу —
+`no leaks found`, код 0; что цель действительно краснеет на находке, проверено формой с
+абсолютным путём (код 1).
+
+### 11. Mi-9 — код возврата `privacy scan` при ошибке ввода-вывода
+
+Ошибка обхода больше не отображается в `ExitFindings`. Обе ветки (`fs.ErrNotExist` и любая
+другая) возвращают `cli.ExitUsage` = 2 — «ошибка» по контракту кодов `mvctl` (0 / 1 / 2), и в
+сообщении явно сказано, что скан неполный: обход прерывается на первой ошибке, значит результат
+частичный, и «1 находка» без этого могла означать «дальше не смотрели». Вариант «копить
+нечитаемые пути в `Result.Skipped` и падать в конце» не выбран: `Skipped` сегодня означает
+«прочитано и осознанно пропущено» (бинарник, большой файл), и смешивать в нём пропуск с отказом
+хуже, чем остановиться; полный обход с накоплением — в T-139 вместе со структурным разбором.
+
+Тест `TestScanSeparatesAnErrorFromAFinding` строит непрочитаемый путь именем с NUL-байтом: это
+единственная форма, которая на Windows и на Linux одинаково даёт ошибку, **не** являющуюся
+`fs.ErrNotExist` (мод-бит каталога на Windows не работает). Тест проверяет и код 2, и слово
+«incomplete» в stderr.
+
+### 12. Что не делалось и почему
+
+- **Mi-8** (`coverage-gate.sh` не отличает отсутствующий пакет от несобирающегося) и
+  **N-1…N-6** — в бэклог по решению оркестратора.
+- **Пины и права `qwen-*.yml`** (предложение 1 ревью) — отдельная задача: §3.2 прямо запрещает
+  трогать эти файлы в T-012.
+- **`.gitattributes` c `go.mod text eol=lf`** (предложение 2) — файл F-1, отдельная задача;
+  `go mod tidy -diff` на Windows остаётся «грязным», на Linux-раннере шаг зелёный.
+- **`upload-sarif`** — см. §5.
+
+### 13. Проверки этой итерации
+
+Окружение: Windows, Git Bash, `GOFLAGS=-buildvcs=false`, `make` нет (рецепты выполнялись как
+скрипты), `-race` недоступен (ОВ-5 — только в CI), `push` нельзя.
+
+| Проверка | Результат |
+|---|---|
+| `actionlint .github/workflows/go.yml` | 0 замечаний |
+| `go build ./...`, `go vet ./...` | ok, ok |
+| `go test -short -count=1 ./...` | все пакеты `ok` |
+| `golangci-lint run ./...` | **0 issues** |
+| `gofmt -l cmd/mvctl/internal/privacy` | пусто |
+| `git ls-files -s scripts/*.sh` | `coverage-gate.sh` и `compose-lint.sh` — `100755` |
+| режим из индекса в контейнере `bash:5` | `-rwxrwxr-x`; запуск как программы → код 2 (usage), не 126 |
+| `bash scripts/coverage-gate.sh 60 internal/{state,mechanics,swarm,llm,replay}` | пять предупреждений «does not exist yet», код 0 |
+| `bash scripts/coverage-gate.sh 60 cmd/mvctl/internal` | `93.0% (477 of 513 statements)`, код 0 |
+| `go run ./cmd/mvctl privacy scan testdata/` | `no external identifiers … (6 files read)`, код 0 |
+| эмуляция job `contracts` | `65 types, 8 topics, 58 schema files`; `69 variables`; `TestSchemasValid` ok |
+| эмуляция job `security` (gitleaks по индексу в запинованном образе, `privacy scan`, `govulncheck ./...`) | 0 находок / 0 находок / уязвимостей нет |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| эмуляция рецепта `make secrets-scan` (по индексу) | обе части зелёные |
+
+### 14. Открытые вопросы
+
+1. **`scripts/llm-bench.sh` (T-013) в индексе `100644`.** Тот же класс, что C-1, но файл чужой —
+   не трогал. Кому чинить: developer#2 в T-013 или отдельной строкой при приёмке подволны.
+2. **Единый источник чувствительных ключей.** `shared/logging.sensitiveKeys` не экспортирован;
+   выравнивание списков регулярками — временная мера. Предлагаю закрепить экспорт за T-139
+   (EPIC-005), а до тех пор считать расхождение известным.
+3. **`.github/ci.env` и `ci-harness`.** Если сценарии e2e будут подниматься через compose, строку
+   `MV_CORE_ADMIN_CLIENTS` там придётся расширить — вносить это в DoD T-018 или нет, решает
+   tech-lead#1.
+
+### 15. Риски и допущения
+
+- **Реальный прогон CI по-прежнему недоступен** (push нельзя). C-1 и M-4 проверены прогонами на
+  содержимом индекса и в контейнерах — это доказательства, а не оценки. M-3 подтвердится только
+  первым реальным PR: правка снимает обе причины падения (403 на чтение PR и попытка
+  комментировать).
+- **Сужение `push` меняет наблюдаемое поведение веток эпиков**: пока PR не открыт, коммиты в
+  `epic/**` не проверяются CI вовсе. Это принятое решение оркестратора (экономия минут);
+  локально роль страховки играет `make ci`.
+- **Расширение правил сканера повышает риск ложных срабатываний** на будущих фикстурах
+  (`\d{6,}:` вместо `\d{8,10}:`, `sk-…{8,}` вместо `{16,}`). Сегодня `testdata/` чист, а цена
+  ошибки несимметрична: ложное срабатывание — переименование фикстуры, пропуск — переписывание
+  истории.
+- **`update_id` теперь ловится как внешний идентификатор**, хотя сам по себе идентификатором
+  человека не является. Это сознательно: он приходит только в связке с апдейтом, и логгер
+  скрывает его по тем же соображениям (T-06/T-08).
+
+---
+
+## developer#2 · T-014 · итерация 2 (исправления по ревью #1) · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, база `fd93a6a`, изменения в индексе, коммита нет. Вердикт ревью
+— «вернуть», ворота волны 1 не закрыты (Critical 0, Major 2, Minor 7, Nit 5). Закрыты назначенные
+оркестратором **Major-1, Major-2, Minor-1, Minor-2, Minor-3, Minor-4, Minor-5, Minor-6, Minor-7,
+Nit-5**. Nit-1…Nit-4 — в бэклог по решению оркестратора. Область правок — `shared/testkit/**`,
+`shared/eventbus/kafka.go` (общий код: новый кейс вскрыл зависание `Close`, см. §3 п. 7 — пометка
+`contract-change` при коммите) и эта запись; `internal/mechanics/**`, `rules/**` (T-015,
+developer#1) и `review.md` не трогал.
+
+Набор контракта вырос с 15 проверок до 20 и по-прежнему целиком проходит на обеих реализациях.
+
+### 1. Правки реализации (`shared/testkit/membus/membus.go`)
+
+**Major-1 — отменённая подписка дочитывала весь хвост.** Проверка «пора остановиться» была только
+там, где читатель припаркован на конце лога, и там, где доставка сама вернула ошибку. Успешный
+обработчик означал, что отменённая подписка спокойно доводила до конца всё, что уже лежит в топике,
+а брокер останавливается в пределах одного события — падает `FetchMessage` или `CommitMessages`.
+
+Введён один предикат и одна точка вызова:
+
+```go
+func (b *Bus) stopping(ctx context.Context) bool   // ctx.Err() != nil || закрыт b.st.done
+```
+
+Он спрашивается **в начале каждой итерации** `Subscribe`, `Tail` (обе возвращают `nil`) и
+`ReadRange` (возвращает `next, nil`) — то есть перед тем, как взять следующую запись, а не только
+когда записи кончились. Возвраты выбраны по kafka: там отмена и закрытый reader одинаково проходят
+через `eventbus.stopped` и дают `nil`.
+
+**Побочно закрыто второе расхождение того же класса** — `Close()` при непустом хвосте, см. §3 п. 6.
+Одного предиката хватает на оба, потому что для читателя отмена контекста и закрытие шины — одно и
+то же событие: «дальше не читать».
+
+**Major-2 / Minor-3 / Minor-6 — ручки, которых не хватало набору.**
+
+| Что | Зачем |
+|---|---|
+| `Bus.Lenient() *Bus` | вид на ту же шину с `SkipValidateOnRead=true`. Второй `membus` тут не годится: у него был бы свой лог, в который никто не публиковал |
+| `Bus.SetChaos(Chaos)` | хаос — свойство всего транспорта, а кейсу нужно продублировать **одну** публикацию; второй шины для этого опять нет |
+| — | отдельной ручки для `Close` не понадобилось: `Bus.Close` уже есть в интерфейсе C-01 |
+
+Ради `Lenient` изменяемое состояние вынесено из `Bus` в `state` под указателем (`done`, `mu`,
+`closed`, `chaos`, `topics`, `groups`). Это и есть смысл вида: шина и её виды — **один транспорт**,
+закрытие одного закрывает все, опубликованное через один читается через другой. Публичный API
+`membus` только дополнен; `New`, `Config` и поведение по умолчанию не менялись.
+
+### 2. Новые проверки контракта (`shared/testkit/contract/contract.go`)
+
+| Проверка | Что держит | Замечание |
+|---|---|---|
+| `CancellingASubscriptionStopsItOnTheBacklog` | 40 событий в топике, обработчик 25 мс, отмена после третьего: после возврата `Subscribe` число вызовов не растёт и заметно меньше длины хвоста | Major-1 |
+| `AnUncommittedEventIsDeliveredAgain` | обработчик держит событие до отмены и возвращает `ctx.Err()` → новая подписка **той же группы** получает его снова (at-least-once) | Minor-2 |
+| `WithoutValidationOnReadTheEventReachesTheHandler` | на шине с `SkipValidateOnRead=true` событие не по схеме доходит до обработчика и **не** попадает в `dead_letters` | Minor-6 |
+| `ABigUndecodableBodyIsTruncatedInItsDeadLetter` | тело 900 КиБ → dead letter с `RawTruncated=true` и ровно `MaxDeadLetterRaw` байт; следующее сообщение того же топика обработано | Minor-5 |
+| `CloseStopsTheSubscriptionsAndRefusesToPublish` | `Close()` под непустым хвостом → идущая подписка вернула `nil`, хвост не дочитан, `Publish` вернул `ErrClosed` | Major-2 |
+
+**Minor-1 — `stop()` больше не выбрасывает результат `Subscribe`.** Сигнатура стала `stop(t)`, и
+ненулевой возврат — `t.Errorf` с внятным текстом. Побочный эффект: правило C-01 «штатная остановка
+возвращает `nil`» теперь распространено на все 20 кейсов, а не на один именной. Проверено мутацией
+F (§4): припаркованная подписка, возвращающая `ctx.Err()`, даёт 10 внятных сообщений вместо
+15-секундных таймаутов в непонятных местах.
+
+**Minor-3 — дубль идёт через ручку `Target.Duplicate`, а не через двойной `Publish` в теле кейса.**
+На `membus` ручка включает `Chaos{Duplicate: true}` на время одной публикации — то есть режим
+`--chaos=duplicate` из ADR-010 п. 4 наконец участвует в контракте, а не только в unit-тесте
+заглушки. На kafka ручка публикует событие дважды: у брокера переключателя нет, а повтор публикации
+— ровно то, что кладёт на провод продюсер, не получивший подтверждения. Наблюдаемое потребителем
+одинаково: один `event.id`, две доставки.
+
+`Target` дополнен тремя полями: `Duplicate`, `Lenient` (обязательные — `Run` падает без них) и
+`Close` (необязательное; кейс идёт последним, после него таргет непригоден, поэтому таргет, который
+обязан пережить набор, оставляет поле пустым и кейс пропускается).
+
+### 3. Найденные расхождения (продолжение §2 записи от 2026-09-09)
+
+5. **Отмена подписки при непустом хвосте.** Зонд ревьюера (100 событий, обработчик 50 мс, отмена
+   через 1,5 с): `membus` — 30 вызовов на момент отмены и **100** после возврата `Subscribe`,
+   kafka — 26 и **26**. Починено в `membus` (§1). После правки контрактный кейс печатает
+   `membus: 3 of 40` и `redpanda: 3 of 40`. Мутация A (§4) возвращает `40 of 40`.
+6. **Закрытие шины при непустом хвосте — расхождение того же класса, найдено в этой итерации при
+   написании кейса Major-2.** `membus` замечал закрытый `done` только в припаркованном `select`,
+   поэтому `Close()` под непустым хвостом означал «дочитать всё, потом вернуть `nil`»; kafka
+   закрывает reader, и `FetchMessage` падает немедленно. Починено тем же предикатом `stopping`.
+   Кейс `CloseStopsTheSubscriptionsAndRefusesToPublish` закрывает шину именно под хвостом, поэтому
+   расхождение держит общий набор, а не только заглушка. Мутация G (§4) возвращает `40 of 40`.
+
+7. **`Kafka.Close()` навсегда подвешивал подписку, пойманную между обработчиком и коммитом.**
+   Найдено кейсом Major-2 на живом брокере: `CloseStopsTheSubscriptionsAndRefusesToPublish` падал
+   4 прогона из 4 с «Close left the subscription running after 15s». Дамп горутин показал место
+   точно: `kafka-go/reader.go:907` в `CommitMessages`, вызванный из `kafka.go:175`. Механизм:
+   `Reader.commits` — буферизованный канал (`QueueCapacity`, по умолчанию 100), поэтому первый
+   `select` в `CommitMessages` успевает положить запрос в буфер даже после `Close`, а второй ждёт
+   ответа на `errch` — от горутины, которую `Close` уже остановил. Контекст подписки при этом не
+   отменён (закрыли шину, а не контекст), так что ждать он будет вечно. Цена дефекта не тестовая:
+   `Close` зовёт каждый контекст платформы при остановке (`runtime.Deps`), то есть процесс,
+   остановленный в неудачный момент, не завершался бы вовсе.
+   **Починено в `shared/eventbus/kafka.go`**: у шины появился контекст `closing`, отменяемый
+   `Close` **до** закрытия читателей, а `Subscribe` наследует от него контекст своего цикла
+   (`context.AfterFunc`). Теперь и fetch, и commit заканчиваются так, как требует C-01 от
+   остановленной подписки, — возвратом `nil`. `membus` в той же ситуации возвращал `nil` сразу,
+   то есть это ровно расхождение заглушки с адаптером, и до этой итерации оно не ловилось ничем:
+   `Close` в наборе не проверялся (Major-2).
+
+Больше правок в `shared/eventbus/**` не потребовалось: остальные четыре новых кейса зелёные на
+kafka без изменений адаптера. Цепочка `Close → FetchMessage → io.ErrClosedPipe → stopped → nil`,
+которая до сих пор была обоснована только чтением кода, теперь проверена прогоном на живом брокере.
+
+### 4. Мутационные проверки
+
+Файлы после каждой мутации восстанавливались из резервной копии, md5 сверялись
+(`membus.go` — `4af70d8e…`, `delivery.go` — `56230b56…`).
+
+| # | Мутация | Ожидание | Факт |
+|---|---|---|---|
+| A | `membus`: снять `stopping` в начале цикла `Subscribe` | падение | `CancellingASubscriptionStopsItOnTheBacklog` — «handled the whole backlog (40 of 40)» |
+| B | `membus`: припаркованный читатель возвращает `ErrClosed` вместо `nil` при `Close` | падение | `CloseStopsTheSubscriptionsAndRefusesToPublish` — «returned eventbus: bus is closed, want nil» (та самая мутация 6 ревью, которая раньше оставляла набор зелёным) |
+| C | `membus`: `g.next = offset + 1` безусловно (курсор движется и при прерванной доставке) | падение | `AnUncommittedEventIsDeliveredAgain` — таймаут 15 с |
+| D | `membus`: `Lenient()` не выставляет флаг (перепутанный знак `!MV_BUS_VALIDATE_ON_READ`) | падение | `WithoutValidationOnReadTheEventReachesTheHandler` — «did not reach the handler within 15s» |
+| E | `eventbus/delivery.go`: `truncateRaw` возвращает тело целиком | падение на обеих, **но по разным причинам** | На Redpanda подписка умирает с «`[10] Message Size Too Large`» при записи dead letter: тело 900 КиБ в base64 — 1,2 МиБ, больше `max.message.bytes`; офсет не коммитится, топик стоит на том самом сообщении, ради которого DLQ и заведён. На `membus` тот же кейс падает по отсутствию `RawTruncated` (в памяти запись удаётся). То есть смысл проверки действительно транспортный, и юнит-тест обрезки его не заменяет. Сообщение брокера видно только благодаря Minor-1: до правки `stop()` результат `Subscribe` выбрасывался и был бы виден один таймаут |
+| F | `membus`: припаркованная подписка возвращает `ctx.Err()` вместо `nil` при отмене | внятные ошибки вместо таймаутов | 10 кейсов сообщают «the subscription returned context canceled, want nil», весь набор — 1,4 с вместо минут (эффект Minor-1) |
+| G | `membus`: `stopping` не смотрит на `done` (закрытие видно только на парковке) | падение | `CloseStopsTheSubscriptionsAndRefusesToPublish` — «handled the whole backlog (40 of 40)» |
+| H | `eventbus/kafka.go`: снять наследование контекста цикла от `closing` (состояние до правки §3 п. 7) | зависание на брокере | `CloseStopsTheSubscriptionsAndRefusesToPublish` — «Close left the subscription running after 15s», 4 прогона из 4; дамп горутин указывает на `CommitMessages` |
+
+### 5. Известные расхождения, которые контракт сознательно не покрывает (Minor-7)
+
+1. **Несуществующий топик.** `membus` отдаёт `ErrNoTopic` синхронно из `Publish`/`Subscribe`/
+   `Journal` (`membus.go`, `topic()`); kafka — ошибку дозвона из `End`, ошибку записи из `Publish`
+   (writer с `AllowAutoTopicCreation=false`) и **молчаливое ожидание** в `Subscribe`. Контракт этого
+   не проверяет: у ошибок нет общего типа, и приводить их к одному пришлось бы, меняя публичное
+   поведение адаптера — это ревизия C-01, а не задача ворот. Потребителю следует считать, что
+   единственный переносимый факт — «на несуществующий топик работать нельзя»; вид ошибки зависит от
+   реализации.
+2. **Начало журнала при retention.** У `membus` офсет 0 существует всегда; у брокера с retention
+   30/90/180 дней (`infrastructure.md` §10) `from` может оказаться левее log start offset — тогда
+   `ReadRange` отдаст события с бо́льшими офсетами и вернёт `next = msg.Offset+1`, ничего не сообщив
+   о пропуске, а `membus` в той же ситуации отдаст всё с `from`. Поведение `ReadRange` левее начала
+   журнала контрактом C-01 **не определено**, поэтому кейса нет; заявка architect#1 при ревизии C-01
+   — см. §9 п. 2. Для MVP-1 не срочно: окно retention заведомо больше жизни любого курсора.
+
+### 6. Отклонения от дизайна (дополнение к §4 записи от 2026-09-09)
+
+4. **Хаос: `Chaos{Duplicate bool}` вместо доли 5 %, `ReorderTopics` отсутствует.** ADR-010 п. 4 и
+   `foundation.md` §9 требуют `--chaos=duplicate` с переизданием 5 % событий (NFR-013) и
+   `--chaos=reorder-topics` (проверка ожидания по `correlation_id`). Реализован детерминированный
+   `bool`: доля 5 % в тесте означает «дубля может не быть», то есть либо тест зелёный, ничего не
+   проверив, либо в нём появляется цикл «публикуй, пока не продублируется» — это медленно и всё
+   равно недетерминированно (NFR-061 требует воспроизводимости). Доля осмысленна для нагрузочного
+   прогона, `bool` — для функционального; при необходимости `Chaos` дополняется полем
+   `DuplicateRate`, существующее поле при этом не меняется.
+   **`ReorderTopics` не реализован** и потребителя пока не имеет: перестановка событий *между*
+   топиками проверяет ожидание по `correlation_id`, которое появится в EPIC-003 (рой ждёт факты
+   State) и EPIC-005. Заявка — в задачу-потребителя, как и стартеры MinIO/Qdrant/Neo4j (отклонение 1
+   записи от 2026-09-09).
+5. **`Target.Duplicate` на kafka — двойная публикация, а не режим шины.** У брокера переключателя
+   хаоса нет и быть не может; повтор публикации моделирует ретрай продюсера после потерянного `ack`
+   — штатный источник дублей в at-least-once. Наблюдаемое потребителем совпадает с
+   `--chaos=duplicate`: один `event.id`, две доставки, разные офсеты.
+
+### 7. Таймаут кейса и бюджет красного прогона (Nit-5)
+
+`contract.Timeout` снижен с 60 с до **15 с**. Обоснование — замер: самый долгий кейс на живом
+брокере 0,70 с (`CancellingASubscriptionStopsItOnTheBacklog`, из них 0,5 с — намеренные паузы
+обработчика), весь набор из 20 кейсов на Redpanda 8,49 с, на `membus` 0,90 с. Пятнадцать секунд —
+двадцатикратный запас к самому долгому кейсу; их хватает и на вступление в consumer group на
+холодном брокере (0,2–0,3 с на этой машине).
+
+Бюджет красного прогона: было 15 × 60 с = **15 минут** при лимите CI ≤ 10 минут на job (ADR-010
+п. 5), стало 20 × 15 с = **5 минут** в худшем случае, когда падают все кейсы разом. Реально
+наблюдённые красные прогоны из §4: 1,0–1,5 с (мутации A, B, F, G — падение по утверждению, не по
+таймауту) и 15,0–15,5 с (мутации C, D, E — падение по таймауту).
+
+### 8. Как проверял
+
+Окружение: Windows, Git Bash, `GOFLAGS=-buildvcs=false`, Docker Desktop 29.6.1, `-race` локально
+недоступен (общий DoD §1 п. 2 — в CI job `unit`).
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...`, `go vet ./...` | ok, ok |
+| `go vet -tags integration ./shared/...` | ok |
+| `go test -short -count=1 ./...` | все пакеты `ok`; при повторном прогоне краснел `internal/mechanics` из-за временных зондов `zz_reviewtmp*_test.go`, оставленных параллельным ревью T-015 (чужие неотслеживаемые файлы, не трогал) — без этого пакета всё зелёное |
+| `go test -tags integration -count=1 ./shared/testkit/... ./shared/eventbus/...` | зелёные **два прогона подряд** (и четыре подряд за итерацию): 12,5 с и 13,8 с (пакет `contract` — 10,4 с и 11,4 с) |
+| Contract на Redpanda, подробно | **20/20 PASS**, весь набор 7,7–10,4 с в трёх прогонах, самый долгий кейс 0,70 с |
+| Contract на membus, подробно | **20/20 PASS**, весь набор 0,90 с |
+| Задержка одиночной публикации на брокере | 1,04 мс и 0,54 мс в двух прогонах при бюджете 300 мс (NFR-001) |
+| `golangci-lint run ./...` и `--build-tags=integration,e2e` | **0 issues** в обоих на момент прогона; при повторе после правок T-015 весь модуль даёт 2 issues в `internal/mechanics/rules.go` (чужой файл, работа идёт параллельно) — по `./shared/...` в обоих режимах **0 issues** |
+| `gofmt -l shared/testkit shared/eventbus` | пусто |
+| Покрытие (unit-режим) | `testkit` 74,0 % (**без изменений**), `membus` 83,8 % (было 83,6 %), `contract` 81,2 % (было 81,3 %), `eventbus` 75,4 % (было 75,2 %) — все ≥ 60 % |
+| `gitleaks git --staged --redact .` | `no leaks found` |
+| `pre-commit run --files <свои файлы>` | зелёный |
+
+Покрытие `contract` изменилось на −0,1 п. п. — арифметика новых веток, которые на зелёном прогоне
+исполняться и не должны: `t.Skip` при пустом `Target.Close`, два новых `t.Fatal` в преамбуле `Run`
+и ветки сообщений об ошибках в пяти новых кейсах. Порог 60 % не затронут; `shared/testkit`
+(условие DoD итерации) не изменился вовсе — его собственные файлы не правились.
+
+### 9. Открытые вопросы
+
+1. **`membus.SetChaos` меняет режим работающей шины.** Для contract-теста это безопасно (кейсы идут
+   последовательно, публикует только текущий), но ручка публичная, и параллельный тест чужого
+   пакета может получить чужой дубль. Если это сочтут риском — заменить на `Bus.PublishDuplicated`
+   (узкая ручка вместо переключателя). Решает tech-lead#1.
+2. **Поведение `ReadRange` левее начала журнала контрактом не определено** (§5 п. 2). Нужна строка в
+   C-01: либо «поведение не определено, вызывающий сверяется с `End`/log start», либо новый метод
+   `Start(ctx, topic)`. Заявка architect#1 при ревизии C-01.
+3. **`ReorderTopics`** (§6 п. 4) — назвать задачу-потребителя. Предлагаю EPIC-003 (ожидание фактов
+   State по `correlation_id`); закрепить в `foundation.md` §9 вместе со стартерами контейнеров,
+   чтобы отклонение не всплывало на каждом ревью.
+4. **Правка `shared/eventbus/kafka.go` — снова общий код** (§3 п. 7). Публичный API не менялся,
+   изменилось поведение `Close` под идущей подпиской: было зависание, стало `nil`. Пометка
+   `contract-change` при коммите — как и для правок первой итерации (ОВ-2 записи от 2026-09-09);
+   решает tech-lead#1.
+5. **`Tail`/`ReadRange` контекст от `closing` не наследуют.** Они не коммитят, а `FetchMessage` на
+   закрытом читателе возвращает `io.ErrClosedPipe` сразу, поэтому дефекта там нет; но и кейса,
+   который закрывал бы шину под работающим `Tail` на брокере, в наборе тоже нет. Если сочтут, что
+   симметрия важнее минимального диффа — те же три строки добавляются в оба метода.
+
+### 10. Риски и допущения
+
+- **`-race` по-прежнему не прогонялся.** Новое разделяемое состояние — `state.chaos` под тем же
+  мьютексом, что и остальное содержимое `state`, и `atomic.Int64` в двух новых кейсах. `Lenient()`
+  копирует только неизменяемые поля `Bus`; мьютекса в `Bus` больше нет вовсе, поэтому копия
+  структуры корректна по построению (копирование мьютекса поймал бы `go vet`).
+- **Кейсы с хвостом опираются на паузу обработчика 25 мс.** На раннере, где 40 событий обработались
+  бы быстрее, чем `waitFor` замечает третий вызов, кейс потерял бы смысл, но ложно не позеленел бы:
+  утверждение — «обработано меньше 40», а не «обработано ровно 3». Запас сорокакратный (1 с работы
+  против ~30 мс до отмены).
+- **`AnUncommittedEventIsDeliveredAgain` требует, чтобы обработчик вернул `ctx.Err()`.** Это ровно
+  то, что описано в `Delivery.Deliver` («leave the event uncommitted so that it is redelivered»);
+  обработчик, возвращающий на отмене `nil`, будет закоммичен — и это правильно, он сказал, что
+  справился. Кейс проверяет контракт, а не спасает небрежный обработчик.
+  **Поправка итерации 3 (ревью #2, Minor-4):** «будет закоммичен» верно только для заглушки. Замер
+  ревьюера: `membus` коммитит всегда, kafka перевыдаёт событие в 3 прогонах из 5 — `CommitMessages`
+  вызывается с уже отменённым контекстом, и `select` в kafka-go при двух готовых ветках выбирает
+  случайно. Расхождение внесено в §8 записи итерации 3 как известное и непокрытое.
+- **Топик `player_events` подрос на 80 событий** (два кейса с хвостом по 40). Подписки последующих
+  кейсов на живом брокере стартуют с `FirstOffset` и перечитывают их; на замерах это не сказалось
+  (набор стал быстрее прежнего: 8,5 с против 15,5 с в ревью), но при дальнейшем росте набора хвосты
+  стоит уменьшить или дать этим кейсам отдельный топик.
+- **Большая dead letter (~680 КиБ после base64) остаётся в `dead_letters` до конца прогона.**
+  Поэтому кейс поставлен предпоследним: `waitForDeadLetter` опрашивает топик целиком каждые 10 мс, и
+  любой более поздний кейс, читающий `dead_letters`, тянул бы её по сети на каждый опрос.
+- **Два прогона `integration` подряд** — свидетельство отсутствия флака, но не исчерпывающее;
+  первый прогон в CI стоит посмотреть отдельно (замечание ревьюера остаётся в силе).
+
+---
+
+## developer#1 · T-015 · F-10b «`internal/mechanics`: типы, `Load`, формулы, RNG, `rules/dark-forest.yaml` v0.1» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation` (HEAD на старте `fd93a6a`). Основание: `tasks.md` §1 и раздел
+T-015; `architecture/components/state-and-mechanics.md` v0.2 §2, §5.1–§5.7; `architecture/contracts.md`
+v0.4 C-03 v1.1, C-02 v1.2; ADR-012, ADR-003 п. 5; `requirements/domain-review.md` §3.3 (приложение A
+PRD); схемы `schemas/events/{dice.rolled,combat.decided}.v1.json`; `shared/entity` v2 (T-011).
+Коммит не выполнялся (`git.commits: ask`) — изменения подготовлены в индексе.
+
+Параллельно developer#2 вёл итерацию 2 T-014 в `shared/testkit/**` и `shared/eventbus/**`; эти
+файлы не трогались. `shared/entity`, `shared/eventbus`, `shared/contracts` используются только на
+чтение. `cmd/multiverse` не менялся: механика — библиотека, а не контекст, регистрировать нечего.
+
+### 1. Состав `internal/mechanics`
+
+| Файл | Что |
+|---|---|
+| `types.go` | Типы C-03: `Actor` (+`Participation`, `LastDamager`, `Alive()`, `Attr()`), `Action` (+`LivingEnemies`), `Outcome` (+`FreeAttack`), `Item`, `Roll`, `ProposedChange`, `StateView`, `Violation`, `Invariant`; константы `ActionKinds`, `Purposes` (enum `dice.rolled`); `ErrNotImplemented`, `ErrInvalidTarget` |
+| `formula.go` | Мини-грамматика §5.3: `DiceExpr` (`ParseDice`, `Roll`, `Min`/`Max`, `String`), `Term`, `CheckExpr` (`ParseCheck`, `Eval`, `Threshold`, `String`), `CheckResult` |
+| `rng.go` | `Seed` (SHA-256(`eventID:index`)[:8] BE), `NewRNG` (PCG(seed, 0), `math/rand/v2`), `Rules.Roll`, `Rules.RollCheck` |
+| `rules.go` | `RulesDocument` (YAML-модель §5.2), `Load`/`LoadBytes`, компиляция и валидация, `ConfigError`/`ErrInvalidRules`, аксессоры (`Stats`, `Kinds`, `Check`, `Attack`, `NPCAttack`, `Flee`, `Rest`, `TargetRules`, `Round`, `Loot`, `Document`), формулы (`Critical`, `Fumble`, `DamageDice`, `Damage`, `FleeThreshold`, `FleePosition`, `Restore`, `ClampHP`, `Excluded`), `Invariants()` |
+| `invariants.go` | Реестр `inv-01…inv-10` с `Where`, `InvariantIDs()`; все `Check = nil` |
+| `actor.go` | `ActorFromEntity(e, enc)` |
+| `dice_event.go` | `DiceRolledPayload(roll, roller)` |
+| `resolve.go`, `target.go`, `changes.go` | Заглушки `Resolve`, `NPCTarget`, `ChangesFor` (EPIC-002 T-053/T-054) |
+
+Отклонение от списка файлов задачи: вместо шести файлов девять — `invariants.go`, `resolve.go`,
+`target.go`, `changes.go` заведены по структуре `state-and-mechanics.md` §2, чтобы EPIC-002
+дописывал логику в тот файл, где она по дизайну и лежит, а не переносил её из `types.go`.
+
+### 2. Формат правил и `rules/dark-forest.yaml` v0.1
+
+Файл — ровно `RulesDocument` §5.2 с числами domain-review §3.3: игрок `hp_max 10, atk 2, def 12,
+dmg d6, flee 2`; `wolf` `hp_max 10, atk 3, def 11, dmg d4, flee null`; `attack.hit = "d20 + atk >= def"`,
+крит 20 (×2), фамбл 1; `flee.check = "d20 + flee >= 10 + living_enemies"`, при провале — `free_attack`,
+успех — `outside:{world_id}`; `rest.restore = hp_max`, во встрече запрещён; `npc_target.order =
+[last_damager, min_hp, player_id_asc]`, `exclude = [idle, out_of_combat, dead]`; трофей волка;
+`round {60s, 2}`; все десять инвариантов. `rules_version: "0.1"` — то поле, что уходит в
+`combat.decided.rules_version` (проверено тестом на собранном payload).
+
+Валидация при `Load` (всё — ошибка, не предупреждение): `schema_version == 1`; `rules_version` по
+маске семвера; непустой `world`; `entities` непусты, `hp_max ≥ 1`, `def ≥ 1`, `atk ≥ 0`, `dmg`
+разбирается и **не может выпасть отрицательным** (`DiceExpr.Min() ≥ 0` — ловит `d6-10`); обе формулы
+разбираются, идентификаторы слева резолвятся только из актора (`atk def hp hp_max flee`), справа —
+из цели или контекста (`living_enemies`); `crit_natural`/`fumble_natural` — грани кубика проверки и
+не совпадают; `crit_multiplier ≥ 1`; `damage_formula` — либо `dmg`, либо валидное dice-выражение;
+`rolls[]` — только purposes из enum `dice.rolled`; `npc_attack.inherit == attack`; `flee.on_fail ∈
+{free_attack, none}`; плейсхолдеры `success_position ⊆ {world_id, region_id}`; `rest.restore` —
+`hp_max` или dice; `npc_target.order` — из трёх известных, без повторов, непустой; `exclude` — из
+известных статусов и видов участия; ключи `loot` — существующие kind, у предмета есть `kind` и
+`name`; `round.timeout` разбирается и положителен, `idle_after_missed ≥ 1`; `invariants[]` — только
+известные id, без повторов, непустой. Неизвестные ключи **любого уровня** — ошибка
+(`yaml.Decoder.KnownFields(true)`, а не ручная сверка верхнего уровня).
+
+Ошибка валидации — `ConfigError{Path, Reason}`; `errors.Is(err, ErrInvalidRules)` истинно для всех,
+`Path` — точечный путь ключа (`entities.player.hp_max`, `npc_target.order[1]`). Тесты проверяют не
+только «отказал», но и **какой ключ** назван: иначе ошибка «файл плохой» не помогает автору правил.
+
+### 3. Реализованные формулы
+
+`Rules.Critical`/`Fumble` (натуральная грань перебивает сумму в обе стороны), `DamageDice` (кубы
+атакующего или общее выражение) и `Damage(rolled, critical)` (множитель крита, никогда меньше нуля),
+`FleeThreshold(target, livingEnemies)` (= `10 + n`, уходит в `combat.decided.outcome.threshold`),
+`FleePosition(worldID, regionID)`, `Restore(actor, rng)` (до `hp_max`, либо `hp + бросок` с
+клампом; при `hp_max` генератор **не трогается** — иначе отдых сдвинул бы кубы следующего хода),
+`ClampHP` (inv-02), `Excluded(actor)` (inv-01: терминальные статусы и `npc_target.exclude`).
+
+`CheckExpr.Eval` — общая машина проверок: бросок плюс термы актора против термов цели и контекста.
+Неизвестный идентификатор — **ошибка**, а не ноль: молчаливый ноль превращает правило в другое
+правило (волк без `flee` иначе «бежал бы» на 10).
+
+### 4. Решения по RNG
+
+`Seed(eventID, idx) = BigEndian(sha256(eventID + ":" + idx)[:8])`, `NewRNG = rand.New(rand.NewPCG(seed, 0))`
+(`math/rand/v2`), бросок `NdM+K` — `N` подряд `1 + IntN(M)` **на одном** генераторе плюс `K`,
+`Natural` — первый кубик. Часов нет, глобального состояния нет, один бросок — один генератор.
+
+Тесты фиксируют шесть векторов `Seed`, вычисленных вне Go (по определению: SHA-256 и big endian) —
+любой рефакторинг, меняющий их, обесценивает все записанные прогоны, и тест это ловит. Отдельно
+проверено: 1000 индексов одной причины и 1000 причин при индексе 0 не дают ни одного совпадения
+seed; соседние индексы расходятся не менее чем в 16 битах (хеш, а не счётчик); повторный вызов
+после тысячи посторонних бросков и в обратном порядке даёт те же `Roll` поле в поле; из 1000 ходов
+по 4 броска d20 «все четыре одинаковы» — ноль (порог теста 5).
+
+`Rules.Roll` отказывается бросать без `causeEventID`, при отрицательном индексе, при неизвестном
+purpose и при неразбираемой формуле: бросок, который нельзя воспроизвести из журнала, не должен
+попадать в журнал.
+
+### 5. Что оставлено EPIC-002
+
+`Resolve` и `ChangesFor` возвращают `ErrNotImplemented`; `NPCTarget` возвращает `nil`; все `Check`
+инвариантов — `nil`. Это ровно «не входит» из T-015 (T-053, T-054). Заглушки закреплены тестом
+`TestStubs` — когда EPIC-002 реализует их, тест скажет об этом первым; там же проверено, что
+заглушки не мутируют переданных акторов (гарантия §5.1).
+
+### 6. Отклонения от контракта C-03 (запрос system-architect, не молча)
+
+`contracts.md` C-03 и `state-and-mechanics.md` §5.1 расходятся в четырёх сигнатурах. Реализованы
+формы §5.1 (детальный дизайн; они же согласуются со схемами событий); расхождение вынесено в отчёт
+оркестратору как запрос на приведение C-03 к §5.1:
+
+| Функция | C-03 (`contracts.md`) | §5.1 (реализовано) | Почему |
+|---|---|---|---|
+| `Roll` | `… ) Roll` | `… ) (Roll, error)` | формула и purpose приходят снаружи (блупринт, фоновая таблица) и могут быть невалидны |
+| `ActorFromEntity` | `(e entity.Entity) (Actor, error)` | `(e, enc *entity.Entity) (*Actor, error)` | `Participation` и `LastDamager` — факты встречи, из одной сущности игрока их не прочитать |
+| `ChangesFor` | `(o, a, actors, causeEventID) []entity.Change` | `(a, o, attacker, target, factEventID) ([]ProposedChange, error)` | `entity.Change{Path,Old,New}` — это **факт** `entity.updated`, а не ops предложения; T-015 требует `ProposedChange` и `ErrNotImplemented`, а вернуть ошибку без канала ошибки нельзя |
+| `DiceRolledPayload` | `(roll, roller string)` | `(roll, roller entity.Ref)` | схема требует `roller.entity{id,type}`; из строки её не собрать |
+
+**Уточнение итерации 2 (Minor-1 ревью #1).** По `ChangesFor` реализованная форма — не §5.1, а
+**третья**: порядок и типы аргументов по §5.1, но возвращаемых значений два
+(`([]ProposedChange, error)`), потому что вернуть `ErrNotImplemented` без канала ошибки нельзя.
+Поэтому корректная формулировка запроса — «привести к `([]ProposedChange, error)` **и** C-03,
+**и** §5.1», а не «привести C-03 к §5.1»: приведение C-03 к букве §5.1 дало бы
+`[]ProposedChange` без ошибки, и код разошёлся бы уже со свежеисправленным контрактом. Решение
+оркестратора от 2026-09-10 принимает именно эту форму (см. §10 п. 1).
+
+Пятое расхождение — не в сигнатуре: **у `NPCTarget` нет канала ошибки**. Заглушка возвращает `nil`,
+и это неотличимо от штатного «кусать некого» (UC-008 A2). До EPIC-002 T-053 потребитель обязан
+брать `testkit/mechanics.FixedMechanics`; в коде это записано комментарием.
+
+### 7. `dice.rolled.roll.seed` — расхождение закрыто (обновлено в итерации 2)
+
+`state-and-mechanics.md` §5.6 требовал seed **строкой** (десятичный uint64), схема
+`schemas/events/dice.rolled.v1.json` — `{"type": "integer", "minimum": 0}`. На момент сдачи
+итерации 1 было реализовано по схеме (числом) и вынесено вопросом. Замер показал, что расхождение
+не косметическое:
+
+    seed 17918835045097094771 → на проводе {"seed":17918835045097094771}
+    → json.Unmarshal в map[string]any → float64 → 17918835045097095168 (не равно)
+
+`shared/eventbus/kafka.go` декодирует событие в `map[string]any`, поэтому **потребитель**
+`dice.rolled` с seed больше 2^53 прочитал бы не то число, что было записано. На детерминизм самой
+механики это не влияет (seed вычисляется из `event_id` и индекса, а не читается из события), но
+сверка записи с прогоном (`events_hash_match`, `dice_rolled_new`) по этому полю не сошлась бы.
+
+**Решение принято оркестратором в пользу §5.6** (`journal.md`, 2026-09-10, «ДЕФЕКТ КОНТРАКТА,
+найден на T-015»), правка внесена им же и на момент итерации 2 полна:
+
+- `schemas/events/dice.rolled.v1.json` — `"type": "string"`, шаблон `^(0|[1-9][0-9]{0,19})$`;
+- `internal/mechanics/dice_event.go` — `strconv.FormatUint(roll.Seed, 10)`;
+- три фикстуры `shared/contracts/validate_test.go`;
+- `analysis/api-contracts.md` §2.3.5 и `analysis/data-model.md` §7.3 — тип на проводе назван.
+
+Закреплено двумя тестами: «seed через обобщённый разбор остаётся точным» (`map[string]any` →
+`.(string)`) и золотой таблицей `TestGoldenRolls` итерации 2, где записана и десятичная строка на
+проводе — подмена `FormatUint(…, 16)` её роняет.
+
+### 8. Тесты
+
+`internal/mechanics`: 5 файлов, 40 тестовых функций, 103 подтеста (143 узла `--- PASS`).
+
+| Файл | Что покрывает |
+|---|---|
+| `rules_test.go` | золотые числа приложения A с загрузкой **настоящего** `rules/dark-forest.yaml`; 34 негативных кейса валидации (каждый ломает одну строку файла и сверяет `ConfigError.Path`); мусорный YAML; отсутствующий файл; путь файла в ошибке; копийность `Loot`/`Document`; реестр инвариантов |
+| `formula_test.go` | разбор и рендер dice/check с round-trip; 16 отказов `ParseDice`, 10 отказов `ParseCheck`; диапазоны; 1000 бросков каждого выражения не выходят за границы; **таблица попаданий** (натуральная 1/8/9/10/19/20 при atk 2 против def 11); **таблица урона** (d6/d4, крит ×2, ноль и отрицательный вход); **таблица бегства** (пороги 10/11/12/13); отдых (полный, кубиковый с клампом, генератор не тронут); клампы HP; `Excluded` по трём терминальным статусам и трём видам участия; `Actor.Attr` |
+| `rng_test.go` | 6 фиксированных векторов `Seed`; разделение индексов и причин; воспроизводимость; распределение d20 (все грани, среднее около 10,5); `NdM+K` на одном RNG со сверкой по ручной прокрутке генератора; 6 отказов `Roll`; `RollCheck` и его 5 отказов |
+| `dice_event_test.go` | `DiceRolledPayload` валиден против `dice.rolled.v1.json` через `contracts.Validate` (полное событие, `Derive` от `player.attacked`); все 7 purposes; `Outcome` → `combat.decided` (атака и бегство) валидны против `combat.decided.v1.json`, `rules_version` берётся из `Load` |
+| `actor_test.go` | `ActorFromEntity` без встречи и со встречей (участие игрока, `last_damager` волка); сверка статов сущности с `Rules.Stats` (то, что T-016 будет делать по фикстурам); 7 отказов по отсутствующим и нечитаемым атрибутам; регион вместо бойца и вместо встречи; терминальные статусы; `TestStubs` |
+
+Границы из задачи закрыты: нулевой и отрицательный урон (`Damage`), смерть (`ClampHP` до нуля и
+`TargetDead` в кейсе `combat.decided`), бегство при разных порогах (0–3 противника), валидный и
+битый YAML, отсутствующие поля.
+
+### 9. Результаты DoD
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | зелёный |
+| `go vet ./...` | зелёный |
+| `go test -short -count=1 ./...` | зелёный (без `-race` — недоступен в окружении, см. риски) |
+| `golangci-lint run ./...` | **0 issues** (границы ADR-001: правило `internal-mechanics` уже было в `.golangci.yml`, пакет не импортирует ни один `internal/*`) |
+| Покрытие `internal/mechanics` | **94,9 %** при пороге 60 % |
+| `gofmt -l` по своим файлам | пусто |
+| `pre-commit run --files …` | зелёный |
+| `gitleaks git --staged --redact .` | 0 находок |
+
+### 10. Открытые вопросы
+
+1. **C-03 против §5.1** — четыре сигнатуры (раздел 6). **Закрыт** решением оркестратора
+   (`journal.md`, 2026-09-10): править надо контракт, а не код. `Roll` → `(Roll, error)`;
+   `ActorFromEntity(e, enc *entity.Entity) (*Actor, error)`; `DiceRolledPayload(roll, roller
+   entity.Ref)`; `ChangesFor` → `([]ProposedChange, error)` **в обоих документах** — то есть
+   реализованная форма является третьей и по отношению к C-03, и по отношению к §5.1, и правка
+   нужна обоим (замечание Minor-1 ревью #1). Исполнитель — architect#1 в бридж-блоке волны 1;
+   код T-015 не переделывается.
+2. **`NPCTarget` без канала ошибки** — **закрыт** тем же решением: C-03 v1.2 →
+   `NPCTarget(npc *Actor, candidates []*Actor) (*Actor, error)`. До правки контракта и T-053
+   потребитель обязан брать `testkit/mechanics.FixedMechanics`.
+3. **`seed` в `dice.rolled`: строка или число** — **закрыт** в пользу строки (раздел 7 и
+   `journal.md`, 2026-09-10). Схема, `DiceRolledPayload`, фикстуры контрактов, `api-contracts.md`
+   §2.3.5 и `data-model.md` §7.3 приведены к десятичной строке.
+4. **`laws/dark-forest-world.v1.yaml` ещё нет** (EPIC-003). Тест «множество `kind: invariant` в
+   законах == `Invariants()`» написать негде; `InvariantIDs()` для него уже экспортирован.
+   Кому: EPIC-003 и `mvctl laws check`.
+
+### 11. Риски и допущения
+
+- **`-race` не прогонялся** — недоступен в окружении. Для этого пакета риск близок к нулю: `Rules`
+  после `Load` не мутируется, глобального состояния и горутин в пакете нет, RNG создаётся на каждый
+  бросок. Но формально пункт §1.2 общего DoD закрыт частично.
+- **`entities.player` даёт тип `player`, любой другой ключ — `npc`.** Правило соответствует v0.1
+  (`player` и `wolf`), но зашито в код (`kindType`). Если появится второй управляемый тип, правило
+  придётся сделать данными.
+- **`damage_formula` как имя атрибута допускает только `dmg`.** Сознательное сужение: другие
+  атрибуты — числа, а не кубы. Расширение — вместе с расширением грамматики (FR-115).
+- **Грамматика намеренно узкая** (ADR-012 п. 2): нет `==`, `in`, скобок, вложенности. Навыки и
+  сопротивления E-C потребуют её расширения отдельной задачей с ревью.
+- **Тесты читают настоящий `rules/dark-forest.yaml`, а не фикстуру.** Плюс — золотые числа не
+  разъезжаются с файлом; минус — правка файла ломает тесты подстановки (`strings.Replace`). Тест
+  отвечает на это явным сообщением «фикстура больше не содержит …: чините тест, а не правила».
+
+---
+
+## developer#1 · T-015 · итерация 2 по ревью #1 · 2026-09-10
+
+Область: `internal/mechanics/**`, `rules/**`, эта запись. `shared/testkit/**` и `shared/eventbus/**`
+(итерация 2 T-014, developer#2 и code-reviewer#2 работали параллельно) не трогал; `review.md` не
+трогал. Посторонних `zz_reviewtmp*_test.go` в `internal/mechanics` на момент работы не было.
+
+### 1. Major-1 — таблица золотых бросков (`rng_test.go`, `TestGoldenRolls`)
+
+Дыра ревью: поток генератора не был закреплён ничем. Ожидания `TestRollNdMPlusK` выводились из
+`NewRNG(Seed(...))` — из той же функции, которую тест проверяет, поэтому подмена
+`rand.NewPCG(seed, 0)` → `rand.NewPCG(0, seed)` оставляла все 40 тестов зелёными.
+
+Добавлена таблица **литеральных** чисел: адрес броска, его результат и натуральная грань, форма
+формулы на проводе и десятичная строка seed в `dice.rolled`.
+
+| cause | index | формула на входе | на проводе | seed | result | natural |
+|---|---|---|---|---|---|---|
+| `01JC0000000000000000000000` | 0 | `d20` | `d20` | 5566502161584001210 | 3 | 3 |
+| `01JC0000000000000000000000` | 1 | `1d6` | `d6` | 14095709468665957854 | 4 | 4 |
+| `01JC0000000000000000000000` | 2 | `d20` | `d20` | 1898231145079728858 | 6 | 6 |
+| `01JC0000000000000000000000` | 3 | `d4` | `d4` | 1256483486913892533 | 2 | 2 |
+| `player.attacked` | 0 | `3d6+2` | `3d6+2` | 11954706955398637122 | 9 | 3 |
+
+Числа взяты из `review.md` и **независимо пересчитаны вне Go** — скриптом на Python, который
+реализует определения, а не вызывает библиотеку: SHA-256 от `"eventID:index"`, первые восемь байт
+big endian; PCG-DXSM в том виде, в каком его задаёт `math/rand/v2` (128-битный LCG с константами
+`mul{Hi,Lo}`/`inc{Hi,Lo}`, выходная функция «double xorshift multiply»), с посевом `(seed, 0)`;
+отбор грани — `Rand.uint64n` (маска для степени двойки, иначе умножение на 128 бит с порогом
+`-n % n`). Все пять строк совпали с `review.md` и с прогоном Go до последнего числа; значения seed
+совпали и с `TestSeedVectors` там, где адреса пересекаются.
+
+Строка с индексом 1 записана на входе как `1d6`, а на проводе как `d6` — этим же тестом закрыт
+**Minor-6**: канонической на проводе объявлена форма `DiceExpr.String()` (`DiceRolledPayload` —
+единственный конструктор payload). Фикстуры `shared/contracts/validate_test.go` пишут `"1d20"` и
+`"1d8+2"` — их приведение к канонической форме относится к C-01 и чужому файлу, оставлено заявкой
+(см. открытые вопросы).
+
+Проверка мутациями (каждая откатывалась, файлы сверены по md5 с состоянием до серии; прогон —
+только `-run TestGoldenRolls`, чтобы было видно, что ловит именно новая таблица):
+
+| Мутация | Итог |
+|---|---|
+| `rand.NewPCG(seed, 0)` → `rand.NewPCG(0, seed)` | **убита**: все 5 строк, «the stream of the generator changed» |
+| `Seed`: `eventID + ":" + itoa(i)` → `eventID + itoa(i)` | **убита**: seed, бросок и строка на проводе |
+| `Seed`: `binary.BigEndian` → `binary.LittleEndian` | **убита**: seed, бросок и строка на проводе |
+| `DiceRolledPayload`: `FormatUint(seed, 10)` → `FormatUint(seed, 16)` | **убита**: строка на проводе во всех 5 строках |
+| `Roll`: `Formula: dice.String()` → `Formula: formula` | **убита**: строка `1d6` (Minor-6) |
+
+### 2. Minor-2 — `Document()` перестал течь
+
+`maps.Clone` копировал карту, но значения `StatsDoc` несли тот же `Flee *int`, а значения
+`Loot` — те же срезы: `*doc.Entities["player"].Flee = 99` менял правила. Теперь `Document()`
+дублирует `Flee` и клонирует каждую таблицу трофеев. Срезы `Loot` — тот же класс утечки в той же
+функции, поэтому закрыты вместе с указателем. `TestLootAndDocumentAreCopies` дополнен обоими
+случаями.
+
+### 3. Minor-3 — `Load` называет ключ детерминированно
+
+`compileEntities` и `compileLoot` шли по карте Go: при двух битых записях обвиняемый выбирался
+рандомизацией итерации (в ревью — 177/23 на 200 одинаковых `LoadBytes`). Обход переведён на
+`slices.Sorted(maps.Keys(...))`. Тест `TestLoadNamesTheSameKeyEveryTime` ломает `hp_max` **у обоих**
+видов и требует одного и того же `ConfigError.Path` на 100 прогонах.
+
+### 4. Minor-4 — верхняя граница формулы
+
+`ParseDice` ограничивал только снизу, поэтому `200000000d6` грузился молча и стоил 466 мс за один
+бросок, а при 10^12 кубов — минуты внутри хода. Введены `maxDiceCount`, `maxDiceSides` и
+`maxDiceModifier`, все три равны **1000**.
+
+Обоснование числа. (а) Домен: ни одно правило v0.1 и ни одна мыслимая фоновая таблица региона не
+просит больше десятка кубов; 1000 — три порядка запаса, ни одна существующая формула не задета.
+(б) Стоимость: тысяча выборок из PCG — микросекунды, то есть самая широкая **разрешённая** формула
+всё равно не способна затормозить ход, тогда как запрещённая начиналась с сотен миллисекунд.
+(в) Арифметика: `Max()` такой формулы не превышает 10^6 + 10^3, поэтому ни `Max()`, ни `Min()`, ни
+клампы HP не переполняются даже при 32-битном `int` — прежняя грамматика при ~10^18 кубов
+переполняла `Max()` молча. Ограничение модификатора добавлено того же класса ради: `d6+9e18`
+разбирался и переполнял `Max()` при сложении.
+
+Граница — часть грамматики и проверяется на `Load`, а не доверием к вызывающему: `Rules.Roll` —
+вход для фоновых таблиц GM региона, чьи формулы приходят из блупринтов (ADR-012 п. 2). Тесты:
+пять новых отказов в `TestParseDiceRejects`, `TestDiceBounds` (`1000d1000+1000` разбирается,
+каждый следующий шаг — нет) и кейс `Load` «more dice than a turn can roll» с путём
+`entities.player.dmg`.
+
+### 5. Minor-5 — второй YAML-документ отвергается
+
+`yaml.Decoder.Decode` читал первый документ и останавливался, поэтому забытый редактором `---`
+терял половину правил без единого сообщения — в пакете, где неизвестный ключ уже ошибка, потому что
+это вероятная опечатка. После успешного `Decode` вызывается второй, и всё, кроме `io.EOF`,
+отвергается. `TestLoadRejectsASecondDocument` покрывает три хвоста: второй документ с правилами,
+пустой второй документ и мусор после `---`.
+
+### 6. Minor-7 — устаревшие места записи T-015
+
+§7 переписан: расхождение по `dice.rolled.roll.seed` закрыто оркестратором в пользу §5.6, правка
+полна, тип на проводе — десятичная строка. §10 п. 3 закрыт ссылкой на `journal.md`. Заодно закрыты
+п. 1 и п. 2 решением оркестратора «править контракт, а не код», и в §6 добавлено уточнение Minor-1:
+реализованная форма `ChangesFor` — **третья**, править нужно и C-03, и §5.1.
+
+### 7. Чего не делал
+
+`ChangesFor` и остальные три сигнатуры не переделывал — по решению оркестратора правится C-03,
+а не код. Nit-замечания 1–3 ревью #1 (зазор шаблона uint64 в схеме, проверка `roller` в
+`DiceRolledPayload`, неиспользуемый получатель у `Roll`/`RollCheck`) не трогал: первое — чужой
+файл и осознанный зазор, второе и третье — изменение поверхности C-03, а её правит architect#1 в
+бридж-блоке.
+
+### 8. Результаты DoD
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...` | зелёный |
+| `go vet ./...` | зелёный |
+| `go test -short -count=1 ./...` | зелёный, все пакеты `ok` |
+| `go test -count=1 -cover ./internal/mechanics/...` | `ok`, покрытие **94,9 %** (не ниже итерации 1) |
+| `golangci-lint run ./...` | **0 issues** |
+| `gofmt -l internal/mechanics/ rules/` | пусто |
+| `pre-commit run --files …` | зелёный |
+| `gitleaks git --staged --redact .` | 0 находок |
+
+`-race` по-прежнему недоступен в окружении (решение оркестратора ОВ-5: `-race` — в CI).
+
+### 9. Открытые вопросы
+
+1. Фикстуры `shared/contracts/validate_test.go` пишут формулу как `"1d20"`/`"1d8+2"`, а
+   канонической на проводе теперь объявлена форма `DiceExpr.String()` (`"d20"`, `"d8+2"`).
+   Схема формой не ограничивает, поэтому это не поломка, но при следующей правке C-01 фикстуры
+   стоит привести к канонической форме. Файл чужой — не трогал.
+2. Предел в 1000 кубов/граней/модификатора зафиксирован в коде константами пакета, а не в
+   `state-and-mechanics.md` §5.3. Если грамматика описывается в дизайне как контракт для
+   блупринтов (EPIC-003), число стоит перенести туда.
+
+---
+
+## developer#2 · T-014 · итерация 3 по ревью #2 · 2026-09-10
+
+Объём — тестовый: `shared/testkit/contract/contract.go` и три строки плюс комментарий в
+`shared/testkit/membus/membus.go`. `shared/eventbus/kafka.go` не трогал: правка итерации 2 проверена
+ревьюером отдельно на живом брокере и признана верной, новых дефектов общего кода эта итерация не
+вскрыла.
+
+### 1. Major-1 — окно кейса `Close` сделано детерминированным
+
+Было: обработчик спит 25 мс, кейс ждёт `calls >= 3` и закрывает шину в произвольный момент **внутри**
+обработчика. Зависает же только подписка, застигнутая между обработчиком и `CommitMessages`, поэтому
+мутация H («снять наследование контекста цикла от `closing`», то есть `kafka.go` до правки) роняла
+набор 4 прогона из 8.
+
+Стало — два утверждения вместо одного, и вместе они закрывают обе половины гонки:
+
+1. **Сигнал последней строкой.** Обработчик третьего события шлёт в канал `returning` и сразу
+   возвращает `nil`; кейс закрывает шину по этому сигналу. Цикл в этот момент почти наверняка внутри
+   `CommitMessages`, ждёт ответа от горутины, которую `Close` только что остановил
+   (kafka-go `reader.go:907-912`: второй `select` не имеет ветки `r.stctx.Done()`).
+2. **Счёт вызовов после `Close`.** Кейс запоминает `calls` **в момент входа в `Close`** (а не в
+   момент сигнала — иначе медленный раннер, поздно поставивший горутину теста, давал бы ложный
+   красный) и требует не более одного дополнительного вызова: только событие, уже бывшее в полёте.
+
+Второе утверждение и есть то, что делает кейс детерминированным. Замер: на исправном адаптере
+`before=3 after=3` в 6 прогонах из 6, при том что сам `Close` длится 72–111 мс (закрытие каждого
+kafka-читателя — это выход из consumer group, по разу на подписку). Под мутацией цикл, которому никто
+не сказал остановиться, продолжает разбирать хвост всё это время: `before=3 after=6…7`.
+
+Почему одного лишь сужения окна не хватило и понадобился счёт: замер показал, что `k.Close()`
+закрывает читателей **последовательно**, а порядок обхода `map` случаен. Если первым закрывается
+припаркованный читатель (см. §2), его `Close` вместе с выходом из группы занимает ~80 мс, и за это
+время коммит подписки с хвостом успевает пройти — цикл уходит в `FetchMessage`, ловит
+`io.ErrClosedPipe` и штатно возвращает `nil`. Проверено экспериментом: с одним читателем в шине
+мутация H роняет набор 4 из 4, с двумя — 3 из 4. Это не дефект `Close` (на исправном коде
+`stopReaders` отменяет контексты **всех** циклов до того, как тронут хоть один читатель, и порядок не
+важен), но кейс на одном лишь зависании остался бы вероятностным.
+
+### 2. Major-2 — `Close` под припаркованной подпиской
+
+В `closeStopsEverything` теперь две подписки одной шины и один `Close`:
+
+- **припаркованная** — на `system_events`, своя (чтобы хвост из `player_events` её не будил);
+  «догнала» доказывается маркером: кейс публикует `tick.fired` и ждёт, пока обработчик его увидит,
+  после чего в топике ничего не осталось;
+- **на хвосте** — прежняя, на `player_events`, 40 событий по 25 мс.
+
+Обе обязаны вернуть `nil`. Это закрывает самую частую форму штатной остановки (простаивающий
+потребитель плюс `runtime.Deps.Stop`) и обе ветки `membus` одним закрытием: припаркованный `select`
+(`membus.go:298`) и выход по `stopping` при непустом хвосте (`membus.go:284`).
+
+### 3. Major-3 — дедуп больше не проходит без дубля
+
+`repeated` и `marker` строятся **до** подписки, обработчик считает все доставки `repeated.ID`
+отдельным `atomic.Int64` **до** окна дедупа, и кейс требует `>= 2`. Прежнее утверждение
+(`handled == [repeated, marker]`) осталось: оно проверяет дедуп, новое — что дублировать было что.
+Ручка `Target.Duplicate`, переставшая дублировать, теперь роняет кейс на обеих реализациях
+(мутации I и J).
+
+### 4. Minor-3 — `stopping(ctx)` в путях записи dead letter
+
+`membus.go`, три места после неудачной доставки (`Subscribe`, `ReadRange`, `Tail`):
+`if ctx.Err() != nil` → `if b.stopping(ctx)`. До правки `Close` под падающим обработчиком давал
+`eventbus: write dead letter for player.looked: eventbus: bus is closed`, а kafka — `nil`; правило
+C-01 «штатная остановка возвращает `nil`» нарушала заглушка. Причина вынесена в комментарий к
+`stopping`.
+
+**Правка не закреплена кейсом — сознательно.** Мутация M3 (откат всех трёх строк) оставляет набор
+зелёным. Детерминированный кейс здесь требует третьей подписки, обработчик которой на **последней**
+попытке (4-й вызов, `Retries+1`) сигналит кейсу и блокируется, пока `Close` не вернётся, — только
+тогда запись dead letter гарантированно приходится на закрытую шину; без блокировки окно между
+последним вызовом обработчика и записью в `dead_letters` измеряется микросекундами и в него не
+попасть. Это ещё одна подписка и ~25 строк сверх согласованного объёма итерации, а третий читатель
+в шине заново ставит под вопрос доказанный 8 из 8 якорь §1. Форма кейса описана здесь целиком, чтобы
+её можно было взять как есть; предложение — в бэклог волны 1 (§9).
+
+### 5. Minor-5 — таймаут кейса перевыдачи
+
+`AnUncommittedEventIsDeliveredAgain` — самый медленный кейс набора (18,8 с под нагрузкой). Он ждёт
+дважды, и раньше у каждого ожидания было по `Timeout`. Теперь у кейса **один** срок на оба ожидания,
+`2 * Timeout`: любое из них может занять все 30 с, а красный прогон стоит ровно столько же, сколько
+стоил (2 × 15 с). Общий бюджет набора не изменился. Появились `waitUntil` (свободная функция и метод
+`subscription`) — `waitFor`/`wait` теперь их тонкие обёртки с `Timeout` по умолчанию.
+
+### 6. Nit-2 — граница кейса отмены
+
+`cancellingStopsOnTheBacklog`: `atReturn >= backlog` → `atReturn >= backlog/2`. «39 из 40» — то же
+расхождение, что и «40 из 40». Та же граница поставлена и в кейсе `Close`, только там она получилась
+жёстче (§1 п. 2): «не более одного вызова сверх того, что было на входе в `Close`».
+
+### 7. Мутационные проверки
+
+Все файлы после мутаций восстановлены из резервных копий, md5 сверены:
+`kafka.go` — `a5e77309…`, `membus.go` — `4b0a9a43…`, `membus_test.go` — `3249e654…`,
+`redpanda_integration_test.go` — `c030a109…`.
+
+| # | Мутация | Прогонов | Красных | Чем упало |
+|---|---|---|---|---|
+| H | `eventbus/kafka.go`: снять наследование контекста цикла от `closing` (состояние до правки итерации 2) | 8 | **8** | 7 × «Close left the subscription on the backlog running after 15s»; 1 × «the handler was called 2 more times while the bus was closing (5 of the 40 events of the backlog in all)» |
+| B1 | `membus.go:299`: припаркованная ветка `Subscribe` возвращает `ErrClosed` вместо `nil` (мутация 6 ревью #1, до этой итерации не ловилась) | 3 | **3** | «Subscribe returned eventbus: bus is closed for the subscription parked at the end of its topic, want nil» |
+| B2 | `membus.go:284`: `stopping` в начале цикла → только `ctx.Err()` (закрытие видно лишь на парковке) | 3 | **3** | кейс `Close`, ветка хвоста |
+| I | `membus.SetChaos` — no-op | 3 | **3** | «the repeated event ev-membus-10-1 was delivered 1 time(s): the duplicate mode of membus produced no repeat» |
+| J | `redpanda_integration_test.go`: `Duplicate` публикует один раз | 2 | **2** | то же сообщение для `redpanda` |
+| M3 | откат правки §4 (все три `stopping` → `ctx.Err()`) | 1 | 0 | **набор зелёный** — правка Minor-3 не закреплена, см. §4 |
+
+Мутация H, по прогонам: 1–3, 5–8 — зависание (`Close` пришёлся на коммит), 4 — счёт вызовов. То есть
+оба утверждения §1 в деле, и вместе они дают 8 из 8 там, где одно зависание давало 4 из 8.
+[Поправка оркестратора 2026-09-11 по приёмке волны 0: вывод «вместе они дают 8 из 8» ОПРОВЕРГНУТ
+ревью #3 — 35 прогонов под той же мутацией дали 6 зелёных, то есть 8 из 8 были выборкой, а не
+свойством. Причина зелёных оказалась не в скорости `Close`, а в порядке закрытия читателей:
+подписка, чей читатель закрыт первым, останавливается мёртвым читателем и молчит при любом
+`Close`. Детерминированным на практике якорь стал только в итерации 4 (три подписки на хвосте,
+каждая в своей группе): 94 красных из 94 под мутацией и 20 зелёных из 20 на исправном коде,
+подтверждено ревью #4 независимо — 27 из 27. Абзац оставлен как есть, потому что он часть хода
+работы; читать его надо вместе с этой поправкой.]
+
+### 8. Известные непокрытые расхождения (дополнение к §5 записи итерации 2)
+
+3. **`Close` под работающим `Tail`/`ReadRange`.** Замер ревьюера: `membus` дочитывает 3 записи из 40
+   и возвращает `nil` за 24 мс, Redpanda — **40 из 40** за 966 мс, тоже `nil` (закрытый
+   kafka-читатель отдаёт уже выбранный буфер до конца; предел — `QueueCapacity`, по умолчанию 100
+   записей). То есть заглушка обещает «`Close` останавливает чтение немедленно», а адаптер
+   обрабатывает ещё до сотни событий — с побочными эффектами обработчика. Кейса **нет** по решению
+   оркестратора: набор не может закреплять расхождение, пока C-01 не скажет, какое поведение
+   правильное. Цифры — в заявку architect#1 (запись §9 п. 2 итерации 2 принималась на утверждении
+   «дефекта там нет»; утверждение снято). Если C-01 скажет «остановиться», правка — те же три строки
+   наследования `closing` в `Tail`/`ReadRange`. Мутации A2/A3 (снять `stopping` в
+   `membus.go:340` и `:372` — нумерация после правок этой итерации) набор не ловит — это следствие того же пробела.
+4. **Обработчик, игнорирующий отмену и вернувший `nil`.** Замер ревьюера (обработчик спит 300 мс и
+   возвращает `nil`, отмена через 50 мс, затем новая подписка той же группы): `membus` не перевыдаёт
+   событие ни разу, kafka перевыдаёт в **3 прогонах из 5**. Причина — `reader.CommitMessages` с уже
+   отменённым контекстом и случайный выбор `select` в kafka-go при двух готовых ветках.
+   Детерминированного кейса на это не написать, пока коммит идёт по отменяемому контексту; заявка по
+   общему коду (коммит обработанного события через `context.WithoutCancel` с небольшим дедлайном) —
+   решение system-architect, помечена `contract-change`, в бридж-блок волны 1. Утверждение §10
+   записи итерации 2 поправлено на месте.
+
+### 9. Что не делал
+
+- Кейс на `stopping` в `ReadRange`/`Tail` (Minor-1 ревью #2) и кейс на Minor-4 — по решению
+  оркестратора, см. §8.
+- Собственный интеграционный тест адаптера в `shared/eventbus` — задача T-394 волны 1.
+- `shared/eventbus/kafka.go` — не трогал.
+- Кейс на Minor-3 — см. §4; форма кейса описана, предложение в бэклог.
+
+### 10. Результаты DoD (ворота волны 1)
+
+| Проверка | Результат |
+|---|---|
+| `go build ./...`, `go vet ./...` | зелёные |
+| то же с `-tags integration` | зелёные |
+| `go test -short -count=1 ./...` | все пакеты `ok`, **включая `internal/mechanics`** (чужих зондов в дереве на момент прогона не было) |
+| `go test -tags integration -count=1 ./shared/testkit/... ./shared/eventbus/...` | зелёный **дважды подряд** (`contract` 14,9 с и 16,2 с) |
+| Набор на обеих реализациях | 20/20 `membus`, 20/20 `redpanda` |
+| `golangci-lint run ./shared/...` | 0 issues |
+| `golangci-lint run --build-tags integration,e2e ./shared/...` | 0 issues |
+| Покрытие (unit-режим) | `testkit` 74,0 % (без изменений), `membus` 83,8 % (без изменений), `contract` **81,4 %** (было 81,2 %), `eventbus` 75,4 % (без изменений) |
+| `gofmt -l shared/` | пусто |
+
+### 11. Открытые вопросы
+
+1. **Кейс на Minor-3** (§4): добавлять ли третью подписку с падающим обработчиком в
+   `closeStopsEverything` — это ещё ~25 строк и повторное доказательство якоря §1, или вынести в
+   отдельную задачу волны 1 вместе с T-394. Моё предложение — второе: там же живёт и интеграционный
+   тест адаптера, а обе проверки про одно и то же место жизненного цикла.
+2. **Последовательное закрытие читателей в `k.Close()`** (§1): на исправном коде это не дефект
+   (контексты циклов отменяются до того, как тронут первый читатель), но выход из consumer group по
+   разу на подписку означает, что остановка контекста с N подписками стоит N сетевых обходов подряд
+   — при 10 подписках это ~0,8 с. Дефектом не считаю, вопрос к system-architect: нужен ли NFR на
+   время штатной остановки. Не переоткрываю ничего решённого — вопрос новый.
+
+### 12. Риски и допущения
+
+- **`-race` по-прежнему недоступен.** Новое разделяемое состояние — один `atomic.Int64` и один
+  буферизованный канал на кейс; блокировок не добавлено.
+- **Счёт «не более одного вызова сверх входа в `Close`» (§1 п. 2) опирается на то, что отмена
+  контекстов циклов доходит быстрее, чем обработчик успевает взять следующее событие.** Запас —
+  25 мс паузы обработчика против ~1 мс от входа в `Close` до `stopReaders`. На исправном коде замер
+  дал 0 дополнительных вызовов в 6 прогонах из 6, допуск — 1. Если раннер окажется настолько
+  медленным, что между `calls.Load()` и `stopReaders` пройдёт 25 мс, кейс даст ложный красный;
+  считаю это менее вероятным, чем цена вероятностного якоря.
+- **Кейс `Close` теперь публикует ещё одно событие в `system_events`** и держит там подписку — топик
+  прежде читался только кейсом политики. На времени набора это не сказалось (13–16 с против 12 с),
+  но `Close` на брокере стал длиннее: два читателя вместо одного, ~160 мс против ~80 мс.
+- **Один срок на два ожидания в `AnUncommittedEventIsDeliveredAgain` (§5)** предполагает, что оба
+  ожидания медленные не одновременно. Если и вступление в группу, и перевыдача займут по 20 с,
+  кейс упадёт там, где раньше прошёл. Замер под нагрузкой: 18,8 с суммарно при сроке 30 с.
+- **Мутационные прогоны — на машине владельца** (Docker 29.6.1, Redpanda v26.1.17 в testcontainers).
+  Первый прогон на ubuntu-latest всё ещё стоит посмотреть отдельно; первый кандидат на флак —
+  `CloseStopsTheSubscriptionsAndRefusesToPublish` (поправлено в итерации 4 по Nit-3 ревью #3: под
+  нагрузкой этот кейс стоит 5,0–8,7 с, тогда как `AnUncommittedEventIsDeliveredAgain`, названный
+  здесь изначально, — меньше 2,2 с).
+
+## developer#1 · T-016 · F-10c «Фикстуры мира и `latest.json` seq 0» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`. Основание: `tasks.md` §1 и раздел T-016;
+`architecture/components/state-and-mechanics.md` v0.2 §3, §4.3–§4.4, §4.6, §4.9–§4.10;
+`analysis/data-model.md` §3; `architecture/contracts.md` v0.4 C-14 v1.1;
+`schemas/events/snapshot.created.v1.json`; `shared/entity` v2 (T-011); `internal/mechanics` и
+`rules/dark-forest.yaml` v0.1 (T-015); решения оркестратора по ОВ T-011 (`journal.md`, 2026-09-10,
+пп. 1–2); `plan/ownership.md` §1 (строка `testdata/fixtures/**`). Коммит не выполнялся
+(`git.commits: ask`) — изменения подготовлены в индексе.
+
+Параллельно code-reviewer#2 вёл ревью T-014 в `shared/testkit/**` и `shared/eventbus/**` — эти
+файлы не трогались. `internal/mechanics` (T-015 принята) используется только на чтение, как
+библиотека.
+
+### 1. Что создано
+
+| Файл | Что |
+|---|---|
+| `testdata/fixtures/world.json` | `dark-forest-world` «Мир Тёмного леса» |
+| `testdata/fixtures/region.json` | `dark-forest-01` «Тёмный лес» |
+| `testdata/fixtures/npc.json` | `wolf-alpha` «Альфа-волк» |
+| `testdata/fixtures/players.json` | `player-A` «Вася», `player-B` «Лена», `player-C` «Олег» |
+| `testdata/fixtures/snapshots/state/latest.json` | указатель на снапшот seq 0 (§4.4) |
+| `testdata/fixtures/snapshots/state/20260101T000000Z-000000.json` | объект снапшота, на который смотрит указатель |
+| `testdata/fixtures/README.md` | формат файлов, происхождение чисел, правило правки |
+| `test/fixtures/fixtures_test.go` | сверка (11 тестов, 13 подтестов) |
+
+Имена сущностей — фикстуры требований (`user-stories.md` «Общие для MVP-1 фикстуры»,
+`use-cases.md`): «Вася»/«Лена»/«Олег» и «Альфа-волк». Это не имена людей, а канон спецификации;
+persona-данных в дереве нет, все три персонажа — `actor_kind: ci`.
+
+Формат файла сущностей — **массив** `entity.Entity`, даже когда сущность одна: одно правило разбора
+на все четыре файла, и `npc.json` расширяется респауном EPIC-003 без смены формы. §4.10 форму файла
+не задаёт; выбор описан в `README.md` рядом с фикстурами.
+
+Фикстура — сущность сразу после принятого `entity.create.proposed`: `version: 1`,
+`created_at == updated_at == 2026-01-01T00:00:00Z`, без `last_event_id`, `last_change` и `history`
+— их пишет State, когда публикует факт (§4.5 пп. 10, 12). Тест это проверяет: фикстура,
+принесённая «из середины партии», отличается от фикстуры bootstrap именно этими полями.
+
+`scope` записан **объектом** `{id, type}`, а не сокращением `solo:{id}`: решение оркестратора по ОВ
+T-011 п. 2. Отдельный подтест смотрит на тип хранимого значения, а не только на результат
+`entity.Scope()` — геттер принимает обе формы, и без этой проверки сокращение проехало бы молча
+(проверено подменой: строковая форма сдвигает `state_hash`, но не смысл).
+
+Атрибуты региона — по решению оркестратора п. 1: канон `data-model.md` §3.2 (`npc_ids[]`,
+`players_present[]`) плюс `encounter_chance`. Таблица §4.10 говорит `npcs: []` — это ключ встречи
+(`entity.AttrNPCs`), а не региона; поправку §4.10 делает architect#1.
+
+### 2. Что сверяется расчётом, а что литералом
+
+Правило файла: число утверждается только там, где оно авторское, и выводится везде, где у него есть
+источник. В тесте нет ни одной из констант 10/2/12/3/11, ни строк `d6`/`d4`.
+
+**Расчётом:**
+
+| Что | Из чего выводится |
+|---|---|
+| `hp`, `hp_max`, `atk`, `def`, `dmg`, `flee`, `status` | `mechanics.ActorFromEntity(e, nil)` сравнивается целиком с `Rules.Stats(kind)` (`want.ID = e.ID`). Сравнение всей структуры, а не пяти полей: стат, добавленный в правила позже, не проедет непроверенным |
+| `loot` NPC | `Rules.Loot("wolf")` → `[]entity.LootEntry{ItemKind, Name}` |
+| `rules.World` | равен `id` сущности мира — правила и фикстуры про один мир |
+| `npc_ids`, `players_present` региона | проекции `position` сущностей (inv-10) |
+| `state_hash` | `entity.StateHash(entities)` по шести фикстурам |
+| `size_bytes` | длина файла снапшота в байтах |
+| `entities_count` | `len(entities)` |
+| `applied_proposals` | шаблон `bootstrap:{world}:{type}/{id}` из §4.10 по шести сущностям |
+| `snapshot.id` | `state:{world}:{seq:06d}` |
+| `laws_version` указателя | `laws_version` сущности мира |
+| `rules_version` указателя | `Rules.Version` из `rules/dark-forest.yaml` |
+| `state_hash` объекта снапшота | пересчёт по `entities` объекта; сами `entities` сверяются с четырьмя файлами поэлементно |
+
+**Литералом (авторский контент, источника нет):** идентификаторы и имена; `weather: fog`,
+`time_of_day: night`, `day: 1`, `season: autumn`, `locale: ru` — тест проверяет принадлежность
+словарям `data-model.md` §3.1, а не значения; `description` региона; `blueprint_ref`;
+`respawn_ttl: 24h` (зафиксирован §4.10 — сверяется как литерал, потому что это и есть его
+источник); `encounter_chance: 0.25`.
+
+`encounter_chance` — единственное число без владельца: в `rules/dark-forest.yaml` его нет, а
+владелец по дизайну — блупринт `domain-dark-forest` EPIC-003 (`encounter{detect_on, chance}`,
+EPIC-003 `design.md` A3). Поэтому значение помечено предварительным в `README.md`, а тест проверяет
+только форму: вероятность в `(0, 1]`. Утверждать 0,25 равенством значило бы закрепить число,
+которого никто не выбирал.
+
+### 3. Объект снапшота: почему он появился сверх списка §4.10
+
+§4.10 перечисляет только `snapshots/state/latest.json`. Но §4.4 называет `latest.json` **указателем**,
+а фикстуру — «эталоном для потребителей read-model», и порядок чтения потребителя там же: указатель
+→ объект по `snapshot.key` → сверка `state_hash`. Указатель на несуществующий объект этот порядок не
+проходит, а `size_bytes` при отсутствующем объекте становится числом, которое нечем проверить.
+Поэтому объект `20260101T000000Z-000000.json` добавлен, и все числа указателя стали измеримыми.
+Дублирование шести сущностей в двух местах безопасно: тест сверяет их поэлементно и по
+`CanonicalJSON`.
+
+### 4. Расхождения формата, вынесенные в вопросы (не подгонялись)
+
+1. **`snapshot.created.v1.json` — подмножество `latest.json`.** Схема события задаёт ровно восемь
+   полей блока `snapshot` (`id, seq, taken_at, cursor, laws_version, state_hash, size_bytes, key`)
+   и `additionalProperties: false`. §4.4 держит в указателе ещё три: `rules_version`,
+   `entities_count`, `reason`. Тест не выкидывает их из фикстуры и не расширяет схему: он собирает
+   `snapshot.created` из указателя, снимая ровно эти три ключа (и падает, если хоть один из них из
+   фикстуры пропал), и валидирует результат через `contracts.Validate`. Кому чинить — вопрос §8.
+2. **`size_bytes` в объекте снапшота.** §4.4 говорит про блок объекта «…как в latest…», но объект не
+   может назвать собственную длину, не изменив её. В фикстуре `size_bytes` есть только в указателе;
+   тест это закрепляет обоими способами — объект без `size_bytes`, и блоки указателя и объекта
+   совпадают после снятия этого поля.
+3. **`npcs: []` в таблице §4.10** против `npc_ids[]` `data-model.md` §3.2 — закрыто решением
+   оркестратора (п. 1 в §1 выше), правку §4.10 делает architect#1.
+
+### 5. Перенос строк и `size_bytes`
+
+`.gitattributes` нормализует `*.json` (`* text=auto`), а `core.autocrlf=true` на машине владельца
+вернёт их в рабочее дерево с CRLF — `git add` предупредил об этом на всех семи файлах. Значит
+длина файла в байтах зависела бы от того, кто клонировал репозиторий. Тест читает фикстуры через
+`readLF` (CRLF → LF) и сравнивает `size_bytes` с длиной **нормализованного** содержимого — это и
+есть объект, каким он лежит в Git и каким уйдёт в MinIO. Просить строку
+`testdata/fixtures/** eol=lf` в `.gitattributes` (файл tech-lead#1) не стал: правка общего файла
+ради того, что решается двумя строками в тесте.
+
+### 6. Тест: где он лежит и почему
+
+`test/fixtures/fixtures_test.go`, пакет только из `_test.go` (`go build ./...` такой пакет
+пропускает, `go test` — нет; проверено на модуле-зонде). Не в `testdata/fixtures/` — Go-инструменты
+каталог `testdata` игнорируют, тест бы никогда не запускался. Не в `internal/<новый пакет>` —
+ловушка `internal-unlisted` в `.golangci.yml` запрещает новому контексту импортировать
+`internal/*`, а сверка статов без `internal/mechanics` невозможна; правка `.golangci.yml` — общий
+файл tech-lead#1. Каталог `test/` уже назначен планом под e2e T-018
+(`test/e2e/stubs_v0_test.go`), депгард к нему правил не имеет. Когда EPIC-002 напишет
+`internal/state/bootstrap_test.go` (§4.10), эти проверки естественно переезжают туда.
+
+### 7. Проверки
+
+| Что | Результат |
+|---|---|
+| `go build ./...` | ok |
+| `go vet ./...` | ok |
+| `go test -short -count=1 ./...` | все пакеты `ok`, в т.ч. `multiverse-core.io/test/fixtures` |
+| `golangci-lint run ./test/...` | 0 issues |
+| `golangci-lint run ./...` | 2 issues, **оба вне задачи**: `shared/testkit/contract/contract.go:982,986` — забытый отладочный зонд `ZZPROBE` с `time.Now`/`time.Since` (T-014, файл в работе у developer#2/code-reviewer#2; не трогал) |
+| `gofmt -l test/ testdata/` | пусто |
+| `mvctl privacy scan testdata/` | `no external identifiers in testdata/ (13 files read)`, exit 0 |
+| `gitleaks git --staged --redact .` | no leaks found |
+| `pre-commit run --files <8 своих файлов>` | все хуки Passed, кроме `golangci-lint` (он запускается на всём модуле и падает на том же чужом `ZZPROBE`) |
+| `-race` | недоступен (как и в T-014/T-015) |
+
+Мутационная проверка теста — десять подмен, каждая красит ожидаемый подтест: `atk 2→3` в
+`players.json` (стат + `state_hash` + объект); последний символ `state_hash`;
+`encounter_chance 0.25→25`; `npc_ids → []`; `size_bytes 4531→4532`; удаление `reason` из указателя;
+`component state→archive` (падает и проверка поля, и валидация схемы); `size_bytes`, добавленный в
+объект; `scope` сокращением-строкой; неизвестный ключ в `world.json` (строгий разбор).
+
+### 8. Открытые вопросы
+
+1. **`snapshot.created.v1.json` и §4.4** (см. §4 п. 1). Схема события — подмножество указателя на
+   три поля. Развилка: либо §4.4 явно говорит «эти три поля живут только в `latest.json`, в payload
+   события их нет» (тогда правка документа, схема как есть), либо схема получает `rules_version`,
+   `entities_count`, `reason` как необязательные (тогда правка `schemas/events/` — владелец файла
+   EPIC-002, создан в F-4b). Сейчас реализован первый вариант, потому что он ничего не ломает.
+   Кому: architect#1 / system-architect.
+2. **`size_bytes` в объекте снапшота** (см. §4 п. 2) — зафиксировать в §4.4 одной фразой, что блок
+   объекта повторяет блок указателя **кроме** `size_bytes`. Кому: architect#1.
+3. **`encounter_chance`** — число нужно выбрать владельцу (EPIC-003, блупринт `domain-dark-forest`),
+   и добавить в EPIC-003 тест согласованности `blueprint.encounter.chance` ↔
+   `region.encounter_chance` — рядом с уже запланированным тестом согласованности `npc_table` ↔
+   `rules`/фикстуры (EPIC-003 `design.md` R6). Сейчас 0,25 — предварительное.
+4. **Объект снапшота сверх списка §4.10** (§3) — подтвердить у architect#1, что фикстура-эталон
+   включает и объект, и внести файл в таблицу §4.10.
+5. **Имя мира** — в требованиях названия у `dark-forest-world` нет (`api-contracts.md` §2.1 пишет
+   `"name": "…"`), поставлено «Мир Тёмного леса». Если у владельца продукта есть другое — правка в
+   одну строку, `state_hash` пересчитывается тестом.
+6. **`blueprint_ref`** мира и региона (`global-dark-forest-world@1.0`, `domain-dark-forest@1.0`)
+   выставлены по `data-model.md` §3.1–§3.2 и списку блупринтов EPIC-003 A3. Формат «имя@версия»
+   документами не закреплён; когда EPIC-003 напишет блупринты, значения нужно сверить.
+
+### 9. Риски и допущения
+
+- **Числа фикстур дублируют `rules/dark-forest.yaml` намеренно** (§4.10). Пока связь держит только
+  тест этой задачи; когда EPIC-002 напишет `internal/state/bootstrap_test.go`, а EPIC-003 — сверку
+  `npc_table.stats_ref`, проверок станет три, и они должны остаться согласованными. Правка правил
+  без правки фикстур красит `test/fixtures` — это и есть замысел.
+- **`state_hash` зависит от `entity.CanonicalJSON`.** Любая правка канонизации (T-011) сдвинет
+  значение в двух файлах фикстур. Тест пересчитывает хэш, поэтому расхождение видно сразу, но
+  чинится оно правкой фикстур, а не теста.
+- **Порядок `entities` в объекте снапшота** — `(type, id)`, как требует §4.4; при добавлении
+  сущности в фикстуры её нужно вставить в объект на своё место, иначе тест красный. Это
+  сознательная цена за то, что объект — настоящий эталон, а не приблизительный.
+- **`applied_proposals`** собран по шаблону `proposal_id` из §4.10. Если EPIC-002 при реализации
+  `Bootstrap` выберет другой шаблон, фикстура и тест правятся вместе — одна строка в каждом.
+
+---
+
+## developer#1 · T-017 · F-10d «`testkit/state.FakeState` v0 и `testkit/mechanics.FixedMechanics`» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, команда TEAM-1, экземпляр developer#1 (в `tasks.md` строка T-017
+назначена на developer#2 — оркестратор передал задачу этому экземпляру; developer#2 параллельно
+доводит T-014). Основание: `epics/EPIC-001-foundation/design.md` §5 (строки `FakeState` v0 и
+`FixedMechanics`), §5.1, §10, §11 (отклонённая альтернатива «интерфейс в C-03»);
+`architecture/components/state-and-mechanics.md` §3.3, §4.3–§4.5, §4.9, §4.10, §5.1, §5.4;
+`architecture/contracts.md` v0.4 — C-02 v1.2, C-03 v1.1, C-14 (уточнение v0.4), §0, §16 п. 7, §17;
+`architecture/consolidation.md` §14.1 (TL2-6, З-2). Коммит не выполнялся (`git.commits: ask`) —
+изменения подготовлены в индексе.
+
+Каталоги вне владения не трогались: `shared/testkit/{contract,membus}` (T-014, developer#2),
+`shared/eventbus`, `internal/mechanics` и `rules/` (T-015, принята), `testdata/fixtures` и `test/`
+(T-016, принята), `review.md`, `.golangci.yml`.
+
+### 1. Что создано
+
+| Файл | Что в нём |
+|---|---|
+| `shared/testkit/mechanics/fixed.go` | `FixedMechanics`, `New`, `Load`, `Rules`, таблица исходов, `Verdict`, `Resolve`, `NPCTarget`, `Roll`, `Stats`, `Invariants` |
+| `shared/testkit/mechanics/fixed_test.go` | доли таблицы, детерминизм, четыре вердикта удара, крит ×2, назначения бросков NPC, бегство, отдых, отказы, выбор цели, проброс правил, `dice.rolled` из `Roll` |
+| `shared/testkit/mechanics/consumer_test.go` | интерфейс `Mechanics` на стороне потребителя + один потребитель, прогоняемый и на заглушке, и на `*mechanics.Rules` |
+| `shared/testkit/state/state.go` | `Config`, `FakeState`, `New`, `Seed`, `WithInvariants`, `Start`/`Wait`, `Get`/`All`/`StateHash`/`AppliedProposals`, публикация `analytics.replay.completed` |
+| `shared/testkit/state/apply.go` | `Apply` (обработчик `system_events`), разбор предложений, матрица из пяти отказов, `atomic`, факты `entity.created/updated` |
+| `shared/testkit/state/snapshot.go` | `SnapshotMeta`/`Pointer`/`Object`, `SnapshotKey`, `Snapshot()` в `objstore` |
+| `shared/testkit/state/fixtures.go` | `LoadFixtures` — четыре файла `testdata/fixtures` в порядке бутстрапа |
+| `shared/testkit/state/{state,apply,snapshot,consumer}_test.go` | протокол старта, цикл «предложение → факт» на membus по каждому op, матрица отказов, `abandoned`, `atomic`, дедуп, снапшот, проекция потребителя |
+
+### 2. Что заглушка обещает
+
+**`FakeState` v0.**
+
+- Читает `system_events` под группой `testkit-state`, отвечает на `entity.create.proposed` и
+  `entity.update.proposed`; всё остальное (включая собственные факты) игнорирует.
+- Применяет `entity.ApplyOps` на копиях, `Version+1` при непустом `changed`, `updated_at` и
+  `applied_at` — `timestamp` предложения; факты `entity.created`/`entity.updated` строятся через
+  `Derive` (общая цепочка, общий `proposal_id`), по одному на сущность, в порядке возрастания `id`.
+- Матрица отказов ровно из пяти причин: `unknown_entity`, `version_conflict`, `invalid_op`,
+  `duplicate_entity`, `dead_entity`. `version_conflict` несёт `details.expected_version` и
+  `details.actual_version`.
+- `atomic=true` — один `rejected` на пакет, мир не двигается вообще (тест сверяет `StateHash` до и
+  после); `atomic=false` — по одному `rejected` на сломанный набор, остальные применяются.
+- Терминальные статусы: `dead | abandoned | ascended_final` → `dead_entity`, кроме операций только
+  по четырём путям трупа (`died_at`, `killed_by`, `loot_claimed_by`, `encounter_id`, §4.5 п. 5).
+  Переход `alive → abandoned` по `cause=forget` от шлюза проходит и даёт
+  `entity.updated {changed:[{path: status, old: alive, new: abandoned}], cause: forget}`; повторное
+  предложение — `dead_entity`; `narrative.output kind=death` заглушка не издаёт.
+- **Протокол старта**: `Start` подписывается и сразу публикует `analytics.replay.completed`
+  `{mode: recovery, replay{run_id, snapshot_id: null, events_replayed: 0, llm_calls: 0,
+  dice_rolled_new: 0, duration_ms, state_hash_after, incomplete_record: false}}`,
+  `source = testkit/state`. Событие проходит `contracts.Validate` — схему проверяет реестр, а не тест.
+- `Seed(entities)` — бутстрап из фикстур (`LoadFixtures`), копией; повторный посев того же `id` —
+  ошибка. `Snapshot(ctx, reason)` пишет объект `state/{ts}-{seq:06d}.json`, затем
+  `state/latest.json` в `objstore` (формат §4.4, `state_hash`/`size_bytes`/`entities_count`
+  пересчитываются, `cursor.system_events` — из `eventbus.PositionFromContext`).
+- Дедуп по `proposal_id` — LRU `eventbus.Dedup`; в окно попадает **только применённое** (§4.5 п. 12),
+  поэтому отклонённое предложение можно переслать под тем же `proposal_id` и получить ответ, а не
+  тишину. Окно же отдаётся в снапшот как `applied_proposals`.
+
+**`FixedMechanics`.**
+
+- `Roll`, `Stats`, `Invariants` не подделаны — проброшены в загруженный `*mechanics.Rules`
+  (`rules/dark-forest.yaml`). Числа боя у потребителя те же, с которыми он будет работать.
+- Подделан только вердикт: `Seed(causeEventID, rollIndexStart) mod 10` → таблица
+  6 попаданий / 1 крит / 1 фамбл / 2 промаха = 60/10/10/20 (`design.md` §5). Всё остальное считается
+  по правилам: урон — настоящий бросок `DamageDice` атакующего (`d6` у игрока, `d4` у волка),
+  крит умножается на `crit_multiplier`, `hp_after` зажимается `ClampHP` (inv-02).
+- Натуральная кость в отчёте согласована с вердиктом (крит — 20, фамбл — 1, попадание — минимальная
+  кость, берущая `def`, промах — максимальная, не берущая). Иначе `FakeNarrator` T-018 напечатал бы
+  «выпало 3, критический удар».
+- Бегство решается той же таблицей (попадание/крит — успех), порог берётся из `FleeThreshold`,
+  `free_attack` — из `flee.on_fail`. Отдых таблицу не спрашивает: `rest.restore: hp_max`.
+- `NPCTarget` — первый живой кандидат по `id` (исключённые по `Rules.Excluded` не кандидаты).
+
+### 3. Чего заглушка сознательно не делает
+
+- **Владение (`level_violation`) и инварианты (`law_violation`)** — вне матрицы v0 (`design.md` §5).
+  Практическое следствие для C-02 v1.2: заглушка **не проверяет**, что `alive → abandoned` предлагает
+  именно шлюз; предложение с `meta.agent` она примет, тогда как настоящий State ответит
+  `level_violation`. Проверяется только статус цели, что и даёт `dead_entity` в обоих случаях из DoD.
+  `WithInvariants()` — no-op с записью `warn` (все `Check` в `mechanics.Invariants()` пока `nil`).
+- **Персист отдельных сущностей** — мира на диске нет, `PutEntity`/`PutIntent`/`DeleteIntent`
+  (ADR-013) не делаются; в `objstore` попадает только снапшот по явному вызову.
+- **Recovery и догон журнала** — сигнал `replay.completed` честно сообщает нули: заглушка ничего не
+  проигрывала. `snapshot.created` не публикуется вовсе: в `Spec.Publishers` этого типа `testkit/state`
+  нет (`contracts.md` §0), и заглушка не изобретает себе прав.
+- **Дедуп по `last_change` и досылка неподтверждённых фактов** (§4.5 п. 2, §4.8) — нет. Следствие:
+  если `Publish` факта упадёт после фиксации, повтор доставки будет проглочен окном дедупа. Для
+  membus это невозможная ветка, но в отчёте она названа.
+- **`FixedMechanics.Outcome.Loot` всегда пуст** — см. §6 п. 2.
+
+### 4. Как проверено совпадение сигнатур
+
+**C-03 — компилятором.** `shared/testkit/mechanics/consumer_test.go` объявляет интерфейс `Mechanics`
+так, как его объявит потребитель на своей стороне (`design.md` §11: C-03 не меняется, интерфейс
+пишет EPIC-003), и содержит два утверждения времени сборки:
+`var _ Mechanics = (*mech.Rules)(nil)` и `var _ Mechanics = (*fixed.FixedMechanics)(nil)`. Расхождение
+в одном аргументе или одном возвращаемом значении ломает сборку пакета. Сверх утверждений там же
+лежит функция `encounterTurn(m Mechanics, …)` — форма хода агента встречи, — и тест прогоняет её
+**и на заглушке, и на загруженном `*Rules`**: на первой ход проходит, на втором приходит
+`mechanics.ErrNotImplemented` (T-053). То есть подмена уже выполнена в одном тесте, а не обещана.
+
+**C-02 — реестром и потребителем.** Контракт событийный, поэтому проверок три:
+`shared/testkit/state/consumer_test.go` строит read-model ровно так, как её строят EPIC-003/EPIC-004
+(подписка на `system_events`, чтение `entity.created/updated/rejected` через `event.Path()`), и ни
+одним именем не упоминает `testkit`; тест `TestTheStubIsARegisteredPublisher` сверяет, что
+`testkit/state` перечислен в `Spec.Publishers` всех четырёх издаваемых типов (это же проверяет job
+`contracts`) и что `snapshot.created` заглушке не принадлежит; `TestTheRefusalMatrixIsASubsetOfTheContract`
+держит пять причин внутри семи из схемы `entity.update.rejected`. Плюс: всё, что заглушка публикует,
+проходит `eventbus.Route` → `contracts.Validate`, потому что membus валидирует и на записи, и на
+чтении — невалидное событие не «пройдёт мимо теста», оно не опубликуется.
+
+### 5. Отклонения от дизайна
+
+1. **`FixedMechanics` лежит в `shared/testkit/mechanics`** (`design.md` §5, `tasks.md` T-017,
+   `ownership.md` §1), а не в `shared/testkit/state`, как написано в `contracts.md` §17 строкой
+   «`testkit/state.FixedMechanics`». Взят вариант задачи и карты владения; §17 нужно поправить.
+2. **`details.batch_size`** из §4.5 п. 9 не публикуется: схема `entity.update.rejected.v1.json`
+   объявляет `details` с `additionalProperties: false` и знает только `expected_version`,
+   `actual_version`, `invariant_id`. Поле молча не добавлялось — вынесено в вопросы.
+3. **`rules_version` в снапшоте приходит из `Config`**, а не из правил: `shared/*` не может
+   импортировать `internal/mechanics` (см. §6 п. 1), поэтому версию передаёт тот, у кого правила уже
+   загружены. В e2e T-018 это `FixedMechanics.Rules().Version`.
+4. **Исключение «четыре пути трупа»** реализовано, хотя описание v0 в `design.md` §5 про него молчит:
+   без него `loot_claimed_by`/`killed_by` на убитом волке получали бы `dead_entity`, и сценарий
+   добычи в e2e T-018 был бы невозможен (inv-03). Это буквальный §4.5 п. 5, не расширение.
+5. **`Start` возвращает управление сразу**, а подписка живёт в горутине до `ctx.Done()`
+   (`Wait()` присоединяет её). `design.md` формы запуска не задаёт; такая нужна, чтобы «подписался →
+   просигналил» было одним вызовом у потребителя.
+
+### 6. Открытые вопросы
+
+1. **Блокер: `depguard` запрещает `shared/testkit/mechanics → internal/mechanics`.**
+   `.golangci.yml`, правило `shared`: `files: **/shared/**`, `deny: multiverse-core.io/internal`
+   (ADR-001 п. 3). Но `FixedMechanics` обязана говорить типами C-03 (`mech.Outcome`, `mech.Roll`,
+   `mech.Actor`, `mech.Action`, `mech.Invariant`) — иначе она и `*mechanics.Rules` не удовлетворяют
+   одному интерфейсу и весь смысл заглушки (§11 `design.md`) исчезает. Сейчас
+   `golangci-lint run ./shared/testkit/mechanics/...` даёт **3 issues** (`fixed.go`, `fixed_test.go`,
+   `consumer_test.go`) — одна и та же строка импорта. `shared/testkit/state` чист (0 issues).
+   Правка на одну строку, но файл вне владения этого экземпляра (`.golangci.yml` — EPIC-001,
+   tech-lead#1 + devops), и она затрагивает границу ADR-001, поэтому не сделана. Предлагаемый вид:
+   в правило `shared` добавить отрицание `- "!**/shared/testkit/mechanics/**"`, рядом объявить
+   правило `shared-testkit-mechanics` с `list-mode: lax`, `files: **/shared/testkit/mechanics/**`,
+   `allow: multiverse-core.io/internal/mechanics` — как уже сделано для `internal-*`.
+   Кому: tech-lead#1 + system-architect (пометка `contract-change`, ADR-001 доп. пункт).
+   Альтернативы, которые я не выбирал самовольно: перенести пакет в `internal/mechanics/testkit`
+   (тогда правило `internal-mechanics` пропускает импорт без правок линтера, но ломается
+   `ownership.md` §1 и `contracts.md` §17); поднять типы C-03 в `shared/` (правка C-03, дороже).
+2. **`Outcome.Loot` нечем заполнить.** Трофей берётся из `Rules.Loot(kind)`, где `kind` — это
+   `wolf`, а `mechanics.Actor` несёт только `ID`/`Type` (`npc`). Ни `Resolve`, ни `ChangesFor`
+   вида C-03 не получают `kind`, поэтому заглушка всегда возвращает пустой `Loot`, и настоящая
+   реализация EPIC-002 столкнётся с тем же. Развилка: добавить `Actor.Kind` (совместимое дополнение
+   C-03) либо передавать `kind` отдельным аргументом. Кому: architect#1 / EPIC-002 (T-053).
+3. **`details.batch_size`** (см. §5 п. 2): либо §4.5 п. 9 убирает поле, либо схема
+   `entity.update.rejected.v1.json` получает его как необязательное. Кому: architect#1 / EPIC-002
+   (владелец файла схемы).
+4. **`loot_claimed_by` без константы** в `shared/entity/types.go`: `died_at`, `killed_by`,
+   `encounter_id` там есть, четвёртый путь трупа — нет, и в `apply.go` он написан строкой. Кому:
+   EPIC-002 (владелец `shared/entity` после волны 0) — одна строка в `types.go`.
+5. **`analytics.replay.completed.run_id`** заглушка формирует как `"{world}:testkit/state"`. Формат
+   `run_id` документами не закреплён; если EPIC-005 ждёт ULID прогона — сказать, и заглушка изменится
+   в одну строку. Кому: architect#1 / EPIC-005.
+6. **Издатель `abandoned`.** Заглушка не отличает шлюз от агента (см. §3). Если для e2e T-018 или для
+   роя это существенно, нужно либо расширить матрицу v0 шестой причиной `level_violation` (тогда это
+   уже не «ровно пять»), либо оставить как есть и записать ограничение в C-02 §17. Кому: architect#1.
+
+### 7. Результаты DoD
+
+| Что | Результат |
+|---|---|
+| `go build ./...` | ok |
+| `go vet ./...` | ok |
+| `go test -short -count=1 ./...` | все пакеты `ok`, **кроме** `shared/testkit/contract` — `TestBusContractOnMembus/CloseStopsTheSubscriptionsAndRefusesToPublish` падает стабильно (2 прогона). Файл `shared/testkit/contract/contract.go` в работе у developer#2 (T-014), в моей области нет, не трогал |
+| `go test -short -count=1 ./shared/testkit/state/ ./shared/testkit/mechanics/` | ok |
+| покрытие | `shared/testkit/state` — **87,2 %**, `shared/testkit/mechanics` — **93,2 %** (порог 70 %) |
+| `golangci-lint run ./shared/testkit/state/...` | **0 issues** |
+| `golangci-lint run ./shared/testkit/mechanics/...` | **3 issues** — `depguard` на импорте `internal/mechanics`, все три об одной строке; см. §6 п. 1 |
+| `gofmt -l shared/testkit/state shared/testkit/mechanics` | пусто |
+| `pre-commit run --files <11 своих файлов>` | `gitleaks`, `golangci-lint-fmt`, `check for added large files`, `fix end of files`, `check for merge conflicts` — Passed; `golangci-lint` — Failed на тех же трёх `depguard` |
+| `gitleaks git --staged --redact .` | no leaks found |
+| `-race` | недоступен (как в T-014/T-015/T-016) |
+| индекс | добавлены только 11 своих файлов; `shared/testkit/{contract,membus}`, `internal/mechanics`, `testdata/`, `test/` не тронуты |
+
+Мутационные проверки (каждая подмена красит ожидаемый тест и только его): вердикт «крит» сдвинут в
+таблице на слот промаха; `verdictMiss` вместо `verdictFumble` в строке 7; урон без `crit_multiplier`;
+`NPCTarget` без фильтра `Excluded`; `naturalFor` для попадания на `def-atk-1`; порядок фактов не
+сортируется по `id`; `atomic` применяет по мере обхода (красит сверку `StateHash`); терминальная
+проверка без исключения путей трупа; `remember` перенесён до решения (красит «отклонённое не
+запоминается»); `Snapshot` пишет указатель раньше объекта; `replay.completed` с `events_replayed: 1`.
+
+### 8. Риски и допущения
+
+- **Таблица исходов — не симуляция.** Натуральная кость подгоняется под вердикт, а не наоборот; при
+  редких статах (`def - atk` вне `[2, 19]`) кость упирается в границу и арифметика «кость + atk»
+  перестаёт согласовываться с вердиктом. Потребитель обязан читать исход из `Outcome`, а не
+  пересчитывать его из кости; в комментарии `naturalFor` это сказано. Когда EPIC-002 напишет
+  `Resolve`, вопрос исчезает вместе с заглушкой.
+- **Доли 60/10/10/20 держатся на равномерности SHA-256 по посевам.** Тест меряет их на 10 000
+  событий с допуском 0,02; строгое равенство недостижимо, потому что слот берётся от хэша, а не от
+  счётчика.
+- **`FakeState` хранит мир только в памяти.** Всё, что потребитель хочет увидеть на диске, приходит
+  через `Snapshot()`. Если T-018 понадобится «мир после падения», это отдельная задача, а не правка
+  заглушки.
+- **Ожидание в тестах — опрос с реальным таймаутом** (`testkit.After`, `clock.RealTimers`): подписка
+  живёт в горутине, и ручные часы не могут сказать, сколько времени она реально получила. Ручные
+  часы при этом стоят в конструкторах событий (`testkit.Deterministic`), поэтому сами события
+  байт-в-байт воспроизводимы.
+- **`Start` нельзя вызвать дважды** — две подписки одной группы поделили бы между собой предложения.
+  Тест на это есть; для второго мира нужен второй `FakeState`.
+
+## developer#1 · T-017 · итерация 2 по ревью #1 · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, команда TEAM-1, экземпляр developer#1. Основание: раздел
+«T-017 · ревью #1 · code-reviewer#1» в `review.md` и решения оркестратора из `journal.md`
+(запись «Решения оркестратора по ревью T-017 · Итерация 2»). Область правок — только
+`shared/testkit/state/**` и `shared/testkit/mechanics/**`; `shared/testkit/{contract,membus}`
+(T-014, developer#2 в работе), `shared/eventbus`, `internal/mechanics`, `rules/`, `testdata/`,
+`test/`, `review.md`, `.golangci.yml`, `ownership.md` не трогались. Коммит не выполнялся,
+изменения подготовлены в индексе.
+
+### 1. Что исправлено
+
+**Major-1 · два набора изменений на одну сущность.** `applyUpdate` отказывает `invalid_op`, если
+`changes[]` называет один `entity.id` дважды (решение оркестратора). Отказ один на пакет, до
+взятия замка и независимо от `atomic`: пакет разобран как неверно сформированный (§4.5 п. 1), а не
+как набор частично применимых изменений. Внятное сообщение уходит в лог
+(`remedy: merge the operations of one entity into a single change set`) — в событии его выразить
+нечем: `details` в `entity.update.rejected.v1.json` объявлен с `additionalProperties: false` и
+тремя известными полями. В doc-комментарии записано, почему ограничение живёт в коде, а не в
+схеме: JSON Schema не умеет уникальность по вложенному полю (`uniqueItems` сравнивает элементы
+целиком, а два набора по одной сущности различаются операциями), поэтому реестр такой пакет
+принимает и отказывать обязана каждая реализация State — T-056 встретит то же предложение. Тест
+`TestOneEntityNamedTwiceIsRefused` гоняет оба режима (`atomic` и нет) и сверяет: один отказ, ноль
+фактов, `StateHash` не сдвинулся, `AppliedProposals` пуст.
+
+**Minor-1 · порядок «объект, потом указатель».** В `snapshot_test.go` добавлен декоратор хранилища
+`putRecorder` (обёртка над `objstore.Client`, записывает последовательность ключей в `Put`) и тест
+`TestTheObjectIsWrittenBeforeThePointer`. Продакшн-код не менялся: порядок в нём был правильным, не
+хватало доказательства.
+
+**Minor-2 · сигнал старта после подписки.** `Start` больше не публикует сигнал по факту «горутина
+дошла до вызова»: он ждёт, пока подписка не отчитается, что она живая. ~~И возвращает ошибку
+подписки вместо сигнала, если та упала сразу.~~ **Формулировка сужена 2026-09-10 по ревью #2
+(Minor-7): ошибку подписки вместо сигнала `Start` возвращает только на шине, которая умеет
+отчитаться о готовности** (реализует `readySubscriber`); такой шины в дереве нет — единственная
+реализация — двойник `readyBus` в тесте. На обычной `eventbus.Bus` запасная ветка объявляет
+готовность **до** вызова `Subscribe`, поэтому `select` в `Start` всегда выбирает `ready`, и упавшая
+подписка доходит до вызывающего через `Wait` и запись `error` в лог, а не через `Start`. Зонд
+ревьюера (шина с немедленно падающим `Subscribe`, 300 прогонов) это и показал: `Start` сообщил об
+ошибке 0 раз из 300, сигнал ушёл 300 из 300. Поведение при этом не изменилось ни в лучшую, ни в
+худшую сторону — неверной была запись, а не код; исправление запасной ветки без правки C-01 не
+выражается (см. п. 1 §4 ниже). Отчитаться может только шина: `eventbus.Bus` (C-01)
+момент регистрации группы назвать не умеет — `Subscribe` блокируется до конца подписки, поэтому
+регистрация происходит внутри вызова, который ещё не вернулся. Шина, которая этот момент знает,
+реализует `readySubscriber` (`SubscribeReady(..., ready chan<- struct{})`), и заглушка ждёт её
+отчёта; `membus` его не реализует (T-014, чужое владение), и там держится другая гарантия,
+названная в комментарии вслух: новая группа читает с первого офсета, поэтому опубликованное до
+`Start` не теряется. Тесты: `TestStartSubscribesBeforeItAnnounces` (порядок на шине, которая умеет
+отчитаться) и `TestNothingPublishedBeforeStartIsLost` (гарантия на `membus`, зонд ревьюера).
+Остаточный зазор — брокер без такого отчёта — вынесен в открытые вопросы к C-01: закрыть его можно
+только в `shared/eventbus` (канал готовности в `Subscribe`) или чтением по офсетам (`Journal.Tail`
+с закреплённым офсетом), и то и другое вне владения этой задачи.
+
+**Minor-3 · режим сверяется с литералом.** В `TestStartAnnouncesRecovery` сравнение идёт с
+`"recovery"`, а не с `state.ReplayModeRecovery`; отдельной строкой проверено, что сама константа
+равна контрактному значению — её импортируют потребители. Подмена константы на `"test"` теперь
+красит тест (схема допускает оба значения, поэтому реестр подмену не ловил).
+
+**Minor-4 · чужой мир.** `Apply` пропускает событие, у которого `world` ≠ `Config.WorldID`: без
+факта, без отказа, с записью `debug`. Выбор поведения обоснован так: State — воркер на мир (§7.1),
+предложение чужого мира адресовано не этой заглушке, а отказ был бы ответом от имени другого State
+и попал бы к его потребителям как настоящий `entity.update.rejected` — проекция чужого мира читает
+тот же `system_events`. Курсор при этом двигается: сообщение прочитано. Тест
+`TestAProposalOfAnotherWorldIsPassedOver`.
+
+**Minor-5 · переход `alive → abandoned`.** Задействован `entity.StatusTransitionAllowed` (T-011):
+после `ApplyOps` изменения просматриваются на путь `status`, переход сверяется с матрицей
+`data-model.md` §3.3, а `abandoned` дополнительно требует `cause=forget` (C-02 v1.2, З-2). Отказ —
+`invalid_op`, шестая причина не вводится. Проверка стоит после `ApplyOps`, потому что набор,
+оставляющий статус прежним, не даёт `Change` вообще, и «переход в себя» не должен превращаться в
+отказ.
+
+**Зазор по издателю записан явно** (вторая половина Minor-5): заглушка **не проверяет, кто
+предложил переход**. По C-02 v1.2 и З-2 `alive → abandoned` публикует только шлюз и без
+`meta.agent`; предложение роя с агентом настоящий State отвергает причиной `level_violation`,
+которой нужна таблица владения — в v0 её нет (design.md §5). Поэтому предложение роя с
+`cause=forget` на заглушке пройдёт, а на настоящем State упрётся. Зазор назван в doc-комментарии
+`statusRefusal` и здесь; матрица заглушки остаётся из пяти причин.
+
+**Nit-2 · золотой вектор таблицы исходов.** `TestOutcomeTableIsTheOneWrittenDown` — двенадцать
+литеральных пар «событие → исход»: по одной на каждую из десяти строк таблицы плюс две с
+`rollIndex = 1`. Любая перестановка строк с разными вердиктами краснеет; перестановка одинаковых
+строк таблицу не меняет.
+
+**Nit-3 · семь причин из схемы.** `TestTheRefusalMatrixIsASubsetOfTheContract` читает enum `reason`
+из скомпилированной схемы реестра (`contracts.Lookup(...).Schema.Properties["reason"].Enum`), а не
+из литерального списка; добавлены проверки, что `level_violation` и `law_violation` в контракте
+есть, а в матрице заглушки нет — зазор остаётся решением, а не пропажей.
+
+### 2. Проверка мутациями (каждая правка снята — свой тест падает)
+
+| Снятая правка | Что покраснело |
+|---|---|
+| отказ при повторе сущности | `TestOneEntityNamedTwiceIsRefused/{atomic,loose}` |
+| `Put` указателя перед `Put` объекта | `TestTheObjectIsWrittenBeforeThePointer` |
+| сигнал без ожидания отчёта шины | `TestStartSubscribesBeforeItAnnounces` |
+| `ReplayModeRecovery = "test"` | `TestStartAnnouncesRecovery` (обе строки) |
+| фильтр чужого мира убран | `TestAProposalOfAnotherWorldIsPassedOver` |
+| `statusRefusal` не вызывается | `TestAbandonedNeedsTheCauseOfForget` (оба подтеста) |
+| убрана только проверка `cause` | `.../abandoned_with_another_cause` |
+| убран только `StatusTransitionAllowed` | `.../a_status_the_matrix_does_not_know` |
+| поворот таблицы исходов | `TestOutcomeTableIsTheOneWrittenDown` (тест долей остался зелёным) |
+
+Все мутации откачены, файлы сверены по контрольным суммам с копиями, снятыми до мутаций.
+
+### 3. Как проверено
+
+`go build ./...`, `go vet ./...`, `go test -short -count=1 ./...` — зелёные целиком. Покрытие:
+`shared/testkit/state` 87,3 % (было 87,2 %), `shared/testkit/mechanics` 93,2 % (без изменений).
+`golangci-lint run ./shared/testkit/state/... ./shared/testkit/mechanics/...` — 0 issues,
+`gofmt -l` по обоим каталогам пуст. `-race` в окружении недоступен.
+
+### 4. Отклонения и открытые вопросы этой итерации
+
+1. **Строгий порядок «группа зарегистрирована → сигнал» средствами C-01 недостижим** (см. Minor-2).
+   Реализовано: ожидание отчёта шины там, где шина умеет отчитаться, честный комментарий и тест
+   реальной гарантии там, где не умеет. Вопрос к архитектору: добавлять ли в `Bus.Subscribe` канал
+   готовности (правка C-01) или считать зазор допустимым до EPIC-002.
+2. **Ратификация правила «одна сущность — один набор изменений»** остаётся за архитектором
+   (открытый вопрос ревью, п. 2): заглушка отказывает, T-056 должна вести себя так же. Пункт 3
+   открытых вопросов ревью («дешевле закрыть в схеме») закрывается отрицательно: JSON Schema
+   уникальность по вложенному полю не выражает.
+3. Шесть открытых вопросов итерации 1 остаются в силе.
+
+## developer#2 · T-014 · итерация 4 по ревью #3 · 2026-09-10
+
+Объём — тестовый: кейс `closeStopsEverything` в `shared/testkit/contract/contract.go` и три
+вспомогательных метода рядом с ним. `shared/eventbus/kafka.go` и `shared/testkit/membus/membus.go`
+не менялись: md5 сверены до и после всех мутационных прогонов (`kafka.go` `a5e77309…`,
+`membus.go` `4b0a9a43…`). `review.md` не трогал. `internal/mechanics/**`, `rules/**`, `testdata/**`,
+`test/**` (T-015 и T-016 приняты) и `shared/testkit/{state,mechanics}/**` (T-017, developer#1
+работает параллельно) — вне области, на запись не открывались.
+
+Основание: `review.md` «T-014 · ревью #3 (итерация 3)», решение оркестратора от 2026-09-10 с явным
+условием выхода (`journal.md`, последняя запись).
+
+### 1. Major-1: почему основной вариант в чистом виде якоря не даёт
+
+Предложенный вариант — «обработчик сигнального события блокируется до **возврата** `Close`, после
+чего утверждение становится точным равенством `after == before`». Первым делом проверена его
+предпосылка: `Close` действительно не ждёт горутин подписок. Подтверждено по исходнику kafka-go
+v0.4.51: `Reader.Close` (`reader.go:757-777`) отменяет свои контексты, ждёт **своих** горутин
+(`r.join.Wait()`) и закрывает `r.msgs`; про обработчик вызывающей стороны он ничего не знает.
+Блокировка обработчика `Close` не запирает — это верно.
+
+Неверна вторая половина: **разблокированный мутант не дочитывает буфер читателя.** Цикл
+`Subscribe` устроен как `FetchMessage → deliver → CommitMessages`, поэтому после разблокировки он
+упирается не в `FetchMessage`, а в коммит уже обработанного события. А коммит после возврата
+`Close` пройти не может: `commitLoopImmediate` (`reader.go:194-225`) при отмене поколения разбирает
+канал `r.commits`, отвечает всем ожидающим и выходит, а `r.join.Wait()` внутри `Close` дожидается
+именно его. Дальше `CommitMessages` (`reader.go:894-901`) выбирает из двух **готовых** ветвей
+`select`:
+
+- `r.commits <- creq` — буфер на `QueueCapacity` = 100 свободен, а отвечать некому: цикл встаёт
+  навсегда (у мутанта контекст не отменён, а ветки `ctx.Done()` во втором `select` нет);
+- `<-r.stctx.Done()` — возврат `io.ErrClosedPipe`, который `eventbus.stopped` (`kafka.go:455-457`)
+  трактует как штатную остановку, и подписка возвращает `nil`.
+
+Go выбирает между двумя готовыми ветвями равновероятно, значит вариант в чистом виде — монетка 1/2
+на подписку, то есть хуже наблюдавшихся ревьюером 0,83. Эта же развилка объясняет, почему в ревью #3
+часть красных прогонов была зависанием, а часть — счётом.
+
+Второй результат зонда — механизм, который на самом деле красит мутанта счётом, и он не тот, что
+предполагался. Зонд на коде итерации 3 (6 прогонов; лог таймлайна вызовов, длительности `Close`,
+`before`/`after`):
+
+```
+мутация H, красные:  Close 81–162 мс; вызовы идут тем же шагом 26,5 мс ещё ~54 мс внутри Close,
+                     затем прекращаются: after = before + 3
+мутация H, зелёный:  Close 161,9 мс, но последний вызов — через 0,5 мс после входа в Close,
+                     дальше тишина: after = before + 1 (внутри допуска)
+```
+
+Разница между ними — не скорость `Close`, а **порядок закрытия читателей**. `Close` закрывает их
+последовательно, порядок — обход `map`. Цикл разбирает хвост ровно до тех пор, пока его
+**собственный** читатель ещё в группе; как только очередь дошла до него, его коммит перестаёт
+проходить, и цикл заканчивается — независимо от того, отменяли ему контекст или нет. Поэтому
+подписка, чей читатель закрывается первым, о дефекте не сообщает ничего: её останавливает мёртвый
+читатель, а не та отмена, ради которой кейс написан. С одной подпиской на хвосте это и есть
+«монетка» из Major-1.
+
+### 2. Что сделано
+
+Кейс `CloseStopsTheSubscriptionsAndRefusesToPublish` перекроен так, чтобы ни одно утверждение не
+зависело ни от длительности `Close`, ни от порядка обхода `map`.
+
+1. **Три подписки на хвосте вместо одной** (`a`, `b`, `c` — каждая в своей группе, на одном топике
+   и одном хвосте) плюс припаркованная. Первым может закрыться только один читатель; у остальных
+   двух впереди остаётся по целому закрытию читателя (у последнего — два), и именно они показывают,
+   что делает цикл, которому не сказали остановиться. Требование к машине: у последней закрываемой
+   подписки хвоста впереди **сумма не менее двух** закрытий читателя, и эта сумма должна быть дольше
+   двух событий работы обработчика.
+   [Поправка оркестратора 2026-09-11 по ревью #4, Nit-1: прежняя формулировка «закрытие ОДНОГО
+   читателя дольше ~9 мс» по нижней границе неверна — ревьюер намерил одиночные закрытия от 5,5 мс
+   (28 замеров, 5,5…91,4 мс) при стоимости события ~5,8 мс. Верна суммарная величина: в шести
+   замерах накопленное перед последним читателем хвоста составило 55,0 / 73,7 / 74,2 / 85,0 / 96,5 /
+   118,4 мс, то есть 9–20 событий при допуске в одно. Вывод от этого крепче, но запас надо считать
+   по сумме, иначе следующий снимет не тот.]
+2. **Точная база.** Каждый обработчик на сигнальном событии отдаёт сигнал и **паркуется** до
+   момента, когда кейс его отпустит, — непосредственно перед `Close`. В момент снятия базы в полёте
+   нет ни одного события, поэтому `before` равен `signalOn` по построению, а не по везению; прежняя
+   формулировка «прочитать счётчик в момент входа в `Close`» была источником шума с обеих сторон.
+3. **Хвост 300 событий, пауза 3 мс на событие** вместо 40 и 25 мс. Порог, ниже которого мутант
+   выживает, уехал с ~25 мс до ~4,5 мс на событие (3 мс паузы плюс ~1,5 мс на коммит), а
+   наблюдаемый диапазон `Close` (81–162 мс, под нагрузкой до ~400 мс) остался прежним.
+4. **Допуск — одно событие** (`slack = 1`), как и был, но теперь это буквально «событие в полёте»:
+   на исправном коде замерено **0 дополнительных вызовов в 64 измерениях из 64** (10 прогонов
+   двухподписочной версии и 4 прогона итоговой × 2 реализации × число подписок; 28 измерений из
+   них — под `GOMAXPROCS=1` с 16 нагрузчиками). Замер сделан временной подменой `slack` на `-1`,
+   чтобы утверждение печатало фактическое число.
+5. **Предохранитель.** Парковка обработчика ограничена сроком `Timeout`: кейс, упавший до того, как
+   отпустит обработчики, не должен держать подписку до `-timeout` всего прогона.
+
+Побочный эффект перекройки: мутация B2 ревью #3 (`membus.go:284`, `stopping` → только `ctx.Err()`)
+красит набор сообщением «280 more events … (300 of the 300 events of the backlog in all)» вместо
+прежних «37 из 40» — то же расхождение, но без остатка.
+
+### 3. Nit-1, Nit-2, Nit-3
+
+- **Nit-1** — исправлено: `subscription.stop` ждёт `<-s.done` в `select` с `testkit.After(Timeout)`.
+  Зависшая подписка теперь стоит кейсу его собственные 15 с, а не `-timeout` всего прогона.
+- **Nit-2** — исправлено: припаркованная подписка берёт группу `r.group+"-parked"`, три подписки на
+  хвосте — `-a`, `-b`, `-c`. Общий метод `start` принимает группу параметром; добавлены
+  `subscribeGroup` и `subscribeWithGroup`, старые `subscribe`/`subscribeWith` делегируют им с
+  `r.group`, прочие кейсы не изменились. Побочный выигрыш: набор на брокере стал быстрее
+  (9,6–12,7 с против 13,3 с) — лишней ребалансировки больше нет.
+- **Nit-3** — исправлено в записи итерации 3 («Риски и допущения»): кандидатом на первый флак назван
+  `CloseStopsTheSubscriptionsAndRefusesToPublish`.
+
+Заодно, по образцу Minor-5 ревью #2: два ожидания сигналов делят **один** срок `Timeout` на двоих, а
+не берут по сроку каждое, — бюджет красного прогона от третьей подписки не вырос.
+
+### 4. Доказательство: мутация H
+
+Мутация: в `shared/eventbus/kafka.go` удалено наследование контекста цикла от `closing`
+(`ctx, cancel := context.WithCancel(ctx)`, `defer cancel()`, `context.AfterFunc(k.closing, cancel)`,
+`defer stopWatchingClose()` → `_ = k.closing`), то есть состояние кода до правки итерации 2.
+Мутация накладывалась и снималась скриптом, md5 сверялись (`53d18ede…` под мутацией, `a5e77309…`
+после снятия). Форма прогона — как гоняет CI: `go test -tags integration -count=1
+./shared/testkit/contract/` (обе реализации в одном прогоне).
+
+| Серия | Прогонов | Красных | Зелёных | Чем красит |
+|---|---|---|---|---|
+| **Итоговый код** (3 подписки), обычный прогон | 30 | **30** | 0 | 27 — зависание коммита после `Close`, 3 — счёт (от +3 до +11 события при допуске 1) |
+| **Итоговый код**, `GOMAXPROCS=1` + 16 нагрузчиков | 4 | **4** | 0 | все 4 — зависание |
+| Промежуточный код (2 подписки, общий срок на сигналы) | 30 | **30** | 0 | 21 — зависание, 9 — счёт (от +2 до +21) |
+| Промежуточный код (2 подписки, до общего срока) | 30 | **30** | 0 | 21 — зависание, 9 — счёт (от +5 до +20) |
+| **Итого** | **94** | **94** | **0** | |
+
+Обязательны первые две строки — 34 прогона итогового кода, из них 4 под нагрузкой. Остальные 60 —
+путь к нему; они показывают, что вторая подписка уже снимает «монетку», а третья добавляет запас
+(на двух подписках минимальный счёт был +2 при допуске 1, на трёх — +3, и в каждом таком прогоне
+порог перешагивали как минимум две подписки). Ни одного зелёного прогона под мутацией H не
+наблюдалось ни на одной из трёх версий кейса.
+
+Расхождение с ревью #3 (6 зелёных из 35) объяснено полностью: там прогон становился зелёным, когда
+единственный читатель хвоста закрывался первым. С тремя читателями хвоста этого случиться не может.
+
+### 5. Доказательство: исправный код
+
+| Форма прогона | Прогонов | Результат |
+|---|---|---|
+| `go test -tags integration -count=1 ./shared/testkit/contract/` | 12 | 12 зелёных, 9,6–12,7 с |
+| то же, `GOMAXPROCS=1` + 16 нагрузчиков | 8 | 8 зелёных, 38,2–47,5 с |
+| **Итого по DoD «не менее 20 прогонов»** | **20** | **20 зелёных, 8 из них под нагрузкой** |
+| замер дополнительных вызовов (`slack = -1`) | 14 | 0 дополнительных вызовов в 64 измерениях из 64 |
+| `go test -tags integration -count=1 ./shared/testkit/... ./shared/eventbus/...` | 2 подряд | зелёные |
+| мутация B1 (`membus.go:299`, припаркованная ветка → `ErrClosed`) | 3 | **3 красных**, сообщение адресное |
+| мутация B2 (`membus.go:284`, `stopping` → `ctx.Err()`) | 3 | **3 красных**, «280 more … (300 of 300)» |
+| `go test -short -count=1 ./...` | 1 | 24 пакета `ok` |
+
+Самый долгий кейс набора под нагрузкой — по-прежнему `Close`: 5,75 / 8,66 / 7,12 с в трёх прогонах
+(следующий, `RetriesThenDeadLetterAndTheStreamMovesOn`, — 1,96–3,95 с). Рост против 5,02–6,30 с
+итерации 3 — цена третьей подписки и хвоста в 300 событий. Запас до `Timeout` = 15 с на любое
+отдельное ожидание сохраняется.
+
+### 6. Бюджет красного прогона
+
+Худший красный прогон кейса `Close` — три ожидания подряд, каждое почти исчерпавшее срок:
+`parked.wait` (15 с) + общий срок на оба сигнала (15 с) + первое ожидание возврата подписки (15 с)
+= 45 с на реализацию. Третья подписка бюджет не увеличила: ожидания сигналов делят один срок.
+Итого по набору: 18 кейсов × 15 с + 30 с (перевыдача) + 45 с (`Close`) ≈ **5,75 мин на реализацию**,
+обе идут одним пакетом → **≈ 11,5 мин**, при `go test -timeout 15m` и `timeout-minutes: 25`
+(`.github/workflows/go.yml:146,181`). Оценка ревью #3 (30 с на `Close`) не учитывала `parked.wait`;
+цифра здесь исправлена в большую сторону, вывод прежний — укладывается, но остаётся выше ориентира
+ADR-010 п. 5.
+
+### 7. Результаты DoD
+
+| Что | Результат |
+|---|---|
+| набор 20/20 на обеих реализациях | 20 прогонов, оба таргета зелёные в каждом |
+| `go test -tags integration -count=1 ./shared/testkit/... ./shared/eventbus/...` дважды подряд | зелёный оба раза |
+| `golangci-lint run ./shared/...` | **0 issues** |
+| `golangci-lint run --build-tags integration,e2e ./shared/...` | **0 issues** |
+| `gofmt -l shared/` | пусто |
+| `go vet ./...`, `go vet -tags integration ./shared/...` | чисто |
+| покрытие (unit-режим) | `contract` **81,9 %** (было 81,4 %), `testkit` 74,0 %, `membus` 83,8 %, `eventbus` 75,4 % — снижения нет |
+| покрытие (`-tags integration`) | `contract` 82,0 %, `membus` 83,8 %, `eventbus` 75,4 % |
+| `go test -short -count=1 ./...` | 24 пакета `ok` |
+| `pre-commit run --files shared/testkit/contract/contract.go` | все хуки Passed |
+| `gitleaks git --staged --redact .` | no leaks found |
+| `-race` | недоступен на этой машине (как в итерациях 1–3) |
+| индекс | добавлены только `shared/testkit/contract/contract.go` и `dev-log.md` |
+
+Окружение: Windows 11, Git Bash, Go 1.26.8, `GOFLAGS=-buildvcs=false`, Docker 29.6.1,
+Redpanda v26.1.17 в testcontainers, `-race` недоступен, `push` нельзя.
+
+Состояние дерева на момент сдачи (md5): `contract.go` `9647f682…` (изменён этой итерацией),
+`kafka.go` `a5e77309…`, `membus.go` `4b0a9a43…`, `membus_test.go` (contract) `3249e654…`,
+`redpanda_integration_test.go` `c030a109…` — четыре последних совпадают с состоянием, принятым в
+ревью #3. Все мутации сняты, зондов в дереве не осталось.
+
+### 8. Отклонения от решения оркестратора
+
+1. **Обработчик отпускается непосредственно перед `Close`, а не после его возврата.** Причина —
+   §1: после возврата `Close` разблокированный цикл упирается в коммит, который у мутанта с
+   вероятностью 1/2 отвечает `io.ErrClosedPipe`, и подписка штатно возвращает `nil`. Вариант в
+   чистом виде дал бы 1/2 на подписку вместо нынешнего. То, ради чего блокировка вводилась, —
+   точная база — сохранено полностью: `before` равен `signalOn` по построению.
+2. **Допуск оставлен равным одному событию, а не убран.** Замер даёт 0 из 64, то есть равенство
+   `after == before` держится фактически.
+   [Поправка оркестратора 2026-09-11 по ревью #4, Nit-2: «0 из 64» без контрпримера читается как
+   «допуск не нужен», а он нужен. У ревьюера 84 измерения дали 82 нуля и ДВЕ единицы, обе на шине в
+   памяти, в одном прогоне. Прямая проверка `slack = 0` дала 1 ложный красный из 8 прогонов на
+   исправном коде — и снова на шине в памяти, где между отпусканием обработчика и отменой нет
+   сетевого коммита. Вопрос закрыт в пользу исполнителя: строку `slack = 0` не вносить.]
+   На раннере с одним ядром отрезок между
+   `close(release)` и `stopReaders` теоретически может уместить одно событие, а ложный красный в
+   воротах стоит дороже, чем один пропущенный мутант, которого поймают две другие подписки. Если
+   ревьюер считает иначе — правка в одну строку (`slack = 0`).
+3. **Запасной вариант применён вместе с основным, а не вместо него**: пауза 3 мс и хвост 300 — это
+   он и есть; третья подписка добавлена сверх него, потому что без неё оставался слепой участок
+   «мой читатель закрыт первым», который паузой не лечится.
+
+### 9. Открытые вопросы
+
+Новых нет. Открытые вопросы итераций 1–3 и решения по ним не переоткрываются.
+
+### 10. Риски и допущения
+
+- **Якорь опирается на одно свойство машины: закрытие одного kafka-читателя длится дольше, чем
+  ~4,5 мс работы обработчика (два события при допуске в одно).** Наблюдаемый минимум — ~9 мс,
+  типичное значение — 40–90 мс, потому что закрытие читателя означает выход из consumer group по
+  сети. Это свойство транспорта, а не гонка планировщика, и на более медленном раннере оно только
+  усиливается. Утверждать «якорь детерминирован по построению» я не буду: строго детерминированного
+  утверждения о `Subscribe`, отличающего исправный код от мутанта H без обращения ко времени, в
+  границах C-01 нет. Единственный кандидат — «контекст обработчика отменяется при `Close`» — был бы
+  расширением контракта и требует system-architect; в этой итерации он не делался.
+- **Вторая половина якоря — зависание коммита — вероятностна по построению kafka-go** (1/2 на
+  подписку, ≈ 7/8 на три). Для красного она не нужна: счёт красит сам по себе. Обе половины
+  независимы, и в 34 прогонах итогового кода не было прогона, где не сработала ни одна.
+- **Все прогоны — на машине владельца.** Раннер GitHub (2–4 vCPU, Docker там же) эмуляцией
+  `GOMAXPROCS=1` + нагрузчики не воспроизводится: здесь узкое место — CPU процесса теста, там ещё
+  диск и сеть брокера.
+- **`-race` не прогонялся.** Новое разделяемое состояние итерации — канал `release` (только
+  закрывается) и `atomic.Int64` в трёх экземплярах `backlogReader`; в CI под `-race` смотреть на них
+  первым делом.
+- **Кейс стал дороже**: три группы вместо одной и 300 публикаций вместо 40. Под нагрузкой он стоит
+  5,75–8,66 с при сроке 15 с на отдельное ожидание. Если раннер окажется медленнее ещё вчетверо,
+  первым упадёт именно он — это и записано в Nit-3.
+- **Посторонний файл в дереве**: `shared/testkit/state/zz_review2_probe_test.go` —
+  неотслеживаемый, появился и переписывался во время этой итерации (02:30 и 02:32). Он в области
+  T-017 (developer#1 / code-reviewer#2), не мой: не трогал и в индекс не добавлял. На момент
+  финальных проверок `gofmt -l shared/` пуст и `golangci-lint run ./shared/...` даёт 0 issues, но
+  прогоны `./shared/testkit/state/` его подхватывают — если он останется в дереве к приёмке, это
+  вопрос к владельцу.
+
+---
+
+## developer#1 · T-018 · F-10e «`testkit/gateway.Harness` v0, `testkit/swarm.FakeNarrator` v0 и e2e „заглушки v0“» + пять правок по ревью #2 T-017 · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, коммита нет (`commits=ask`), изменения в индексе. Работал по
+решению оркестратора от 2026-09-11, записанному в `tasks.md` T-018: `WithEncounterStub` **не
+делается**, состав задачи сокращён, боевой сквозной тест переносится в I1-α.
+
+Вне области и не открывалось: `shared/testkit/{contract,membus}/**` (T-014, code-reviewer#2 держит
+там живые зонды), `shared/eventbus/**`, `internal/mechanics/**`, `rules/**`, `testdata/**`,
+`review.md`, `tasks.md`, `.golangci.yml`, `ownership.md`. `membus` использован как есть.
+
+### Часть 1. Пять правок по ревью #2 T-017
+
+**Minor-6 · тест порядка «подписка → сигнал» ловил свою мутацию 2 раза из 100.** В `readyBus`
+(`state_test.go`) появились ворота: `SubscribeReady` записывает `subscribe`, затем ждёт канала,
+который открывает тест. `TestStartSubscribesBeforeItAnnounces` теперь запускает `Start` в горутине,
+дожидается записи `subscribe`, и, пока ворота держат подписку, следит, не сделала ли заглушка
+что-нибудь ещё — второй шаг на шине или возврат из `Start`. Только после этого ворота открываются и
+сверяется порядок. Ложных красных окно дать не может: при исправном коде `Start` за воротами не
+проходит вообще, сколько бы тест ни ждал; окно (`gateWindow = 250 мс`) ограничивает лишь время, за
+которое сломанный код обязан себя выдать — ему нужен хэш мира и один маршалинг.
+
+Измерено на этой машине, мутация «снять `select` в `Start`» (сигнал без ожидания отчёта шины),
+100 отдельных прогонов бинарника теста из каталога пакета:
+
+| Прогон | Красных из 100 |
+|---|---|
+| **До правки**, мутация применена | **7** |
+| **После правки**, мутация применена | **100** |
+| После правки, код исправен | **0** |
+
+(Ревьюер на своей машине видел 2 из 100 — доля зависит от планировщика; направление то же.)
+
+**Minor-7 · гарантия, которой нет.** Кода не менял: в запасной ветке `close(ready)` стоит до
+`Subscribe`, и выразить иначе, не трогая C-01, нельзя (это открытый вопрос T-017 к архитектору).
+Сузил формулировку в записи «developer#1 · T-017 · итерация 2», §1 Minor-2: старое утверждение
+зачёркнуто, рядом сказано, что ошибку подписки вместо сигнала `Start` возвращает **только** на шине,
+реализующей `readySubscriber`, а такой в дереве нет; на обычной `eventbus.Bus` упавшая подписка
+доходит до вызывающего через `Wait` и запись `error` в лог. Зонд ревьюера (0 из 300 / 300 из 300)
+приведён там же. То же сужение внесено в doc-комментарий `Start` (`state.go`).
+
+**Minor-8 · движение курсора над чужим миром.** В `TestAProposalOfAnotherWorldIsPassedOver` событие
+подаётся через `eventbus.ContextWithPosition` (`offset=41`, помощник `applyAt`), и снимок сверяется:
+`Cursor[system_events] == 42`. Мутация «перенести обновление курсора ниже фильтра чужого мира»
+теперь валит этот тест (`cursor 0, want 42`); мутация откачена, `apply.go` побайтово совпадает с
+версией в индексе (`git diff` по файлу пуст).
+
+**Nit-4 · допущение о проверке типа.** `TestTheBusOfTheTestsDoesNotReportReadiness`: имя метода
+`SubscribeReady` ищется на `*membus.Bus` **рефлексией**, а не проверкой типа. Так падает и случай
+«`membus` завёл метод с другой сигнатурой», который проверка на соответствие интерфейсу пропустила
+бы молча. Вторая половина теста утверждает, что двойник `readyBus` этому интерфейсу по-прежнему
+соответствует, — иначе `TestStartSubscribesBeforeItAnnounces` пинил бы запасную ветку, а не отчёт.
+В `state.go` над `subscribe` добавлена ссылка на этот тест.
+
+**Nit-5 · комментарий о брокере.** Формулировка «on a broker where a new consumer group starts at
+the end of the journal» больше не выглядит как описание платформы: рядом сказано, что **обе**
+реализации C-01 читают с первого офсета (адаптер Kafka — `StartOffset: kafka.FirstOffset`, `membus`
+— курсором с нуля), и порядок держится ради брокера, у которого этого свойства нет. Убрана и
+привязка гарантии только к `membus` ниже по тексту.
+
+### Часть 2. T-018
+
+#### 2.1 Что создано
+
+| Файл | Что это |
+|---|---|
+| `shared/testkit/gateway/harness.go` | `Harness` v0: `NewHarness(bus, fixtures)`, `Start`/`Wait`/`Observe`, `CreatePlayer`, `Enter`, `Look`, `Say`, `Rest`, `Leave` |
+| `shared/testkit/gateway/scenario.go` | `Step`, `Script(name)`, `Scenarios()`, `Scenario(ctx, name)`, `Step(ctx, step)`; сценарии `solo-visit` и `party-visit` |
+| `shared/testkit/gateway/harness_test.go` | 17 тестов (с подтестами — 34 запуска) |
+| `shared/testkit/swarm/narrator.go` | `FakeNarrator` v0: `NewFakeNarrator(bus, worldID)`, `WithLaws`/`WithLog`, `Start`/`Wait`, `Narrate`, `Observe`, `KindFor` |
+| `shared/testkit/swarm/template/ru.go` | Десять русских шаблонов: шесть `entry`, четыре `round` |
+| `shared/testkit/swarm/narrator_test.go`, `.../template/ru_test.go` | 18 + 5 тестов |
+| `test/e2e/doc.go` | пакет `e2e` без тега — иначе `go build ./...` спотыкается о каталог, все файлы которого исключены ограничением сборки |
+| `test/e2e/stubs_v0_test.go` (`-tags e2e`) | сквозной тест «заглушки v0» без боя |
+| `test/e2e/empty_world_test.go` (`-tags e2e`) | сквозной тест «пустой мир» |
+
+#### 2.2 `Harness` v0: что он обещает и чего не делает
+
+Публикует с `source=testkit/gateway` — значение реестра (`contracts.SourceTestkitGateway`), которое
+`contracts.md` §0 v0.4 разрешает для всех `player.*` и обоих предложений; `meta.actor_kind=ci`,
+`meta.correlation_id = id` у корневых, `meta.agent` не ставится никогда (политика `player_events`).
+Сопутствующее предложение **производное** от действия (`Derive`), а не второй корень: так факт
+State и действие игрока лежат в одной цепочке и по журналу видно, какое действие сдвинуло мир.
+
+Персонажи берутся из фикстур `testdata/fixtures` — `CreatePlayer(id)` предлагает ровно тот набор
+атрибутов, что записан в файле. Мир — тот, который называет фикстура типа `world`; двух миров
+харнесс не обслуживает.
+
+**Ожидание собственного факта.** Каждое действие, которое предлагает изменение, ждёт ответа State по
+своему `proposal_id` и возвращает отказ ошибкой. Причина не в удобстве теста: `expected_version`
+обязателен для `hp`, `status`, `inventory` и позиции бойца (ADR-013 п. 1), а версию харнесс знает
+только из фактов, которые читает подпиской на `system_events` (`Observe` — read-model шлюза,
+урезанный до версий и судьбы предложений). Отсюда прямое следствие, которое я записал и в тесте:
+**изменение, о котором харнесс ещё не услышал, даёт `version_conflict`** — ровно то же будет у
+настоящего шлюза, читающего свой read-model. В `TestRestPinsTheVersionItSawLast` рана наносится в
+обход харнесса, и тест сначала дожидается, пока харнесс о ней услышит.
+
+Не делается: HTTP, сессии, `action_key`, идемпотентность, `group.*`, `round.*`, `analytics.*`.
+`Attack`/`Flee` **не сделаны**: бить некого — единственная заглушка боя Phase 1 (`FakeEncounter`,
+EPIC-003 T-219) появится в волне 1.
+
+`move` предлагает только `position`. `scope` в предложение не кладу: у соло-игрока он равен
+`{id: player-X, type: solo}` и при входе в регион не меняется, а набор, не меняющий ничего, даёт
+`entity.updated` с пустым `changed` и той же версией — шум вместо факта. Это отклонение от строки
+`design.md` §5 «`entity.update.proposed position/scope`»; групповой scope придёт с `group.*` в
+EPIC-004.
+
+#### 2.3 `FakeNarrator` v0: только нарратив
+
+Таблица v0 (`narrated`, одно место, которое решает, о чём заглушка рассказывает):
+`player.entered_region → kind=entry`, `player.looked → kind=entry`, `round.closed → kind=round`.
+`generated_by=template`, `locale=ru`, `laws_version` по умолчанию `v1` (из фикстуры мира; заглушка
+не читает `world.laws.changed` — это живой мир EPIC-003), `filter{applied:false, status:pass,
+filter_version:"none"}`, `narrative_event_id` = собственный `id`, `based_on[0]` = событие-причина,
+`meta.agent{id:"fake-narrator", level:"task", blueprint:"fake-narrator",
+blueprint_version:"0.0.0"}`, `source=testkit/swarm`.
+
+Получатели: у `entry` — действующий персонаж (в соло-scope scope и есть игрок, C-04); у `round` —
+все, кого называет `round.closed`, в порядке `acted → auto_defended → idle`, без повторов
+(C-05: получатели — все игроки области, включая `idle`). Раунд, в котором никого нет, текста не
+получает: `recipients` имеет `minItems: 1`, и пустой список был бы нарушением схемы, замаскированным
+под нарратив.
+
+Подстановка здоровья настоящая: нарратор ведёт маленькую проекцию по `entity.created`/
+`entity.updated` (`Observe` на `system_events`) — имя, `hp`, `hp_max`. Персонаж, о котором он ещё не
+слышал, всё равно получает текст, только с прочерком вместо числа: игрок, которому не пришло ничего,
+играть дальше не может. В шаблонах `round` здоровья нет намеренно — один раунд это один текст на
+всю область, и чьё именно это здоровье, контракт не отвечает.
+
+**Решение по `combat.decided` (вопрос оркестратора).** Подписку **не объявляю**. Причины: (1) в
+Phase 1 единственный издатель `combat.decided` — `FakeEncounter` (`contracts.md` C-05), которого
+ещё нет, поэтому ветка `kind=turn` была бы кодом, до которого не дотягивается ни один тест — минус к
+покрытию и мёртвая ветка на ревью; (2) объявленная, но не питаемая подписка — это ровно тот класс
+«гарантии, которой нет», из-за которого в T-017 появились Minor-6 и Minor-7; (3) добавить строку в
+`narrated` и один тест — работа на десять минут, и делать её должен тот, кто приносит издателя
+(EPIC-003 T-219/T-220), одним изменением с тестом, который её питает. То же касается
+`encounter.started → world_event` и `entity.updated status=dead → death`. Отсутствие названо вслух в
+doc-комментарии пакета и закреплено тестом `TestTheTableOfV0IsTheWholeTable`: он падает, если такой
+тип появится в таблице (или если из неё пропадёт существующий).
+
+**Расхождение документов, которое я не подгонял.** `design.md` §5 и формулировка задачи говорят
+`player.looked → kind=entry`; блок «Заглушка» C-05 в `contracts.md` говорит `player.looked → turn`.
+Реализовано по задаче и `design.md` (`entry`). Вопрос архитектору — ниже.
+
+#### 2.4 Сквозные тесты
+
+**«Заглушки v0»** (`stubs_v0_test.go`, тег `e2e`). `Harness` + `FakeState` v0 + `FakeNarrator` v0 на
+`membus`. State засеян миром, регионом и волком **без игроков** — создание персонажа это первый шаг
+сценария, а мир, где он уже есть, ответил бы `duplicate_entity`. Сценарий — `party-visit`: три
+персонажа фикстур, каждый проходит «создание → вход → осмотр → реплика → отдых → выход», 18 шагов.
+
+Ожидания **выводятся из скрипта**, литералов нет:
+
+- число `narrative.output` = число шагов, чей `Step.PlayerEvent()` есть в таблице нарратора
+  (`swarm.KindFor`) → 6 при 18 шагах; ни 30, ни любое другое число в тесте не написано;
+- число `entity.created`/`entity.updated` = число шагов с соответствующим `Step.Fact()`;
+- последовательность действий на `player_events` = последовательность `Step.PlayerEvent()` скрипта,
+  сверяется поэлементно и по порядку.
+
+Проверяется также: конверт каждого действия (`source`, `actor_kind=ci`, `correlation_id = id`, нет
+`meta.agent`); ни одного `entity.update.rejected`; каждый персонаж после визита в мире, вне региона,
+жив и на полном здоровье; каждый нарратив — нужного `kind`, `generated_by=template`, с блоком
+фильтра, версией законов, `narrative_event_id`, одним получателем и правильным миром; **все события
+всех топиков валидны по реестру** (46 событий в текущем прогоне); **поток недоставленных пуст**.
+
+**«Пустой мир»** (`empty_world_test.go`, тег `e2e`). Собирает `cmd/multiverse`, запускает
+`--contexts=all --bus=memory` на свободном порту (`MV_CORE_ADDR` через `t.Setenv`), опрашивает
+`GET /health` до `status=ok`, проверяет, что в ответе есть контексты, и отдельно прогоняет
+подкоманду `multiverse health --url …` — ту самую, которой пользуется healthcheck compose.
+
+`test/e2e/doc.go` без тега нужен затем, что каталог, все файлы которого исключены ограничением
+сборки, для `go build ./...` — ошибка, а не пустой пакет.
+
+#### 2.5 Что перенесено в I1-α и почему
+
+По решению оркестратора (`tasks.md` T-018, 2026-09-11) и `contracts.md` C-05:
+
+- **боевой сквозной сценарий** (`Scenario("solo-30")`, 30 ходов) — нужен тот, кто вызовет `Resolve`
+  и опубликует `dice.rolled`/`combat.decided`/`entity.update.proposed`; в Phase 1 это
+  `testkit/swarm.FakeEncounter` (EPIC-003 T-219), первый блок волны 1;
+- **30 `narrative.output`** — это счёт боевого сценария; в тесте без боя он не «сокращается до
+  шести», а просто не считается: число выводится из скрипта;
+- **факты `entity.updated` на каждый удар** — удара нет;
+- **`Harness.Attack`/`Flee`** — методы, которым в волне 0 нечего вызывать;
+- **`narrative.output kind=turn`** (`combat.decided`) и `kind=death`/`world_event` — см. §2.3;
+- **`WithEncounterStub`** — не делается вовсе (риск «прижилась», `design.md` §12); второй боевой
+  двойник, который потом пришлось бы удалять, не строится.
+
+Задачи-удаления `WithEncounterStub` в `tasks.md` EPIC-003 не завожу и tech-lead#2 не уведомляю: этот
+пункт DoD снят решением вместе с самой заглушкой.
+
+#### 2.6 Проверки
+
+Окружение: Go 1.26.8, `GOFLAGS=-buildvcs=false`, golangci-lint 2.13.2, gitleaks, pre-commit 4.6.2
+(`%APPDATA%\Python\Python314\Scripts`). `-race` недоступен.
+
+- `go build ./...`, `go vet ./...`, `go vet -tags e2e ./test/...` — зелёные;
+- `go test -short -count=1 ./...` — зелёные целиком (27 пакетов);
+- `go test -tags e2e -count=1 -timeout 10m ./...` — зелёные, `test/e2e` включительно;
+- покрытие: `shared/testkit/gateway` **89,5 %**, `shared/testkit/swarm` **84,0 %**,
+  `shared/testkit/swarm/template` **93,8 %**, `shared/testkit/state` **87,3 %** (не ниже прежнего);
+- `golangci-lint run ./shared/testkit/gateway/... ./shared/testkit/swarm/... ./shared/testkit/state/... ./test/...`
+  — **0 issues**, и с `--build-tags integration,e2e` — тоже **0 issues**;
+- `gofmt -l` по своим каталогам пуст;
+- `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 схем; `env check` — 69 переменных;
+- `pre-commit run --files …` по своим файлам, `gitleaks git --staged --redact .` — см. отчёт
+  оркестратору.
+
+`golangci-lint run ./...` по всему дереву даёт 4 issues в `shared/eventbus/kafka.go` (`ZZPROBE`,
+`time.Since`, `gofmt`) — это живые зонды code-reviewer#2 по T-014, чужая область, не трогал.
+
+#### 2.7 Отклонения от дизайна
+
+1. **`Scenario("solo-30")` не реализован**; вместо него `solo-visit` и `party-visit` без боя —
+   по решению оркестратора. `Script("solo-30")` возвращает ошибку, называющую, что известные
+   сценарии не дерутся и бой приходит с `FakeEncounter`.
+2. **`WithEncounterStub` не сделан** — то же решение.
+3. **`Attack`/`Flee` в `Harness` не сделаны** — вызывать нечего.
+4. **`move` не предлагает `scope`** — см. §2.2.
+5. **`player.looked → entry`, а не `turn`** — расхождение `design.md` §5 и блока «Заглушка» C-05;
+   сделано по задаче и дизайну.
+6. **`Harness` — не HTTP-клиент.** `design.md` §5 и C-04 называют `Harness` ещё и «Go-клиентом HTTP
+   API»; в v0 это только генератор в шину, как и написано в самой строке §5 («из фикстур, без
+   HTTP»). HTTP-половина — EPIC-004, когда появится шлюз.
+7. **Конструкторы `NewHarness(bus, fixtures)` / `NewFakeNarrator(bus, worldID)`** вместо `Config`,
+   как в T-017: первая сигнатура прямо названа в задаче и в `design.md`; необязательное
+   настраивается цепочкой `WithTimeout`/`WithLog`/`WithLaws` (как `FakeState.WithInvariants`).
+
+#### 2.8 Открытые вопросы
+
+1. **`player.looked`: `entry` или `turn`?** `design.md` §5 и `tasks.md` T-018 — `entry`; блок
+   «Заглушка» C-05 `contracts.md` — `turn`. Сделано `entry`. Кому: architect#1 / system-architect —
+   поправить один из двух документов, чтобы EPIC-003 C4 не переоткрывал вопрос при замене заглушки.
+2. **`entity.update.proposed` при движении: нужен ли `scope`?** Заглушка предлагает только
+   `position` (§2.2). Если групповой scope должен приходить тем же пакетом, это строка в C-04 и
+   правка в EPIC-004 T-301. Кому: architect#1.
+3. **Ожидание собственного факта в `Harness`.** Сейчас каждое действие с предложением блокируется до
+   ответа State. Настоящему шлюзу так нельзя (HTTP отвечает `202` и не ждёт). Если EPIC-004 захочет
+   переиспользовать `Harness` как основу нагрузочного сценария, понадобится неблокирующий режим —
+   фиксирую как известное ограничение v0, а не как заявку.
+4. **Открытые вопросы T-017 остаются в силе**, в первую очередь развилка по `readySubscriber` /
+   гарантии «новая группа читает с первого офсета» в C-01 (вариант «в» ревью #2). Nit-4 сделал
+   допущение видимым, но развилку не закрыл.
+5. **Кто заводит `kind=turn`/`death`/`world_event` в `FakeNarrator`** — предлагаю EPIC-003 T-220
+   одним изменением вместе с `FakeEncounter`; строка в `narrated` плюс тест, который её питает.
+   Кому: tech-lead#2 через tech-lead#1.
+
+#### 2.9 Риски и допущения
+
+- **`-race` не прогонялся** (недоступен). Новое разделяемое состояние: `Harness.mu` (версии,
+  позиции, `settled`, канал `changed`, закрываемый и заменяемый под замком) и `FakeNarrator.mu`
+  (проекция персонажей). `WithLog`/`WithTimeout`/`WithLaws` замка не берут намеренно — они
+  настраивают заглушку **до** `Start`, и это сказано в их doc-комментариях. Под `-race` смотреть
+  сюда первым делом.
+- **Свободный порт в «пустом мире»** берётся так: слушатель на `127.0.0.1:0`, адрес, закрытие.
+  Между закрытием и стартом процесса окно, которое из теста не закрыть — процессу передаётся адрес,
+  а не слушатель. Окно короткое, порт только что назван свободным; на очень занятой машине тест
+  может упасть с «address in use».
+- **Сборка бинарника внутри теста** делает «пустой мир» самым долгим тестом набора (~3,3 с здесь).
+  Он под тегом `e2e` и в `-short` не попадает.
+- **Ожидание нарративов в сквозном тесте** — опрос по стенным часам с запасом 10 с. Нарратор
+  публикует из подписки, и никакой детерминированной точки «всё разослано» у шины в памяти нет.
+  Если раннер окажется на порядок медленнее, первым упрётся именно этот срок.
+- **Порядок «факт State → действие игрока» нарратор не контролирует.** В сквозном тесте
+  `entity.created` приходит раньше `player.looked`, потому что харнесс ждёт своего факта, — но это
+  следствие протокола харнесса, а не гарантия нарратора. Тест
+  `TestTheNarratorWorksOffTheBusToo` допускает оба исхода (число или прочерк) и говорит об этом
+  вслух.
+- **Шаблоны — контент.** Десять текстов написаны мной в регистре тёмного леса; литературную
+  приёмку никто не делал. Если владелец продукта захочет другой тон, это правка одного файла
+  (`template/ru.go`), схемы и тесты не двигаются.
+
+## developer#1 · T-018 · правки по ревью #1 (Minor-1…3, Nit-1, Nit-2, Nit-4) · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, коммита нет (`commits=ask`), изменения в индексе. Задача принята
+ревью #1 (Critical 0, Major 0, Minor 3, Nit 4); это доводка перед приёмкой волны. Все три Minor —
+один класс: **утверждение шире того, что закреплено тестом**. Реализация нигде не менялась, кроме
+порядка проверок в сквозном тесте; чинилось доказательство.
+
+Вне области и не открывалось: `README.md`, `CLAUDE.md`, `AGENTS.md`, `Docs/ops/runbook.md`,
+`services/_archive/README.md`, `.dev-team.json` (приёмка T-019 у tech-lead#1),
+`shared/testkit/{contract,membus}/**`, `shared/eventbus/**`, `internal/mechanics/**`, `rules/**`,
+`testdata/**`, `review.md`, `tasks.md`, `.golangci.yml`. `shared/testkit/state/**` открывался
+только временно, ради мутации (см. ниже), и возвращён в исходное состояние.
+
+### Что сделано
+
+**Minor-1 · «изменение, о котором харнесс не слышал, даёт `version_conflict`» теперь закреплено.**
+`harness_test.go`: новый тест `TestAChangeTheHarnessNeverHeardOfIsRefused`. Он держит окно, которое
+`TestRestPinsTheVersionItSawLast` закрывает ожиданием: второй харнесс на той же шине **не
+запускается вовсе**, получает через `Observe` ровно один факт (`entity.created`, который запущенный
+харнесс уже свернул), после чего персонажа ранят мимо него. `Rest` такого харнесса прикалывает
+версию, которой мир уже не живёт; State отвечает `entity.update.rejected`, и тест утверждает и тип
+ответа, и `reason = state.ReasonVersionConflict`, и что ответ адресован именно этому `proposal_id`.
+Глухота нужна ради детерминизма: зонд ревьюера «слушающий харнесс без ожидания» давал конфликт
+50 из 50, но это гонка, а не свойство. Комментарий `harness_test.go` в старом тесте перестал быть
+самостоятельным обещанием и ссылается на новый тест.
+
+**Minor-2 · «вся таблица» проверяет таблицу целиком.** `narrator_test.go`: список из семи поимённо
+названных типов заменён обходом **всего реестра** (`contracts.All()`): для каждого типа
+сравниваются `KindFor` и `tells`, плюс счётчик отвечающих типов сверяется с `len(tells)` — это
+ловит и запись в таблице о типе, которого в реестре нет. Тип вне реестра шина не понесёт вообще,
+поэтому запись о нём в таблице недостижима; так и написано в комментарии.
+
+**Minor-3 · диагностика важнее порядка.** `test/e2e/stubs_v0_test.go`: `assertNothingWasDeadLettered`
+поднят выше `assertNarratives`. Правило записано в комментарии: сначала спрашиваем о том, что уже
+произошло, потом ждём того, чего ещё нет. Недоставленное письмо несёт ошибку схемы, поле и событие-
+причину; ожидание может сказать только «не пришло». Комментарий в `assertEverythingIsValid`
+(«следующая проверка») исправлен на «проверка выше», у `assertNothingWasDeadLettered` появился
+doc-комментарий с причиной порядка.
+
+**Nit-1 · `harness.go`.** Doc-комментарий `move` больше не обещает `scope`: сказано, что в пакете
+только `position`, почему (`scope` соло-персонажа при входе в регион не меняется, а набор, ничего
+не меняющий, даёт `entity.updated` с пустым `changed`) и что групповой случай — открытый вопрос №2
+и строка C-04, а не решение заглушки.
+
+**Nit-2 · `narrator.go` + `narrator_test.go`.** `DefaultLawsVersion` связан с фикстурой тестом
+`TestTheDefaultLawsIsTheOneTheFixtureWorldLivesUnder`: он читает `testdata/fixtures` через
+`state.LoadFixtures` и сверяет `LawsVersion()` мира с константой. Код фикстуру по-прежнему не
+читает — это осознанно (заглушка не слушает `world.laws.changed`), но молча разъехаться два места
+больше не могут. Doc-комментарий константы называет тест.
+
+**Nit-4 · счётчики записи.** Заголовок и §1: «три правки» → «пять правок». §2.1: `gateway` —
+15 тестов / 24 запуска → **17 / 34**, `swarm` — 16 → **18** (по два прибавили правки Minor-1 и
+Minor-2 / Nit-2; замеренные ревьюером 16/33 и 17 — состояние до этих правок). `template` — 5,
+как было. Цифры покрытия ревьюер подтвердил, они не менялись.
+
+**Nit-3 (`empty_world_test.go`, 60 с на процесс, умерший на старте) не делал** — ревьюер оставил
+его как Nit, а канал от `cmd.Wait()` в опросе порта меняет поведение сквозного теста, а не его
+доказательство. Предложение в бэклог волны 1.
+
+### Проверка мутациями
+
+Все мутации сняты, дерево сверено (`grep ZZMUT` по своим каталогам — 0, `git diff` по
+`shared/testkit/state` пуст).
+
+| Пункт | Мутация | До правки | После правки |
+|---|---|---|---|
+| Minor-1 | `state/apply.go`: `CheckVersion(nil)` — оптимистическая блокировка не проверяется | пакет `gateway` **зелёный целиком** | **красный**: «State answered the stale rest with entity.updated: a proposal pinned to a version the harness never heard of has to be refused» (0,30 с) |
+| Minor-2 | `narrated`: `"npc.moved": KindEntry` (зонд ревьюера H4) | `swarm`, `template` и e2e **зелёные** | **красный**: «the narrator answers npc.moved with "entry" (answers=true); the table of v0 is "" (answers=false)» + «4 types of the registry are answered, the test knows 3» |
+| Minor-3 | `narrator.go`: не класть `laws_version` (событие невалидно по схеме) | красный за **10,03 с**, «timed out waiting for the narratives of the scenario» | красный за **0,03 с**: «dead letter: … Error: testkit/swarm: publish narrative.output (entry): … missing property 'laws_version'», с `ID:e2e-4` события-причины |
+
+Мутация Minor-1 лежит вне моей области (`shared/testkit/state`): другого способа сломать именно то
+свойство, которое закрепляет новый тест, изнутри `gateway` нет — любое искажение самой приколки
+версии ловит уже существующий `TestRestPinsTheVersionItSawLast`. Применена временно, снята,
+отсутствие следов проверено. Для полноты: собственные тесты `state` эту мутацию тоже ловят
+(4 красных) — то есть свойство State было закреплено, а его видимость через шлюз — нет.
+
+### Проверки
+
+Окружение: Go 1.26.8, `GOFLAGS=-buildvcs=false`, golangci-lint 2.13.2, `-race` недоступен.
+
+- `go build ./...`, `go vet ./...`, `go vet -tags e2e ./test/...` — зелёные;
+- `go test -short -count=1 ./...` — зелёные целиком;
+- `go test -tags e2e -count=1 ./test/...` — зелёные;
+- покрытие **не изменилось**: `gateway` 89,5 %, `swarm` 84,0 %, `swarm/template` 93,8 %;
+- `golangci-lint run ./shared/testkit/gateway/... ./shared/testkit/swarm/... ./test/...` — 0 issues,
+  и с `--build-tags integration,e2e` — 0 issues;
+- `gofmt -l` по своим каталогам пуст.
+
+### Предложения в бэклог
+
+1. **Nit-3 ревью #1**: `test/e2e/empty_world_test.go` — следить за `cmd.Wait()` в `select` опроса
+   порта, чтобы процесс, умерший на старте, стоил набору 0,1 с вместо 60.
+
+## tech-writer · T-019 · F-9 «Документация под новую раскладку» · 2026-09-10
+
+Ветка `epic/EPIC-001-foundation`, коммита нет (`commits=ask`). Одна запись на всю задачу — она
+не была сделана ни после первой сдачи, ни после итераций 2–3 (N-2, ревью #2). Область: `README.md`,
+`CLAUDE.md`, `AGENTS.md`, `Docs/ops/runbook.md`, `services/_archive/README.md`,
+`.dev-team.json.stack`. `docker-compose*.yml`, `Makefile`, `.env.example`,
+`scripts/compose-lint.sh`, `.github/**` (T-397) читались только как источник истины, не
+редактировались.
+
+### Что переписано и почему
+
+Все пять документов описывали раскладку репозитория ДО перехода на единый модуль
+(`EPIC-001`): `go.work` и 15 независимых сервисов, `docker-compose.yml` как «полный стек и
+профили» одним файлом, ChromaDB/TimescaleDB/Redis как часть целевого стека, список подкоманд
+`mvctl` без учёта того, что часть реализована, а часть зарезервирована под будущие эпики.
+Переписано по факту кода и артефактов волны 0:
+
+- карта каталогов (`CLAUDE.md`, `AGENTS.md`, `README.md`) — под единый модуль (`cmd/multiverse`,
+  `cmd/mvctl`, `internal/mechanics` как единственный реализованный доменный пакет,
+  `shared/{eventbus,jsonpath,contracts,entity,objstore,env,logging,runtime,clock,agent,testkit}`);
+- таблица статусов `services/*` (источник переписывания / legacy / заморожен / архив) во всех
+  трёх файлах-инструкциях и в `services/_archive/README.md` — сверена построчно с
+  `git log --follow` по каждому перенесённому пути;
+  инфраструктура — MinIO из собственных исходников (`build/minio.Dockerfile`, ADR-021), Qdrant
+  вместо ChromaDB (Chroma осталась только в профиле `legacy`), без TimescaleDB/Redis;
+- `Docs/ops/runbook.md` пересобран из `infrastructure.md` §9 под фактические команды `make` и
+  карточки процессов (`gateway`/`core`/`memory` + `llama-server` вне compose);
+- `.dev-team.json.stack` приведён к факту (Go 1.26, единый модуль, Redpanda, MinIO из
+  исходников, Qdrant+Neo4j, Chroma только в профиле `legacy`, `llama-server` + опционально
+  Ollama).
+
+Итерация 4 (эта запись, по возврату tech-lead#1): `CLAUDE.md` оставался единственным файлом,
+не поправленным под T-397 (разнесение профилей `bot`/`legacy` в собственные compose-файлы) —
+исправлена карта каталогов и раздел «Ключевые файлы»; обязательные переменные там же заменены
+списком-правилом («всё, что помечено `[required]`»), как уже было сделано в README и runbook;
+поправлены `README.md`/`runbook.md` (профиль `legacy` не требует ручного `make legacy-src` —
+это делает сама цель `up`), состав инструментов для `make ci` в README (`pre-commit` в цель не
+входит, в CI ставятся не четыре инструмента, а три, не назван `python3`), место предупреждения
+о непрогнанных целях `make` в README (перенесено перед блоком команд), раздел runbook про
+ротацию токена бота (команда, замещающая активный набор профилей, заменена на набор с
+добавлением `bot` и на прямой вызов compose для точечного действия). Мелкие правки на одну
+строку: описание `make secrets-scan` в `CLAUDE.md` (второй прогон читает индекс, а не рабочую
+копию), список каталога `build/` в `CLAUDE.md`/`AGENTS.md` (дополнен до состава README),
+подкоманда `mvctl version` добавлена в перечень реализованных (README/CLAUDE/AGENTS),
+`services/_archive/README.md:16` — «Makefile и compose архив не собирают» уточнено до трёх
+compose-файлов.
+
+### Что убрано как устаревшее
+
+`go.work`, `make build-service`/`make build-all`/`make run SERVICE=`/`make logs-service` (цели
+для независимых сервисов workspace, которого больше нет), описание 15 сервисов как активной
+раскладки, ChromaDB/TimescaleDB/Redis как часть целевого стека вне профиля `legacy`, список
+обязательных переменных окружения как фиксированный перечень (заменён правилом «см. `[required]`
+в `.env.example`» — переживёт следующую правку файла).
+
+### Расхождения между кодом и документами, найденные по дороге
+
+1. **Раскладка профилей compose устарела в `CLAUDE.md` (N-1, Major).** T-397 разнесла сервисы
+   профилей `bot` и `legacy` в `docker-compose.bot.yml`/`docker-compose.legacy.yml` (шапки этих
+   файлов и `Makefile:61-63` подтверждают), а `README.md` был поправлен ещё в итерации 3.
+   `CLAUDE.md` продолжал утверждать, что весь стек и все профили — один файл `docker-compose.yml`,
+   и не упоминал два новых файла вовсе. Это файл-инструкция для агентов будущих эпиков — риск
+   в том, что агент, добавляющий сервис нового профиля по этой карте, воспроизвёл бы дефект,
+   который T-397 только что закрыла.
+2. **Профиль `legacy` документирован как требующий ручного шага (N-3, Minor).**
+   `README.md:74–75` и `runbook:67–69` предписывали выполнить `make legacy-src` перед первым
+   `make up PROFILES=legacy`. По факту `Makefile:217` объявляет `legacy-src` предпосылкой цели
+   `up` — она выполняется автоматически, как только `legacy` попал в активный набор профилей;
+   шапка `docker-compose.legacy.yml:19-20` говорит то же самое. Лишний ручной шаг убран из обоих
+   документов, оставлено объяснение, почему первый запуск профиля дольше обычного.
+3. **Раздел runbook о ротации токена бота предписывал команду, ломающую правило раздела 2
+   того же файла (N-7, Minor).** `make up PROFILES=bot` не добавляет `bot` к активному набору
+   профилей, а замещает его (`Makefile:57`) — оператор с `COMPOSE_PROFILES=memory` в `.env`
+   получил бы стек, поднятый одним набором compose-файлов, а `make down` (без `PROFILES=`) —
+   другим, и раздел 2 прямо предупреждает, что тогда сервисы профиля не остановятся. Заменено
+   на набор с добавлением профиля бота (`PROFILES=memory,bot`) и на прямой вызов `docker compose
+   -f docker-compose.yml -f docker-compose.bot.yml up -d telegram-bot` для точечного действия.
+
+### Проверки
+
+GNU make на машине не установлен (известный пробел владельца, зафиксирован в `journal.md` и в
+шапке runbook) — цели не прогонялись. Каждое утверждение сверено чтением файла-источника или
+запуском его составных частей: шапки всех трёх compose-файлов и `Makefile:40-69,191,217,222`
+(раскладка профилей, состав `ci`, предпосылка `legacy-src`); `.env.example` (`grep required` = 6
+пометок); `.github/workflows/go.yml` (какие инструменты ставит CI — `golangci-lint`, `gitleaks`,
+`govulncheck`, `pre-commit` не встречается); `scripts/compose-lint.sh:98-100` (жёсткая проверка
+`python3`); `go run ./cmd/mvctl --help` (15 команд, реализованы `contracts env storage privacy
+version`); все относительные ссылки шести файлов проверены на существование цели.
+
+### Что осталось за владельцем
+
+Общий DoD T-019 требует, чтобы «команды из README выполнялись на чистой машине владельца
+(проверка человеком)» — этот пункт не выполнен: ни на одной машине, где шла разработка, GNU
+make не установлен, ни разу ни одна цель `make` не была прогнана по-настоящему. Документы этого
+не скрывают — предупреждение стоит и в `README.md` (перед блоком «Запуск за 5 команд», добавлено
+этой итерацией), и в шапке `Docs/ops/runbook.md`. Пока стендовый прогон не сделан, закрывать
+T-020 (приёмка волны 0) нельзя — это отдельный открытый пункт, переданный оркестратору ревью #2.
+
+
+## devops-engineer · T-397 · «Запуск на чистой машине»
+
+[Запись восстановлена оркестратором 2026-09-11 по отчёту исполнителя и записям `journal.md`:
+исполнитель её не оставил, и это второй случай за волну (первый — T-019). Общий DoD §1 п. 5
+требует запись явно; без неё задача невоспроизводима из артефактов эпика.]
+
+### 1. Что было сломано
+
+`docker compose` подставляет переменные во **весь** файл до того, как отфильтрует сервисы по
+профилям. В `docker-compose.yml` две обязательные переменные принадлежали сервисам вне набора по
+умолчанию — токен телеграм-бота (профиль `bot`) и образ Chroma (профиль `legacy`, намеренно не
+закреплён решением D-3). Поэтому `make up` на чистой машине падал, не создав ни одного контейнера,
+при любом составе профилей. Сокращение набора по умолчанию, сделанное оркестратором раньше, эту
+причину не затрагивало.
+
+### 2. Второй дефект, найденный по дороге
+
+В `.env.example` инлайн-комментарий после **пустого** значения становился значением переменной:
+разбор dotenv у compose обрезает хвостовой комментарий только после непустого значения. Оператор,
+скопировавший пример и ничего не заполнивший, получал логин MinIO, равный тексту комментария —
+значение непустое, поэтому обязательность молчала, и хранилище стартовало с мусорным доступом.
+При этом `set -a; . ./.env` в Makefile читал ту же строку как пустую: два инструмента расходились в
+значении одной переменной. Правило «секрет только через обязательную переменную» было обесценено
+форматом файла. Инлайн-комментариев после пустого значения было ровно 13, не осталось ни одного.
+
+### 3. Решение
+
+Вариант «отдельные compose-файлы по профилю»: `docker-compose.bot.yml` и `docker-compose.legacy.yml`,
+подключаемые из Makefile ровно тогда, когда профиль запрошен. Громкий отказ сохранён дословно и
+переехал вместе с переменной. Отвергнуто: замена обязательности на значение по умолчанию (точка
+использования токена — бинарник, которого нет до EPIC-004, а образ платформы не содержит ни
+оболочки, ни curl, поэтому проверку негде поставить) и файл заглушек (тихо убивает смысл громкого
+отказа). Граница проведена по зацеплению якорями YAML: якорь не пересекает файл.
+
+### 4. Что охраняет правку
+
+Правило 7 линтера композиции и две фикстуры: обязательная переменная у сервиса вне набора по
+умолчанию и пустая переменная с инлайн-комментарием. Плюс пометка обязательности в примере
+настроек как единственный машиночитаемый источник этого списка.
+
+### 5. Проверки
+
+`config -q` на чистой машине — код 0; набор по умолчанию — ровно девять сервисов; `up --dry-run`
+доходит до создания контейнеров; профили `bot` и `legacy` без своих переменных дают отказ с именем
+переменной; линтер зелёный, все шесть «плохих» фикстур отвергаются; шаг CI выполнен дословно.
+Ревью code-reviewer#2: принять, Critical 0, Major 0, Minor 3, Nit 4; Minor-1 (разбор набора
+профилей в Makefile расходился с разбором compose в трёх случаях) закрыт оркестратором.
+
+### 6. Чего проверка не покрывает
+
+**Ни одна цель `make` не исполнялась: GNU make на машине не установлен**, а CI цели `make` не
+вызывает. Логика подключения файлов профиля проверена только эмуляцией оболочкой на семи
+сценариях. Это долг владельца, записанный в `journal.md` и в шапке `Docs/ops/runbook.md`.

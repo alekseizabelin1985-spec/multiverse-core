@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-10T13:00:00+03:00",
+  "updatedAt": "2026-09-11T09:15:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -53,7 +53,7 @@ window.DEVTEAM_STATE =
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
       "branch": "epic/EPIC-001-foundation",
-      "next": "Коммит T-010 + T-011 → T-012 (CI) ∥ T-013 (замер моделей, стенд)",
+      "next": "T-014 (ворота волны 1) ∥ ревью T-012",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -178,6 +178,146 @@ window.DEVTEAM_STATE =
           "finishedAt": "2026-09-10T13:00:00+03:00",
           "reviewIterations": 2,
           "wave": 0
+        },
+        {
+          "id": "T-012",
+          "title": "F-7 CI .github/workflows/go.yml и hardening",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-10T13:20:00+03:00",
+          "finishedAt": "2026-09-10T17:10:00+03:00",
+          "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-013",
+          "title": "F-8 матрица замера LLM и baseline.md (подготовка; замер — стенд)",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-10T13:20:00+03:00",
+          "finishedAt": "2026-09-10T15:10:00+03:00",
+          "reviewIterations": 0,
+          "wave": 0
+        },
+        {
+          "id": "T-014",
+          "title": "F-5t shared/testkit и contract-тест шины — ВОРОТА ВОЛНЫ 1",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-10T15:10:00+03:00",
+          "finishedAt": "2026-09-11T03:10:00+03:00",
+          "reviewIterations": 4,
+          "wave": 0
+        },
+        {
+          "id": "T-015",
+          "title": "F-10b internal/mechanics: типы, Load, формулы, RNG, rules/dark-forest.yaml",
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-10T17:40:00+03:00",
+          "finishedAt": "2026-09-10T20:50:00+03:00",
+          "reviewIterations": 2,
+          "wave": 0
+        },
+        {
+          "id": "T-394",
+          "title": "Интеграционные тесты адаптера Kafka в shared/eventbus на живом брокере",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-395",
+          "title": "Кейс контракта: Close под падающим обработчиком (запись dead letter)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-396",
+          "title": "U-11: решение по каталогам IDE и ассистентов в индексе",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-397",
+          "title": "Запуск на чистой машине: обязательные переменные чужих профилей ломают make up",
+          "status": "done",
+          "assignee": "devops-engineer",
+          "startedAt": "2026-09-11T04:55:00+03:00",
+          "finishedAt": "2026-09-11T07:40:00+03:00",
+          "reviewIterations": 1,
+          "wave": 1
+        },
+        {
+          "id": "T-398",
+          "title": "Свести раскол docs/ и Docs/, вычистить устаревшие файлы-инструкции (QWEN.md и др.)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-399",
+          "title": "Привести infrastructure.md к состоянию после T-397",
+          "status": "todo",
+          "assignee": "architect#1",
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-400",
+          "title": "Harness v0: методы Attack и Flee, боевой шаг сценария",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-401",
+          "title": "Задание CI с детектором гонок для ключевых кейсов",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-402",
+          "title": "Стендовый замер LLM и заполнение baseline.md",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
+        },
+        {
+          "id": "T-403",
+          "title": "Стендовый прогон команд README на чистой машине",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1
         }
       ],
       "defects": []
@@ -1102,6 +1242,356 @@ window.DEVTEAM_STATE =
       "action": "итерация 2 по ревью модели сущности",
       "startedAt": "2026-09-10T11:40:00+03:00",
       "finishedAt": "2026-09-10T13:00:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-012",
+      "action": "CI: go.yml, hardening, privacy scan",
+      "startedAt": "2026-09-10T13:20:00+03:00",
+      "finishedAt": "2026-09-10T14:30:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-013",
+      "action": "подготовка замера LLM: bench-скрипты, prompts.jsonl, шаблон baseline.md",
+      "startedAt": "2026-09-10T13:20:00+03:00",
+      "finishedAt": "2026-09-10T15:10:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-012",
+      "action": "ревью CI и hardening",
+      "startedAt": "2026-09-10T14:30:00+03:00",
+      "finishedAt": "2026-09-10T15:50:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "shared/testkit ядро и contract-тест шины (membus ↔ kafka)",
+      "startedAt": "2026-09-10T15:10:00+03:00",
+      "finishedAt": "2026-09-10T16:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-012",
+      "action": "итерация 2 по ревью CI",
+      "startedAt": "2026-09-10T15:50:00+03:00",
+      "finishedAt": "2026-09-10T17:10:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "ревью testkit и contract-теста шины",
+      "startedAt": "2026-09-10T16:40:00+03:00",
+      "finishedAt": "2026-09-10T17:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "итерация 2: закрытие ворот волны 1",
+      "startedAt": "2026-09-10T17:40:00+03:00",
+      "finishedAt": "2026-09-10T18:55:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-015",
+      "action": "internal/mechanics и rules/dark-forest.yaml",
+      "startedAt": "2026-09-10T17:40:00+03:00",
+      "finishedAt": "2026-09-10T18:25:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-015",
+      "action": "независимое ревью механики и правил",
+      "startedAt": "2026-09-10T18:25:00+03:00",
+      "finishedAt": "2026-09-10T19:15:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "повторное ревью, проверка ворот волны 1",
+      "startedAt": "2026-09-10T18:55:00+03:00",
+      "finishedAt": "2026-09-10T20:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-015",
+      "action": "итерация 2: закрепление потока RNG",
+      "startedAt": "2026-09-10T19:15:00+03:00",
+      "finishedAt": "2026-09-10T19:45:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-015",
+      "action": "повторное ревью итерации 2",
+      "startedAt": "2026-09-10T19:45:00+03:00",
+      "finishedAt": "2026-09-10T20:50:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "итерация 3: три якоря набора",
+      "startedAt": "2026-09-10T20:20:00+03:00",
+      "finishedAt": "2026-09-10T21:20:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "третье ревью, ворота волны 1",
+      "startedAt": "2026-09-10T21:20:00+03:00",
+      "finishedAt": "2026-09-10T23:00:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-016",
+      "action": "фикстуры мира и latest.json",
+      "startedAt": "2026-09-10T21:20:00+03:00",
+      "finishedAt": "2026-09-10T21:55:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-016",
+      "action": "ревью фикстур мира",
+      "startedAt": "2026-09-10T21:55:00+03:00",
+      "finishedAt": "2026-09-10T22:30:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "итерация 4: детерминированный якорь",
+      "startedAt": "2026-09-10T23:00:00+03:00",
+      "finishedAt": "2026-09-11T01:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-017",
+      "action": "заглушки состояния и механики",
+      "startedAt": "2026-09-10T23:00:00+03:00",
+      "finishedAt": "2026-09-10T23:40:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-017",
+      "action": "ревью заглушек состояния и механики",
+      "startedAt": "2026-09-10T23:40:00+03:00",
+      "finishedAt": "2026-09-11T00:15:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-017",
+      "action": "итерация 2 по ревью",
+      "startedAt": "2026-09-11T00:15:00+03:00",
+      "finishedAt": "2026-09-11T00:50:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-017",
+      "action": "повторное ревью итерации 2",
+      "startedAt": "2026-09-11T00:50:00+03:00",
+      "finishedAt": "2026-09-11T01:50:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-014",
+      "action": "четвёртое ревью, ворота волны 1",
+      "startedAt": "2026-09-11T01:20:00+03:00",
+      "finishedAt": "2026-09-11T03:10:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-018",
+      "action": "харнесс, рассказчик и сквозной тест",
+      "startedAt": "2026-09-11T01:50:00+03:00",
+      "finishedAt": "2026-09-11T02:35:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-018",
+      "action": "ревью харнесса и рассказчика",
+      "startedAt": "2026-09-11T02:35:00+03:00",
+      "finishedAt": "2026-09-11T04:20:00+03:00"
+    },
+    {
+      "role": "tech-writer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "документация под новую раскладку",
+      "startedAt": "2026-09-11T03:20:00+03:00",
+      "finishedAt": "2026-09-11T03:55:00+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "приёмка документации",
+      "startedAt": "2026-09-11T03:55:00+03:00",
+      "finishedAt": "2026-09-11T04:55:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-018",
+      "action": "доводка по ревью",
+      "startedAt": "2026-09-11T04:20:00+03:00",
+      "finishedAt": "2026-09-11T05:20:00+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-397",
+      "action": "обязательные переменные и профили compose",
+      "startedAt": "2026-09-11T04:55:00+03:00",
+      "finishedAt": "2026-09-11T06:05:00+03:00"
+    },
+    {
+      "role": "tech-writer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "итерация 2 по приёмке",
+      "startedAt": "2026-09-11T05:20:00+03:00",
+      "finishedAt": "2026-09-11T06:05:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-397",
+      "action": "ревью разделения compose и правила 7",
+      "startedAt": "2026-09-11T06:05:00+03:00",
+      "finishedAt": "2026-09-11T07:40:00+03:00"
+    },
+    {
+      "role": "tech-writer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "итерация 3: документы под новый механизм профилей",
+      "startedAt": "2026-09-11T06:05:00+03:00",
+      "finishedAt": "2026-09-11T06:30:00+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "финальная приёмка документации",
+      "startedAt": "2026-09-11T06:30:00+03:00",
+      "finishedAt": "2026-09-11T07:00:00+03:00"
+    },
+    {
+      "role": "tech-writer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "итерация 4 по замороженному объёму",
+      "startedAt": "2026-09-11T07:00:00+03:00",
+      "finishedAt": "2026-09-11T08:10:00+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-019",
+      "action": "приёмка после итерации 4",
+      "startedAt": "2026-09-11T08:10:00+03:00",
+      "finishedAt": "2026-09-11T08:35:00+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-020",
+      "action": "приёмка волны 0",
+      "startedAt": "2026-09-11T08:35:00+03:00",
+      "finishedAt": "2026-09-11T09:15:00+03:00"
     }
   ],
   "events": [
@@ -1920,10 +2410,553 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-011 итерация 2 принята: покрытие 86,9 %, property-тест-страж на changed[] ⟺ state_hash"
+    },
+    {
+      "at": "2026-09-10T13:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "user",
+      "text": "Коммит fd93a6a (T-010 + T-011, contract-change)"
+    },
+    {
+      "at": "2026-09-10T13:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельно: developer#1 → T-012 (CI), developer#2 → T-013 (подготовка замера: скрипты, промпты, шаблон baseline)"
+    },
+    {
+      "at": "2026-09-10T14:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-012: CI (7 job'ов, SHA-пины, минимальные permissions), dependabot, CODEOWNERS, privacy scan; actionlint чист"
+    },
+    {
+      "at": "2026-09-10T14:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer#1 (Opus) → T-012"
+    },
+    {
+      "at": "2026-09-10T15:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-013 подготовка: 30 промптов, матрица E/E+/C/A, bench-скрипты (Git Bash, без jq), шаблон baseline; замер — за пользователем"
+    },
+    {
+      "at": "2026-09-10T15:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "developer#2 (Opus) → T-014: shared/testkit, membus, contract-тест шины (ворота волны 1)"
+    },
+    {
+      "at": "2026-09-10T15:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-012: вернуть (Critical 1 — нет бита исполнения у coverage-gate.sh; 3 Major: триггеры, права gitleaks на PR, лишний allowlist)"
+    },
+    {
+      "at": "2026-09-10T15:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-012 итерация 2: C-1, M-2..M-4 + Mi-1/2/3/4/5/6/7/9"
+    },
+    {
+      "at": "2026-09-10T16:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-014 (ворота): contract-тест 15 проверок на membus и живой Redpanda; найдены и починены 2 дефекта kafka-адаптера; задержка публикации 4–17 мс"
+    },
+    {
+      "at": "2026-09-10T16:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "code-reviewer#2 (Opus) → T-014"
+    },
+    {
+      "at": "2026-09-10T17:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-012 итерация 2 принята: actionlint 0, режимы скриптов исправлены (включая llm-bench.sh), сканер приватности 89 %"
+    },
+    {
+      "at": "2026-09-10T17:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014: вернуть — ворота НЕ закрыты (Major 2: membus дочитывает хвост после отмены; Bus.Close вне контракта)"
+    },
+    {
+      "at": "2026-09-10T17:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-014 итерация 2 ∥ developer#1 → T-015 (механика и правила боя)"
+    },
+    {
+      "at": "2026-09-10T18:25:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-015 готова: internal/mechanics (покрытие 94,9 %) и rules/dark-forest.yaml v0.1"
+    },
+    {
+      "at": "2026-09-10T18:25:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Дефект контракта: dice.rolled.seed integer → десятичная строка (uint64 терял точность через float64)"
+    },
+    {
+      "at": "2026-09-10T18:25:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-015 на независимом ревью"
+    },
+    {
+      "at": "2026-09-10T18:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-014 итерация 2: контракт 20 проверок, зелёный на обеих реализациях дважды подряд"
+    },
+    {
+      "at": "2026-09-10T18:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "Дефект общего кода: Kafka.Close() подвешивал подписку между обработчиком и коммитом — починено"
+    },
+    {
+      "at": "2026-09-10T18:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 итерация 2 на повторном ревью (ворота волны 1)"
+    },
+    {
+      "at": "2026-09-10T19:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-015: вернуть — поток RNG не закреплён тестом (14 из 16 мутаций убиты, детерминизм подтверждён)"
+    },
+    {
+      "at": "2026-09-10T19:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Решение: расхождение C-03 и §5.1 править в контракте, код T-015 не переделывать"
+    },
+    {
+      "at": "2026-09-10T19:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-015 итерация 2: золотые броски и шесть мелких правок"
+    },
+    {
+      "at": "2026-09-10T19:45:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-015 итерация 2: таблица золотых бросков ловит все пять подмен потока RNG"
+    },
+    {
+      "at": "2026-09-10T19:45:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-015 итерация 2 на повторном ревью"
+    },
+    {
+      "at": "2026-09-10T20:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 ревью #2: вернуть — три якоря набора не держат (Major 3), ворота волны 1 не закрыты"
+    },
+    {
+      "at": "2026-09-10T20:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Создана T-394: интеграционные тесты адаптера Kafka (в пакете нет ни одного)"
+    },
+    {
+      "at": "2026-09-10T20:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-014 итерация 3: сужение окна кейса Close, припаркованная подписка, настоящий дубль"
+    },
+    {
+      "at": "2026-09-10T20:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-015 ревью #2: принять — золотые числа сверены третьим путём, все колонки живые"
+    },
+    {
+      "at": "2026-09-10T20:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Minor-8 закрыт: константа проверки переполнялась и делала правило всегда истинным"
+    },
+    {
+      "at": "2026-09-10T20:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-015 принята"
+    },
+    {
+      "at": "2026-09-10T21:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-014 итерация 3: якорь Close теперь 8 прогонов из 8, все три Major доказаны мутациями"
+    },
+    {
+      "at": "2026-09-10T21:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 ревью #3 — окончательное решение по воротам волны 1"
+    },
+    {
+      "at": "2026-09-10T21:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-016: фикстуры мира и указатель на снапшот seq 0"
+    },
+    {
+      "at": "2026-09-10T21:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-016 готова: фикстуры выводят производные числа из правил, а не повторяют их"
+    },
+    {
+      "at": "2026-09-10T21:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-016 на независимом ревью"
+    },
+    {
+      "at": "2026-09-10T22:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-016 ревью: принять — 16 из 17 мутаций пойманы"
+    },
+    {
+      "at": "2026-09-10T22:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Оба Minor закрыты: ключ снапшота выводится, перенос строк фикстур закреплён"
+    },
+    {
+      "at": "2026-09-10T22:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-016 принята"
+    },
+    {
+      "at": "2026-09-10T23:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 ревью #3: вернуть — якорь недетерминирован, 6 зелёных из 35 под мутацией"
+    },
+    {
+      "at": "2026-09-10T23:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Итерация 4 с условием выхода: если якорь снова не детерминирован — перенос в T-394, итерации 5 не будет"
+    },
+    {
+      "at": "2026-09-10T23:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-017: заглушки FakeState v0 и FixedMechanics"
+    },
+    {
+      "at": "2026-09-10T23:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-017 готова: подмена заглушки на настоящие правила доказана компиляцией и прогоном одного хода"
+    },
+    {
+      "at": "2026-09-10T23:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Граница импортов: узкое исключение для двойника механики, зонд подтвердил, что остальное shared/* по-прежнему закрыто"
+    },
+    {
+      "at": "2026-09-10T23:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-017 на независимом ревью"
+    },
+    {
+      "at": "2026-09-11T00:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-017: вернуть — два набора изменений на одну сущность, первый теряется молча"
+    },
+    {
+      "at": "2026-09-11T00:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Правило no-testkit-in-production: заглушки больше не могут попасть в рабочий код"
+    },
+    {
+      "at": "2026-09-11T00:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-017 итерация 2: отказ при повторе сущности и пять мелких правок"
+    },
+    {
+      "at": "2026-09-11T00:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-017 итерация 2: отказ вместо молчаливой потери, девять мутаций подтверждают правки"
+    },
+    {
+      "at": "2026-09-11T00:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-017 итерация 2 на повторном ревью"
+    },
+    {
+      "at": "2026-09-11T01:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-014 итерация 4: 94 красных из 94 под мутацией, 20 зелёных из 20 на исправном коде"
+    },
+    {
+      "at": "2026-09-11T01:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "Разбор механизма оркестратора опровергнут экспериментом: мутант встаёт на коммите, а не дочитывает буфер"
+    },
+    {
+      "at": "2026-09-11T01:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 ревью #4 — ворота волны 1"
+    },
+    {
+      "at": "2026-09-11T01:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-017 ревью #2: принять"
+    },
+    {
+      "at": "2026-09-11T01:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "WithEncounterStub в F-10 не делается: боевой сквозной тест переносится в I1-α волны 1"
+    },
+    {
+      "at": "2026-09-11T01:50:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-018: харнесс игрока, рассказчик v0 и сквозной тест без боя"
+    },
+    {
+      "at": "2026-09-11T02:35:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-018 готова: харнесс ждёт ответа State, рассказчик v0, два сквозных теста, 46 событий валидны"
+    },
+    {
+      "at": "2026-09-11T02:35:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-018 на независимом ревью"
+    },
+    {
+      "at": "2026-09-11T03:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-014 ревью #4: принять — ворота волны 1 со стороны T-014 закрыты, 27 красных из 27"
+    },
+    {
+      "at": "2026-09-11T03:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Срок задания integration поднят до 20 минут: худший красный прогон стоит 14,5"
+    },
+    {
+      "at": "2026-09-11T03:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-014 принята после четырёх ревью"
+    },
+    {
+      "at": "2026-09-11T03:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-writer",
+      "text": "T-019: документы под раскладку одного модуля, описание 15 сервисов уходит"
+    },
+    {
+      "at": "2026-09-11T03:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-writer",
+      "text": "T-019: документы описывают систему, которая есть, а не пятнадцать сервисов, которых нет"
+    },
+    {
+      "at": "2026-09-11T03:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": ".env.example поднимал несуществующий сервис бота: набор профилей по умолчанию сокращён"
+    },
+    {
+      "at": "2026-09-11T03:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-019 на приёмочном ревью"
+    },
+    {
+      "at": "2026-09-11T04:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-018 ревью: принять — ожидания сквозного теста выводятся из скрипта, подтверждено мутациями"
+    },
+    {
+      "at": "2026-09-11T04:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Исправлена собственная запись в журнале: свойство харнесса не было закреплено тестом"
+    },
+    {
+      "at": "2026-09-11T04:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "Доводка T-018: три утверждения приводятся в соответствие с тем, что держат тесты"
+    },
+    {
+      "at": "2026-09-11T04:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-019: вернуть — make up падает на чистой машине из-за переменных сервисов вне активного профиля"
+    },
+    {
+      "at": "2026-09-11T04:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Моя правка профилей проблему не решала: compose интерполирует файл до фильтрации"
+    },
+    {
+      "at": "2026-09-11T04:55:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-397: починка запуска на чистой машине, до приёмки волны"
+    },
+    {
+      "at": "2026-09-11T05:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "Доводка T-018 закрыта: мутация «снять проверку версии» теперь роняет пакет шлюза за 0,30 с"
+    },
+    {
+      "at": "2026-09-11T05:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-018 принята"
+    },
+    {
+      "at": "2026-09-11T05:20:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-writer",
+      "text": "T-019 итерация 2: четыре неверных утверждения в документах"
+    },
+    {
+      "at": "2026-09-11T06:05:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-397: профили bot и legacy вынесены в свои compose-файлы, запуск на чистой машине починен"
+    },
+    {
+      "at": "2026-09-11T06:05:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "Второй дефект: комментарий после пустой переменной становился её значением, MinIO стартовал бы с мусорным логином"
+    },
+    {
+      "at": "2026-09-11T06:05:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Пробел проверки: GNU make не установлен, цели Makefile никем не выполнялись"
+    },
+    {
+      "at": "2026-09-11T06:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-019 на финальной приёмке после трёх итераций"
+    },
+    {
+      "at": "2026-09-11T07:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-019 приёмка #2: вернуть — CLAUDE.md сохранил карту профилей до T-397, записи в dev-log нет"
+    },
+    {
+      "at": "2026-09-11T07:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-writer",
+      "text": "T-019 итерация 4: объём заморожен семью пунктами"
+    },
+    {
+      "at": "2026-09-11T07:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-397 принята: оба дефекта проверены сравнением до и после, при переносе ничего не потеряно"
+    },
+    {
+      "at": "2026-09-11T07:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Пять новых файлов T-397 не были в индексе — добавлены; иначе ветка приехала бы сломанной"
+    },
+    {
+      "at": "2026-09-11T07:40:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Карточки T-394…T-399 заведены в tasks.md: задача только в журнале невоспроизводима"
+    },
+    {
+      "at": "2026-09-11T08:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-writer",
+      "text": "T-019 итерация 4: семь пунктов заморозки закрыты, запись в dev-log добавлена"
+    },
+    {
+      "at": "2026-09-11T08:10:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Полная проверка ветки: сборка, тесты, линт, сквозные, интеграционные, контракты, секреты — всё зелёное"
+    },
+    {
+      "at": "2026-09-11T08:35:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-019 принята после четырёх итераций"
+    },
+    {
+      "at": "2026-09-11T08:35:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Правило эпика: ссылаться на имена целей и переменных, а не на номера строк"
+    },
+    {
+      "at": "2026-09-11T08:35:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-020: приёмка волны 0"
+    },
+    {
+      "at": "2026-09-11T09:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "ВОЛНА 0 ПРИНЯТА С УСЛОВИЯМИ: содержание доказано, условия — стенд, коммит и гигиена"
+    },
+    {
+      "at": "2026-09-11T09:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведены T-400…T-403; поправлено опровергнутое утверждение и восстановлена пропущенная запись"
+    },
+    {
+      "at": "2026-09-11T09:15:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "Волну 1 можно начинать сейчас: бридж-блок не зависит ни от make, ни от живого стенда"
     }
   ],
   "blockers": [
-    "EPIC-001: ждёт подтверждения коммита T-010 + T-011"
+    {
+      "at": "2026-09-11T06:05:00+03:00",
+      "text": "GNU make не установлен на машине владельца: цели Makefile не выполнялись ни разу, CI их тоже не вызывает. Нужен прогон владельцем: make -n up PROFILES=bot, make -n up PROFILES=memory,legacy, make compose-lint, затем make up на чистой машине."
+    }
   ],
   "risks": [
     {

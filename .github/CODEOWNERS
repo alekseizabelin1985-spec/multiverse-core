@@ -1,0 +1,40 @@
+# =============================================================================
+# .github/CODEOWNERS — who reviews what (SEC-25, T-26; U-9)
+# Source: Docs/dev-team/architecture/infrastructure.md v0.3 §3.2 (F-7, T-012).
+# =============================================================================
+# The owner is the only human reviewer of three virtual teams, so the base rule
+# covers the whole repository. The "contract" directories are then repeated one
+# by one: a rule that exists on its own does not get lost when a subdirectory
+# is added, and the list is what a reader of a pull request sees named.
+#
+# Branch protection (set in the repository settings, not here):
+#   * main               — required checks + "Require review from Code Owners";
+#   * integration/mvp-1  — required checks only. GitHub does not let an author
+#                          approve their own pull request, so requiring the
+#                          owner's approval on the integration branch would
+#                          block the owner (§3.2).
+#
+# services/_archive/** is deliberately ownerless: the archive is frozen code
+# kept for reference (U-1, F-3), and a review request on it is noise.
+# =============================================================================
+
+*                    @alekseizabelin1985-spec
+
+# Data the agents obey: prompts, laws and limits. A change here changes the
+# behaviour of the swarm without touching a line of Go (T-26).
+/blueprints/         @alekseizabelin1985-spec
+/laws/               @alekseizabelin1985-spec
+/config/             @alekseizabelin1985-spec
+
+# Contracts between the three teams: the event schemas and the shared packages.
+/schemas/            @alekseizabelin1985-spec
+/shared/             @alekseizabelin1985-spec
+
+# The supply chain: images, pins and the workflows themselves.
+/build/              @alekseizabelin1985-spec
+/.github/            @alekseizabelin1985-spec
+/docker-compose.yml  @alekseizabelin1985-spec
+/Makefile            @alekseizabelin1985-spec
+
+# Frozen code, no owner.
+/services/_archive/

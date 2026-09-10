@@ -1,207 +1,149 @@
 # AGENTS.md
 
-This file provides guidance to agents when working with code in this repository.
+Инструкции для агентов при работе с этим репозиторием. Платформо-специфичные
+детали (карта пакетов, конверт события, команды) — в [`CLAUDE.md`](CLAUDE.md);
+этот файл — более короткая выжимка конвенций для быстрой ориентации.
 
-## Project Overview
+## Обзор проекта
 
-This is a multiverse game engine built with event-driven architecture. The system consists of multiple specialized services that communicate through an event bus (Redpanda/Kafka).
+Событийная платформа «живых миров» на Go 1.26: **единый модуль**
+(`module multiverse-core.io`, `go.work` не используется), один бинарник платформы
+`cmd/multiverse` (набор поднятых контекстов — флаг `--contexts`, не отдельная
+сборка) и CLI оператора `cmd/mvctl`. Шина — Redpanda (Kafka API).
 
-Each service has its own AGENTS.md file in its respective directory under `services/{service-name}/AGENTS.md` with specific guidance for working with that service.
+Репозиторий проходит переход на эту раскладку (`EPIC-001 «Фундамент»`); часть
+контекстов (`state`, `mechanics`, `swarm`, `llm`, `laws`, `gateway`, `memory`) пока
+зарегистрированы как заглушки, отвечающие только `/health: ok`. Код вне единого
+модуля (`services/*`, у каждого свой `go.mod`) — активен частично; статус каждого
+каталога — в [`services/_archive/README.md`](services/_archive/README.md) и в
+таблице ниже.
 
-## Build/lint/test commands
+## Команды сборки/линта/теста
 
-- Build all services: `make build`
-- Build specific service: `make build-service SERVICE=entity-manager`
-- Run specific service: `make run SERVICE=entity-manager`
-- Start all services: `make up`
-- Stop all services: `make down`
-- Clean build artifacts: `make clean`
-- Show logs for all services: `make logs`
-- Show logs for specific service: `make logs-service SERVICE=entity-manager`
-- Run tests: `make test`
+- Сборка всего модуля: `make build` (`go build -o bin/ ./cmd/...`)
+- Поднять инфраструктуру: `make minio-image && make up`
+- Проверить статус: `make health`
+- Остановить: `make down`
+- Логи одного сервиса compose: `make logs SERVICE=<имя>`
+- Тесты (unit, без сети): `make test`
+- Тесты с контейнерами (Redpanda/MinIO/Qdrant/Neo4j): `make test-integration`
+- e2e в одном процессе без Docker: `make test-e2e`
+- Контракты/схемы: `make contracts`
+- Всё как в CI (без Docker): `make ci`; с контейнерами — `make ci-full`
 
-## Code style guidelines
+Полный список — `make help`. Целей `make build-service SERVICE=<имя>`,
+`make run SERVICE=<имя>`, `make logs-service SERVICE=<имя>` больше **нет** — они
+были нужны для набора независимых сервисов workspace, которого в текущей
+раскладке не существует.
 
-- All services are written in Go 1.24.0
-- Use JSON Schema Draft 7 for entity payload validation
-- Follow event-driven architecture with Kafka/Redpanda as message broker
-- Services communicate through events in the event bus (topics: player_events, world_events, game_events, system_events, scope_management, narrative_output)
-- Entity management uses MinIO for storage with bucket naming pattern: `entities-{world_id}`
-- All services are stateful and support recovery via snapshots and event replay
-- **Use `event.Path()` (jsonpath.Accessor) for ALL event data access** — provides type-safe, fallback-compatible access
-- **Use hierarchical event structure** (`entity:{id,type}`, `world:{id}`, `scope:{id,type}`) for NEW events; flat keys still supported for backward compatibility
-- All services must be built with CGO disabled for cross-platform compatibility (`CGO_ENABLED=0`)
-- Use UUIDs for event IDs and entity IDs
-- All services must be containerized with Docker using multi-stage builds
+## Соглашения по коду
 
-### 🔀 Event Access Patterns (MANDATORY)
+- Модуль один: `go build ./...` из корня собирает `cmd/*`, `internal/*`, `shared/*`
+  (без `services/*` — у них свои `go.mod`, они вне корневого модуля).
+- Go 1.26 везде (см. `go.mod`, `build/versions.env`); `CGO_ENABLED=0` для сборки
+  образа платформы (`build/Dockerfile`, `distroless/static-debian12` в рантайме).
+- Конфигурация процессов — только переменные окружения с префиксом `MV_`,
+  зарегистрированные в `shared/env`; `os.Getenv`/`os.LookupEnv`/`os.Environ`/
+  `os.ExpandEnv` вне `shared/env` запрещены линтером (`forbidigo` в `.golangci.yml`).
+- Время — только через `shared/clock`: `time.Now`, `time.After`/`Tick`/`NewTimer`/
+  `NewTicker`/`Since`/`Until` вне `shared/clock` тоже под запретом `forbidigo` —
+  иначе повтор партии (replay) перестаёт быть детерминированным.
+- Логирование — только `log/slog` (`shared/logging`); `log.Print*`/`Fatal*`/`Panic*`
+  под тем же запретом `forbidigo` — платформа отдаёт исключительно структурные
+  JSON-логи.
+- JSON Schema для событий — 2020-12 (`santhosh-tekuri/jsonschema/v6`), не Draft 7.
+- Идентификаторы событий и сущностей — UUID (`github.com/google/uuid`), кроме
+  режима `--id-source=sequence` (детерминированные id для replay/тестов).
 
-```go
-// ✅ ALWAYS use for reading event data:
-pa := event.Path()  // *jsonpath.Accessor
+### Конверт события и доступ к данным (`shared/eventbus`, `shared/jsonpath`)
 
-// Extract with fallback chain — NEW format: entity.entity.id
-entityID, _ := pa.GetString("entity.entity.id")
-if entityID == "" {
-    entityID, _ = pa.GetString("entity.id")  // fallback previous format
-}
-if entityID == "" {
-    entityID, _ = pa.GetString("entity_id")  // fallback legacy
-}
-
-// World/Scope: use unified helpers
-worldID := eventbus.GetWorldIDFromEvent(event)  // reads event.World.Entity.ID
-scope := eventbus.GetScopeFromEvent(event)      // returns *ScopeRef{ID, Type}
-
-// Type-safe getters for any depth:
-level, _ := pa.GetInt("entity.stats.level")
-active, _ := pa.GetBool("entity.active")
-items, _ := pa.GetSlice("entity.inventory")
-
-// Array access by index:
-firstItem, _ := pa.GetString("entity.inventory[0].name")
-
-// Quick existence check:
-if pa.Has("quest.objectives") { /* ... */ }
-```
-
-### 📝 Creating Events (MANDATORY)
+Сквозные поля события — в `Meta` и в полях `World`/`Scope` верхнего уровня
+`eventbus.Event`, а не внутри `payload`. Публиковать события — только через
+конструкторы, не собирать `Event{}` вручную:
 
 ```go
-// ✅ ALWAYS use builder for new events:
-payload := eventbus.NewEventPayload().
-    WithEntity(id, entityType, name).
-    WithScope(scopeID, scopeType).  // solo/group/city/region/quest
-    WithWorld(worldID)
+// Корневое событие цепочки:
+root := eventbus.NewRoot("player.attacked", "gateway", worldID, scope, eventbus.ActorHuman, payload)
 
-// Add custom fields with dot-notation — use entity/event reference format:
-eventbus.SetNested(payload.GetCustom(), "entity.entity.id", entityID)
-eventbus.SetNested(payload.GetCustom(), "entity.entity.type", entityType)
-eventbus.SetNested(payload.GetCustom(), "trigger.event.id", triggerEventID)
-eventbus.SetNested(payload.GetCustom(), "trigger.event.type", "event")
+// Производное — наследует World/Scope, Correlation/Causation и Timestamp причины
+// (нужно для побайтового повтора при replay):
+fact := eventbus.Derive(root, "combat.decided", "core/mechanics", payload)
 
-event := eventbus.NewStructuredEvent(type, source, worldID, payload)
-bus.Publish(ctx, topic, event)
+bus.Publish(ctx, fact)
 ```
 
-### 🕸️ EntityRef format (ALL references)
-
-All entity/event references in payload use unified format:
-
-```json
-{
-  "entity":  {"entity": {"id": "player-123", "type": "player"}},
-  "target":  {"entity": {"id": "sword-456", "type": "item"}},
-  "world":   {"entity": {"id": "world-789", "type": "world"}},
-  "trigger": {"event":  {"id": "evt-abc", "type": "event"}}
-}
-```
-
-Neo4j automatically creates relationships from payload keys:
-- `(ev)-[:ENTITY]->(player-123:Entity)`
-- `(ev)-[:TARGET]->(sword-456:Entity)`
-- `(ev)-[:WORLD]->(world-789:Entity)`
-- `(ev)-[:TRIGGER]->(evt-abc:Event)`
-
-Entity↔Entity relations created via `relations[]` array.
-
-### ⚠️ Deprecated Patterns (AVOID in new code)
+Чтение полей **payload** — через `event.Path()` (`*jsonpath.Accessor`, dot-notation,
+безопасные геттеры):
 
 ```go
-// ❌ DON'T use direct map access (panics on missing/wrong type):
-entityID := event.Payload["entity_id"].(string)
-worldID := event.WorldID
-
-// ❌ DON'T create events with manual maps:
-event := eventbus.Event{Payload: map[string]interface{}{...}}
-
-// ❌ DON'T use flat reference fields:
-payload["entity_id"] = id
-payload["world_id"] = worldID
-
-// ✅ USE the patterns above instead
+pa := event.Path()
+level, _ := pa.GetInt("stats.level")
+active, _ := pa.GetBool("active")
+if pa.Has("objectives") { /* ... */ }
 ```
 
-## Custom utilities and patterns
+`World`/`Scope` читаются как поля события, а не через `Path()`:
+`eventbus.GetWorldIDFromEvent(event)` возвращает `event.World.Entity.ID` (с
+фолбэком на плоские ключи payload — только для совместимости с legacy-продюсерами
+профиля `legacy`, в новом коде не нужен).
 
-- Entity manager uses a custom entity structure with history tracking and path-based payload access
-- World generator uses Ascension Oracle (Qwen3) for generating world details and schemas
-- Narrative orchestrator uses Semantic Memory Builder (ChromaDB + Neo4j) for RAG context
-- Ontological Archivist stores schemas in MinIO with versioned JSON files
-- BanOfWorld service uses "resonance" metrics for world integrity monitoring
-- CultivationModule generates "Dao portraits" from player history for ascension events
-- All services use structured logging with consistent format
-- Services use context for cancellation and timeouts
-- Event bus uses Kafka with LeastBytes balancer for load distribution
-- Services implement graceful shutdown with HTTP server shutdown and resource cleanup
-- Custom Oracle client with retry logic and structured response handling
-- Custom MinIO client with common interfaces for storage operations
-- Event bus with configurable polling frequency via `KAFKA_POLL_FREQUENCY_MS` environment variable
+Любое изменение публичного API `shared/eventbus` (конверт, `Bus`, `Journal`) и
+`schemas/events/_common.json` — **только через системного архитектора**
+(`Docs/dev-team/plan/ownership.md`, пометка `contract-change`).
 
-## Non-standard directory structures
+### Реестр типов событий (`shared/contracts`)
 
-- Services are organized in `services/` directory with each service in its own subdirectory
-- **Entry points are INSIDE each service**: `services/<service-name>/cmd/<service-name>/main.go`
-- Internal packages are in `internal/` directory
-- Documentation is in `Docs/` directory
-- Docker configuration in `build/` directory
-- Fake dependencies for CGO issues in `fake_deps/` directory
-- Configuration YAML files in `configs/` directory
-- Example event JSON files in `events/` directory
-- AI agent memory files in `memory/` directory
+Каждый публикуемый тип — запись `Spec{Type, Topic, Schema, Publishers, Consumers}`
+и файл `schemas/events/*.v1.json`. После добавления/переименования типа — прогнать
+`go run ./cmd/mvctl contracts check` (ловит несоответствия «тип без схемы» и
+наоборот).
 
-## Project-specific conventions
+## Карта каталогов
 
-- All services must be built with CGO_ENABLED=0 for cross-platform compatibility
-- Services use specific naming conventions for topics: `player_events`, `world_events`, `game_events`, `system_events`, `scope_management`, `narrative_output`
-- World entities are stored in MinIO buckets named `entities-{world_id}`
-- Global entities are stored in `entities-global` bucket
-- Schema versions are stored in MinIO with path pattern: `schemas/{type}/{name}/v{version}.json`
-- All services must be run with Docker Compose for proper environment setup
-- Services communicate through event bus, not direct API calls
-- Entity manager supports both state changes and full entity snapshots
-- All services must be able to recover from snapshots and replay events
-- Services use specific environment variables for configuration (MINIO_ENDPOINT, ORACLE_URL, SEMANTIC_MEMORY_URL, etc.)
-- World generation requires specific seed-based prompts for Qwen3
-- Services must handle entity travel between worlds through snapshot management
-- All services must be able to handle concurrent access to shared resources
-- Services use specific event types for different operations (entity.created, entity.updated, world.generated, etc.)
-- Semantic Memory service stores all events for context and replay
-- Services must handle entity travel between worlds through snapshot management
-- All services must be able to handle concurrent access to shared resources
-- Services use specific event types for different operations (entity.created, entity.updated, world.generated, etc)
-- Semantic Memory service stores all events for context and replay
+```
+cmd/multiverse/     # бинарник платформы (serve/health/db), флаг --contexts
+cmd/mvctl/           # CLI оператора: contracts, env, storage, privacy, version (реализованы),
+                      # world/blueprint/laws/record/golden/llm/memory/report/trace (зарезервированы)
+internal/mechanics/  # единственный реализованный доменный пакет на сейчас
+shared/eventbus/     # конверт события, Bus/Journal, DLQ, kafka-реализация
+shared/jsonpath/      # универсальный доступ по dot-path к map[string]any
+shared/contracts/     # реестр типов событий + JSON-схемы
+shared/entity/        # модель сущности v2
+shared/objstore/      # объектное хранилище (minio + in-memory)
+shared/env/           # реестр переменных окружения
+shared/logging/       # slog с обязательными полями
+shared/runtime/       # HTTP-сервер процесса, Context{Start/Stop/Health}
+shared/clock/         # Clock/Timers (реальные и управляемые)
+shared/agent/         # каркас роя агентов GM (целевой рантайм — internal/swarm)
+shared/testkit/       # membus, contract-тест шины, фейки для тестов/e2e
+schemas/events/       # JSON-схемы событий
+rules/dark-forest.yaml # детерминированная механика
+testdata/fixtures/    # фикстуры мира
+build/                # Dockerfile платформы, legacy.Dockerfile, minio.Dockerfile,
+                      # minio-init.sh, redpanda-init.sh, versions.env
+services/             # код вне единого модуля (свои go.mod) — см. таблицу ниже
+services/_archive/    # архив выведенного из сборки кода
+```
 
-## Service-Specific Guidance
+## Статус кода в `services/`
 
-Each service has detailed guidance in its own AGENTS.md file:
+| Статус | Каталоги | Смысл |
+|---|---|---|
+| Источник переписывания | `entity-manager`, `rule-engine`, `game-service` | референс при переносе на `internal/state`/`internal/mechanics`/`internal/gateway` |
+| Legacy (профиль compose `legacy`) | `narrative-orchestrator`, `semantic-memory` | as-is, пока `MV_GM_PATH=legacy`; уходят в архив после EPIC-003 I2 |
+| Заморожен (`FROZEN.md`) | `world-generator`, `universe-genesis-oracle`, `ontological-archivist`, `cultivation-module`, `plan-manager`, `city-governor`, `entity-actor`, `evolution-watcher` | вне MVP-1, возврат — EPIC-006…EPIC-010 |
+| Архив (`services/_archive/**`) | `ban-of-world`, `reality-monitor`, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}` и др. | заменены; ничего не удалено, `git log --follow` читается |
 
-- [EntityManager](services/entity-manager/entitymanager/AGENTS.md) - Manages game entities and their history
-- [NarrativeOrchestrator](services/narrative-orchestrator/narrativeorchestrator/AGENTS.md) - Generates dynamic narratives
-- [WorldGenerator](services/world-generator/worldgenerator/AGENTS.md) - Creates game worlds
-- [BanOfWorld](services/ban-of-world/banofworld/AGENTS.md) - Monitors world integrity
-- [CityGovernor](services/city-governor/citygovernor/AGENTS.md) - Manages city structures
-- [CultivationModule](services/cultivation-module/cultivationmodule/AGENTS.md) - Handles player cultivation
-- [RealityMonitor](services/reality-monitor/realitymonitor/AGENTS.md) - Monitors game reality state
-- [PlanManager](services/plan-manager/planmanager/AGENTS.md) - Manages player plans
-- [SemanticMemory](services/semantic-memory/semanticmemory/AGENTS.md) - Provides semantic context
-- [OntologicalArchivist](services/ontological-archivist/ontologicalarchivist/AGENTS.md) - Stores schemas
-- [UniverseGenesisOracle](services/universe-genesis-oracle/universegenesis/AGENTS.md) - Generates universes
-- [GameService](services/game-service/gameservice/AGENTS.md) - Handles player interactions
-- [EntityActor](services/entity-actor/entityactor/AGENTS.md) - Living Worlds: Neural autonomous entities
-- [EvolutionWatcher](services/evolution-watcher/evolutionwatcher/AGENTS.md) - Living Worlds: Anomaly detection
-- [RuleEngine](services/rule-engine/ruleengine/AGENTS.md) - Living Worlds: Universal mechanics
+Подробный список с коммитами и причинами — [`services/_archive/README.md`](services/_archive/README.md).
+Файлов `services/<имя>/AGENTS.md` в репозитории сейчас нет — вся специфика служебного
+кода описывается в `ARCHIVED.md`/`FROZEN.md` соответствующего каталога, а не в
+отдельных `AGENTS.md`.
 
-**Shared packages** (12 total):
-- `config` - Configuration store
-- `entity` - Entity structure and types
-- `eventbus` - Event bus, types, topics, Kafka client
-- `intent` - Oracle intent recognition and prompt builder
-- `jsonpath` - Universal dot-path accessor (critical for hierarchical events)
-- `minio` - MinIO clients (common, factory, HTTP, legacy, official)
-- `oracle` - Oracle HTTP client for AI generation
-- `redis` - Redis client
-- `rules` - Rule engine core (engine, rule)
-- `schema` - JSON Schema validation
-- `spatial` - Spatial utilities (filter, geometry, scope)
-- `tinyml` - TinyML model loader and interface
+## Нестандартная структура
+
+- Точки входа платформы — `cmd/multiverse`, `cmd/mvctl` (не внутри `services/*`).
+- Домен на сегодня — только `internal/mechanics`; остальные `internal/*`
+  (`state`, `swarm`, `llm`, `laws`, `gateway`, `memory`) появятся по мере эпиков.
+- Документация команды разработки — `Docs/dev-team/**` (архитектура, ADR, контракты,
+  эпики и задачи); ведёт оркестратор процесса, вручную не редактировать.
+- Эксплуатационная документация — [`Docs/ops/runbook.md`](Docs/ops/runbook.md).

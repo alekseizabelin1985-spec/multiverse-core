@@ -16,8 +16,20 @@
 #   memory   qdrant, neo4j, memory
 #   gpu      ollama — only with MV_LLM_PROVIDER=ollama and only in a container
 #   dev      redpanda-console
-#   bot      telegram-bot
-#   legacy   narrative-orchestrator, semantic-memory, chromadb (+ neo4j)
+#   bot      telegram-bot                    -> docker-compose.bot.yml
+#   legacy   narrative-orchestrator, semantic-memory, chromadb (+ neo4j here)
+#                                            -> docker-compose.legacy.yml
+#
+# Two profiles live in their own file (T-397; dev-log Ma-1). `docker compose`
+# interpolates the whole file BEFORE it filters by profile, so a `${VAR:?}` that
+# belongs to a service outside the default set breaks every command for every
+# operator — that is how `MV_TELEGRAM_BOT_TOKEN` (a secret nobody but the bot's
+# owner has) and `CHROMA_IMAGE` (deliberately unpinned, D-3) used to stop
+# `make up` on a clean machine before a single container was created. The two
+# services therefore sit in docker-compose.bot.yml and docker-compose.legacy.yml,
+# which the Makefile adds with `-f` exactly when their profile is active, and the
+# loud refusal survives untouched — for the operator who asked for the profile.
+# Rule 7 below keeps this file free of the same trap.
 #
 # House rules enforced by scripts/compose-lint.sh (§3.1.1):
 #   1. every image carries an explicit tag out of build/versions.env, no latest;
@@ -32,7 +44,11 @@
 #      127.0.0.1:1234 and containers reach it through host.docker.internal
 #      (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
 #      host.docker.internal, a compose service or an RFC1918 host, never at a
-#      public one.
+#      public one;
+#   7. this file — the one compose always loads — interpolates cleanly on a
+#      clean machine: every ${VAR:?} in it resolves from build/versions.env or
+#      from a variable the README tells the operator to fill ([required] in
+#      .env.example). Anything else belongs in a per-profile file (T-397).
 #
 # Known limitation of a single compose file (T-008; dev-log ОВ-40): a port
 # publication cannot be made conditional on a profile. Where §1.4 asks for a
@@ -48,13 +64,6 @@ x-logging: &platform-logging
   options:
     max-size: "50m"
     max-file: "5"
-
-# The bot writes far less and its lines carry a redacted token: 10m x 3.
-x-bot-logging: &bot-logging
-  driver: json-file
-  options:
-    max-size: "10m"
-    max-file: "3"
 
 # Every process is the same image with a different --contexts set (ADR-001,
 # NFR-075); build/Dockerfile carries no HEALTHCHECK because the port depends on
@@ -401,155 +410,6 @@ services:
     restart: unless-stopped
     logging: *platform-logging
 
-  # ============================ bot (profile bot) ============================
-  # The token lives here and nowhere else (D-10, compose-lint rule 4); no
-  # env_file, because .env carries the token to whoever reads it.
-  telegram-bot:
-    profiles: ["bot"]
-    image: multiverse-core:${MV_IMAGE_TAG:-dev}
-    build:
-      context: .
-      dockerfile: build/Dockerfile
-      args:
-        GO_VERSION: ${GO_VERSION}
-        VERSION: ${MV_IMAGE_TAG:-dev}
-    # The binary lands in EPIC-004; build/Dockerfile already copies everything
-    # under ./cmd, so this line starts working the moment cmd/telegram-bot
-    # exists — no change to this file.
-    entrypoint: ["/telegram-bot"]
-    environment:
-      MV_ENV: ${MV_ENV:-dev}
-      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
-      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
-      MV_TELEGRAM_BOT_TOKEN: ${MV_TELEGRAM_BOT_TOKEN:?set MV_TELEGRAM_BOT_TOKEN in .env}
-      MV_TELEGRAM_ALLOWED_USER_IDS: ${MV_TELEGRAM_ALLOWED_USER_IDS:-}
-      MV_TELEGRAM_GATEWAY_URL: ${MV_TELEGRAM_GATEWAY_URL:-http://gateway:8088}
-      MV_TELEGRAM_POLL_TIMEOUT_S: ${MV_TELEGRAM_POLL_TIMEOUT_S:-25}
-      MV_TELEGRAM_HEALTH_ADDR: ${MV_TELEGRAM_HEALTH_ADDR:-:8089}
-    ports:
-      - "127.0.0.1:8089:8089"
-    healthcheck:
-      test: ["CMD", "/telegram-bot", "health", "--url", "http://127.0.0.1:8089/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 10s
-    depends_on:
-      gateway:
-        condition: service_healthy
-    restart: unless-stopped
-    logging: *bot-logging
-
-  # ========================== legacy (profile legacy) ========================
-  # As-is narrative-orchestrator + semantic-memory + Chroma, kept alive only
-  # while MV_GM_PATH=legacy (S5, D-3, ADR-004 add. 8). The sections come from
-  # services/_archive/build/docker-compose.as-is.yml; the services are frozen
-  # and read their as-is variable names (no MV_ prefix, outside the shared/env
-  # registry, §4.1 p. 2). The whole profile disappears in EPIC-003 I2.
-  #
-  # Viability of this profile is an open question of T-008 — see dev-log ОВ-41:
-  # the frozen code imports shared/config, shared/minio, shared/oracle and
-  # shared/spatial, which F-3 moved to services/_archive/shared/, and F-2
-  # deleted the go.work that used to bind them together.
-  chromadb:
-    profiles: ["legacy"]
-    # Deliberately without a default: build/versions.env leaves CHROMA_IMAGE
-    # empty because which server tag serves the frozen chroma-go client is
-    # decided on the stand (D-3). An empty image fails loudly here; a guessed
-    # tag would fail silently at runtime.
-    image: ${CHROMA_IMAGE:?set CHROMA_IMAGE in build/versions.env once the tag is decided (T-008, D-3)}
-    environment:
-      IS_PERSISTENT: "true"
-      ANONYMIZED_TELEMETRY: "false"
-    volumes:
-      # The as-is volume name on purpose: §5.5 keeps the Chroma data until the
-      # profile is removed, unlike the redpanda/minio volumes which T-004
-      # renamed so that as-is data is not silently remounted.
-      - chroma_data:/chroma/chroma
-    # Publishes nothing (§1.4): only semantic-memory talks to it.
-    expose:
-      - "8000"
-    restart: unless-stopped
-    logging: *platform-logging
-
-  semantic-memory:
-    profiles: ["legacy"]
-    build:
-      # The as-is workspace, exported from LEGACY_SRC_REF by
-      # `make legacy-src`; the work tree no longer compiles this code.
-      context: build/.legacy-src
-      dockerfile: ../legacy.Dockerfile
-      args:
-        SERVICE: semantic-memory
-        GO_BUILD_TAGS: chroma_v2_enabled
-        BUILD_CGO: "1"
-        LEGACY_GO_IMAGE: ${LEGACY_GO_IMAGE}
-        LEGACY_RUNTIME_IMAGE: ${LEGACY_RUNTIME_IMAGE}
-        LEGACY_ONNXRUNTIME_VERSION: ${LEGACY_ONNXRUNTIME_VERSION}
-        LEGACY_ONNXRUNTIME_SHA256: ${LEGACY_ONNXRUNTIME_SHA256}
-    image: multiverse-core-legacy:semantic-memory-${MV_IMAGE_TAG:-dev}
-    environment:
-      KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
-      CHROMA_URL: http://chromadb:8000
-      CHROMA_USE_V2: "true"
-      CHROMA_COLLECTION_NAME: ${LEGACY_CHROMA_COLLECTION:-multiverse_events}
-      NEO4J_URI: ${MV_NEO4J_URI:-neo4j://neo4j:7687}
-      NEO4J_USER: ${MV_NEO4J_USER:-neo4j}
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
-      MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
-      MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
-      MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
-      SEMANTIC_PORT: "8082"
-    ports:
-      # 8083 on the host so that it does not collide with the target `memory`
-      # service, which owns 8082 (§1.4).
-      - "127.0.0.1:8083:8082"
-    depends_on:
-      redpanda:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      chromadb:
-        condition: service_started
-      neo4j:
-        condition: service_healthy
-    restart: unless-stopped
-    logging: *platform-logging
-
-  narrative-orchestrator:
-    profiles: ["legacy"]
-    build:
-      # The as-is workspace, exported from LEGACY_SRC_REF by
-      # `make legacy-src`; the work tree no longer compiles this code.
-      context: build/.legacy-src
-      dockerfile: ../legacy.Dockerfile
-      args:
-        SERVICE: narrative-orchestrator
-        LEGACY_GO_IMAGE: ${LEGACY_GO_IMAGE}
-        LEGACY_RUNTIME_IMAGE: ${LEGACY_RUNTIME_IMAGE}
-    image: multiverse-core-legacy:narrative-orchestrator-${MV_IMAGE_TAG:-dev}
-    environment:
-      KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
-      SEMANTIC_MEMORY_URL: http://semantic-memory:8082
-      MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
-      MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
-      MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
-      # The as-is orchestrator calls an OpenAI-compatible endpoint; on this
-      # stand that is the native llama-server, same as the target `core`.
-      ORACLE_URL: ${LEGACY_ORACLE_URL:-http://host.docker.internal:1234/v1/chat/completions}
-      ORACLE_MODEL: ${LLM_MODEL_DEFAULT}
-      ORACLE_TIMEOUT_MS: ${LEGACY_ORACLE_TIMEOUT_MS:-60000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Publishes nothing (§1.4): it only reads the bus and writes narrative.
-    depends_on:
-      redpanda:
-        condition: service_healthy
-      semantic-memory:
-        condition: service_started
-    restart: unless-stopped
-    logging: *platform-logging
-
 volumes:
   # Target volumes are named apart from the as-is ones (`redpanda_data`,
   # `minio_data`, `ollama_data`): with the same COMPOSE_PROJECT_NAME the old
@@ -562,6 +422,3 @@ volumes:
   ollama-data:
   qdrant-storage:
   neo4j-data:
-  # The one volume that keeps its as-is name on purpose (§5.5): the Chroma data
-  # stays until the `legacy` profile is removed in EPIC-003 I2.
-  chroma_data:

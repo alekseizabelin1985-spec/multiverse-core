@@ -10,7 +10,7 @@
       "properties": {
         "index": { "type": "integer", "minimum": 0, "description": "Index of the roll inside its cause event; part of the seed." },
         "formula": { "type": "string", "minLength": 1 },
-        "seed": { "type": "integer", "minimum": 0, "description": "Seed(causeEventID, roll.index) = first 8 bytes of SHA-256, big endian." },
+        "seed": { "type": "string", "pattern": "^(0|[1-9][0-9]{0,19})$", "description": "Seed(causeEventID, roll.index) = first 8 bytes of SHA-256, big endian, as a decimal string: a uint64 does not survive a generic JSON decode as a number (state-and-mechanics.md 5.6)." },
         "result": { "type": "integer" },
         "natural": { "type": "integer" }
       },

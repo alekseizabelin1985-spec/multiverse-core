@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "component": "state",
+  "snapshot": {
+    "id": "state:dark-forest-world:000000",
+    "seq": 0,
+    "key": "state/20260101T000000Z-000000.json",
+    "taken_at": "2026-01-01T00:00:00Z",
+    "cursor": { "system_events": 0 },
+    "laws_version": "v1",
+    "rules_version": "0.1",
+    "state_hash": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e",
+    "entities_count": 6,
+    "reason": "bootstrap"
+  },
+  "world_id": "dark-forest-world",
+  "entities": [
+    {
+      "schema_version": 1,
+      "id": "wolf-alpha",
+      "type": "npc",
+      "world_id": "dark-forest-world",
+      "name": "Альфа-волк",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "kind": "wolf",
+        "region_id": "dark-forest-01",
+        "position": "dark-forest-01",
+        "hp": 10,
+        "hp_max": 10,
+        "atk": 3,
+        "def": 11,
+        "dmg": "d4",
+        "status": "alive",
+        "loot": [{ "item_kind": "wolf-pelt", "name": "волчья шкура" }]
+      }
+    },
+    {
+      "schema_version": 1,
+      "id": "player-A",
+      "type": "player",
+      "world_id": "dark-forest-world",
+      "name": "Вася",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "hp": 10,
+        "hp_max": 10,
+        "atk": 2,
+        "def": 12,
+        "dmg": "d6",
+        "flee": "2",
+        "status": "alive",
+        "position": "outside:dark-forest-world",
+        "scope": { "id": "player-A", "type": "solo" },
+        "actor_kind": "ci",
+        "inventory": []
+      }
+    },
+    {
+      "schema_version": 1,
+      "id": "player-B",
+      "type": "player",
+      "world_id": "dark-forest-world",
+      "name": "Лена",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "hp": 10,
+        "hp_max": 10,
+        "atk": 2,
+        "def": 12,
+        "dmg": "d6",
+        "flee": "2",
+        "status": "alive",
+        "position": "outside:dark-forest-world",
+        "scope": { "id": "player-B", "type": "solo" },
+        "actor_kind": "ci",
+        "inventory": []
+      }
+    },
+    {
+      "schema_version": 1,
+      "id": "player-C",
+      "type": "player",
+      "world_id": "dark-forest-world",
+      "name": "Олег",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "hp": 10,
+        "hp_max": 10,
+        "atk": 2,
+        "def": 12,
+        "dmg": "d6",
+        "flee": "2",
+        "status": "alive",
+        "position": "outside:dark-forest-world",
+        "scope": { "id": "player-C", "type": "solo" },
+        "actor_kind": "ci",
+        "inventory": []
+      }
+    },
+    {
+      "schema_version": 1,
+      "id": "dark-forest-01",
+      "type": "region",
+      "world_id": "dark-forest-world",
+      "name": "Тёмный лес",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "description": "Старый ельник на северной окраине мира: тропы теряются в подлеске, между стволами стоит туман, и по ночам за деревьями слышен вой.",
+        "npc_ids": ["wolf-alpha"],
+        "players_present": [],
+        "respawn_ttl": "24h",
+        "encounter_chance": 0.25,
+        "blueprint_ref": "domain-dark-forest@1.0"
+      }
+    },
+    {
+      "schema_version": 1,
+      "id": "dark-forest-world",
+      "type": "world",
+      "world_id": "dark-forest-world",
+      "name": "Мир Тёмного леса",
+      "version": 1,
+      "created_at": "2026-01-01T00:00:00Z",
+      "updated_at": "2026-01-01T00:00:00Z",
+      "attributes": {
+        "laws_version": "v1",
+        "weather": "fog",
+        "time_of_day": "night",
+        "day": 1,
+        "season": "autumn",
+        "locale": "ru",
+        "blueprint_ref": "global-dark-forest-world@1.0"
+      }
+    }
+  ],
+  "applied_proposals": [
+    "bootstrap:dark-forest-world:world/dark-forest-world",
+    "bootstrap:dark-forest-world:region/dark-forest-01",
+    "bootstrap:dark-forest-world:npc/wolf-alpha",
+    "bootstrap:dark-forest-world:player/player-A",
+    "bootstrap:dark-forest-world:player/player-B",
+    "bootstrap:dark-forest-world:player/player-C"
+  ]
+}

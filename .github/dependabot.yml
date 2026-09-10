@@ -1,0 +1,78 @@
+# =============================================================================
+# .github/dependabot.yml — supply chain updates (SEC-25, T-35/T-36)
+# Source: Docs/dev-team/architecture/infrastructure.md v0.3 §2.4, §3.2 (F-7).
+# =============================================================================
+# Three ecosystems, and what each of them is for:
+#
+#   gomod          — the modules of the single Go module (F-2). Minor and patch
+#                    updates are grouped into one pull request a week; a major
+#                    update arrives on its own, because it is a task, not a bump.
+#   github-actions — the SHA pins of .github/workflows/*.yml. Pinning by SHA is
+#                    what makes an action immutable (T-35); Dependabot is what
+#                    keeps an immutable pin from becoming an old one.
+#   docker         — the base images of build/*.Dockerfile, monthly.
+#
+# What Dependabot does NOT see: build/versions.env. The pins of the compose
+# stack, of the LLM runtime and of the developer tooling live there as plain
+# dotenv values, so the operator compares them with the registries once a month
+# (infrastructure.md §9.5); bumping one is a separate task with a run of the
+# golden set (ADR-021 §4).
+#
+# No `reviewers:` key: the owner is the single reviewer and .github/CODEOWNERS
+# already says so — GitHub deprecated the field in favour of exactly that.
+# =============================================================================
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    groups:
+      go-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+      - go
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns:
+          - '*'
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: docker
+    # Every Dockerfile of the build directory: the platform image, the MinIO
+    # image built from source (ADR-021) and the frozen `legacy` profile.
+    directory: /build
+    schedule:
+      interval: monthly
+      time: '06:00'
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: build

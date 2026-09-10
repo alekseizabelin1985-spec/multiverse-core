@@ -79,12 +79,13 @@ var (
 
 	CoreAddr = Declare("MV_CORE_ADDR", "127.0.0.1:8090",
 		"listen address of /health and /v1/admin/* of the process (D-7)")
-	CoreAdminClients = Declare("MV_CORE_ADMIN_CLIENTS", "operator,mvctl",
+	CoreAdminClients = Declare("MV_CORE_ADMIN_CLIENTS", "operator,mvctl,ci-harness",
 		"comma separated X-Client-Id admitted to /v1/admin/* (ADR-009 p. 9); "+
-			"the default is the short list the platform ships with, and mvctl is "+
-			"on it in advance: no subcommand of this build calls the routes yet, "+
-			"its world, laws and snapshot subcommands arrive in EPIC-002/003 "+
-			"(decision ОВ-28)")
+			"the default is the short list the platform ships with, and mvctl "+
+			"and ci-harness are on it in advance: no subcommand of this build "+
+			"calls the routes yet, its world, laws and snapshot subcommands "+
+			"arrive in EPIC-002/003, and ci-harness is the client id the e2e "+
+			"scenarios of CI use from T-018 on (decision ОВ-28)")
 	MemoryURL = Declare("MV_MEMORY_URL", "",
 		"memory service address; empty switches memory off (degradation FR-035)")
 	SnapshotEveryFacts = Declare("MV_SNAPSHOT_EVERY_FACTS", "200",

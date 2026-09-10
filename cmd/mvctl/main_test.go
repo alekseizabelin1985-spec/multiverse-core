@@ -18,6 +18,10 @@ func TestRunDispatches(t *testing.T) {
 		"contracts check":  {[]string{"contracts", "check"}, cli.ExitOK},
 		"contracts topics": {[]string{"contracts", "topics", "--format=rpk"}, cli.ExitOK},
 		"storage init":     {[]string{"storage", "init", "--store=memory"}, cli.ExitOK},
+		// The path is relative to the package directory the test binary runs
+		// in; the job of CI runs the same command against testdata/ from the
+		// repository root.
+		"privacy scan":     {[]string{"privacy", "scan", "../../testdata"}, cli.ExitOK},
 		"version":          {[]string{"version"}, cli.ExitOK},
 		"help":             {[]string{"help"}, cli.ExitOK},
 		"no arguments":     {nil, cli.ExitUsage},
@@ -53,7 +57,7 @@ func TestReservedNamesAreHeld(t *testing.T) {
 	registry := commands()
 	for _, name := range []string{
 		"world", "blueprint", "laws", "record",
-		"golden", "llm", "memory", "privacy", "report", "trace",
+		"golden", "llm", "memory", "report", "trace",
 	} {
 		cmd, ok := registry.Lookup(name)
 		if !ok {
@@ -70,7 +74,7 @@ func TestReservedNamesAreHeld(t *testing.T) {
 // works must not be listed as reserved.
 func TestImplementedCommandsHaveNoOwnerMark(t *testing.T) {
 	registry := commands()
-	for _, name := range []string{"contracts", "env", "storage", "version"} {
+	for _, name := range []string{"contracts", "env", "privacy", "storage", "version"} {
 		cmd, ok := registry.Lookup(name)
 		if !ok {
 			t.Fatalf("%s is not registered", name)

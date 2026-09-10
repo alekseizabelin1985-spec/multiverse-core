@@ -10,9 +10,19 @@ ADR-001 доп. п. 5.
 ## Правила
 
 - Каталог **вне сборки**: собственный `go.mod` (`multiverse-core.io/archive`, без `require`), поэтому
-  `go build ./...` корня архив не видит. Исключение архива из `.golangci.yml` (T-003),
-  `.dockerignore` и `Makefile`/`docker-compose.yml` (T-004, T-008) и `CODEOWNERS` (T-012) —
-  задачи волны 0: этих файлов ещё нет либо они ссылаются на исходные (перенесённые) пути.
+  `go build ./...` корня архив не видит. Исключение архива проверено фактом (T-003, T-012): в
+  `.golangci.yml` — строки 217 и 274 (`services/_archive`, `services/`); в `.dockerignore` —
+  строка 46 (`services/`); в `.github/CODEOWNERS` — строка 40 (`/services/_archive/`, комментарий
+  строка 17). Ни один рецепт `Makefile` и ни один сервис ни одного из трёх compose-файлов
+  (`docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`) архив не
+  собирает, поэтому явное исключение им не требовалось. Оговорка «не собирают
+  `services/*`» верна только для `docker-compose.yml` и `docker-compose.bot.yml`:
+  профиль `legacy` собирает `services/narrative-orchestrator` и
+  `services/semantic-memory`, но не из рабочего дерева — цель `legacy-src`
+  выкладывает их из `LEGACY_SRC_REF` в отдельный каталог сборки, и архив при этом
+  всё равно не участвует. `docker-compose.legacy.yml:6,33` ссылается на
+  `services/_archive/build/docker-compose.as-is.yml` и `services/_archive/shared/` только в
+  комментариях (документирует решение T-008), а не как на зависимость сборки.
   Из `gitleaks` архив — **не** исключён.
 - Возврат отдельного пакета в сборку — `git mv` обратно; подкаталоги без собственного `go.mod`
   (`shared/{schema,redis,rules,intent,tinyml}`) через `replace` не подключаются (ревью T-002, M-2).
@@ -71,3 +81,12 @@ ADR-001 доп. п. 5.
 | 8 замороженных сервисов (`FROZEN.md`) | заморозка, не архив: `world-generator`, `universe-genesis-oracle`, `ontological-archivist`, `cultivation-module`, `plan-manager`, `city-governor`, `entity-actor`, `evolution-watcher` | EPIC-006…010 |
 | `shared/eventbus`, `shared/jsonpath`, `shared/entity`, `shared/agent` (кроме `tools/*`, `filter.go`, `e2e_dark_forest_test.go`) | переносятся в единый модуль в T-003 (F-2) | — |
 | `shared/agent/tools/registry.go` | реестр инструментов остаётся | EPIC-003 |
+
+## Смотрите также
+
+Таблица выше — источник истины по каждому перенесённому пути. Сводная таблица
+статусов (активен / источник переписывания / legacy / заморожен / архив) для всего
+`services/` — в корневых [`README.md`](../../README.md#статус-кода-вне-единого-модуля),
+[`CLAUDE.md`](../../CLAUDE.md#статус-кода-в-services) и [`AGENTS.md`](../../AGENTS.md#статус-кода-в-services)
+(T-019, F-9); при добавлении новой строки в архив в волне 1+ обновляются обе стороны
+одним PR, чтобы таблицы не расходились.

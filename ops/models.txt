@@ -1,0 +1,30 @@
+# ops/models.txt — модели платформы (infrastructure.md v0.3 §6.5)
+#
+# Формат задан Makefile: каждая НЕзакомментированная строка — тег для
+# `ollama pull` (`make models`) и для прогрева (`make warm`); обе цели работают
+# только при MV_LLM_PROVIDER=ollama. Файлы .gguf для llama-server качаются
+# вручную в MV_LLM_MODELS_DIR, поэтому секция gguf ниже — комментарии: иначе
+# `make models` попытался бы тянуть их из реестра Ollama.
+#
+# После F-8 (ops/metrics/baseline.md) список сокращается до победившей
+# конфигурации и сверяется с блупринтами: валидатор C-11 (правило 7а)
+# отклоняет модель, которой нет у выбранного провайдера.
+
+# --- gguf: llama-server, провайдер openai_compat (по умолчанию) --------------
+# Скачиваются вручную с Hugging Face в MV_LLM_MODELS_DIR; имя модели в запросе
+# и в блупринте = имя файла без расширения (GET /v1/models).
+#
+#   Qwen3.8-27B-UD-Q3_K_XL      unsloth/Qwen3.8-27B-GGUF   13,1 ГБ   конфигурация E, LLM_MODEL_DEFAULT
+#   qwen3-8b                    Qwen/Qwen3-8B-GGUF          ~5,2 ГБ   конфигурация E+ (тики), router-режим
+#   nomic-embed-text            эмбеддинги (EPIC-005)       ~0,3 ГБ   только если эмбеддинги пойдут через llama-server
+#   bge-m3                      эмбеддинги (EPIC-005)       ~2,3 ГБ   альтернатива nomic, решение architect#1 в 005-memory
+
+# --- ollama: только при MV_LLM_PROVIDER=ollama -------------------------------
+# Нужны для конфигураций C и A матрицы замера и как запасной путь эмбеддингов
+# (ADR-005 доп. 2 п. 8). До решения F-8 держим весь набор; после — останется
+# только выбранное.
+qwen3:30b-a3b
+qwen3:8b
+qwen3:14b
+nomic-embed-text
+bge-m3

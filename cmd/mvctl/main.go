@@ -19,6 +19,7 @@ import (
 	"multiverse-core.io/cmd/mvctl/internal/cli"
 	contractscmd "multiverse-core.io/cmd/mvctl/internal/contracts"
 	envcmd "multiverse-core.io/cmd/mvctl/internal/env"
+	privacycmd "multiverse-core.io/cmd/mvctl/internal/privacy"
 	storagecmd "multiverse-core.io/cmd/mvctl/internal/storage"
 )
 
@@ -55,6 +56,14 @@ func commands() *cli.Registry {
 			Summary: storagecmd.Summary,
 			Run:     storagecmd.Run,
 		},
+		// The minimal `privacy scan` belongs to F-7 rather than to EPIC-005:
+		// the security job of CI runs it from wave 0 on, and EPIC-005 (T-139)
+		// replaces the implementation behind the same name (decision ОВ-47).
+		cli.Command{
+			Name:    "privacy",
+			Summary: privacycmd.Summary,
+			Run:     privacycmd.Run,
+		},
 		cli.Command{
 			Name:    "version",
 			Summary: "print the version this binary was built from",
@@ -69,7 +78,6 @@ func commands() *cli.Registry {
 		cli.Reserved("golden", "run and update the golden set", "EPIC-005"),
 		cli.Reserved("llm", "report LLM usage and cost", "EPIC-005"),
 		cli.Reserved("memory", "rebuild, reset and query the memory index", "EPIC-005"),
-		cli.Reserved("privacy", "scan artefacts for external identifiers", "EPIC-005"),
 		cli.Reserved("report", "session and audit reports as CSV", "EPIC-005"),
 		cli.Reserved("trace", "follow one correlation id through the journal", "EPIC-005"),
 	)

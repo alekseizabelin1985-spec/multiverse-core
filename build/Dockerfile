@@ -13,9 +13,12 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 ARG VERSION=dev
+# Both version variables are stamped (decision ОВ-30): main.version is what
+# `mvctl version` prints, logging.Version is the version field of every log
+# line (§7.1, NFR-041). Stamping only one leaves the other at "dev".
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    go build -ldflags "-s -w -X main.version=${VERSION}" -o /out/ ./cmd/...
+    go build -ldflags "-s -w -X main.version=${VERSION} -X multiverse-core.io/shared/logging.Version=${VERSION}" -o /out/ ./cmd/...
 
 # Pinned by digest, not by the floating :nonroot tag (infrastructure.md §2.4);
 # Dependabot (ecosystem docker, directory build/) bumps the line. Refresh with:

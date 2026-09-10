@@ -8,3 +8,8 @@ Makefile text eol=lf
 *.exe binary
 *.pdf binary
 testdata/recordings/*.jsonl merge=binary
+# The fixture pointer states the size of the snapshot object in bytes (C-14
+# v1.1, §4.4), so a consumer that reads the object off a Windows checkout must
+# get the same file the pointer describes: CRLF would make it 4686 bytes where
+# the pointer says 4531.
+testdata/fixtures/** text eol=lf

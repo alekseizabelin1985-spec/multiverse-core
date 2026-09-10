@@ -1,0 +1,20 @@
+[
+  {
+    "schema_version": 1,
+    "id": "dark-forest-01",
+    "type": "region",
+    "world_id": "dark-forest-world",
+    "name": "Тёмный лес",
+    "version": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "attributes": {
+      "description": "Старый ельник на северной окраине мира: тропы теряются в подлеске, между стволами стоит туман, и по ночам за деревьями слышен вой.",
+      "npc_ids": ["wolf-alpha"],
+      "players_present": [],
+      "respawn_ttl": "24h",
+      "encounter_chance": 0.25,
+      "blueprint_ref": "domain-dark-forest@1.0"
+    }
+  }
+]

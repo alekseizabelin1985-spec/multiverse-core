@@ -69,7 +69,7 @@ func TestEnvelopeAccepts(t *testing.T) {
 			"action": {"type": "attack"},
 			"target": {"entity": {"id": "wolf-alpha", "type": "npc"}}}`))
 	derived := eventbus.Derive(root, "dice.rolled", SourceSwarm,
-		payloadOf(t, `{"roll": {"index": 0, "formula": "1d20", "seed": 4133419312, "result": 17, "natural": 17},
+		payloadOf(t, `{"roll": {"index": 0, "formula": "1d20", "seed": "4133419312", "result": 17, "natural": 17},
 			"purpose": "hit",
 			"roller": {"entity": {"id": "player-A", "type": "player"}}}`),
 		eventbus.WithAgent(eventbus.AgentRef{ID: "encounter-wolf:solo:player-A", Level: "task", Blueprint: "encounter-wolf"}))
@@ -204,7 +204,7 @@ func TestPayloadExamples(t *testing.T) {
 			"entity": {"entity": {"id": "player-A", "type": "player"}},
 			"details": {"expected_version": 23, "actual_version": 24}}`},
 		"dice.rolled": {eventbus.ActorSystem, `{
-			"roll": {"index": 1, "formula": "1d8+2", "seed": 12345678, "result": 7, "natural": 5},
+			"roll": {"index": 1, "formula": "1d8+2", "seed": "12345678", "result": 7, "natural": 5},
 			"purpose": "damage",
 			"roller": {"entity": {"id": "player-A", "type": "player"}}}`},
 		"snapshot.created": {eventbus.ActorSystem, `{
@@ -285,7 +285,7 @@ func TestPayloadRejects(t *testing.T) {
 			"snapshot": {"id": "s", "seq": 0, "taken_at": "2026-09-09T12:00:00Z", "cursor": {},
 				"laws_version": "v1", "state_hash": "h", "size_bytes": 1, "key": "k"}}`},
 		"unknown dice purpose": {"dice.rolled", `{
-			"roll": {"index": 0, "formula": "1d20", "seed": 1, "result": 3, "natural": 3},
+			"roll": {"index": 0, "formula": "1d20", "seed": "1", "result": 3, "natural": 3},
 			"purpose": "luck",
 			"roller": {"entity": {"id": "player-A", "type": "player"}}}`},
 		"replay without incomplete_record": {"analytics.replay.completed", `{

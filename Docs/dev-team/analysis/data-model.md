@@ -417,7 +417,7 @@ HMAC внешнего ID не нужен: `link_id` случаен (ADR-009 до
 
 ### 7.3. DiceRoll (`dice.rolled`, топик `game_events`; тип EPIC-002, публикует агент встречи до `combat.decided`)
 
-`roll{index (0..), formula (d20, d6, d4), seed, result, natural (для d20)}`, `purpose` (`hit, damage, flee, npc_hit, npc_damage, encounter_chance, background`), `roller{entity}`; причина — `meta.causation_id` (действие игрока или `round.closed`); `seed = SHA-256(causeEventID + ":" + index)[:8]` BigEndian, RNG `math/rand/v2` PCG(seed, 0) (C-03). `correlation_id`, `actor_kind`, `agent`, `replay` — в `meta`.
+`roll{index (0..), formula (d20, d6, d4), seed (десятичная строка uint64 — число JSON не переживает разбор в `map[string]any`), result, natural (для d20)}`, `purpose` (`hit, damage, flee, npc_hit, npc_damage, encounter_chance, background`), `roller{entity}`; причина — `meta.causation_id` (действие игрока или `round.closed`); `seed = SHA-256(causeEventID + ":" + index)[:8]` BigEndian, RNG `math/rand/v2` PCG(seed, 0) (C-03). `correlation_id`, `actor_kind`, `agent`, `replay` — в `meta`.
 
 ### 7.4. TickRecord (`tick.fired`) и RoundClose (`round.closed`)
 

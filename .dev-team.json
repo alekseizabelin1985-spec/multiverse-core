@@ -3,7 +3,7 @@
   "language": "ru",
   "autonomy": "gates",
   "projectName": "multiverse-core",
-  "stack": "Go 1.24/1.25 workspace, Redpanda (Kafka), MinIO, ChromaDB, Neo4j, TimescaleDB, Ollama+Qwen3, Docker Compose",
+  "stack": "Go 1.26, single module (no go.work), Redpanda (Kafka API), MinIO built from source, Qdrant + Neo4j (Chroma only in the legacy compose profile), llama-server (llama.cpp) native + optional Ollama, Docker Compose",
   "hasUI": false,
   "git": {
     "branches": true,
@@ -20,6 +20,6 @@
     "epic": 13,
     "team": 3,
     "adr": 21,
-    "task": 393
+    "task": 403
   }
 }

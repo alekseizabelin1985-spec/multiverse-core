@@ -10,7 +10,7 @@
 # the owner's machine and pulling a container to parse a document would be a
 # strange dependency for a linter.
 #
-# The six rules:
+# The seven rules:
 #   1. every image has an explicit tag, never `latest`, and every third-party
 #      image comes from a variable declared in build/versions.env (NFR-071);
 #   2. every published port is bound to 127.0.0.1 (SEC-13); the init containers,
@@ -27,12 +27,29 @@
 #   6. there is no `llama-server` service — it is a native process outside
 #      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
 #      host.docker.internal, a service of this file or an RFC1918 address, but
-#      never at a public host (SEC-15, ADR-005 add. 2 p. 3).
+#      never at a public host (SEC-15, ADR-005 add. 2 p. 3);
+#   7. the always-loaded compose file starts on a clean machine (T-397).
+#
+# Rule 7 in full, because it is the one that is easy to break by accident:
+# `docker compose` interpolates a file WHOLE, before it filters by profile, so
+# one `${VAR:?}` belonging to a service the operator never runs stops `config`,
+# `up` and `ps` for everybody — which is exactly how MV_TELEGRAM_BOT_TOKEN and
+# CHROMA_IMAGE (empty by decision D-3) killed `make up` on a clean machine
+# before a single container existed. The rule reproduces that: it builds the
+# environment of a machine that copied .env.example and filled what the README
+# asks for — the variables marked `[required]` there — adds build/versions.env,
+# and demands that the first compose file (the one compose loads by default)
+# interpolate without a single error. A required variable that a clean machine
+# has no reason to hold belongs in a per-profile file, loaded with its profile:
+# docker-compose.bot.yml, docker-compose.legacy.yml. Those files are linted by
+# rules 1–6 like any other, and are deliberately outside rule 7.
 #
 # Exit code is non-zero on any violation.
 #
 # Usage:
-#   scripts/compose-lint.sh [-f <compose file>]
+#   scripts/compose-lint.sh [-f <compose file>]...
+# The first -f replaces the default set of files; further -f add to it. The
+# first file in the set is the one rule 7 applies to.
 # Environment:
 #   COMPOSE_LINT_ENV_FILES  space separated env files (default:
 #                           "build/versions.env .github/ci.env")
@@ -44,15 +61,21 @@ set -euo pipefail
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
-compose_file=docker-compose.yml
+# The caller may be `make`, which exports COMPOSE_ENV_FILES, or a shell where
+# the operator set COMPOSE_FILE/COMPOSE_PROFILES for their own stack. Every file
+# and profile this linter looks at is passed explicitly below; inheriting any of
+# them would make the result depend on whose terminal it ran in.
+unset COMPOSE_ENV_FILES COMPOSE_FILE COMPOSE_PROFILES
+
+compose_files=()
 while [ $# -gt 0 ]; do
   case "$1" in
   -f | --file)
-    compose_file=$2
+    compose_files+=("$2")
     shift 2
     ;;
   -h | --help)
-    sed -n '2,50p' "$0"
+    sed -n '2,60p' "$0"
     exit 0
     ;;
   *)
@@ -61,6 +84,13 @@ while [ $# -gt 0 ]; do
     ;;
   esac
 done
+
+# The whole target topology: the file compose loads by default plus the two
+# per-profile files it does not (T-397). Rules 1-6 need all of them, or the bot
+# token and the Chroma image would stop being checked the moment they moved.
+if [ ${#compose_files[@]} -eq 0 ]; then
+  compose_files=(docker-compose.yml docker-compose.bot.yml docker-compose.legacy.yml)
+fi
 
 read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-build/versions.env .github/ci.env}"
 read -r -a profiles <<<"${COMPOSE_LINT_PROFILES:-gpu memory dev legacy bot}"
@@ -71,16 +101,124 @@ if [ -z "$python_bin" ]; then
   exit 2
 fi
 
-args=(compose -f "$compose_file")
+profile_args=()
+for p in "${profiles[@]}"; do
+  [ -n "$p" ] && profile_args+=(--profile "$p")
+done
+
+# --------------------------------------------------------------------------
+# Rule 7 — the always-loaded file starts on a clean machine.
+# Runs first and on its own: if this fails, nothing else about the file matters
+# to an operator who cannot get past `docker compose config`.
+# --------------------------------------------------------------------------
+clean_env=$(mktemp)
+trap 'rm -f "$clean_env"' EXIT
+
+primary=${compose_files[0]}
+# A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
+# paired with bad-x.env when that file exists. That is how the half of rule 7
+# that reads .env.example gets a negative fixture of its own without teaching
+# the `bad-*.yml` loop of `make compose-lint` and of CI a second file pattern.
+env_example=${primary%.yml}.env
+[ -f "$env_example" ] || env_example=.env.example
+
+if ! clean_out=$(CLEAN_ENV_PATH="$clean_env" ENV_EXAMPLE_PATH="$env_example" \
+  "$python_bin" - <<'PY' 2>&1
+import io
+import os
+import sys
+
+# The environment of a machine that copied .env.example and filled what the
+# README asks for: the file verbatim, with one substitution — the variables
+# marked `[required]` in the comment above them. Everything else keeps the value
+# the example ships, including the empty ones, which is the whole point.
+DUMMY = "compose-lint-clean-machine"
+SKIP = ("COMPOSE_ENV_FILES=", "COMPOSE_FILE=")
+
+path = os.environ["ENV_EXAMPLE_PATH"]
+out = []
+comment = ""
+problems = []
+
+for lineno, line in enumerate(io.open(path, encoding="utf-8"), 1):
+    line = line.rstrip("\n")
+    stripped = line.strip()
+    if not stripped:
+        comment = ""
+        continue
+    if stripped.startswith("#"):
+        comment = stripped
+        continue
+    key, sep, rest = line.partition("=")
+    if not sep:
+        comment = ""
+        continue
+    value, hashmark, _ = rest.partition("#")
+    # An inline comment after an EMPTY value is not a comment to compose: its
+    # dotenv parser trims a trailing comment only when a value precedes it, so
+    # `KEY=   # a secret, leave empty` arrives as the literal text of the
+    # comment — non-empty, which silences ${KEY:?} and starts the container with
+    # rubbish. `set -a; . ./.env` in the Makefile reads the same line as empty,
+    # so compose and make disagree about one variable. Hence: no inline comment
+    # after an empty value, ever.
+    if hashmark and not value.strip():
+        problems.append(f"{path}:{lineno}: {key.strip()} is empty and carries an "
+                        f"inline comment, which compose reads as its value; move "
+                        f"the comment to the line above")
+    if not line.startswith(SKIP):
+        out.append(f"{key}={DUMMY}" if ("[required]" in comment and not value.strip()) else line)
+    comment = ""
+
+if problems:
+    print("\n".join(problems), file=sys.stderr)
+    sys.exit(1)
+
+io.open(os.environ["CLEAN_ENV_PATH"], "w", encoding="utf-8", newline="\n").write(
+    "\n".join(out) + "\n"
+)
+PY
+); then
+  {
+    echo "compose-lint: 1 violation(s) in $env_example"
+    echo "  [rule 7] the environment of a clean machine cannot be read from $env_example:"
+    printf '%s\n' "$clean_out" | sed 's/^/           /'
+  } >&2
+  exit 1
+fi
+
+# The env files in the order .env declares them (COMPOSE_ENV_FILES=.env,
+# build/versions.env): the pins win over the example, as they do for `make up`.
+if ! clean_out=$(docker compose -f "$primary" \
+  --env-file "$clean_env" --env-file build/versions.env \
+  "${profile_args[@]}" config -q 2>&1); then
+  {
+    echo "compose-lint: 1 violation(s) in $primary"
+    echo "  [rule 7] $primary does not interpolate on a clean machine (.env.example"
+    echo "           with its [required] variables filled + build/versions.env), so"
+    echo "           \`make up\` stops before the first container is created (T-397):"
+    printf '%s\n' "$clean_out" | sed 's/^/           /'
+    echo "           A required variable of a service outside the default profile set"
+    echo "           belongs in that profile's own file (docker-compose.bot.yml,"
+    echo "           docker-compose.legacy.yml), where the refusal reaches the operator"
+    echo "           who actually asked for the profile."
+  } >&2
+  exit 1
+fi
+
+# --------------------------------------------------------------------------
+# Rules 1-6 — the resolved model, every file and every profile at once.
+# --------------------------------------------------------------------------
+args=(compose)
+for f in "${compose_files[@]}"; do
+  args+=(-f "$f")
+done
 for f in "${env_files[@]}"; do
   [ -n "$f" ] && args+=(--env-file "$f")
 done
 # Every profile at once: the resolved model keeps each service's `profiles`, so
-# one pass covers the whole file and rule 2 can still tell a `dev` console from
-# a production port.
-for p in "${profiles[@]}"; do
-  [ -n "$p" ] && args+=(--profile "$p")
-done
+# one pass covers the whole topology and rule 2 can still tell a `dev` console
+# from a production port.
+args+=("${profile_args[@]}")
 
 model=$(docker "${args[@]}" config --format json)
 
@@ -93,11 +231,13 @@ model=$(docker "${args[@]}" config --format json)
 # root. A line that mentions the word in order to forbid it — `.env.example`,
 # `shared/env/infra.go` — is not a credential and is filtered below.
 # This file is excluded from its own scan: it necessarily spells the word out.
-minioadmin_hits=$(git grep -i -n -- minioadmin --   docker-compose.yml build scripts cmd shared .github .env.example   ':!scripts/compose-lint.sh' |
+minioadmin_hits=$(git grep -i -n -- minioadmin -- \
+  'docker-compose*.yml' build scripts cmd shared .github .env.example \
+  ':!scripts/compose-lint.sh' |
   grep -v -i -E '(never|not|не) minioadmin' || true)
 
 MODEL_JSON="$model" MINIOADMIN_HITS="$minioadmin_hits" \
-  COMPOSE_FILE_PATH="$compose_file" \
+  COMPOSE_FILE_PATHS="${compose_files[*]}" \
   "$python_bin" - <<'PY'
 import ipaddress
 import json
@@ -107,9 +247,11 @@ import sys
 from urllib.parse import urlsplit
 
 model = json.loads(os.environ["MODEL_JSON"])
-compose_path = os.environ["COMPOSE_FILE_PATH"]
-with open(compose_path, encoding="utf-8") as fh:
-    raw = fh.read()
+compose_paths = os.environ["COMPOSE_FILE_PATHS"].split()
+raw_files = []
+for path in compose_paths:
+    with open(path, encoding="utf-8") as fh:
+        raw_files.append((path, fh.read()))
 
 services = model.get("services") or {}
 service_names = set(services)
@@ -137,18 +279,19 @@ with open("build/versions.env", encoding="utf-8") as fh:
 # only asks that the tag is explicit.
 LOCAL_IMAGE_PREFIXES = ("multiverse-core:", "multiverse-core-legacy:", "multiverse-core/")
 
-# `image:` as written in the file, per service, so that rule 1 can see the
+# `image:` as written in the files, per service, so that rule 1 can see the
 # variable and not only the value it interpolated to.
 raw_images = {}
-current = None
-for line in raw.splitlines():
-    m = re.match(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$", line)
-    if m:
-        current = m.group(1)
-        continue
-    m = re.match(r"^    image:\s*(\S.*?)\s*$", line)
-    if m and current:
-        raw_images[current] = m.group(1)
+for _, raw in raw_files:
+    current = None
+    for line in raw.splitlines():
+        m = re.match(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$", line)
+        if m:
+            current = m.group(1)
+            continue
+        m = re.match(r"^    image:\s*(\S.*?)\s*$", line)
+        if m and current:
+            raw_images[current] = m.group(1)
 
 # --------------------------------------------------------------------------
 # Rule 1 — pinned images
@@ -226,8 +369,8 @@ MUST_BE_REQUIRED = {
     "MV_TELEGRAM_BOT_TOKEN",
 }
 
-# Credentials as written, in one pass over the whole file: the resolved model
-# has already substituted the values, so a literal password and a correct
+# Credentials as written, in one pass over every file: the resolved model has
+# already substituted the values, so a literal password and a correct
 # `${VAR:?}` look the same there. Layout is deliberately not part of the rule —
 # `environment` may be a mapping (`KEY: value`) or a list (`- KEY=value`), and a
 # secret may sit in any anchor (`x-platform-env` and whatever the next one is
@@ -238,36 +381,41 @@ ENTRY = re.compile(r"^\s*-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(\S.*?)\s*$")
 TOP_LEVEL = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9._-]*):")
 BLOCK = re.compile(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$")
 
-context = compose_path
-for lineno, line in enumerate(raw.splitlines(), 1):
-    if line.lstrip().startswith("#"):
-        continue
-    m = TOP_LEVEL.match(line)
-    if m:
-        context = m.group(1)
-        continue
-    m = BLOCK.match(line)
-    if m:
-        context = m.group(1)
-        continue
-    m = ENTRY.match(line)
-    if not m:
-        continue
-    key, value = m.group(1), m.group(2)
-    if not SECRET_KEY.match(key):
-        continue
-    refs = re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:[-?][^}]*)?\}", value)
-    if not refs:
-        fail(3, f"{context}:{lineno}: {key} carries the literal {value!r}; use ${{{key}:?...}}")
-        continue
-    if key in MUST_BE_REQUIRED and not any(
-        (mod or "").startswith(":?") for _, mod in refs
-    ):
-        fail(
-            3,
-            f"{context}:{lineno}: {key} has a default ({value!r}); a missing credential "
-            "must stop the stack, so it needs ${VAR:?}",
-        )
+for compose_path, raw in raw_files:
+    context = compose_path
+    for lineno, line in enumerate(raw.splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            continue
+        m = TOP_LEVEL.match(line)
+        if m:
+            context = m.group(1)
+            continue
+        m = BLOCK.match(line)
+        if m:
+            context = m.group(1)
+            continue
+        m = ENTRY.match(line)
+        if not m:
+            continue
+        key, value = m.group(1), m.group(2)
+        if not SECRET_KEY.match(key):
+            continue
+        refs = re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(:[-?][^}]*)?\}", value)
+        if not refs:
+            fail(
+                3,
+                f"{compose_path} {context}:{lineno}: {key} carries the literal "
+                f"{value!r}; use ${{{key}:?...}}",
+            )
+            continue
+        if key in MUST_BE_REQUIRED and not any(
+            (mod or "").startswith(":?") for _, mod in refs
+        ):
+            fail(
+                3,
+                f"{compose_path} {context}:{lineno}: {key} has a default ({value!r}); "
+                "a missing credential must stop the stack, so it needs ${VAR:?}",
+            )
 
 hits = [h for h in os.environ.get("MINIOADMIN_HITS", "").splitlines() if h.strip()]
 for hit in hits:
@@ -302,8 +450,9 @@ for name, svc in sorted(services.items()):
     host = env.get("OLLAMA_HOST")
     if host is not None and "0.0.0.0" in host:
         fail(5, f"{name}: OLLAMA_HOST={host!r} exposes the model API (SEC-15)")
-if re.search(r"OLLAMA_HOST\s*[:=]\s*[\"']?0\.0\.0\.0", raw):
-    fail(5, "the literal OLLAMA_HOST=0.0.0.0 appears in the compose file (SEC-15)")
+for compose_path, raw in raw_files:
+    if re.search(r"OLLAMA_HOST\s*[:=]\s*[\"']?0\.0\.0\.0", raw):
+        fail(5, f"the literal OLLAMA_HOST=0.0.0.0 appears in {compose_path} (SEC-15)")
 
 # --------------------------------------------------------------------------
 # Rule 6 — the LLM is a native process, and MV_LLM_URL stays local
@@ -351,13 +500,16 @@ for name, svc in sorted(services.items()):
 
 # --------------------------------------------------------------------------
 if failures:
-    print(f"compose-lint: {len(failures)} violation(s) in {compose_path}", file=sys.stderr)
+    print(
+        f"compose-lint: {len(failures)} violation(s) in {', '.join(compose_paths)}",
+        file=sys.stderr,
+    )
     for line in failures:
         print("  " + line, file=sys.stderr)
     sys.exit(1)
 
 print(
-    f"compose-lint: ok — {len(services)} services, 6 rules "
+    f"compose-lint: ok — {len(services)} services in {len(compose_paths)} file(s), 7 rules "
     f"(profiles resolved: {', '.join(sorted({p for s in services.values() for p in (s.get('profiles') or [])})) or 'none'})"
 )
 PY

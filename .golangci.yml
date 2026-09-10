@@ -41,9 +41,42 @@ linters:
         shared:
           files:
             - "**/shared/**"
+            - "!**/shared/testkit/mechanics/**"
           deny:
             - pkg: multiverse-core.io/internal
               desc: "shared/* must not import internal/*; a context depends on shared, never the other way round (ADR-001 p. 3)"
+
+        # The one exception, and the reason it does not weaken the boundary: a
+        # test double is coupled to what it doubles by definition. FixedMechanics
+        # has to speak the types of C-03 (Outcome, Roll, Actor, Action) or it and
+        # *mechanics.Rules cannot satisfy one interface, which is the whole point
+        # of the double. The exception names one directory and one package: the
+        # double of mechanics may see mechanics and nothing else.
+        shared-testkit-mechanics:
+          list-mode: lax
+          files:
+            - "**/shared/testkit/mechanics/**"
+          allow:
+            - multiverse-core.io/internal/mechanics
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "the mechanics double may see internal/mechanics and no other context (ADR-001 p. 3, exception recorded in journal.md 2026-09-10)"
+
+        # Test doubles stay in tests. ownership.md §1 already treats one file as
+        # "the only import of shared/testkit in the production binary", but the
+        # ban itself was never written down, and the exception for the mechanics
+        # double above opens a way round the boundary: a context could reach
+        # internal/mechanics through the double instead of directly. The pair
+        # "rule here, exclusion for _test.go below" is how shared/(clock|env)
+        # and forbidigo already say "in these files and nowhere else".
+        no-testkit-in-production:
+          files:
+            - "**/internal/**"
+            - "**/cmd/**"
+            - "!**/cmd/multiverse/fake_contexts.go"
+          deny:
+            - pkg: multiverse-core.io/shared/testkit
+              desc: "shared/testkit is for tests: production code must not import a double (ADR-001 p. 3; ownership.md §1 names cmd/multiverse/fake_contexts.go as the single exception)"
 
         # The trap for contexts that have no rule of their own yet: without it a
         # new internal/<ctx> would inherit no boundary at all and could import
@@ -193,6 +226,14 @@ linters:
         linters:
           - forbidigo
         text: (os\.(Getenv|LookupEnv|Environ|ExpandEnv)|time\.(Now|After|Tick|NewTimer|NewTicker|Since|Until))
+
+      # The other half of no-testkit-in-production: a test may use the doubles,
+      # a shipped file may not. depguard sees files, not build kinds, so the
+      # kind is said here.
+      - path: _test\.go$
+        linters:
+          - depguard
+        text: multiverse-core.io/shared/testkit
 
       # Code carried over unchanged when the workspace became one module
       # (T-003, foundation.md §11). Formatting is enforced everywhere; the

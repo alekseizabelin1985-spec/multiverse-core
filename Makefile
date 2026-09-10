@@ -42,7 +42,38 @@ export COMPOSE_ENV_FILES
 COMMA := ,
 PROFILES ?=
 PROFILE_ARGS := $(foreach p,$(subst $(COMMA), ,$(PROFILES)),--profile $(p))
-COMPOSE := docker compose $(PROFILE_ARGS)
+
+# Two profiles live in a compose file of their own (T-397): `docker compose`
+# interpolates a file whole, before it filters by profile, so a required
+# variable of a service outside the default set — the bot token, the unpinned
+# Chroma image (D-3) — used to break `make up` for everyone. The files are added
+# here, and only when their profile is actually asked for, so that the loud
+# refusal stays with the operator who wants that profile.
+#
+# The active set is `PROFILES=` when it is given, otherwise COMPOSE_PROFILES —
+# from the environment, or from .env, which is where §1.3 tells the operator to
+# put it. The value in .env may carry a trailing `# comment`, exactly as
+# .env.example ships it, and compose's own dotenv parser strips it; so does this.
+#
+# The three details below are not style: each one made `make` see fewer files
+# than compose sees, and the stack then came up silently without the service of
+# the profile compose thought was active (T-397 review, Mi-1).
+#   tail -n 1  — a duplicated key: compose keeps the last assignment, not the first.
+#   export …   — `export COMPOSE_PROFILES=…` is a valid dotenv line; compose reads it.
+#   leading ws — compose ignores indentation before the key; a plain ^ anchor does not.
+DOTENV_PROFILES := $(shell sed -n 's/^[[:space:]]*\(export[[:space:]][[:space:]]*\)\?COMPOSE_PROFILES=//p' .env 2>/dev/null | tail -n 1 | sed -e 's/[[:space:]][[:space:]]*\#.*$$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$$//' -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/")
+ACTIVE_PROFILES := $(if $(PROFILES),$(PROFILES),$(if $(COMPOSE_PROFILES),$(COMPOSE_PROFILES),$(DOTENV_PROFILES)))
+ACTIVE_PROFILE_LIST := $(subst $(COMMA), ,$(ACTIVE_PROFILES))
+
+COMPOSE_FILES := -f docker-compose.yml
+COMPOSE_FILES += $(if $(filter bot,$(ACTIVE_PROFILE_LIST)),-f docker-compose.bot.yml)
+COMPOSE_FILES += $(if $(filter legacy,$(ACTIVE_PROFILE_LIST)),-f docker-compose.legacy.yml)
+# An explicit `-f` switches off compose's own file discovery, and with it the
+# local, git-ignored override the header of docker-compose.yml points the
+# operator at (ОВ-40). It stays last, which is what makes it an override.
+COMPOSE_FILES += $(if $(wildcard docker-compose.override.yml),-f docker-compose.override.yml)
+
+COMPOSE := docker compose $(COMPOSE_FILES) $(PROFILE_ARGS)
 
 # gitleaks scans the range of the branch until the history is rewritten (§3.1).
 BASE ?= integration/mvp-1
@@ -104,7 +135,12 @@ lint: ## golangci-lint over the module
 
 .PHONY: test
 test: ## Unit tests: short, race, no network
-	@go test -short -race -count=1 -cover ./...
+	@go test -short -race -count=1 -coverprofile=coverage.out ./...
+	# The floor CI applies (job `unit`); packages that do not exist yet are a
+	# warning, not a failure (ADR-010 p. 5). Through bash and not as a program:
+	# the executable bit lives in the tree, and a script that loses it fails
+	# with Permission denied on Linux while Git for Windows shows nothing.
+	bash scripts/coverage-gate.sh 60 internal/state internal/mechanics internal/swarm internal/llm internal/replay
 
 .PHONY: test-integration
 test-integration: minio-image ## testcontainers: Redpanda, MinIO, Qdrant, Neo4j
@@ -125,16 +161,28 @@ contracts: ## Schemas and the env manifest agree with the code
 	go test ./shared/contracts/... -run TestSchemasValid
 
 .PHONY: secrets-scan
-secrets-scan: ## gitleaks over the branch range and the work tree
+secrets-scan: ## gitleaks over the branch range and the content of the index
 	@gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .
-	gitleaks dir --no-banner --redact .
+	# The second scan reads the content of the index, not the work tree: the
+	# untracked .env of the owner, build/.legacy-src/ and the worktrees of the
+	# agents are not what CI checks out, and they keep the target red for files
+	# that are never committed (decision ОВ-8). The paths stay relative so that
+	# the fingerprints of .gitleaksignore match (§4.5 p. 1).
+	staged=$$(mktemp -d)
+	trap 'rm -rf "$$staged"' EXIT
+	git checkout-index -a --prefix="$$staged/"
+	cd "$$staged" && gitleaks dir --no-banner --redact --config=.gitleaks.toml .
+
+.PHONY: privacy-scan
+privacy-scan: ## External identifiers in the artefacts that are committed (NFR-041)
+	@go run ./cmd/mvctl privacy scan testdata/
 
 .PHONY: vuln
 vuln: ## govulncheck over the module
 	@govulncheck ./...
 
 .PHONY: compose-lint
-compose-lint: ## The six house rules of docker-compose.yml (§3.1.1), then the linter's own fixtures
+compose-lint: ## The seven house rules of the compose files (§3.1.1), then the linter's own fixtures
 	@scripts/compose-lint.sh
 	# A rule that quietly stopped firing looks exactly like a clean file, so
 	# every negative fixture has to stay rejected (testdata/compose-lint).
@@ -147,7 +195,7 @@ compose-lint: ## The six house rules of docker-compose.yml (§3.1.1), then the l
 	done
 
 .PHONY: ci
-ci: lint test contracts secrets-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
+ci: lint test contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
 
 .PHONY: ci-full
 ci-full: ci test-integration ## `make ci` plus the container tests
@@ -173,7 +221,7 @@ minio-image: ## MinIO built from source (ADR-021 variant B); ~5 min the first ti
 # Stack
 # -----------------------------------------------------------------------------
 .PHONY: up
-up: $(if $(findstring legacy,$(PROFILES)),legacy-src) ## Start the stack and wait for it; the LLM is checked, never started
+up: $(if $(filter legacy,$(ACTIVE_PROFILE_LIST)),legacy-src) ## Start the stack and wait for it; the LLM is checked, never started
 	@$(COMPOSE) up -d --wait
 	$(MAKE) --no-print-directory health LLM_STRICT=0
 

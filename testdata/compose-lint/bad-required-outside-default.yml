@@ -1,0 +1,11 @@
+# Rule 7: a required variable of a service that the default profile set never
+# starts. `docker compose` interpolates the file whole, before it filters by
+# profile, so this single line stops `config`, `up` and `ps` on every machine
+# that has no bot token — which is every machine that does not run the bot
+# (T-397). The service belongs in docker-compose.bot.yml instead.
+services:
+  telegram-bot:
+    profiles: ["bot"]
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_TELEGRAM_BOT_TOKEN: ${MV_TELEGRAM_BOT_TOKEN:?set MV_TELEGRAM_BOT_TOKEN in .env}

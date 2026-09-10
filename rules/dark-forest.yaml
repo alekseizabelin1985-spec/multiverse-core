@@ -1,0 +1,86 @@
+# Правила боя мира «Тёмный лес», v0.1.
+#
+# Это данные, а не код: балансировка мира — правка этого файла и золотых чисел
+# в тестах, а не релиз Go (FR-020, ADR-012). Формат — RulesDocument
+# (architecture/components/state-and-mechanics.md §5.2); загрузка и проверка —
+# internal/mechanics.Load. Числа — requirements/domain-review.md §3.3
+# (приложение A PRD): лёгкая d20-система без инициативы и состояний.
+#
+# rules_version попадает в combat.decided и в снапшот. Меняются числа — растёт
+# минорная версия; меняется набор ключей — растёт schema_version и код.
+
+schema_version: 1
+rules_version: "0.1"
+world: dark-forest-world
+
+# Базовые статы: с ними создаётся персонаж и спавнится NPC (Rules.Stats).
+# hp_max — предел hp (inv-02); def — класс защиты, число, которое должен взять
+# атакующий; dmg — кубы урона; flee — бонус к бегству, null у того, кто не бежит.
+entities:
+  player: { hp_max: 10, atk: 2, def: 12, dmg: d6, flee: 2 }
+  wolf: { hp_max: 10, atk: 3, def: 11, dmg: d4, flee: null }
+
+# Атака: d20 + atk атакующего против def цели. Натуральная 20 — попадание и
+# урон ×2 независимо от суммы; натуральная 1 — промах независимо от суммы.
+# Шанс попадания игрока по волку 0,60, средний урон 3,5 → волк падает за ~5
+# ходов (domain-review §3.3, «Математика»).
+attack:
+  hit: "d20 + atk >= def"
+  crit_natural: 20
+  crit_multiplier: 2
+  fumble_natural: 1
+  damage_formula: dmg
+  rolls: [hit, damage]
+
+# Ответ NPC — те же правила, другие назначения бросков (npc_hit, npc_damage) и
+# не чаще одного раза за раунд (NFR-006: без вызовов LLM в бою Phase 1).
+npc_attack:
+  inherit: attack
+  once_per_round: true
+
+# Бегство: d20 + flee против 10 + число живых противников. Успех — персонаж
+# выходит из встречи наружу (DR-19); провал — свободная атака вне очереди.
+flee:
+  check: "d20 + flee >= 10 + living_enemies"
+  rolls: [flee]
+  on_fail: free_attack
+  success_position: "outside:{world_id}"
+
+# Отдых вне встречи восстанавливает hp полностью и занимает ход; во встрече
+# недоступен (проверяет gateway/State, не механика).
+rest:
+  restore: hp_max
+  allowed_in_encounter: false
+
+# Кого кусает NPC: последнего ударившего, иначе с минимальным hp, при равенстве
+# — по возрастанию id. Мёртвые, покинутые, простаивающие и вышедшие из боя не
+# рассматриваются (inv-01; dead покрывает abandoned и ascended_final).
+npc_target:
+  order: [last_damager, min_hp, player_id_asc]
+  exclude: [idle, out_of_combat, dead]
+
+# Трофей за убитого NPC — тому, кто нанёс последний удар, и ровно один (inv-03).
+loot:
+  wolf: [{ kind: wolf-pelt, name: "волчья шкура" }]
+
+# Параметры раунда группы. Координатор — gateway (ADR-020); блупринт встречи
+# ссылается сюда, а не повторяет числа (C-05 v1.1).
+round:
+  timeout: 60s
+  idle_after_missed: 2
+
+# Действующие законы мира. Текст — laws/dark-forest-world.v1.yaml, логика —
+# internal/mechanics/invariants.go, здесь только включение по id (NFR-020).
+invariants:
+  [
+    inv-01,
+    inv-02,
+    inv-03,
+    inv-04,
+    inv-05,
+    inv-06,
+    inv-07,
+    inv-08,
+    inv-09,
+    inv-10,
+  ]

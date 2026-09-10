@@ -72,6 +72,12 @@ type Kafka struct {
 	timers             clock.Timers
 	log                *slog.Logger
 
+	// closing is cancelled by Close. A read loop derives its context from it,
+	// so that a call already in flight when the bus closes ends instead of
+	// waiting for a reader that is no longer there.
+	closing     context.Context
+	stopReaders context.CancelFunc
+
 	mu      sync.Mutex
 	closed  bool
 	writers map[string]*kafka.Writer
@@ -97,6 +103,7 @@ func NewKafka(cfg KafkaConfig) (*Kafka, error) {
 	if reg == nil {
 		return nil, ErrNoRegistry
 	}
+	closing, stopReaders := context.WithCancel(context.Background())
 	return &Kafka{
 		brokers:            append([]string(nil), cfg.Brokers...),
 		registry:           reg,
@@ -104,6 +111,8 @@ func NewKafka(cfg KafkaConfig) (*Kafka, error) {
 		backoff:            cfg.Backoff,
 		timers:             cfg.Timers,
 		log:                cfg.Log,
+		closing:            closing,
+		stopReaders:        stopReaders,
 		writers:            make(map[string]*kafka.Writer),
 		readers:            make(map[*kafka.Reader]struct{}),
 	}, nil
@@ -150,7 +159,29 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) e
 	if err := k.track(reader); err != nil {
 		return errors.Join(err, reader.Close())
 	}
-	defer k.untrack(reader)
+	// The loop follows the lifetime of the bus as well as that of its caller.
+	// Closing the bus closes the reader, which ends a fetch — but a commit
+	// already on its way does not end with it: kafka-go takes the request into
+	// a buffered channel and answers it from a goroutine Close has just
+	// stopped, so CommitMessages waits for a reply that will never come
+	// (reader.go:894-912 of kafka-go v0.4.51). Every context of the platform
+	// calls Close on shutdown, so a subscription caught between its handler and
+	// its commit would hang the whole process. Cancelling the context of the
+	// loop makes both the fetch and the commit end the way C-01 asks a stopped
+	// subscription to end: with nil. Found by the Close case of the contract
+	// test of T-014.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopWatchingClose := context.AfterFunc(k.closing, cancel)
+	defer stopWatchingClose()
+	// The reader is closed when the subscription ends, not merely forgotten.
+	// A kafka-go reader keeps its own goroutines and its membership of the
+	// consumer group until Close: a subscription that stopped but left its
+	// reader open still holds the single partition of the topic, so the next
+	// subscription of the same group waits for a rebalance that may never give
+	// it anything — while membus, whose cursor is a number, resumes at once.
+	// The divergence was found by the contract test of T-014.
+	defer k.closeReader(reader)
 
 	delivery := k.delivery(group)
 	for {
@@ -174,11 +205,29 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) e
 	}
 }
 
-// ReadRange delivers [from, to) in increasing offset order and returns the
-// offset to continue from.
+// ReadRange delivers [from, min(to, End)) in increasing offset order and
+// returns the offset to continue from.
+//
+// It clamps the range to the end of the journal on purpose. A catch-up read
+// must terminate: without the clamp a caller asking for more than the topic
+// holds — a replay whose recorded range is longer than what the broker kept,
+// or a snapshot cursor read back with a generous window — would block inside
+// FetchMessage until its context expired, and membus, which knows its own
+// length, would return immediately. Tail is what a caller uses to keep
+// following (divergence found by the contract test of T-014).
 func (k *Kafka) ReadRange(ctx context.Context, topic string, from, to int64, h Handler) (int64, error) {
 	if from < 0 {
 		return from, fmt.Errorf("eventbus: read range %s: negative from %d", topic, from)
+	}
+	if to <= from {
+		return from, nil
+	}
+	end, err := k.End(ctx, topic)
+	if err != nil {
+		return from, err
+	}
+	if to > end {
+		to = end
 	}
 	if to <= from {
 		return from, nil
@@ -277,6 +326,11 @@ func (k *Kafka) Close() error {
 	}
 	k.readers = make(map[*kafka.Reader]struct{})
 	k.mu.Unlock()
+
+	// Before the readers, not after: a subscription blocked on a commit is
+	// released by the cancellation, and closing a reader out from under it
+	// would not release it.
+	k.stopReaders()
 
 	var errs []error
 	for _, r := range readers {
