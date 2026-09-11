@@ -81,6 +81,20 @@ func TestBusContractOnRedpanda(t *testing.T) {
 			}
 			return lenient, func() { _ = lenient.Close() }, nil
 		},
+		Spare: func() (eventbus.Bus, bool, error) {
+			// A second client of the same broker: its Close ends its own readers
+			// and writers, and the topics — with whatever it left uncommitted or
+			// parked — stay, as they do for a process that stops.
+			spare, err := eventbus.NewKafka(eventbus.KafkaConfig{
+				Brokers:  rp.Brokers(),
+				Registry: contracts.Default(),
+				Backoff:  noPause,
+			})
+			if err != nil {
+				return nil, false, err
+			}
+			return spare, true, nil
+		},
 		Close: bus.Close,
 	})
 }

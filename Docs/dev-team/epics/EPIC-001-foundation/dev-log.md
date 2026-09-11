@@ -8173,3 +8173,22 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - N-2: `ReadRange` в новом кейсе под `context.WithTimeout(t.Context(), Timeout)`, как в `JournalStopsAtTheEndOfTheJournal`.
 - N-3: в карточке объём на Redpanda — 17 + 3 события; риск retention снят (`kafka-go` v0.4.51 `reader.go:1393-1397`), при смене версии — перепроверить.
 - Прогоны: `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/` → 0; `gofmt` чисто; `go test -short -count=1 ./...` → 27 пакетов ok, 0 FAIL; `golangci-lint run ./...` → 0 issues. `-race` недоступен (нет cgo). Мутанты не делались (правки текста и срока чтения). Не коммитил.
+
+<!-- dev-log T-395 -->
+## developer#1 · T-395 · кейс контракта «Close под падающим обработчиком» · 2026-09-12
+
+Ветка `task/T-395-close-under-failing-handler` (от `869b833`), TEAM-1, Opus. Подробности — карточка `tasks/T-395.md`, раздел «Выполнение».
+
+- **Контракт и код.** ADR-023 разрешает две ветви: событие либо в `dead_letters`, либо не закоммичено. Реализации сходятся на второй: dead letter не пишется, офсет не коммитится, `Subscribe` → `nil`. На membus запись dead letter падает на закрытой шине, и `stopping` даёт `nil`. На kafka контекст обработчика отменён `Close`, и `Deliver` уходит по `ctx.Err()`, а при панике запись падает на `ErrClosed`. Расхождения нет, поведение не выбирал.
+- **Сделано.**
+  - Кейс `CloseUnderAFailingHandlerIsAnOrderlyStop` на **запасной шине** (новое поле `Target.Spare`; кейс `Close` и его якорь не тронуты).
+  - Две подписки: `failing` держит последнюю попытку, `panicking` держит вызов и паникует. Удержание по каналу, без таймингов.
+  - Проверки: обе подписки вернули `nil`; где транспорт переживает шину (брокер) — событие в `dead_letters` или пришло заново подписке той же группы на цели.
+  - Добавлен `subscribeOnGroup`.
+- **Мутанты** (копия в scratch, `mktemp -d`, без `-overlay`, удалена по сохранённому пути):
+  - M0, контрольный — красный.
+  - M1 (откат Minor-3 ревью #2 T-014 в `Subscribe`) — **красный**, обе подписки. Это M3 итерации 3 T-014, который раньше якоря не имел.
+  - M2 (приёмник глотает `ErrClosed`, потеря без dead letter) — **зелёный на membus**: после `Close` membus не отдаёт ни журнал, ни `dead_letters`. Открытый вопрос в карточке: принять или дать membus вторую шину над тем же журналом (`contract-change`).
+- **Попутно найдено:** kafka-адаптер отменяет контекст обработчика при `Close` (контекст цикла от `closing`), а C-01 «Остановка» п. 3 / ADR-023 п. 4 говорят, что не отменяет. Для кейса исход тот же; вопрос к system-architect в карточке.
+- **Прогоны:** `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/ && go vet -tags e2e ./test/...` → 0; `gofmt` чисто; `go test -short -count=1 ./...` → 27 пакетов ok; e2e ok; `golangci-lint run ./...` и с `--build-tags integration` по `contract` → 0 issues. `-race` недоступен. Redpanda не прогонялась — прогон с T-394.
+- Не коммитил.
