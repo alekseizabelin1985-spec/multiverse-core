@@ -14,7 +14,7 @@
 
 | Часть | Приоритет | Что входит | Чего нет без неё |
 |---|---|---|---|
-| **005-ops** | Must | `mvctl session-report` (`--audit`, `--json`, `--weekly`, `--background`), `mvctl trace`, `mvctl llm usage`, `mvctl golden check/update`, наполнение `mvctl contracts check`, `ops/metrics/{sessions,background,incidents}.csv`, `testdata/analytics/`, закрепление порогов «после замера» в `nfr.md` (с BA), `analytics.replay.completed mode=test` (поля в общей схеме) | приёмка S1/S2 без отчёта; golden NFR-065; S7 не измерим |
+| **005-ops** | Must | `mvctl report` (`--audit`, `--json`, `--weekly`, `--background`), `mvctl trace`, `mvctl llm usage`, `mvctl golden check/update`, наполнение `mvctl contracts check`, `ops/metrics/{sessions,background,incidents}.csv`, `testdata/analytics/`, закрепление порогов «после замера» в `nfr.md` (с BA), `analytics.replay.completed mode=test` (поля в общей схеме) | приёмка S1/S2 без отчёта; golden NFR-065; S7 не измерим |
 | **005-memory** | Should, отрезаема | `internal/memory` (Qdrant вместо Chroma, Neo4j 5.26 без APOC), `/v1/context/scope`, `/v1/context/absence`, `/v1/trace/{cid}`, `mvctl memory rebuild`, `api/memory.openapi.yaml`, экранирование `generated`-фактов (T-9) | **ничего из Must**: рой работает на `journalContext` (EPIC-003, штатная деградация C-09); сводка «пока тебя не было» — из окна журнала; трасса — `mvctl trace` |
 
 **Не входит**: `mvctl record`/`RecordingWriter` и записи `testdata/recordings` (EPIC-003 I1a); `mvctl blueprint validate`/`laws bump|show` (код EPIC-003, реестр CLI — tech-lead#1); `mvctl world init` (EPIC-002); события `analytics.session.*`/`turn.completed` (EPIC-004); Prometheus/Grafana (EPIC-012); полное право на забвение в памяти (EPIC-013): на MVP-1 `/forget` удаляет только связку в `links.db`, события с псевдонимом `player_id` остаются в журнале и в индексе — перестройка памяти после `/forget` не требуется (ADR-009).
@@ -25,7 +25,7 @@
 
 | Требование | Часть | Что в EPIC-005 | UC / проверка |
 |---|---|---|---|
-| US-038 (FR-085…FR-088, FR-101, BR-17, NFR-032) — CLI/CSV | ops | `session-report` таблица `metrics.md` §6.1, `sessions.csv`, `--audit` → `analytics.consistency.violated code=state_divergence`, `--json`, `--weekly` только `human`; `incidents.csv` ручной с `manual_fix` | UC-033 |
+| US-038 (FR-085…FR-088, FR-101, BR-17, NFR-032) — CLI/CSV | ops | `mvctl report` таблица `metrics.md` §6.1, `sessions.csv`, `--audit` → `analytics.consistency.violated code=state_divergence`, `--json`, `--weekly` только `human`; `incidents.csv` ручной с `manual_fix` | UC-033 |
 | US-012 (FR-070…FR-072) — учёт | ops | `mvctl llm usage`: вызовы/токены/латентность по фазам и уровням из `llm_records` (журнал) или `GET /v1/admin/llm/usage` (`--live`) | UC-024, UC-030 |
 | US-003 (последний критерий), US-015 Should, US-018 (FR-084, FR-092, NFR-034) — трасса | ops (`mvctl trace`) / memory (`/v1/trace`) | цепочка по `correlation_id` из журнала: действие → `dice.rolled` → `combat.decided` → `llm.output` → `entity.updated` → `narrative.output` → `turn.completed` | UC-032 |
 | US-017 (FR-101, NFR-061/062), UC-026 | ops | `analytics.replay.completed mode=test` (`events_hash_match`, `incomplete_record`) — поля в общей схеме (совладение S-6); отчёт расхождения «ход/раунд и первое отличающееся событие» — `mvctl golden check` | UC-026 E2 |
@@ -56,7 +56,7 @@
 
 ```
 cmd/mvctl/internal/
-  report/           session-report: source.go (Journal | Recording), window.go (окно сессии по session.id или --since/--until),
+  report/           mvctl report: source.go (Journal | Recording), window.go (окно сессии по session.id или --since/--until),
                     aggregate.go (таблица metrics.md §6.1: ходы, поломки, латентности p50/p95, LLM по фазам/уровням, fallback,
                     миграция, восстановление), audit.go (state/audit.Recompute + objstore ListEntities → consistency.violated),
                     csv.go (sessions.csv, background.csv — append, заголовок фиксирован), json.go (--json артефакт),
@@ -95,7 +95,7 @@ internal/memory/
   vector.go         interface VectorStore{Upsert, Search(scope, query, k), Delete}; qdrant.go (qdrant/go-client v1.19.x, коллекции
                     events-{world}, entities-{world}; payload: world, scope, source, layer, at, event_id)
   graph.go          interface GraphStore{UpsertEntity, UpsertRelation, Neighbors, Trace}; neo4j.go (из as-is neo4j.go, без APOC)
-  embed.go          Embedder над llm.Provider.Embed (C-15; MV_MEMORY_EMBED_MODEL, кэш по sha256(text))
+  embed.go          Embedder над llm.Provider.Embed (C-15; MV_EMBED_MODEL, кэш по sha256(text))
   http.go           POST /v1/context/scope, POST /v1/context/absence, GET /v1/trace/{cid}, GET /health — по api/memory.openapi.yaml
   absence.go        сводка фона: события world/region за (since_at, until_at) с actor_kind=system → summary (шаблон, без LLM)
   trace.go          цепочка по correlation_id: Neo4j (CAUSED_BY) + fallback Journal
@@ -112,7 +112,7 @@ cmd/mvctl/internal/memory/  rebuild.go (тонкая обёртка над inter
 | Условие | Поведение Swarm (EPIC-003, C-09) | Что делает EPIC-005 |
 |---|---|---|
 | 005-memory не поставлена (отрезана) / `MV_MEMORY_URL` пуст | `NopMemory` → `journalContext` всегда: `EventWindow` (кольцо N на scope), `BackgroundIndex` (world/region, 30 дн.), `Presence` | ничего; Must-критерии US-005/US-036/FR-127 выполняются на журнале |
-| `MV_MEMORY_URL` задан, memory недоступна / таймаут 500 мс / 5xx | fallback на `journalContext` без ошибки игроку; лог `memory_fallback`; `narrative.output` без изменений (поле `based_on[]` из журнала) | `/health` memory `degraded|fail`; `session-report` показывает `memory_fallback_rate` (новая строка блока «LLM», не тревога) |
+| `MV_MEMORY_URL` задан, memory недоступна / таймаут 500 мс / 5xx | fallback на `journalContext` без ошибки игроку; лог `memory_fallback`; `narrative.output` без изменений (поле `based_on[]` из журнала) | `/health` memory `degraded|fail`; `mvctl report` показывает `memory_fallback_rate` (новая строка блока «LLM», не тревога) |
 | memory доступна | `<memory>` секция промпта: факты `authored/validated/generated` (генерированные — экранированы и ограничены, T-9) + `absence` из `/v1/context/absence` **объединяется** с `journalContext` (журнал приоритетнее по свежести ≤ 2 с) | индексация ≤ 2 с; ответы без внешних ID |
 | `--mode=replay` | `NopMemory` всегда (детерминизм; память не участвует в replay) | `memory rebuild` из записи не требуется |
 
@@ -139,14 +139,14 @@ cmd/mvctl/internal/memory/  rebuild.go (тонкая обёртка над inter
 ## 6. Данные и миграции
 
 - **005-ops**: три CSV в `ops/metrics/` (заголовки фиксированы; `incidents.csv` — ручной); `ops/metrics/sessions/<session_id>.json` (артефакты `--json`, в `.gitignore` кроме golden); `testdata/golden/*.expected.jsonl` (`merge=binary`); `testdata/analytics/*.jsonl`. Схема `analytics.consistency.violated.v1.json` (издатель EPIC-005). Поля `mode=test`, `events_hash_match`, `incomplete_record` — в `analytics.replay.completed.v1.json` (PR в файл EPIC-002).
-- **005-memory**: Qdrant коллекции `events-{world}` (размерность по `MV_MEMORY_EMBED_MODEL`; payload-индексы `world`, `scope`, `source`, `at`), `entities-{world}`; Neo4j constraints/indexes (как as-is, кодом при старте; без APOC). Оба — **производные**: бэкапа нет, `mvctl memory rebuild` из журнала за retention (30 дн. доменных топиков) + снапшот State. Данные as-is Chroma/Neo4j не мигрируют (профиль `legacy` живёт отдельно на `:8083`, D-3).
+- **005-memory**: Qdrant коллекции `events-{world}` (размерность по `MV_EMBED_MODEL`; payload-индексы `world`, `scope`, `source`, `at`), `entities-{world}`; Neo4j constraints/indexes (как as-is, кодом при старте; без APOC). Оба — **производные**: бэкапа нет, `mvctl memory rebuild` из журнала за retention (30 дн. доменных топиков) + снапшот State. Данные as-is Chroma/Neo4j не мигрируют (профиль `legacy` живёт отдельно на `:8083`, D-3).
 - **Миграций схем нет** (MVP-1).
 
 ---
 
 ## 7. Конфигурация
 
-005-ops: `MV_KAFKA_BROKERS`, `MV_MINIO_*`, `MV_CORE_URL=http://127.0.0.1:8090` (или через gateway прокси `MV_GATEWAY_URL`), флаги `--from-recording`, `--since/--until`, `--json`, `--audit`, `--weekly`, `--background`. 005-memory: `MV_MEMORY_ADDR=:8082`, `MV_MEMORY_ENABLED=false` (default; включает контекст в `--contexts=all`), `MV_QDRANT_URL`, `MV_NEO4J_URL`, `MV_NEO4J_PASSWORD`, `MV_MEMORY_EMBED_MODEL`, `MV_LLM_PROVIDER` (для `Embed`), `MV_MEMORY_INDEX_LAG_MAX=2s` (health). У Swarm — `MV_MEMORY_URL` (пусто = `NopMemory`), `MV_MEMORY_TIMEOUT=500ms` (EPIC-003). Профиль compose `memory` (Qdrant, Neo4j, процесс `memory`).
+005-ops: `MV_KAFKA_BROKERS`, `MV_MINIO_*`, `MV_CORE_URL=http://127.0.0.1:8090` (или через gateway прокси `MV_GATEWAY_URL`), флаги `--from-recording`, `--since/--until`, `--json`, `--audit`, `--weekly`, `--background`. 005-memory: адрес HTTP — `MV_CORE_ADDR`, как у любого процесса (в compose у `memory` — литерал `:8082`; `MV_MEMORY_ADDR` выведен, T-408), `MV_MEMORY_ENABLED=false` (default; включает контекст в `--contexts=all`), `MV_QDRANT_ADDR`, `MV_NEO4J_URI`, `MV_NEO4J_USER`, `MV_NEO4J_PASSWORD`, `MV_EMBED_MODEL` (имена — по манифесту `shared/env/vars.go`; переменные, которых в манифесте ещё нет, объявляет изменение, вводящее их чтение, — `contracts.md` C-14 v0.4), `MV_LLM_PROVIDER` (для `Embed`), `MV_MEMORY_INDEX_LAG_MAX=2s` (health). У Swarm — `MV_MEMORY_URL` (пусто = `NopMemory`), `MV_MEMORY_TIMEOUT=500ms` (EPIC-003). Профиль compose `memory` (Qdrant, Neo4j, процесс `memory`).
 
 ---
 
@@ -166,10 +166,10 @@ cmd/mvctl/internal/memory/  rebuild.go (тонкая обёртка над inter
 |---|---|---|
 | unit | `report/aggregate` на `testdata/analytics/` (известные p50/p95, счётчики, `end_reason`); `csv` идемпотентность заголовка; `weekly` только `human`; `trace` сортировка/фильтр; `llmusage` агрегаты; `golden` нормализация и «первое отличие»; `contracts` проверки на синтетическом реестре с фантомом | `document` шаблоны по типам; `absence` сводка на фиктивных событиях; ранжирование `authored > validated > generated`; `Embedder` кэш; `VectorStore`/`GraphStore` in-memory фейки |
 | integration (`-tags integration`) | `--audit` над MinIO testcontainers + `Journal` redpanda: снапшот + факты ↔ объекты (совпадение и подложенное расхождение → `state_divergence`) | Qdrant testcontainers: upsert/search по scope; Neo4j 5.26: constraints, relations, `Trace`; индексация ≤ 2 с |
-| e2e | `mvctl golden check solo-30` в CI (job `e2e`); `session-report --from-recording` на записи S1 даёт CSV/JSON; `trace` по `correlation_id` хода из записи содержит все 7 типов цепочки | «сводка из памяти совпадает с журналом»: S14 запись → `memory rebuild` → `/v1/context/absence` ⊇ фоновые события `journalContext`; деградация: memory остановлена → `narrative.output` без ошибки, `memory_fallback` в логе |
+| e2e | `mvctl golden check solo-30` в CI (job `e2e`); `mvctl report --from-recording` на записи S1 даёт CSV/JSON; `trace` по `correlation_id` хода из записи содержит все 7 типов цепочки | «сводка из памяти совпадает с журналом»: S14 запись → `memory rebuild` → `/v1/context/absence` ⊇ фоновые события `journalContext`; деградация: memory остановлена → `narrative.output` без ошибки, `memory_fallback` в логе |
 | contracts | `api/memory.openapi.yaml` ↔ маршруты; схемы `analytics.consistency.violated`, `replay.completed` покрывают примеры | то же |
-| стенд | `session-report` на живой сессии S1/S2; пороги NFR-030/032/034 → `nfr.md` | индексация на живом Ollama-эмбеддинге |
-| критерии готовности | `session-report` даёт CSV/JSON по прогону S1/S2; golden проходит в CI | сводка «пока тебя не было» из памяти совпадает с журналом |
+| стенд | `mvctl report` на живой сессии S1/S2; пороги NFR-030/032/034 → `nfr.md` | индексация на живом Ollama-эмбеддинге |
+| критерии готовности | `mvctl report` даёт CSV/JSON по прогону S1/S2; golden проходит в CI | сводка «пока тебя не было» из памяти совпадает с журналом |
 
 ---
 
@@ -195,7 +195,7 @@ cmd/mvctl/internal/memory/  rebuild.go (тонкая обёртка над inter
 | 005-ops стартует до готовности записей EPIC-003 I1a | `report`/`trace`/`llmusage` пишутся на фикстурах `testdata/analytics/` (синтетика по схемам); golden — после первой записи `solo-30.jsonl` |
 | `--audit` до EPIC-002 I2-4 | режим `partial` (только хэш снапшота vs объекты); полный — после I2 |
 | Порог «индексация ≤ 2 с» на Ollama-эмбеддингах при фоновых тиках | эмбеддинг асинхронно от подписки (очередь), `index_lag` в `/health`; при превышении — `degraded`, не потеря |
-| Размерность вектора привязана к модели эмбеддинга; смена модели = rebuild | коллекция именуется с суффиксом модели; `rebuild` обязателен при смене `MV_MEMORY_EMBED_MODEL` |
+| Размерность вектора привязана к модели эмбеддинга; смена модели = rebuild | коллекция именуется с суффиксом модели; `rebuild` обязателен при смене `MV_EMBED_MODEL` |
 | Записи `merge=binary`: конфликт golden при параллельных правках промптов | `mvctl golden update` — отдельная задача с ревью; одна запись = одна строка, текстовый diff сохраняется (D-14) |
 | Импорт `memory → llm` не разрешён ADR-001 п. 3 | запрос system-architect (§12); до решения — `Embedder` за интерфейсом, реализация в `cmd/multiverse` (сборка) |
 | 005-memory отрезана на G3/G4 | все Must-критерии проверены без `memory` в CI по построению (`MV_MEMORY_ENABLED=false`); `api/memory.openapi.yaml` остаётся как спецификация будущего |

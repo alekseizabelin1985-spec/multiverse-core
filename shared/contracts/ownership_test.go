@@ -5,13 +5,12 @@ import (
 	"testing"
 )
 
-// TestOwnershipRulesCoverEveryProposer checks the static copy against
+// TestOwnershipRulesCoverEveryProposer checks the ownership table against
 // state-and-mechanics.md §4.6: the three agent levels, the three non-agent
 // proposers, and the two levels C-13 reserves without giving them anything.
 //
-// The truth is shared/agent/levels.go (EPIC-003, T-202); the equality test of
-// the copy and the truth arrives with it and blocks the merge on a divergence
-// (contracts.md §16 p. 6). Until then this test is what keeps the copy honest.
+// The table in ownership.go is the only source (ADR-025): there is no second
+// table and no equality test, so this test is what keeps the table honest.
 func TestOwnershipRulesCoverEveryProposer(t *testing.T) {
 	rules := OwnershipRules()
 

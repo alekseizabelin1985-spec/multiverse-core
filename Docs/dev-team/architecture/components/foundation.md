@@ -1,5 +1,7 @@
 # Каркас фундамента (EPIC-001) — раскладка единого модуля и общие библиотеки
 
+> **Состояние дерева на 2026-09-11 (T-409).** Фундамент написан целиком (`shared/*`, `cmd/multiverse`, `cmd/mvctl`, реестр и схемы). Раскладка §1 описывает весь модуль, включая чужие каталоги: из `internal/*` существует только `internal/mechanics`, а `cmd/multiverse/contexts.go` регистрирует семь контекстов пустыми заглушками. `runtime.Deps` — по коду (C-01 v1.3, §3); `serve.go` пока не собирает шину, журнал и реестр — это нужно до первого настоящего контекста (EPIC-002 T-055). Хука `MV_SWARM_FAKE` (`cmd/multiverse/fake_contexts.go`) в дереве нет; `multiverse db backup|check` отвечает «ни одна база не вкомпилирована» до `internal/gateway`.
+
 Версия 0.2 · 2026-09-09 · architect#1 (TEAM-1, волна 0) · статус: **утверждён на G2 (2026-09-09)** с правками сведения; tech-lead#1 нарезает F-0…F-10 в `epics/EPIC-001-foundation/tasks.md` по `epics/EPIC-001-foundation/design.md`.
 **Дополнение после G2**: правки по `architecture/consolidation.md` §9 (решения F-1…F-5, D-1…D-14, T-10, T-16, U-1, U-5) внесены точечно и помечены «Дополнение после G2»; сводка — §14. Где старый текст противоречит дополнению — действует дополнение.
 Границы: `overview.md` §13–§16, §19; ADR-001 (модуль, `--contexts`), ADR-004 (хранилища), ADR-007 (конверт `meta`, реестр, топики), ADR-010 (тесты, CI); контракт C-01 (шина/реестр), C-14 (формат снапшотов — реализуется владельцами). Задача документа — чтобы разработчик волны 0 знал, **где что живёт** и **что делать с существующим кодом**, без вопросов «а куда это положить». Детали блока EPIC-002 — `state-and-mechanics.md`.
@@ -11,7 +13,7 @@
 ```
 go.mod                         module multiverse-core.io; go 1.26; toolchain go1.26.x (Дополнение после G2: D-1, ADR-001 доп. п. 1; патч — из build/versions.env)
 cmd/
-  multiverse/main.go           один бинарник: --contexts, --mode, --bus, --recording, --id-source (адрес HTTP — env MV_CORE_ADDR/MV_GATEWAY_LISTEN/MV_MEMORY_ADDR, не флаг; Дополнение после G2: D-7)
+  multiverse/main.go           один бинарник: --contexts, --mode, --bus, --recording, --id-source (адрес HTTP — только env MV_CORE_ADDR у любого процесса, не флаг; D-7, T-408)
   telegram-bot/                EPIC-004
   mvctl/                       каркас CLI (cobra не нужен — стандартный flag + подкоманды); наполнение EPIC-005/003
 internal/
@@ -48,7 +50,7 @@ services/_archive/<путь>/      выведенный из сборки код
 Docs/archive/                  исторические документы
 ```
 
-Правила: `internal/<a>` не импортирует `internal/<b>` кроме `swarm → mechanics|laws|llm`, `state → mechanics`; `internal/replay` импортирует только `cmd/multiverse`; `shared/*` не импортирует `internal/*`; `cmd/*` импортирует всё. Проверка — `depguard` в `golangci-lint` (конфиг `.golangci.yml`, правила по префиксам путей) в job `unit`.
+Правила: `internal/<a>` не импортирует `internal/<b>` кроме `swarm → mechanics|laws|llm`, `state → mechanics`; `internal/replay` импортирует только `cmd/multiverse`; `shared/*` не импортирует `internal/*` — **с двумя именованными исключениями**: `shared/testkit/mechanics` и `shared/testkit/swarm` импортируют `internal/mechanics` и больше ничего из `internal/*` (правила `shared-testkit-mechanics` и `shared-testkit-swarm` в `.golangci.yml`). Почему так: двойник обязан говорить типами C-03, иначе он и настоящие `Rules` не удовлетворяют одному интерфейсу и подмена теряет смысл (`contracts.md` §17; `journal.md` 2026-09-10, T-219). Исключение узкое: тот же импорт в любом другом пакете `shared/**` линтер отвергает (T-409); `cmd/*` импортирует всё. Проверка — `depguard` в `golangci-lint` (конфиг `.golangci.yml`, правила по префиксам путей) в job `unit`.
 **Дополнение после G2 (S-2, ADR-001 доп. п. 2)**: границы `state → mechanics` и `cmd/multiverse → internal/replay` приняты системным архитектором и кодируются в `.golangci.yml` в F-2 (не «требуют записи» — уже решено). `cmd/mvctl` подкоманды `world init` (EPIC-002) импортируют `internal/state` (bootstrap) — допустимо по правилу «`cmd/*` импортирует всё».
 
 ---
@@ -57,14 +59,18 @@ Docs/archive/                  исторические документы
 
 ```go
 // флаги
---contexts=state,mechanics,swarm,llm,laws | gateway | memory | all        (обязателен)
---mode=live|replay                                                      (по умолчанию live)
---bus=kafka|memory                                                      (memory — только с --contexts=all; e2e)
---recording=<path.jsonl>                                                (replay: запись llm.output/действий)
+--contexts=state,mechanics,laws,llm,swarm | gateway | memory | all        (обязателен; только флаг, переменной MV_CONTEXTS нет)
+--mode=live|replay                                                      (по умолчанию — значение MV_MODE, само по умолчанию live; флаг перекрывает)
+--bus=kafka|memory                                                      (по умолчанию — значение MV_BUS, само по умолчанию kafka; флаг перекрывает; memory — только с --contexts=all)
+--recording=<path.jsonl>                                                (только с режимом replay; до internal/replay разбирается и никуда не идёт)
 --id-source=uuid|sequence                                               (sequence — детерминированные id в тестах)
-# Дополнение после G2 (D-7): флага --admin-addr нет. Адрес HTTP-сервера процесса — env: MV_CORE_ADDR (core, по умолчанию 127.0.0.1:8090),
-# MV_GATEWAY_LISTEN (:8088), MV_MEMORY_ADDR (:8082); в compose — 0.0.0.0 внутри сети, наружу только 127.0.0.1.
+# D-7, T-408: флага --admin-addr нет. Адрес единственного HTTP-сервера ЛЮБОГО процесса — env MV_CORE_ADDR (по умолчанию 127.0.0.1:8090);
+# в compose — литерал рядом с опубликованным портом: gateway ":8088", core ":8090", memory ":8082". MV_GATEWAY_ADDR и MV_MEMORY_ADDR выведены.
 ```
+
+**Режим и вид шины — один источник истины (T-408, внесено в T-409).** `MV_MODE` и `MV_BUS` объявлены в манифесте `shared/env/vars.go`, и из них `serve.go` берёт **значение по умолчанию** флагов `--mode` и `--bus`: флаг, переданный явно, перекрывает манифест для запуска вручную, всё остальное — compose прежде всего, который флагов не передаёт, — подчиняется манифесту. Допустимые значения тоже берутся из манифеста (`Enum()`), чтобы у флага снова не завёлся свой словарь. Вид шины называется по **протоколу**: `kafka` (Redpanda в compose — одна из реализаций Kafka API; брокеры — `MV_KAFKA_BROKERS`) или `memory`; прежнее значение `redpanda` отвергается процессом с фразой, называющей замену, а не принимается как синоним. Строка старта и её запись в лог называют, откуда пришло каждое значение (`mode_from`, `bus_from`). Почему так: до T-408 обе переменные доходили до контейнеров и не читались никем, и оператор, записавший `MV_MODE=replay`, получал рабочий режим без единого слова.
+
+**Порядок в списке `--contexts` ничего не решает**: старт упорядочивает `runtime.Registry` по `DependsOn`. Во всех документах и в compose список `core` пишется одинаково — `state,mechanics,laws,llm,swarm`, как в `docker-compose.yml`, чтобы два разных списка не выглядели двумя решениями (T-409).
 
 Порядок в `main`: `env.Load()` → `logging.Init(service=<из contexts>)` → сборка `runtime.Deps` (шина по `--bus`, `objstore`, `clock`/`timers` по `--mode`, `journal`, `contracts` реестр, `id` генератор, **HTTP mux процесса**) → `runtime.Registry` создаёт запрошенные контексты (фабрики регистрируются пакетами `internal/*` через `runtime.Register("state", state.New)`; `cmd/multiverse` импортирует все `internal/*` для регистрации) → `Start` в порядке зависимостей (`state` → `laws` → `mechanics` → `llm` → `swarm` → `gateway` → `memory`; контекст без зависимостей стартует сразу) → HTTP-сервер процесса (`shared/runtime`, §3): `/health` (агрегат `Status` всех контекстов; `agents_by_level` — секция swarm) + маршруты, смонтированные контекстами (`/v1/admin/*`) → ожидание `SIGTERM` → `Stop` в обратном порядке с общим таймаутом 15 с.
 
@@ -81,18 +87,19 @@ package runtime
 
 type Mode string // "live" | "replay"
 type Status struct { Status string /* ok|degraded|fail */; Details map[string]any }
-type Deps struct {
+type Deps struct {                     // C-01 v1.3 — по коду shared/runtime/runtime.go (T-409)
     Bus       eventbus.Bus
     Journal   eventbus.Journal
-    Store     objstore.Client
+    Contracts *contracts.Registry
     Clock     clock.Clock
     Timers    clock.Timers
     Mode      Mode
     IDs       func() string            // генератор id событий (uuid | sequence)
     Log       *slog.Logger
-    Env       env.Env
-    Contracts *contracts.Registry
+    Mux       *http.ServeMux           // mux единственного HTTP-сервера процесса; Routes(mux) вызывается до Start
 }
+// Полей Store и Env нет и не будет: контекст создаёт objstore.New сам, со своими бакетами и повторами,
+// а переменные читает через объявления манифеста shared/env. Почему — C-01 v1.3.
 type Context interface {
     Name() string
     DependsOn() []string                 // имена контекстов, чьё Start должно завершиться раньше
@@ -205,7 +212,7 @@ func All() []Spec
 
 Реестр — Go-таблица `registry.go` (один PR на добавление типа, ревью system-architect), не YAML: компилятор ловит опечатки, `go test` проверяет, что для каждого `Spec` есть файл схемы и наоборот. Библиотека валидации — `github.com/santhosh-tekuri/jsonschema/v6` **v6.0.3** (draft 2020-12, чистый Go; Дополнение после G2: D-5, версия по `infrastructure.md` §2.4); `xeipuuv/gojsonschema` (as-is, draft-07) удаляется из `go.mod` (сам код as-is не удаляется — уходит в `_archive` вместе с потребителями). Схемы компилируются один раз при старте из `schemas.FS` (`embed`); `Validate` ≈ 20–50 мкс на событие — на критическом пути незначимо.
 
-**Дополнение после G2 (T-10, C-01 v1.1)**: `Spec.Policy` — политика топика: `player_events` принимает только `meta.actor_kind ∈ human|ci|sim` и `meta.agent == nil`; `llm_records`, `system_events(tick.*, agent.*)` требуют `meta.agent`. Политика проверяется в `Publish` всегда и в `Subscribe` при `MV_BUS_VALIDATE_ON_READ=true` (по умолчанию включено; невалидное → `dead_letters` без вызова handler). `contracts.OwnershipRules()` в MVP-1 — статичная таблица в `shared/contracts/ownership.go` (F-4b), наполнение по `state-and-mechanics.md` §4.6; источник истины после волны 1 — `shared/agent/levels.go` (EPIC-003), тест сверяет обе таблицы.
+**Дополнение после G2 (T-10, C-01 v1.1)**: `Spec.Policy` — политика топика: `player_events` принимает только `meta.actor_kind ∈ human|ci|sim` и `meta.agent == nil`; `llm_records`, `system_events(tick.*, agent.*)` требуют `meta.agent`. Политика проверяется в `Publish` всегда и в `Subscribe` при `MV_BUS_VALIDATE_ON_READ=true` (по умолчанию включено; невалидное → `dead_letters` без вызова handler). `contracts.OwnershipRules()` в MVP-1 — статичная таблица в `shared/contracts/ownership.go` (F-4b), наполнение по `state-and-mechanics.md` §4.6. **Эта таблица и есть единственная истина** (ADR-025, T-409): прежняя фраза «источник истины после волны 1 — `shared/agent/levels.go`, тест сверяет обе таблицы» отменена — файла `levels.go` нет, а экспорт из пакета роя разворачивал бы зависимость фундамента на EPIC-003. Строки меняют их владельцы PR с меткой `contract-change` (`contracts.md` §16 п. 6).
 
 `schemas/events/_common.json` — `$defs`: `EntityRef`, `EntityWithName`, `ScopeRef`, `AgentRef`, `WorldRef`, `Timestamp`, `Money`; `_envelope.json` — конверт с `meta`; `<type>.v1.json` — `additionalProperties: false` на верхнем уровне payload (ловит опечатки издателей), `$ref` в `_common.json`. Разбивка F-4 по блокам: (а) `player.*`, `group.*`, `round.*`; (б) `entity.*`, `snapshot.created`, `dice.rolled`, `analytics.replay.completed`; (в) `agent.*`, `tick.*`, `llm.*`, `narrative.output`, `world.*`, `region.*`, `npc.*`, `encounter.*`, `content.incident.recorded`, `analytics.session.*`, `analytics.turn.completed`, `analytics.consistency.violated`. Legacy-типы (`player.moved`, `player.used_skill`, `gm.*`, `narrative.generate`, `violation.detected`, `time.syncTime`) — `Spec{Deprecated: true, Schema: nil}` (валидируется только конверт), удаляются вместе с профилем `legacy`.
 
@@ -249,7 +256,7 @@ func (e Env) String(name, def string) string; Int; Bool; Duration; Required(name
 func Manifest() []Var                              // все переменные, объявленные через env.Declare(name, def, doc) — источник для скрипта сверки с .env.example (NFR-074)
 ```
 Каждый пакет объявляет свои переменные на уровне пакета (`var kafkaBrokers = env.Declare("MV_KAFKA_BROKERS", "localhost:9092", "…")`), поэтому `mvctl env check` сверяет манифест с `.env.example` без grep по `os.Getenv`.
-**Дополнение после G2 (D-4, G-11, W-3; `contracts.md` §16 п. 5)**: имена **не** сохраняются as-is — все платформенные переменные читаются с префиксом `MV_` (`MV_KAFKA_BROKERS`, `MV_MINIO_ENDPOINT`, `MV_OLLAMA_URL`, `MV_CORE_ADDR`, `MV_BUS_VALIDATE_ON_READ`, `MV_STATE_SNAPSHOT_EVERY`, `MV_LLM_PROVIDER`, `MV_GATEWAY_LISTEN`, `MV_TELEGRAM_BOT_TOKEN`, `MV_MODE`, `MV_CONTEXTS`…); без префикса — только сторонние, читаемые чужими образами (`OLLAMA_*`, `MINIO_ROOT_*`, `NEO4J_AUTH`, `COMPOSE_PROFILES`). `env.Declare` отклоняет имя без `MV_` (паника при инициализации пакета — ловится unit-тестом), для сторонних — `env.DeclareExternal`. Список — `.env.example` (F-1/F-6, целевой состав — `infrastructure.md` §4.2).
+**Дополнение после G2 (D-4, G-11, W-3; `contracts.md` §16 п. 5)**: имена **не** сохраняются as-is — все платформенные переменные читаются с префиксом `MV_` (`MV_KAFKA_BROKERS`, `MV_MINIO_ENDPOINT`, `MV_OLLAMA_URL`, `MV_CORE_ADDR`, `MV_BUS_VALIDATE_ON_READ`, `MV_SNAPSHOT_EVERY_FACTS`, `MV_LLM_PROVIDER`, `MV_TELEGRAM_BOT_TOKEN`, `MV_MODE`, `MV_BUS`…; имена сверены с манифестом `shared/env/vars.go` в T-409: `MV_GATEWAY_LISTEN` и `MV_CONTEXTS` в манифест не попали — адрес процесса один, `MV_CORE_ADDR`, набор контекстов задаёт только флаг); без префикса — только сторонние, читаемые чужими образами (`OLLAMA_*`, `MINIO_ROOT_*`, `NEO4J_AUTH`, `COMPOSE_PROFILES`). `env.Declare` отклоняет имя без `MV_` (паника при инициализации пакета — ловится unit-тестом), для сторонних — `env.DeclareExternal`. Список — `.env.example` (F-1/F-6, целевой состав — `infrastructure.md` §4.2).
 
 ```go
 package logging

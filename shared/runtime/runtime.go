@@ -53,11 +53,17 @@ func OK() Status { return Status{Status: StatusOK} }
 // takes what it needs and ignores the rest. A context that requires a
 // dependency the process did not build fails in Start.
 //
-// Fields are added by the tasks that create the packages behind them:
-// Store and Env in F-5 (T-007).
+// cmd/multiverse fills every field (C-01 v1.3). There is no Store and no Env,
+// and none is coming: a context that needs the object store builds its own
+// client with its own settings (objstore.New), and reads its variables through
+// the declarations of shared/env — the manifest is already the one way to the
+// environment, and a second one through Deps would be a second source.
 type Deps struct {
 	// Bus publishes events and opens live subscriptions; Journal reads a
-	// topic by offset for the catch-up after a snapshot (C-01).
+	// topic by offset for the catch-up after a snapshot (C-01). The process
+	// passes one transport as both, so the journal reads the log the bus
+	// writes, and owns it: it closes it after the last context has stopped
+	// (ADR-023). A context never closes either.
 	Bus     eventbus.Bus
 	Journal eventbus.Journal
 	// Contracts is the event registry the contexts validate against

@@ -101,12 +101,12 @@ func (h *HTTP) Err() <-chan error { return h.errored }
 // AdminOnly rejects requests that do not come from a client allowed on
 // /v1/admin/*. Admission is decided by the client, not by the kind of actor
 // (ADR-009 p. 9, C-06): X-Client-Id must be listed in MV_CORE_ADMIN_CLIENTS
-// (comma separated, "operator" when unset), and a missing or unlisted
-// one is rejected. X-Actor-Kind is optional and only validated against the
-// envelope enum human|ci|sim|system: it grants nothing on its own, the operator
-// proxied by the gateway arrives with human. Contexts wrap their own
-// /v1/admin/* handlers with it; /health stays open because the port is
-// published on loopback only.
+// (comma separated; unset, it is the default declared by
+// env.CoreAdminClients), and a missing or unlisted one is rejected.
+// X-Actor-Kind is optional and only validated against the envelope enum
+// human|ci|sim|system: it grants nothing on its own, the operator proxied by
+// the gateway arrives with human. Contexts wrap their own /v1/admin/* handlers
+// with it; /health stays open because the port is published on loopback only.
 //
 // The allow-list is read once, when the middleware is built.
 func AdminOnly(next http.Handler) http.Handler {

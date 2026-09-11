@@ -109,7 +109,7 @@
 |---|---|---|---|---|---|
 | S1 | `e2e_solo_pass` | Автосценарий соло, 30 ходов: `pass = unanswered_actions = 0 ∧ state_divergence_count = 0 ∧ consistency_violations(break) = 0 ∧ service_panics = 0` | отчёт CI + `analytics.session.ended` (`actor_kind=ci`) + `analytics.consistency.violated` | pass в каждом прогоне на `main` | каждый CI-прогон |
 | S1, S2, S7 | `world_break_count` | Число поломок мира в сессии = `count(analytics.consistency.violated, severity=break)` + `count(incidents.csv, kind=world_break)` за сессию | события + `incidents.csv` | 0 | сессия |
-| S1, S2 | `state_divergence_count` | Расхождения снапшота с агрегатом лога по HP / инвентарю / позиции / статусу после сессии; = `count(analytics.consistency.violated, code=state_divergence)` | сверка в тесте / CLI `session-report --audit` | 0 | сессия (CI: каждый прогон; human: по требованию) |
+| S1, S2 | `state_divergence_count` | Расхождения снапшота с агрегатом лога по HP / инвентарю / позиции / статусу после сессии; = `count(analytics.consistency.violated, code=state_divergence)` | сверка в тесте / CLI `mvctl report --audit` | 0 | сессия (CI: каждый прогон; human: по требованию) |
 | S1, NFR-012 | `unanswered_action_ratio` | `count(turn.completed, status∈{timeout,error}) + orphan_actions` / `count(player.* действий)`, где `orphan_actions` — действия без `turn.completed` через 60 с | `player.*` (game-service) + `analytics.turn.completed` | 0 | сессия |
 | S1, NFR-012 | `service_panics` | Число паник и необработанных ошибок в логах всех сервисов за сессию (`level=error` без `handled=true`, `panic:`) | структурированные логи (NFR-033) | 0 | сессия |
 | S2 | `e2e_group_pass` | Автосценарий группы из 3, 30 ходов: то же, что `e2e_solo_pass`, плюс `group_view_consistency = 1` и `state_divergence_count = 0` при одновременных атаках (US-007) | CI | pass | каждый CI-прогон |
@@ -271,7 +271,7 @@
 | `analytics.session.started` | Первое принятое действие в scope, у которого нет активной сессии (после `session.ended` или простоя ≥ 30 мин); для `group` — при создании группы | game-service | `analytics_events` | `world{entity{id,type}}`, `scope{id,type}`, `session{id, kind: solo\|group, actor_kind: human\|ci\|sim, started_at, players_count}`, `participants[]{entity{id,type:player}}` |
 | `analytics.session.ended` | Все участники вышли (`leave`), все мертвы, простой ≥ 30 мин (TTL) или ошибка | game-service | `analytics_events` | `world`, `scope`, `session{id, kind, actor_kind, started_at, ended_at, end_reason: leave\|idle\|death\|error\|forget, players_count, turns_count, turns_degraded, turns_failed}`, `participants[]` (`forget` — сведение 3, BA; не ошибка, C-10 v1.1) |
 | `analytics.turn.completed` | Ход завершён: нарратив или шаблон доставлен всем адресатам scope; либо истёк таймаут ожидания (60 с) → `status=timeout`; либо действие отклонено до Phase 1 → `status=rejected` | game-service | `analytics_events` | `world`, `scope`, `entity{entity{id,type:player},name}`, `correlation_id`, `trigger{event{id,type}}` (событие действия), `session{id}`, `turn{seq, action_type, target{entity{id,type}}?, status: ok\|degraded\|rejected\|timeout\|error, gm_path: agent\|legacy, phase1_mode: rules\|llm, lod?}`, `timings{received_at, acked_at, mechanics_at?, narrative_at?, mechanics_ms?, narrative_ms?, total_ms}`, `narrative{generated_by: llm\|template\|none, agent_level: global\|domain\|task, agent_blueprint?, fallback_reason?, filter_applied: bool}`, `delivery{recipients_count, delivered_count, result_event_id?, narrative_event_id?}`, `absence{since_at, background_events_count, surfaced_event_ids[]}?` (только для `action_type=enter` при наличии предыдущей сессии игрока в мире; копируется из `narrative_output` персонального GM, §4.3) |
-| `analytics.consistency.violated` | Проверка инвариантов после хода (тест/страж), сверка снапшота с логом, ручная/LLM-оценка нарратива нашли нарушение | MVP-1: тест-харнесс и CLI `session-report --audit`; целевое: страж (Запрет Мира) | `analytics_events` | `world`, `scope`, `correlation_id?`, `session{id}?`, `violation{code: hp_out_of_range\|dead_entity_acts\|duplicate_entity\|missing_entity\|position_mismatch\|inventory_mismatch\|state_divergence\|narrative_contradiction\|player_agency, layer: law\|canon\|state\|momentary, severity: break\|warn, detected_by: invariant_check\|snapshot_diff\|llm_judge\|human, entity{entity{id,type}}?, expected?, actual?}` (значения — числа/идентификаторы, не текст нарратива) |
+| `analytics.consistency.violated` | Проверка инвариантов после хода (тест/страж), сверка снапшота с логом, ручная/LLM-оценка нарратива нашли нарушение | MVP-1: тест-харнесс и CLI `mvctl report --audit`; целевое: страж (Запрет Мира) | `analytics_events` | `world`, `scope`, `correlation_id?`, `session{id}?`, `violation{code: hp_out_of_range\|dead_entity_acts\|duplicate_entity\|missing_entity\|position_mismatch\|inventory_mismatch\|state_divergence\|narrative_contradiction\|player_agency, layer: law\|canon\|state\|momentary, severity: break\|warn, detected_by: invariant_check\|snapshot_diff\|llm_judge\|human, entity{entity{id,type}}?, expected?, actual?}` (значения — числа/идентификаторы, не текст нарратива) |
 | `analytics.replay.completed` | Завершено восстановление из снапшота + replay (в тесте или при реальном старте) | компонент восстановления (entity-manager / тест-харнесс) | `analytics_events` | `world`, `replay{run_id, mode: recovery\|test, snapshot_id, snapshot_at, events_replayed, llm_calls, dice_rolled_new, duration_ms, state_hash_before?, state_hash_after, identical: bool?, events_hash_match: bool?, incomplete_record: bool}` |
 
 Примечания к реализации (чтобы разработчик мог сделать без уточнений):
@@ -362,7 +362,7 @@ seed фиксированы (FR-100); сравниваются артефакт�
 
 ### 6.2. Куда класть — самый дешёвый вариант для одного разработчика
 
-**MVP-1 (рекомендация): CLI `session-report` + два CSV в git, без БД.**
+**MVP-1 (рекомендация): CLI `mvctl report` + два CSV в git, без БД.**
 
 - `tools/session-report` (Go, в workspace): читает `analytics_events`,
   `llm.output`/`llm.output.rejected`, `dice.rolled`, фоновые `world.*`/`region.*`
@@ -381,7 +381,7 @@ seed фиксированы (FR-100); сравниваются артефакт�
   description`. Заполняет оператор после сессии; это источник для S7.
 - Оба CSV коммитятся: ПДн в них нет (только `player_id`), объём — строки в
   неделю, история сравнима в PR. Недельные агрегаты (NSM, S7) — тем же CLI
-  `session-report --weekly`.
+  `mvctl report --weekly`.
 - Обоснование: Redpanda retention может быть короче, чем нужно для истории
   сессий; CSV даёт постоянный след без нового сервиса. TimescaleDB сегодня без
   клиента и потребителей (audit-facts §7), reality-monitor неработоспособен —
@@ -442,7 +442,7 @@ TimescaleDB. Судьба reality-monitor — за архитектором: л�
 8. **Топик `analytics_events`** в `redpanda-init` с retention ≥ 90 дней (или
    явное правило игнорирования `analytics.*` в replay) — архитектор.
 9. **FR-101 (артефакт прогона)** — уточнить формат: JSON-сводка
-   `session-report --json` (§6.2) как минимальный артефакт.
+   `mvctl report --json` (§6.2) как минимальный артефакт.
 10. **FR-060 (хранилище связок)** — добавить поле `notice_shown_at` (дата
     показа уведомления об ИИ): S9 измеряется без событий в шине.
 11. **Новое FR (журнал инцидентов оператора):** `ops/metrics/incidents.csv` с

@@ -10,14 +10,16 @@
 # the owner's machine and pulling a container to parse a document would be a
 # strange dependency for a linter.
 #
-# The seven rules:
+# The eight rules:
 #   1. every image has an explicit tag, never `latest`, and every third-party
 #      image comes from a variable declared in build/versions.env (NFR-071);
 #   2. every published port is bound to 127.0.0.1 (SEC-13); the init containers,
 #      chromadb and narrative-orchestrator publish nothing; a console port is
 #      published only by a service in profile `dev` (SEC-33);
 #   3. no default credentials: a secret in `environment` is an interpolation of
-#      the variable of the same name, and the required ones use `${VAR:?}`;
+#      the variable of the same name, and the required ones use `${VAR:?}` —
+#      a key without a value does not count, because an unset one is simply
+#      left out of the container and the image falls back to its own account;
 #      `minioadmin` appears nowhere outside Docs/ and services/_archive/
 #      (SEC-14);
 #   4. MV_TELEGRAM_BOT_TOKEN reaches the `telegram-bot` service only, through
@@ -28,7 +30,32 @@
 #      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
 #      host.docker.internal, a service of this file or an RFC1918 address, but
 #      never at a public host (SEC-15, ADR-005 add. 2 p. 3);
-#   7. the always-loaded compose file starts on a clean machine (T-397).
+#   7. the always-loaded compose file starts on a clean machine (T-397);
+#   8. a platform variable has one default, and it is the manifest's (T-411):
+#      `${MV_X:-d}` is allowed only when d equals the default declared for MV_X
+#      in shared/env/vars.go, or — for a variable whose manifest default is
+#      itself an address — when every item of d is `service:port` or
+#      `scheme://service...` for a service of this compose network: the one
+#      override the manifest documents ("compose overrides them with the names
+#      of the services on its own network"). A bare word is never an address,
+#      even when it happens to be a service name: `telegram-bot` is a service
+#      AND a client id, and an allow-list defaulting to it is exactly the
+#      defect T-411 closed (review #1 Mi-1). `${MV_X}` and `$MV_X` with no
+#      modifier are rejected when the manifest default is not empty: a silent
+#      .env then hands the process an empty value instead of it (Mi-2); `$$`
+#      is compose's escape and is left alone. Anything else is a second source
+#      of one value: a container and a process started by hand disagree, and
+#      nothing tells the operator which one decides. A name the manifest does
+#      not declare, or declares retired, is rejected too — that is also what
+#      makes a parse miss loud.
+#
+# Rule 8, the shape of the fix it asks for: pass the variable through as a key
+# with no value (`MV_X:` in a mapping, `- MV_X` in a list). Compose then sets it
+# from .env when .env has it — empty included, which for an allow-list means
+# nobody — and leaves it out of the container when .env is silent, so the
+# manifest's default applies. `${MV_X}` and `${MV_X:-}` are NOT that: both hand
+# the process an empty value, and shared/env treats set-to-empty as a value —
+# which is why rule 8 rejects both whenever the manifest's default is not empty.
 #
 # Rule 7 in full, because it is the one that is easy to break by accident:
 # `docker compose` interpolates a file WHOLE, before it filters by profile, so
@@ -75,7 +102,8 @@ while [ $# -gt 0 ]; do
     shift 2
     ;;
   -h | --help)
-    sed -n '2,60p' "$0"
+    # The whole header, however long it grows: up to the first line of code.
+    awk 'NR > 1 && /^set -euo pipefail/ { exit } NR > 1' "$0"
     exit 0
     ;;
   *)
@@ -383,6 +411,14 @@ MUST_BE_REQUIRED = {
 # the hole this rule exists to close. The nearest enclosing key is tracked only
 # to name the place in the message.
 ENTRY = re.compile(r"^\s*-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:=]\s*(\S.*?)\s*$")
+# A key with no value: `KEY:` in a mapping, `- KEY` in a list. Compose fills it
+# from .env when .env has it and otherwise leaves it out of the container — for
+# a credential the stack must refuse to start without, that is a silent
+# fallback to whatever the image does on its own (MinIO: minioadmin). Checked
+# before BLOCK, because at indent 2 inside an anchor it looks exactly like the
+# name of a block (T-411: rule 8 teaches this form, rule 3 must not be blind
+# to it).
+BARE = re.compile(r"^\s*-?\s*([A-Za-z_][A-Za-z0-9_]*)\s*:?\s*$")
 TOP_LEVEL = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9._-]*):")
 BLOCK = re.compile(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$")
 
@@ -390,6 +426,15 @@ for compose_path, raw in raw_files:
     context = compose_path
     for lineno, line in enumerate(raw.splitlines(), 1):
         if line.lstrip().startswith("#"):
+            continue
+        m = BARE.match(line)
+        if m and m.group(1) in MUST_BE_REQUIRED:
+            fail(
+                3,
+                f"{compose_path} {context}:{lineno}: {m.group(1)} is passed through "
+                "with no value; an unset credential would just be left out, so it "
+                "needs ${VAR:?}",
+            )
             continue
         m = TOP_LEVEL.match(line)
         if m:
@@ -504,6 +549,107 @@ for name, svc in sorted(services.items()):
             )
 
 # --------------------------------------------------------------------------
+# Rule 8 — a platform variable has one default, and it is the manifest's
+# --------------------------------------------------------------------------
+# The manifest is read as source text and not through mvctl: this job runs
+# without Go. `\s*` spans newlines, so a Declare whose name and default sit on
+# lines of their own parses as well as a one-line one. What the pattern cannot
+# read — a constant or a raw string for the name, an escaped quote in the
+# default, DeclareExternal("MV_...") — leaves the name unknown, and an unknown
+# name fails below; a concatenated default is read up to its first quote and
+# fails as a mismatch. Either way a parse miss is loud. Lines that are Go
+# comments are dropped first: dict() keeps the LAST match, so a commented-out
+# `// Declare("MV_A", "old", ...)` below the real one would otherwise become
+# the default this rule compares with — the one silent case (review #1 N-2).
+MANIFEST = "shared/env/vars.go"
+with open(MANIFEST, encoding="utf-8") as fh:
+    manifest_src = "\n".join(l for l in fh.read().splitlines() if not l.lstrip().startswith("//"))
+manifest = dict(re.findall(r'\bDeclare\(\s*"(MV_[A-Z0-9_]+)"\s*,\s*"([^"\\]*)"', manifest_src))
+retired = set(re.findall(r'\bDeclareDeprecated\(\s*"(MV_[A-Z0-9_]+)"', manifest_src))
+if not manifest:
+    fail(8, f"no Declare(\"MV_...\", ...) found in {MANIFEST}; nothing to compare the defaults with")
+
+# `${MV_X:-d}` and `${MV_X-d}`; `${MV_X:?}` carries no default and is rule 7's.
+DEFAULTED = re.compile(r"\$\{(MV_[A-Z0-9_]+):?-([^}]*)\}")
+# `${MV_X}` and `$MV_X`: no modifier at all, so a silent .env hands the process
+# an EMPTY value — set, and therefore beating the manifest's default (review #1
+# Mi-2). `$$` is compose's escape for a literal dollar, not an interpolation.
+BRACED = r"\{(MV_[A-Z0-9_]+)\}"
+BARE_REF = r"(MV_[A-Z0-9_]+)(?![A-Za-z0-9_])"
+UNMODIFIED = re.compile(r"(?<!\$)\$(?:" + BRACED + "|" + BARE_REF + ")")
+# host:port or scheme://... — the only shapes an address takes in these files.
+ADDRESS_ITEM = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S+|[A-Za-z0-9._-]+:[0-9]+")
+
+
+def is_address(value):
+    """True when every comma separated item is host:port or scheme://..."""
+    return all(ADDRESS_ITEM.fullmatch(i.strip()) for i in value.split(","))
+
+
+def names_services(value):
+    """True when every item names a service of this compose network AS AN
+    ADDRESS: `redpanda:9092`, `http://core:8090`, `neo4j://neo4j:7687`. A bare
+    `telegram-bot` is a word that happens to be a service name — and a client
+    id (review #1 Mi-1)."""
+    if not is_address(value):
+        return False
+    for item in (i.strip() for i in value.split(",")):
+        host = urlsplit(item).hostname if "://" in item else item.rpartition(":")[0] or item
+        if host not in service_names:
+            return False
+    return True
+
+
+def unknown(where, name):
+    """Retired and undeclared names fail whatever form the interpolation takes."""
+    if name in retired:
+        fail(8, f"{where}: {name} is declared retired in {MANIFEST}; nothing reads it")
+        return True
+    if name not in manifest:
+        fail(
+            8,
+            f"{where}: {name} is not declared in {MANIFEST}, so its value here "
+            "has nothing to agree with (and mvctl env check cannot see it)",
+        )
+        return True
+    return False
+
+
+for compose_path, raw in raw_files:
+    for lineno, line in enumerate(raw.splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            continue
+        where = f"{compose_path}:{lineno}"
+        for name, default in DEFAULTED.findall(line):
+            if unknown(where, name):
+                continue
+            # The address exception holds only for a variable that IS an address.
+            if default != manifest[name] and not (is_address(manifest[name]) and names_services(default)):
+                fail(
+                    8,
+                    f"{where}: {name} defaults to {default!r} here and to "
+                    f"{manifest[name]!r} in {MANIFEST} - two sources of one value "
+                    "(T-411). Pass it through as a key with no value, so that .env "
+                    "decides and the manifest's default applies when .env is silent. "
+                    "Only an address variable (its manifest default is host:port or "
+                    "scheme://) may differ, and only by naming a service of this "
+                    "compose network with a port or a scheme",
+                )
+        for m in UNMODIFIED.finditer(line):
+            name = next(g for g in m.groups() if g)
+            if unknown(where, name):
+                continue
+            if manifest[name] != "":
+                fail(
+                    8,
+                    f"{where}: {m.group(0)} has neither a default nor `:?`: when .env "
+                    f"is silent the process gets an EMPTY {name}, not the manifest's "
+                    f"{manifest[name]!r}, and shared/env reads set-to-empty as a value "
+                    "- for an allow-list that is nobody (T-411 review #1 Mi-2). Pass "
+                    "it through as a key with no value",
+                )
+
+# --------------------------------------------------------------------------
 if failures:
     print(
         f"compose-lint: {len(failures)} violation(s) in {', '.join(compose_paths)}",
@@ -514,7 +660,7 @@ if failures:
     sys.exit(1)
 
 print(
-    f"compose-lint: ok — {len(services)} services in {len(compose_paths)} file(s), 7 rules "
+    f"compose-lint: ok — {len(services)} services in {len(compose_paths)} file(s), 8 rules "
     f"(profiles resolved: {', '.join(sorted({p for s in services.values() for p in (s.get('profiles') or [])})) or 'none'})"
 )
 PY

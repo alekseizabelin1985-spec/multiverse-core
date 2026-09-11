@@ -1,0 +1,11 @@
+# Rule 8: `${MV_X}` with no modifier. With the line absent from .env compose
+# substitutes an EMPTY string, the process sees the variable as set, and
+# shared/env returns that empty value instead of the manifest's default — for
+# this allow-list that is nobody. It is the "naive fix" T-411 warned against,
+# and the linter did not see it (T-411 review #1 Mi-2). The fix is a key with
+# no value: `MV_CORE_ADMIN_CLIENTS:`.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS}

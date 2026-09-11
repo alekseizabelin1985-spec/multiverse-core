@@ -710,7 +710,7 @@ MIGRATION.md отключает narrative-orchestrator, Living Worlds — рас
 - Варианты: A) Redis добавить (go-redis), TimescaleDB и Qdrant удалить; B) всё удалить, кэш — in-memory; C) оставить как есть.
 - Рекомендация: **A**, если принят OQ-A-02=A (агентам нужен hot-context); иначе B.
 - **Статус.** открыт → архитектура (OQ-A-02 = A принят, предпосылка для A выполнена).
-- **Статус A3.** решено — **ADR-004**: Redis **не** добавляется в MVP-1 (in-memory + снапшот; вернуться при выносе Swarm в отдельный процесс или в EPIC-006/012), TimescaleDB и ChromaDB удаляются из compose, Qdrant остаётся как векторная БД; топики `analytics_events` и `llm_records` создаются (**ADR-007**), метрики MVP-1 — `mvctl session-report` + CSV.
+- **Статус A3.** решено — **ADR-004**: Redis **не** добавляется в MVP-1 (in-memory + снапшот; вернуться при выносе Swarm в отдельный процесс или в EPIC-006/012), TimescaleDB и ChromaDB удаляются из compose, Qdrant остаётся как векторная БД; топики `analytics_events` и `llm_records` создаются (**ADR-007**), метрики MVP-1 — `mvctl report` + CSV.
 
 ### OQ-A-08 Как узаконить события, порождаемые LLM (`new_events` в `world_events`)?
 - Почему вопрос: narrative-orchestrator публикует события с типами, придуманными моделью; потребители переключаются по строковым литералам; нет реестра типов и схем. Это главный источник «событий без издателя/потребителя».

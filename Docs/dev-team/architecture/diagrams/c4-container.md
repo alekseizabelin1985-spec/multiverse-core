@@ -17,7 +17,7 @@ C4Container
     Container(gw, "gateway", "Go, cmd/multiverse --contexts=gateway", "HTTP API v1, псевдонимизация, сессии, раунды, идемпотентность, outbox доставок, read-model. Сегодня контекст пустой: процесс поднимается и отвечает /health")
     Container(core, "core", "Go, cmd/multiverse --contexts=state,mechanics,laws,llm,swarm", "состояние, механика, законы, шлюз модели, рой агентов. Из пяти контекстов написан один - mechanics; остальные четыре зарегистрированы пустыми")
     Container(mem, "memory", "Go, cmd/multiverse --contexts=memory", "проекция журнала: векторный индекс и граф, контекст агентов, сводка отсутствия. Контекст пустой")
-    Container(cli, "mvctl", "Go, cmd/mvctl", "env check, contracts check, storage init, privacy scan. Команды world init, replay, session-report, laws bump - будущее")
+    Container(cli, "mvctl", "Go, cmd/mvctl", "env check, contracts check, storage init, privacy scan. Команды world init, record, report, laws bump - будущее, имена зарезервированы в реестре")
 
     ContainerQueue(bus, "Redpanda", "Kafka API, 1 брокер, 1 партиция на топик", "восемь топиков: player_events, game_events, world_events, system_events, narrative_output, llm_records, analytics_events, dead_letters; retention 30/90/180 дней, segment.ms=1d")
     ContainerDb(minio, "MinIO", "S3, сборка из исходников тега RELEASE.2025-10-15", "entities-{world}, snapshots-{world}/{state,swarm,gateway}, prompts-{world} по флагу, ops-artifacts; versioning и ILM ставит EnsureBucket")
@@ -67,6 +67,19 @@ C4Container
 | прокси `/v1/admin/*` | ни маршрутов, ни прокси; `shared/runtime` даёт только каркас `Routes(mux)` | EPIC-003 + EPIC-004 |
 
 ## Расхождения с деревом
+
+**Сверка T-409 (2026-09-11, architect#1).** «Закрыто» — документ приведён к дереву; «код» — прав контракт, названа задача; «открыто» — оставлено намеренно.
+
+| # | Статус | Что сделано |
+|---|---|---|
+| 1 | закрыто | `overview.md` §13: абзац «Состояние на 2026-09-11» — один бинарник, шесть пустых контекстов из семи, ответственность в таблице целевая; шапки всех `components/*.md` называют, что есть в дереве |
+| 2 | закрыто | список `core` везде как в compose — `state,mechanics,laws,llm,swarm`: `overview.md` §13, `foundation.md` §2, C4 в `state-and-mechanics.md`, `infrastructure.md` §9.8 |
+| 3 | закрыто | адрес любого процесса — только `MV_CORE_ADDR` (код T-408): `overview.md` §13, `infrastructure.md` §1.2 и §4.2, `foundation.md` §1–§2, `gateway-and-bot.md` §5.1, §11.1, §11.3 |
+| 4 | закрыто | `overview.md` §13 и `infrastructure.md` §1.3: `bot` и `legacy` — отдельные файлы compose, причина названа |
+| 5 | закрыто | там же: `legacy` не поднимается намеренно, пока не выбран тег Chroma |
+| 6 | закрыто | `MV_LLM_URL` обязателен и без значения по умолчанию (код T-404): `overview.md` §13, `infrastructure.md` §4.2, C-15 |
+
+Формулировки, записанные при рисовании (до сверки):
 
 1. **Число процессов совпадает, содержимое — нет.** `overview.md` §13 описывает `gateway`, `core`, `memory` через их ответственность, как будто она реализована. В дереве это один и тот же бинарник с разным набором **пустых** контекстов (`cmd/multiverse/contexts.go`, `stubContexts`). Диаграмма показывает границу процессов честно, содержимое — с пометками.
 2. **Порядок контекстов в `core`.** `overview.md` §13 пишет `--contexts=state,mechanics,swarm,llm,laws`, `docker-compose.yml` запускает `--contexts=state,mechanics,laws,llm,swarm`. Порядок в списке ничего не решает (старт упорядочивает `runtime.Registry` по `DependsOn`), но два разных списка в двух источниках истины — повод для будущей ошибки; правится в `overview.md`.

@@ -226,32 +226,37 @@ func TestParseServeReportsUnknownFlag(t *testing.T) {
 	}
 }
 
-// Wave 0 registers a stub for every context of the platform so that
-// --contexts=all and the compose profiles work before internal/* exists.
-func TestStubContextsAreRegistered(t *testing.T) {
-	registered := map[string]bool{}
-	for _, name := range runtime.Names() {
-		registered[name] = true
+// Wave 0 registers every context of the platform so that --contexts=all and
+// the compose profiles work before internal/* exists: the seven contexts of
+// foundation.md §1, each once, in the documented start order. swarm is among
+// them although its factory lives in fake_contexts.go (T-255): moving its
+// registration there would have moved it to the end of the start order.
+func TestPlatformContextsAreRegisteredOnceInTheStartOrder(t *testing.T) {
+	want := []string{"state", "laws", "mechanics", "llm", "swarm", "gateway", "memory"}
+	if got := runtime.Names(); strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("registered contexts = %v, want %v", got, want)
 	}
-	for _, want := range stubContexts {
-		if !registered[want] {
-			t.Errorf("context %q is not registered (registered: %v)", want, runtime.Names())
-		}
-	}
-	if len(stubContexts) != 7 {
-		t.Fatalf("stubContexts has %d entries, want the 7 contexts of foundation.md §1", len(stubContexts))
+	if strings.Join(platformContexts, ",") != strings.Join(want, ",") {
+		t.Fatalf("platformContexts = %v, want the 7 contexts of foundation.md §1 in start order %v",
+			platformContexts, want)
 	}
 }
 
+// Without MV_SWARM_FAKE every context of the binary is still the empty stub of
+// wave 0, swarm included: the hook changes nothing unless it is asked to.
 func TestStubIsHealthyAndDoesNothing(t *testing.T) {
+	clearVar(t, env.SwarmFake.Name())
 	contexts, err := runtime.New([]string{runtime.All})
 	if err != nil {
 		t.Fatalf("New(all): %v", err)
 	}
-	if len(contexts) != len(stubContexts) {
-		t.Fatalf("New(all) built %d contexts, want %d", len(contexts), len(stubContexts))
+	if len(contexts) != len(platformContexts) {
+		t.Fatalf("New(all) built %d contexts, want %d", len(contexts), len(platformContexts))
 	}
 	for _, c := range contexts {
+		if _, ok := c.(stub); !ok {
+			t.Errorf("%s is %T without %s, want the stub of wave 0", c.Name(), c, env.SwarmFake.Name())
+		}
 		if err := c.Start(context.Background(), runtime.Deps{}); err != nil {
 			t.Errorf("%s.Start: %v", c.Name(), err)
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"multiverse-core.io/shared/clock"
+	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/runtime"
 )
@@ -186,11 +187,64 @@ func serve(opts serveOptions, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	log := slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	return withSignals(context.Background(), process{
+		opts:     opts,
+		contexts: contexts,
+		openBus:  openBus,
+		stdout:   stdout,
+		log:      slog.New(slog.NewJSONHandler(stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
+	}.run)
+}
+
+// withSignals runs fn under a context that SIGINT and SIGTERM cancel, and hands
+// fn the function that unregisters the two. fn calls it once its wait is over,
+// so that a second signal during the shutdown reaches the default handler and
+// kills the process instead of being swallowed. Unregistering also cancels
+// ctx, which is how a test sees that fn got the real release and not a no-op —
+// a signal cannot be sent to a test process on Windows.
+func withSignals(parent context.Context, fn func(ctx context.Context, release func()) error) error {
+	ctx, stop := signal.NotifyContext(parent, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	return fn(ctx, stop)
+}
+
+// process is one run of serve after the options are resolved and the contexts
+// built: what it owns (the bus, the HTTP server) and in which order it lets go
+// of them. It is split from serve so that a test can drive a whole lifetime
+// with contexts of its own and watch the transport close.
+type process struct {
+	opts     serveOptions
+	contexts []runtime.Context
+	openBus  openBusFunc
+	stdout   io.Writer
+	log      *slog.Logger
+}
+
+// run starts the contexts, serves until ctx is done or the HTTP server fails,
+// and stops everything. release is called once the wait is over, so that a
+// second signal during the shutdown reaches the default handler and kills the
+// process instead of being swallowed.
+//
+// The process creates the bus and the journal and is their only closer. The
+// order of the shutdown is HTTP server → contexts in reverse start order → bus,
+// and the bus is last on every path out through a return, a failed start
+// included (ADR-023 p. 4): a context is stopped through its own context by the
+// runtime, not by the bus closing under it, and a context that still publishes
+// or reads the journal in its Stop — a final snapshot pointer, a cursor — needs
+// the bus open to do it.
+//
+// A panic in a Start is not such a path: runtime.StartAll does not recover, so
+// the deferred Close runs during the unwinding while the contexts started
+// before it are still up. The process dies of the panic either way (NFR-012);
+// turning it into an error belongs to StartAll (review #1 of T-410, N-1).
+func (p process) run(ctx context.Context, release func()) error {
+	log := p.log
+	opts := p.opts
 	deps := runtime.Deps{
-		Mode: opts.mode,
-		IDs:  idGenerator(opts.idSource),
-		Log:  log,
+		Mode:      opts.mode,
+		IDs:       idGenerator(opts.idSource),
+		Log:       log,
+		Contracts: contracts.Default(),
 	}
 	// In replay mode time comes from the journal; internal/replay (EPIC-002)
 	// injects EventClock and NullTimers. Until then replay uses a manual clock
@@ -202,11 +256,19 @@ func serve(opts serveOptions, stdout, stderr io.Writer) error {
 		deps.Clock, deps.Timers = clock.Real{}, clock.RealTimers{}
 	}
 
+	bus, err := p.openBus(opts.bus, deps.Contracts, deps.Timers, log)
+	if err != nil {
+		return fmt.Errorf("bus %s (%s): %w", opts.bus, opts.busFrom, err)
+	}
+	// Deferred first, so it runs last: after the contexts are stopped on the
+	// normal path, after StartAll has stopped the started ones on a failed
+	// start, and after shutdown on a failed listen.
+	defer closeBus(bus, log)
+	deps.Bus, deps.Journal = bus, bus
+
+	contexts := p.contexts
 	srv := runtime.NewHTTP(env.CoreAddr.String(), runtime.Aggregate(contexts))
 	deps.Mux = srv.Mux
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	if err := runtime.StartAll(ctx, contexts, deps); err != nil {
 		return err
@@ -231,7 +293,7 @@ func serve(opts serveOptions, stdout, stderr io.Writer) error {
 		slog.String("bus", opts.bus),
 		slog.String("bus_from", opts.busFrom),
 		slog.String("contexts", strings.Join(names, ",")))
-	_, _ = fmt.Fprintf(stdout, "multiverse %s listening on %s, contexts: %s, mode: %s (%s), bus: %s (%s)\n",
+	_, _ = fmt.Fprintf(p.stdout, "multiverse %s listening on %s, contexts: %s, mode: %s (%s), bus: %s (%s)\n",
 		version, srv.Addr, strings.Join(names, ","),
 		opts.mode, opts.modeFrom, opts.bus, opts.busFrom)
 
@@ -243,7 +305,7 @@ func serve(opts serveOptions, stdout, stderr io.Writer) error {
 			serveErr = err
 		}
 	}
-	stop()
+	release()
 
 	stopCtx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
 	defer cancel()
@@ -261,6 +323,16 @@ func shutdown(contexts []runtime.Context, log *slog.Logger) {
 	defer cancel()
 	for _, err := range runtime.StopAll(ctx, contexts) {
 		log.Error("stop", slog.String("error", err.Error()))
+	}
+}
+
+// closeBus closes the transport of the process. Its error is logged rather
+// than returned: it comes after every context has already stopped, there is
+// nothing left to undo, and it must not replace the error the run is ending
+// with.
+func closeBus(bus transport, log *slog.Logger) {
+	if err := bus.Close(); err != nil {
+		log.Error("bus close", slog.String("error", err.Error()))
 	}
 }
 

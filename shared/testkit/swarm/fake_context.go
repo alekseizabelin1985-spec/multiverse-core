@@ -186,14 +186,18 @@ func (c *FakeContext) Stop(_ context.Context) error {
 }
 
 // Health is what /health of the process reports for this context: ok while the
-// subscriptions are alive, fail when one of them stopped on its own, degraded
-// before Start and after Stop.
+// subscriptions of both stubs are alive, fail when one of them stopped on its
+// own, degraded before Start and after Stop.
+//
+// Both halves are asked, and neither question blocks: a context whose fight
+// runs while its narrator has gone deaf is a context whose player swings and
+// never reads a word, and it has to say so on /health rather than in a log line.
 //
 // The details say out loud that this is a stub and which task removes it, so
 // that a run of I1-α cannot be mistaken for a run of the swarm.
 func (c *FakeContext) Health() runtime.Status {
 	c.mu.Lock()
-	encounter, running := c.encounter, c.running
+	encounter, narrator, running := c.encounter, c.narrator, c.running
 	c.mu.Unlock()
 
 	details := map[string]any{
@@ -206,12 +210,7 @@ func (c *FakeContext) Health() runtime.Status {
 		return runtime.Status{Status: runtime.StatusDegraded, Details: details}
 	}
 	details["encounters"] = encounter.ActiveCount()
-	// Only the fight is asked. FakeNarrator reports a dead subscription through
-	// its log and through Wait, which blocks until the subscription is over —
-	// and a health check that blocks is worse than one that reports on the half
-	// of the stub that decides anything (T-220 owns narrator.go; a non-blocking
-	// Err on it is a request, see the report of T-219).
-	if err := encounter.Err(); err != nil {
+	if err := errors.Join(encounter.Err(), narrator.Err()); err != nil {
 		details["err"] = err.Error()
 		return runtime.Status{Status: runtime.StatusFail, Details: details}
 	}

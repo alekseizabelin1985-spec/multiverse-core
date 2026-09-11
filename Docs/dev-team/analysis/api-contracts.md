@@ -58,7 +58,7 @@
 |---|---|
 | Базовый путь | `/v1` (as-is эндпоинты без версии — см. §1.9) |
 | Формат | JSON UTF-8; `Content-Type: application/json`; тело запроса ≤ 64 КиБ, иначе `413 payload_too_large` (SEC-11) |
-| Авторизация | MVP-1: доверенный контур (порт gateway привязан к `127.0.0.1`, ADR-009 п. 9). Заголовок `X-Client-Id` (идентификатор экземпляра клиента: `telegram-bot`, `ci-harness`) — обязателен; значение должно входить в список `MV_GATEWAY_CLIENTS`, иначе `403 client_unknown`. В путях `/v1/clients/{client_id}/…` значение `{client_id}` обязано совпадать с `X-Client-Id`, иначе `403 client_mismatch` (SEC-12). Целевое: токен клиента (E-H) |
+| Авторизация | MVP-1: доверенный контур (порт gateway привязан к `127.0.0.1`, ADR-009 п. 9). Заголовок `X-Client-Id` (идентификатор экземпляра клиента: `telegram-bot`, `ci-harness`) — обязателен; значение должно входить в список `MV_GATEWAY_CLIENT_IDS`, иначе `403 client_unknown`. В путях `/v1/clients/{client_id}/…` значение `{client_id}` обязано совпадать с `X-Client-Id`, иначе `403 client_mismatch` (SEC-12). Целевое: токен клиента (E-H) |
 | `actor_kind` | заголовок `X-Actor-Kind: human\|ci\|sim` (по умолчанию `human`); `ci`/`sim` разрешены только клиентам из списка конфигурации, иначе `403 actor_kind_forbidden`; служебные эндпоинты §1.8 — только `ci`/operator |
 | Предусловие регистрации (сторона бота) | Бот принимает команды **только из личных чатов** и **только от Telegram user id из allowlist** `MV_TELEGRAM_ALLOWED_USER_IDS`; проверка выполняется до любого вызова gateway (ADR-006 дополнение п. 1–2, ADR-009 дополнение п. 1). Групповые чаты и не-allowlist аккаунты gateway не видит вовсе. Инвайт-коды — E-H |
 | Идемпотентность действий | `POST …/actions` принимает `action_key` (строка ≤ 64, уникальна в пределах `player_id`, TTL 24 ч); повтор с тем же ключом → тот же ответ (включая тот же `4xx`, если был) и тот же `correlation_id`, второго хода нет; ключ отличается, тело совпадает — новый ход |
@@ -176,7 +176,7 @@
   "created_at": "<ts>"
 }
 ```
-`kind` ∈ `ack | mechanics | narrative | world_event | group | system`; `generated_by` ∈ `rules | llm | template`; для `template` — `fallback_reason` и пометка «упрощённый режим» в тексте; для `narrative` — `narrative_event_id` одинаков у всех адресатов раунда (берётся из `narrative.output.narrative_event_id`, при его отсутствии — `id` события). Порядок доставки одному `player_id` — строго по `created_at`. `route.external_id` заполняется из `links.db` в момент выдачи и **только клиенту той же платформы, что связка** (`external_platform` == платформа клиента по `MV_GATEWAY_CLIENTS`); в outbox (`gateway.db`) хранится лишь `player_id` и `platform`; после `/forget` доставки отбрасываются. Текст — plain text без разметки (бот отправляет без `parse_mode`, SEC-10).
+`kind` ∈ `ack | mechanics | narrative | world_event | group | system`; `generated_by` ∈ `rules | llm | template`; для `template` — `fallback_reason` и пометка «упрощённый режим» в тексте; для `narrative` — `narrative_event_id` одинаков у всех адресатов раунда (берётся из `narrative.output.narrative_event_id`, при его отсутствии — `id` события). Порядок доставки одному `player_id` — строго по `created_at`. `route.external_id` заполняется из `links.db` в момент выдачи и **только клиенту той же платформы, что связка** (`external_platform` == платформа клиента по `MV_GATEWAY_CLIENT_IDS`); в outbox (`gateway.db`) хранится лишь `player_id` и `platform`; после `/forget` доставки отбрасываются. Текст — plain text без разметки (бот отправляет без `parse_mode`, SEC-10).
 
 ### 1.6. Коды ошибок
 
@@ -188,7 +188,7 @@
 | 400 | `name_required`, `name_invalid` | имя персонажа |
 | 403 | `consent_required` | связка не `consented` |
 | 403 | `actor_kind_forbidden` | `ci`/`sim` от неразрешённого клиента; служебный эндпоинт от не-`ci` |
-| 403 | `client_unknown` | `X-Client-Id` отсутствует или не входит в `MV_GATEWAY_CLIENTS` (C-08 v1.1) |
+| 403 | `client_unknown` | `X-Client-Id` отсутствует или не входит в `MV_GATEWAY_CLIENT_IDS` (C-08 v1.1) |
 | 403 | `client_mismatch` | `{client_id}` пути ≠ `X-Client-Id` (SEC-12, C-08 v1.1) |
 | 404 | `player_not_found`, `world_not_found` | |
 | 404 | `unknown_target` | регион/NPC/группа не существует или не в scope |
@@ -322,24 +322,24 @@
 | `round.opened`, `round.closed` | GE | gateway (координатор раундов, ADR-020) | Task-агент, `group-narrator`, рантайм роя (replay) | 1 | нет |
 | `entity.create.proposed`, `entity.update.proposed` | SE | gateway (player, group, position/scope/group/participation, `rest`), агент встречи (из `mechanics.ChangesFor`), агенты роя | State | 1 | нет (game-service пишет в MinIO напрямую) |
 | `entity.created`, `entity.updated`, `entity.update.rejected` | SE | State | gateway (проекция), агенты роя, memory, страж | 1 | `entity.created` публикуют game-service/world-generator; entity-manager **не публикует** |
-| `dice.rolled` | **GE** | агент встречи через `mechanics.DiceRolledPayload` (тип принадлежит EPIC-002); публикуется **до** `combat.decided` | replay, аудит, `session-report` | 1 | нет |
+| `dice.rolled` | **GE** | агент встречи через `mechanics.DiceRolledPayload` (тип принадлежит EPIC-002); публикуется **до** `combat.decided` | replay, аудит, `mvctl report` | 1 | нет |
 | `combat.decided` | GE | агент встречи (Swarm) на основе `mechanics.Resolve` | State (через `entity.update.proposed`), персональный GM / `group-narrator`, gateway (`Delivery kind=mechanics`), memory | 1 | `combat.started/ended/damage_dealt` — подписчики без издателя |
 | `encounter.started`, `encounter.ended` | WE | GM региона (`started`) / агент встречи (`ended`) | персональные GM, gateway (read-model `encounter`, первый раунд группы), глобальный GM (сводка), memory | 1 | нет |
 | `world.weather_changed`, `world.time_advanced`, `world.event_occurred` | WE | глобальный GM | GM регионов, персональные GM, memory | 1 | `world.weather_changed`, `world.time_tick` — подписчики без издателя |
 | `region.event_occurred`, `npc.moved`, `npc.spawned` | WE | GM региона | глобальный GM, персональные GM, memory | 1 | `npc.action`, `npc.moved` — без издателя/контракта |
-| `tick.fired`, `tick.aborted` | SE | планировщик роя | агент-адресат, replay, `session-report` | 1 | `time.syncTime` (legacy narrative-orchestrator) |
-| `agent.spawned`, `agent.child_resolved`, `agent.stopped`, `agent.spawn_rejected`, `agent.blueprint_reloaded` | SE | рантайм роя | оператор/health, `session-report`, memory | 1 | `gm.created/deleted/merged/split` (legacy) |
-| `llm.output`, `llm.output.rejected` | LR | LLM-шлюз (middleware записи) | replay (`recorded`-провайдер), страж (аудит), `session-report`, memory (только метаданные) | 1 | нет |
+| `tick.fired`, `tick.aborted` | SE | планировщик роя | агент-адресат, replay, `mvctl report` | 1 | `time.syncTime` (legacy narrative-orchestrator) |
+| `agent.spawned`, `agent.child_resolved`, `agent.stopped`, `agent.spawn_rejected`, `agent.blueprint_reloaded` | SE | рантайм роя | оператор/health, `mvctl report`, memory | 1 | `gm.created/deleted/merged/split` (legacy) |
+| `llm.output`, `llm.output.rejected` | LR | LLM-шлюз (middleware записи) | replay (`recorded`-провайдер), страж (аудит), `mvctl report`, memory (только метаданные) | 1 | нет |
 | `narrative.output` | NO | персональный GM (`solo`) / `group-narrator` (`group`) | gateway (доставка), memory | 1 | `narrative.generate` (legacy; game-service не обрабатывает) |
-| `content.incident.recorded` | SE | LLM-шлюз (фильтр (a)) | оператор, `session-report` | 1 | нет |
-| `snapshot.created` | SE | State (`component=state`), Swarm (`swarm`), gateway (`gateway`) | оператор, `session-report --audit`, потребители при старте (через `latest.json`) | 1 | нет |
-| `config.cloud_enabled` | SE | LLM-шлюз (при включении облака `MV_LLM_CLOUD_ENABLED=true`) | оператор, `session-report`, аудит | 1 | нет (новый, ADR-005 дополнение п. 3) |
+| `content.incident.recorded` | SE | LLM-шлюз (фильтр (a)) | оператор, `mvctl report` | 1 | нет |
+| `snapshot.created` | SE | State (`component=state`), Swarm (`swarm`), gateway (`gateway`) | оператор, `mvctl report --audit`, потребители при старте (через `latest.json`) | 1 | нет |
+| `config.cloud_enabled` | SE | LLM-шлюз (при включении облака `MV_LLM_CLOUD_ENABLED=true`) | оператор, `mvctl report`, аудит | 1 | нет (новый, ADR-005 дополнение п. 3) |
 | `world.laws.changed` | WE | автор (CLI `mvctl laws bump`) / механика пробоя (E-B) | все агенты, State, memory | 1 | нет (регистрация без обработчиков) |
 | `world.law_breach.proposed / rejected / applied / review_decided / rolled_back` | WE | E-B | E-B | 1 | нет (регистрация без обработчиков; `mvctl contracts check` знает исключение) |
-| `analytics.session.started / ended`, `analytics.turn.completed` | AE | gateway | `session-report` | 1 | нет |
-| `analytics.consistency.violated` | AE | тест-харнесс, `session-report --audit`, страж (целевое) | `session-report` | 1 | `violation.detected` (ban-of-world, другой смысл) |
-| `analytics.replay.completed` | AE | State (`mode=recovery`) / `mvctl replay` (`mode=test`) — одна схема, совладение EPIC-002/005 (C-14) | `session-report`, CI | 1 | нет |
-| `dead_letters` (обёртка `{original, error, consumer}`) | DL | библиотека шины (после 3 повторов или невалидного события при чтении) | оператор, `session-report --audit` | 1 | нет |
+| `analytics.session.started / ended`, `analytics.turn.completed` | AE | gateway | `mvctl report` | 1 | нет |
+| `analytics.consistency.violated` | AE | тест-харнесс, `mvctl report --audit`, страж (целевое) | `mvctl report` | 1 | `violation.detected` (ban-of-world, другой смысл) |
+| `analytics.replay.completed` | AE | State (`mode=recovery`) / `mvctl replay` (`mode=test`) — одна схема, совладение EPIC-002/005 (C-14) | `mvctl report`, CI | 1 | нет |
+| `dead_letters` (обёртка `{original, error, consumer}`) | DL | библиотека шины (после 3 повторов или невалидного события при чтении) | оператор, `mvctl report --audit` | 1 | нет |
 
 Замкнутость: у каждого типа есть издатель и ≥ 1 потребитель; фантомные топики (`entity_actor_events`, `mechanical_results`, `entity.created` как топик, `world.metrics.*`, `reality.anomaly.detected`) в контракте отсутствуют. Legacy-типы (`player.moved`, `player.used_skill`, `gm.*`, `narrative.generate`, `violation.detected`, `time.syncTime`) — в реестре с пометкой `deprecated, gm_path=legacy`, допустимы только в профиле `legacy` (флаг `agent_mode=off`) и удаляются с ним. Правило потребления (C-01 §0): любой блок может **читать** любой топик; **публиковать** тип может только владелец типа.
 
@@ -393,7 +393,7 @@
 `entity.created`: `entity{…}`, `version: 1`, `attributes{…}`.
 `entity.update.rejected`: `proposal_id`, `reason: version_conflict | unknown_entity | level_violation | law_violation | invalid_op | dead_entity | duplicate_entity`, `entity?`, `details{expected_version, actual_version, invariant_id}`. `duplicate_entity` — `entity.create.proposed` с уже существующим `id` (v1.1, расширение enum).
 
-Правило владения (`level_violation`) — `data-model.md` §4; State проверяет `meta.agent.level` и `cause` по `contracts.OwnershipRules` (единственный источник — таблица уровней `shared/agent/levels.go`, экспортируемая в реестр при сборке). Факт публикуется после успешной записи в объектное хранилище; латентность применения p95 ≤ 50 мс при ≤ 50 сущностей/scope.
+Правило владения (`level_violation`) — `data-model.md` §4; State проверяет `meta.agent.level` и `cause` по `contracts.OwnershipRules` (единственный источник — `shared/contracts/ownership.go`; ADR-025, T-409: прежняя редакция называла источником `shared/agent/levels.go`, которого в дереве нет, а экспорт при сборке разворачивал бы зависимость фундамента на пакет роя). Факт публикуется после успешной записи в объектное хранилище; латентность применения p95 ≤ 50 мс при ≤ 50 сущностей/scope.
 
 #### 2.3.5. Броски (`dice.rolled`) — топик `game_events`; тип (схема, семантика) принадлежит EPIC-002; издатели по `Spec.Publishers` реестра (`contracts.md` §0 v0.4, сведение 3): агент встречи EPIC-003 через `Derive(cause, "dice.rolled", mechanics.DiceRolledPayload(roll, roller))` **до** `combat.decided`, а также `testkit/swarm.FakeEncounter` (только `membus`/`MV_SWARM_FAKE=true`)
 `roll{index, formula, seed, result, natural}`, `purpose: hit|damage|flee|npc_hit|npc_damage|encounter_chance|background`, `roller{entity}`. Причина (`meta.causation_id`) — действие игрока или `round.closed`; `seed = Seed(causeEventID, roll.index) = SHA-256(eventID + ":" + idx)[:8]` BigEndian, RNG — `math/rand/v2` PCG(seed, 0); **на проводе `seed` — десятичная строка** (uint64 не переживает разбор JSON в `map[string]any`: число становится `float64`, и значение выше 2^53 читается другим — измерено на T-015, `state-and-mechanics.md` §5.6) (C-03; зафиксировано архитектором, одна функция на проект). `replay` — в `meta`. Броски вне боя (шанс встречи, таблицы фона) — `Rules.Roll` с тем же контрактом.
@@ -476,7 +476,7 @@
 | 8 | Бюджет до вызова | все | `budget_exceeded` | без вызова |
 | 9 | Числа нарратива ≠ механики | narrative | — (метрика) | доставляется |
 
-Белые списки уровней (MVP-1): `global` → `world.weather_changed, world.time_advanced, world.event_occurred` + `entity.update.proposed(world)`; `domain` → `region.event_occurred, npc.moved, npc.spawned, encounter.started` + `entity.*.proposed(region, npc, encounter)`; `task` (встреча) → `dice.rolled`, `combat.decided` (через механику), `encounter.ended` + `entity.update.proposed(encounter, npc/player во встрече)`; `task` (персональный GM `player-gm`, нарратор группы `group-narrator`) → только `narrative.output`. Таблица уровней — `shared/agent/levels.go`, экспортируется как `contracts.OwnershipRules` (C-02).
+Белые списки уровней (MVP-1): `global` → `world.weather_changed, world.time_advanced, world.event_occurred` + `entity.update.proposed(world)`; `domain` → `region.event_occurred, npc.moved, npc.spawned, encounter.started` + `entity.*.proposed(region, npc, encounter)`; `task` (встреча) → `dice.rolled`, `combat.decided` (через механику), `encounter.ended` + `entity.update.proposed(encounter, npc/player во встрече)`; `task` (персональный GM `player-gm`, нарратор группы `group-narrator`) → только `narrative.output`. Таблица владения — `contracts.OwnershipRules` в `shared/contracts/ownership.go`, единственный источник (C-02 v1.4, ADR-025); `shared/agent/levels.go` держит только допустимые типы событий уровней и роль-белые списки валидатора.
 
 ---
 

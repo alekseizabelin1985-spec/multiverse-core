@@ -89,6 +89,17 @@ flowchart LR
 
 ## Расхождения с деревом
 
+**Сверка T-409 (2026-09-11, architect#1).** «Закрыто» — документ приведён к дереву; «код» — прав контракт, названа задача; «открыто» — оставлено намеренно.
+
+| # | Статус | Что сделано |
+|---|---|---|
+| 1 | закрыто, хвост в коде | **ADR-025**: единственная истина таблицы владения — существующий `shared/contracts/ownership.go`; копии и теста равенства нет; C-02 v1.4, `contracts.md` §16 п. 6, ADR-015 п. 4, `api-contracts.md`, `foundation.md` §6, `state-and-mechanics.md`, `swarm-llm-laws.md` §2 и §5.4. Хвост: комментарии `ownership.go`/`ownership_test.go` ещё называют истиной `levels.go` (правка кода, метка `contract-change`), T-202 переформулировать (tech-lead EPIC-003) |
+| 2 | закрыто | `swarm-llm-laws.md` (шапка и §2) и `contracts.md` §0 прямо называют as-is содержимое `shared/agent` и то, что целевых файлов нет; переписывание — EPIC-003 T-201/T-202. Сам каталог остаётся as-is до этих задач — это план, а не расхождение документа |
+| 3 | закрыто | `contracts.md` §0: абзац о восьми легаси-типах реестра (`Deprecated`, издатель `legacy`, без файла схемы, уходят на S5) |
+| 4 | закрыто | `contracts.md` §0: колонки «Пакеты» и «Файлы-данные» объявлены целевыми, названо, что есть в дереве; шапка `swarm-llm-laws.md` перечисляет недостающие каталоги |
+
+Формулировки, записанные при рисовании (до сверки):
+
 1. **`shared/agent/levels.go` не существует.** `contracts.md` §16 п. 6 называет его единственной истиной таблицы владения и требует блокирующего теста равенства с копией `shared/contracts/ownership.go`. Копия в дереве есть и работает, истины нет, теста равенства нет — сравнивать не с чем. До появления `levels.go` (EPIC-003) фактической истиной является копия, что прямо запрещено процедурой.
 2. **`shared/agent` — это ещё as-is Agent GM Core.** В каталоге лежат `router.go`, `lifecycle.go`, `pipeline.go`, `worker_pool.go`, `state_manager.go`, `md_parser.go`, `blueprint_loader.go`, `helpers.go`, `interfaces.go` — файлы, которые `components/swarm-llm-laws.md` §2 объявляет удаляемыми, и нет ни одного из файлов, которые тот же §2 объявляет целевыми (`types.go`, `blueprint.go`, `parser.go`, `validator.go`, `levels.go`, `placeholders.go`). На карте `shared/agent` поэтому не показан как часть контекста Swarm: сегодня это не типы роя, а вторая, неподключённая архитектура GM.
 3. **Реестр знает больше типов, чем таблица `contracts.md` §0.** В `shared/contracts/registry.go` есть блок `legacyEvent(...)`: `player.moved`, `player.used_skill`, `gm.created/deleted/merged/split`, `narrative.generate`, `violation.detected` — помечены `Deprecated`, издатель и потребитель `legacy`. Это цена профиля `legacy`; в §0 таких строк нет. Типы уйдут вместе с профилем на вехе S5.

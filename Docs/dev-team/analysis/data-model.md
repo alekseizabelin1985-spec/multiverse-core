@@ -3,7 +3,7 @@
 **Инициатива:** PROJECT · **Этап:** A4 (планирование) · **Версия:** 0.2.1 · 2026-09-09 · системный аналитик (dev-team); точечные правки v0.2.1 — system-architect (сведение 3, `architecture/consolidation.md` §14; system-analyst не запущен)
 **Основание:** `requirements/prd.md` v0.2 §7 «Данные», FR-030…FR-036, FR-045, FR-060, FR-085, приложение A; `domain-review.md` §3; `glossary.md` v0.2; `metrics.md` §4; аудит as-is (`architecture/audit-facts.md` §4–5: `entities-{world}`, `shared/entity`, структура `eventbus.Event`); решения G1; **v0.2** — `contracts.md` v0.2 (C-01, C-02, C-07, C-08, C-14), ADR-007 (конверт `meta`), ADR-009 дополнение п. 2 (`link_id`), ADR-019 (`links.db`/`gateway.db`), ADR-020 (раунды), решения G2.
 
-Модель концептуально-логическая: типы — логические (`string`, `int`, `timestamp`, `enum`, `ref`, `list`, `map`), без привязки к хранилищу. Выбор хранилищ — `integrations.md` §3 и архитектор (ADR-004, ADR-019, ADR-021). Имена компонентов v0.1 → v0.2: `entity-manager` = **State** (`internal/state`), `game-service` = **gateway** (`internal/gateway`), `рантайм роя` = **Swarm**, `semantic-memory` = **memory** (005-memory, отрезаема).
+Модель концептуально-логическая: типы — логические (`string`, `int`, `timestamp`, `enum`, `ref`, `list`, `map`), без привязки к хранилищу. Выбор хранилищ — `integrations.md` §3 и архитектор (ADR-004, ADR-019, ADR-021). Имена компонентов v0.1 → v0.2: as-is сервис `entity‑manager` = **State** (`internal/state`), as-is `game‑service` = **gateway** (`internal/gateway`) — **с 2026-09-11 (T-409) в тексте документа стоят только целевые имена**: оба as-is сервиса выведены из целевого кода (переписываются и уходят в архив), и читатель, искавший писателя состояния под старым именем, в дереве его не найдёт; `рантайм роя` = **Swarm**, `semantic-memory` = **memory** (005-memory, отрезаема).
 
 ### Изменения v0.2 (changelog)
 
@@ -25,7 +25,7 @@
 
 ## 1. Принципы модели
 
-1. **Три класса данных.** (а) *Состояние сущностей* — единственный писатель entity-manager, истина в снапшоте; (б) *журнал событий* — append-only, источник догона после снапшота, аудита и replay; (в) *приватные и служебные данные* — связки ПДн (отдельное удаляемое хранилище game-service), сессии/раунды/идемпотентность/outbox (game-service), рантайм роя (агенты, расписание, бюджет).
+1. **Три класса данных.** (а) *Состояние сущностей* — единственный писатель State, истина в снапшоте; (б) *журнал событий* — append-only, источник догона после снапшота, аудита и replay; (в) *приватные и служебные данные* — связки ПДн (отдельное удаляемое хранилище gateway), сессии/раунды/идемпотентность/outbox (gateway), рантайм роя (агенты, расписание, бюджет).
 2. **Всё, что меняет состояние, — событие.** Предложение (`*.proposed`) → факт (`entity.updated`/`entity.created`/`entity.update.rejected`). Сущности версионируются монотонно (`version`); конфликт — по версии.
 3. **Псевдоним внутри.** `player_id` — единственный идентификатор игрока в состоянии, журнале, индексах, промптах. Внешние идентификаторы — только в `Link`.
 4. **Record-replay.** `LLMOutput`, `DiceRoll`, `Tick`, `RoundClose` — записи журнала, не сущности состояния; при replay читаются.
@@ -51,7 +51,7 @@ erDiagram
     Encounter }o--o{ NPC : npcs
     Character ||--o{ Item : inventory
     Link ||--o| Character : "player_id (pseudonym)"
-    Scope ||--o{ Session : "sessions of scope"
+    ScopeRef ||--o{ Session : "sessions of scope (value, not entity)"
     Session ||--o{ Turn : turns
     Session ||--o{ Round : rounds
     Round ||--o{ Turn : "actions in round"
@@ -71,11 +71,13 @@ erDiagram
     ContentIncident }o--|| LLMOutput : "quarantined"
 ```
 
-Владение (кто пишет): **State** (`entity-manager` v0.1) — `World`, `Region`, `Character`, `NPC`, `Item` (внутри `Character`), `Group`, `Encounter`; **gateway** (`game-service` v0.1) — `Link` и `CharacterRequest` (отдельное хранилище `links.db`), `Session`, `Turn`, `Round`, `GroupParticipation`, `IdempotencyKey`, `Delivery` (`gateway.db`); **Swarm** — `AgentInstance`, расписание тиков, счётчики бюджета; **Git/автор** — `Blueprint`, `RulesDocument`, `LawsVersion v1`; **фикстуры** (`testdata/fixtures/*.json`, решение G2) — начальное состояние `World`, `Region`, `NPC`, фикстурных `Character` через `mvctl world init --fixtures`; **журнал** — `EventRecord`, `LLMOutput`, `DiceRoll`, `TickRecord`, `RoundClose`, `AnalyticsRecord`, `ContentIncident`; **каждый stateful-компонент** (`state`, `swarm`, `gateway`) — свой `Snapshot`.
+**Как читать схему и таблицы §3 (сверено с `shared/entity`, T-409).** `ScopeRef` — **значение**, а не сущность: в конверте события это `ScopeRef` рядом с `world`, в состоянии — атрибут `scope` персонажа и группы; отдельного типа сущности `scope` в реестре нет. Атрибуты сущностей §3 — это не поля Go-структуры, а **содержимое карты** `Entity.Attributes map[string]any` с типизированными геттерами (`HP()`, `Status()`, `Position()`, `Scope()`, `Members()` — `shared/entity/attrs.go`). Практическое следствие: опечатка в пути операции — не ошибка компиляции, а отказ `invalid_op` в рантайме.
+
+Владение (кто пишет): **State** (`internal/state`, в дереве пока нет — роль играет `shared/testkit/state.FakeState`) — `World`, `Region`, `Character`, `NPC`, `Item` (внутри `Character`), `Group`, `Encounter`; **gateway** (`internal/gateway`, в дереве пока нет) — `Link` и `CharacterRequest` (отдельное хранилище `links.db`), `Session`, `Turn`, `Round`, `GroupParticipation`, `IdempotencyKey`, `Delivery` (`gateway.db`); **Swarm** — `AgentInstance`, расписание тиков, счётчики бюджета; **Git/автор** — `Blueprint`, `RulesDocument`, `LawsVersion v1`; **фикстуры** (`testdata/fixtures/*.json`, решение G2) — начальное состояние `World`, `Region`, `NPC`, фикстурных `Character` через `mvctl world init --fixtures`; **журнал** — `EventRecord`, `LLMOutput`, `DiceRoll`, `TickRecord`, `RoundClose`, `AnalyticsRecord`, `ContentIncident`; **каждый stateful-компонент** (`state`, `swarm`, `gateway`) — свой `Snapshot`.
 
 ---
 
-## 3. Сущности состояния мира (writer: entity-manager)
+## 3. Сущности состояния мира (writer: State)
 
 Общие атрибуты всех сущностей состояния (`EntityBase`):
 
@@ -130,7 +132,9 @@ erDiagram
 | `inventory[]` | list Item | да | Пусто на старте | |
 | `actor_kind` | enum | да | `human, ci, sim` — задаётся при создании | не меняется |
 | `created_by_link` | — | — | **Не хранится**: связь только со стороны `Link` | приватность |
-| `last_session_ended_at` | timestamp | нет | Для сводки «пока тебя не было» (проекция `analytics.session.ended`) | может жить в game-service |
+| `last_session_ended_at` | timestamp | нет | Для сводки «пока тебя не было» (проекция `analytics.session.ended`) | может жить в gateway |
+
+Где правило статуса проверяется в коде (T-409): список терминальных статусов и проверка — `entity.TerminalStatuses`/`entity.IsTerminalStatus` (`shared/entity/types.go`), матрица переходов — `entity.StatusTransitionAllowed`, ответ «жив ли» для механики — `mechanics.Actor.Alive()`. Матрица применяется к **изменениям** статуса: `set status` в то же значение у живого персонажа — не переход и не отказ, а факт без изменений (C-02 v1.4). `ascended_final` объявлен и входит в терминальные, но перехода в него в MVP-1 не делает никто — резерв эпика культивации (E-C).
 
 Значения `atk/def/dmg` дублируются в сущности намеренно: правила боя — данные, а версия правил на момент создания фиксируется (целевое: `rules_version`).
 
@@ -178,8 +182,8 @@ erDiagram
 | `participants[]` | list {player_id, state: in_combat\|out_of_combat\|idle\|dead, damage_dealt: int, last_hit_at} | да | | |
 | `npcs[]` | list {npc_id, last_damager: ref Character} | да | | |
 | `state` | enum | да | `active, resolved` | |
-| `resolution` | enum | нет | `npc_dead, players_out, abandoned` | |
-| `round_seq` | int | да | Номер текущего раунда (координатор — game-service, проекция) | |
+| `resolution` | enum | нет | `npc_dead, players_out, abandoned` | в событии `encounter.ended` то же значение лежит в поле **`reason`** — имена разные, значения совпадают (`schemas/events/encounter.ended.v1.json`, `shared/entity/types.go`; T-409) |
+| `round_seq` | int | да | Номер текущего раунда (координатор — gateway, проекция) | |
 | `task_agent_id` | ref AgentInstance | нет | | |
 | `opened_by_event_id`, `closed_by_event_id` | ref EventRecord | | | |
 
@@ -189,13 +193,13 @@ erDiagram
 
 | Инициатор предложения | Может менять | Не может | Отказ |
 |---|---|---|---|
-| game-service / gateway (действие игрока, `actor_kind` сессии, без `meta.agent`) | `Character.position` (enter/leave), `scope` и `group_id` (**только вместе с изменением членства в группе — при движении `scope` не предлагается, C-04 v1.2**); **`Character.status: alive → abandoned` (только `cause=forget`, `/forget`; сведение 3)**; `Group.*` (включая `leader_id = null`); создание `player`, `group` | HP (кроме `rest` через механику), NPC, мир; `status` иных переходов | `dead_entity` при `abandoned` над `dead`/`ascended_final` |
+| gateway / gateway (действие игрока, `actor_kind` сессии, без `meta.agent`) | `Character.position` (enter/leave), `scope` и `group_id` (**только вместе с изменением членства в группе — при движении `scope` не предлагается, C-04 v1.2**); **`Character.status: alive → abandoned` (только `cause=forget`, `/forget`; сведение 3)**; `Group.*` (включая `leader_id = null`); создание `player`, `group` | HP (кроме `rest` через механику), NPC, мир; `status` иных переходов | `dead_entity` при `abandoned` над `dead`/`ascended_final` |
 | Механика (Rule Engine) по действию игрока или ответу NPC | `Character.hp/status/position(flee)/inventory(loot)`, `NPC.hp/status/died_at/killed_by`, `Encounter.participants/npcs` | атрибуты мира/региона | `level_violation` |
 | Глобальный GM (`global`) | `World.weather/time_of_day/day/season/epoch`; `laws_version` — только через пробой (E-B) | регион, NPC, игроки | `level_violation` |
 | GM региона (`domain`) | `Region.*` (кроме `description` — авторское), `NPC` региона (создание, позиция, статус при фоновой жизни — но не убитых игроком до `respawn_ttl`), создание `Encounter` | мир, игроки (HP/позиция/инвентарь/статус) | `level_violation` |
 | Task-агент встречи (`task`) | только через механику: `Encounter`, HP/статус участников и NPC встречи | вне встречи | `level_violation` |
 | Персональный GM (`task`/`monitor`) | ничего | всё | `level_violation` / `player_agency` |
-| entity-manager (сам) | `version`, `history`, `updated_at`, `last_event_id` | — | — |
+| State (сам) | `version`, `history`, `updated_at`, `last_event_id` | — | — |
 | Автор (блупринт/CLI) | всё (при загрузке блупринта, `laws@vN+1 approved`) | — | — |
 
 ---
@@ -457,7 +461,7 @@ HMAC внешнего ID не нужен: `link_id` случаен (ADR-009 до
 stateDiagram-v2
     [*] --> creating : entity.create.proposed
     creating --> alive : entity.created
-    alive --> alive : enter/leave/rest/look/say/attack/flee
+    alive --> alive : действия; не переход статуса — меняются под-состояния (четыре оси ниже)
     alive --> dead : entity.updated status=dead (hp=0)
     alive --> ascended_final : целевое (E-C)
     alive --> abandoned : entity.updated status=abandoned (cause=forget, /forget — предлагает gateway; сведение 3)
@@ -473,10 +477,19 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     [*] --> active : encounter.started
-    active --> active : round.opened / combat.decided / round.closed
+    state active {
+        [*] --> waiting
+        waiting --> resolving : действие игрока принято
+        resolving --> resolving : version_conflict — представление обновлено, тот же proposal_id (C-05 v1.3)
+        resolving --> waiting : броски, combat.decided, атомарный пакет применён
+        waiting --> roundopen : scope group, первое открывающее действие (round.opened)
+        roundopen --> waiting : round.closed
+    }
     active --> resolved : encounter.ended (npc_dead | players_out | abandoned)
     resolved --> [*]
 ```
+
+Уточнение T-409 (по `diagrams/states-encounter.md`): прежняя петля `active → active` скрывала то, что решает дефекты, — внутри активной встречи есть ожидание действия и его разрешение, и именно при разрешении агент, получив отказ по конфликту версий, обновляет представление и предлагает заново. Каждое принятое действие кладёт в пакет набор изменений сущности встречи; действие, которое встреча не принимает, остаётся без ответа — состояние потребитель читает по `encounter.started`/`encounter.ended` (C-05 v1.3). Между предложением создать встречу и `entity.created` сущности ещё нет, а `encounter.started` может уже прийти (разные топики).
 
 `abandoned` — все участники вышли из региона/сессии по TTL (Task-агент завершён по TTL).
 
@@ -496,7 +509,7 @@ stateDiagram-v2
 
 ### 9.5. Session
 
-`active` → `ended{leave|idle|death|error|forget}` (`forget` — сведение 3, З-1). Открывается первым игровым действием; `idle` — по простою ≥ 30 мин (таймер game-service; при replay — из `analytics.session.ended`, не влияет на состояние мира).
+`active` → `ended{leave|idle|death|error|forget}` (`forget` — сведение 3, З-1). Открывается первым игровым действием; `idle` — по простою ≥ 30 мин (таймер gateway; при replay — из `analytics.session.ended`, не влияет на состояние мира).
 
 ### 9.6. Turn (действие)
 
@@ -571,16 +584,16 @@ stateDiagram-v2
 
 | # | Инвариант | Где проверяется |
 |---|---|---|
-| 1 | `dead`/`ascended_final` не действует и не выбирается целью | game-service (валидация), механика (выбор цели), entity-manager (предложение от/на мёртвого — `law_violation`) |
-| 2 | `0 ≤ hp ≤ hp_max` | entity-manager (clamp + отказ при явном нарушении) |
-| 3 | Трофей за NPC ≤ 1 (по `Item.source.entity`) | entity-manager |
-| 4 | Позиция участника группы = позиция группы | entity-manager (пакетное применение), тест |
-| 5 | `1 ≤ members ≤ 6` | game-service, entity-manager |
-| 6 | Игрок ровно в одном scope | entity-manager |
+| 1 | `dead`/`ascended_final` не действует и не выбирается целью | gateway (валидация), механика (выбор цели), State (предложение от/на мёртвого — `law_violation`) |
+| 2 | `0 ≤ hp ≤ hp_max` | State (clamp + отказ при явном нарушении) |
+| 3 | Трофей за NPC ≤ 1 (по `Item.source.entity`) | State |
+| 4 | Позиция участника группы = позиция группы | State (пакетное применение), тест |
+| 5 | `1 ≤ members ≤ 6` | gateway, State |
+| 6 | Игрок ровно в одном scope | State |
 | 7 | HP после `entity.updated` = `hp_after` из `combat.decided` | тест/`--audit` |
 | 8 | Нет `combat.decided` против игрока без его действия в сессии (`trigger` цепочки ∈ `player.*`/`round.closed`) | страж конвейера, тест |
-| 9 | NPC, убитый игроком, не возрождается ранее `respawn_ttl` (новый NPC — новый `id`) | GM региона, entity-manager (`npc.status dead → alive` запрещён) |
-| 10 | Одна сущность — одна позиция | entity-manager |
+| 9 | NPC, убитый игроком, не возрождается ранее `respawn_ttl` (новый NPC — новый `id`) | GM региона, State (`npc.status dead → alive` запрещён) |
+| 10 | Одна сущность — одна позиция | State |
 | 11 | `laws_version` в `llm.output` = `World.laws_version` на момент вызова | страж |
 | 12 | В журнале/снапшотах/индексах нет внешних ID | тест NFR-041 |
 

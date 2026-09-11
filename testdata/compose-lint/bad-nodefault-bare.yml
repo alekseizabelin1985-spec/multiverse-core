@@ -1,0 +1,10 @@
+# Rule 8: `$MV_X`, the brace-less spelling of the same trap as
+# bad-nodefault-braced.yml — a silent .env hands the gateway an empty client
+# list, that is nobody, instead of the manifest's default (T-411 review #1
+# Mi-2). `$$MV_X` would be compose's escape for a literal and is not an
+# interpolation; this line is one.
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_CLIENT_IDS: $MV_GATEWAY_CLIENT_IDS

@@ -1,6 +1,7 @@
 # Задачи EPIC-005 «Память и операции» (005-ops — Must, волна 1→2 · 005-memory — Should, волна 2, **отрезаемо**)
 
 Версия 0.1 · 2026-09-09 · tech-lead#1 (TEAM-1) · статус: к G3.
+**Правка T-416 (2026-09-11, tech-lead#1):** подкоманда отчёта везде — **`mvctl report`**. Это имя зарезервировано в реестре `cmd/mvctl/main.go` (C-10, решение оркестратора по T-409). Прежнее имя `mvctl session-report` в этом файле заменено, в формулировках US-038 и `metrics.md` оно может остаться — это документы BA.
 Команда TEAM-1 · ветка `epic/EPIC-005-memory-ops` (от `integration/mvp-1`; создаётся при старте 005-ops, подволна 1.8) · G2 утверждён 2026-09-09 (допущение «005-memory отрезаема» принято пользователем).
 Основание: `epics/EPIC-005-memory-ops/design.md` v0.1 (§1 состав частей, §4.1/§4.2 структура и порядок, §9 тестируемость, §12 запросы к архитектору); `plan/epics.md` v0.2 §2 «EPIC-005»; `architecture/contracts.md` v0.2 (C-01, C-06, C-07, C-09, C-10, C-14, C-15); ADR-004, ADR-005 п. 4, ADR-009, ADR-010, ADR-011, ADR-021; `project/metrics.md` §6; `plan/teams.md` §4; `plan/ownership.md` v0.2; `epics/EPIC-001-foundation/tasks.md` §8 (волны проекта).
 
@@ -10,7 +11,7 @@
 
 | Часть | Приоритет | Задачи | Старт | Отрезаемость |
 |---|---|---|---|---|
-| **005-ops** | **Must** | T-130…T-140 (11) | подволны 1.8–2.2 — **на освободившихся слотах TEAM-1 после приёмки EPIC-002 I1** (developer#2) | не отрезается: нужна для приёмки I1 и I2 (`session-report`, golden), закрывает US-038 CSV, US-012, NFR-065 |
+| **005-ops** | **Must** | T-130…T-140 (11) | подволны 1.8–2.2 — **на освободившихся слотах TEAM-1 после приёмки EPIC-002 I1** (developer#2) | не отрезается: нужна для приёмки I1 и I2 (`mvctl report`, golden), закрывает US-038 CSV, US-012, NFR-065 |
 | **005-memory** | **Should** | T-141…T-148 (8) | подволны 2.1–2.6 (developer#1 с 2.1; developer#2 подключается с 2.4, освободившись от 005-ops) | **отрезаемо на G3/G4 без потери Must-историй**: рой работает на `journalContext` (C-09, штатная деградация); ни один Must-критерий не читает память (`MV_MEMORY_ENABLED=false` в CI по построению) |
 
 ---
@@ -27,7 +28,7 @@
 8. Поведение соответствует критериям приёмки US-038, US-012, US-003 (трасса), US-017, US-015 (Should), US-005/US-036 (Should-часть).
 
 **Критерии приёмки частей** (ворота тимлида):
-- **005-ops**: `mvctl session-report <session_id>` даёт таблицу `metrics.md` §6.1 + строку `ops/metrics/sessions.csv` + `--json` артефакт по прогону **S1 и S2**; `mvctl golden check solo-30` проходит в CI (job `e2e`); `mvctl trace <cid>` печатает полную цепочку из 7 типов; `mvctl llm usage` даёт вызовы/токены/латентности по фазам и уровням; `mvctl contracts check` без фантомов на полном реестре; `--audit` даёт `state_divergence = 0` на записи S2; пороги «после замера» закреплены в `nfr.md`.
+- **005-ops**: `mvctl report <session_id>` даёт таблицу `metrics.md` §6.1 + строку `ops/metrics/sessions.csv` + `--json` артефакт по прогону **S1 и S2**; `mvctl golden check solo-30` проходит в CI (job `e2e`); `mvctl trace <cid>` печатает полную цепочку из 7 типов; `mvctl llm usage` даёт вызовы/токены/латентности по фазам и уровням; `mvctl contracts check` без фантомов на полном реестре; `--audit` даёт `state_divergence = 0` на записи S2; пороги «после замера» закреплены в `nfr.md`.
 - **005-memory**: сводка «пока тебя не было» из памяти совпадает с журналом (`/v1/context/absence` ⊇ фоновые события `journalContext`); при остановленной памяти рой отвечает без ошибки (`memory_fallback` в логе).
 
 ---
@@ -47,7 +48,7 @@
 - **Описание**: `aggregate.go` — таблица `metrics.md` §6.1 (ходы, поломки, латентности p50/p95 по фазам, вызовы/токены LLM по фазам и уровням агентов, fallback, `memory_fallback_rate`, миграция `gm_path`, восстановление); `render.go` (Markdown в stdout); `csv.go` (`ops/metrics/sessions.csv` — append, заголовок фиксирован и идемпотентен); `json.go` (`--json` → `ops/metrics/sessions/<session_id>.json`, FR-101).
 - **Файлы**: `cmd/mvctl/internal/report/{aggregate,render,csv,json}.go`, `ops/metrics/sessions.csv` (заголовок).
 - **Зависимости**: T-130.
-- **Ссылки**: `design.md` §4.1; `metrics.md` §6.1, §6.2; **US-038** (критерий «`session-report <session_id>` → таблица + строка в CSV»); FR-085…FR-088, FR-101; NFR-032.
+- **Ссылки**: `design.md` §4.1; `metrics.md` §6.1, §6.2; **US-038** (критерий «`mvctl report <session_id>` → таблица + строка в CSV»; в тексте US-038 — прежнее имя `session-report`); FR-085…FR-088, FR-101; NFR-032.
 - **DoD**: unit на `testdata/analytics/` — известные p50/p95 и счётчики совпадают с эталоном; повторный запуск не дублирует заголовок CSV и добавляет ровно одну строку; `status=rejected` ход не входит в латентности (US-038 критерий 7); `--json` артефакт валиден и содержит те же числа, что Markdown; общий DoD §1.
 
 ### T-132: `report --weekly`, `incidents.csv`, `background.csv` · Размер: S · Статус: todo · Исполнитель: developer#2 · Подволна 1.10
@@ -85,7 +86,7 @@
 - **Ссылки**: `design.md` §4.1, §6, §11 (риск конфликтов golden); ADR-010; **NFR-065**, NFR-048 (0 ложных срабатываний фильтра (a) на золотом наборе).
 - **DoD**: `mvctl golden check solo-30` зелёный в CI и локально; набор содержит 20 ходов + 3 тика; `git check-attr merge testdata/golden/solo-30.expected.jsonl` = `binary`; общий DoD §1.
 
-### T-137: `session-report --audit` и `analytics.consistency.violated` · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.15
+### T-137: `mvctl report --audit` и `analytics.consistency.violated` · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.15
 - **Описание**: `report/audit.go` — сверка через **`internal/state/audit.Recompute`** (EPIC-002 T-069) и `entity.StateHash`: `hash(снапшот + факты)` против `hash(объектов entities-{world})` из `objstore`; при расхождении — публикация `analytics.consistency.violated code=state_divergence severity=break detected_by=mvctl`; **режим `partial`** (только хэш снапшота против объектов, без фактов) с явной пометкой в отчёте — используется, если EPIC-002 T-069 ещё не слит.
 - **Файлы**: `cmd/mvctl/internal/report/audit.go`; схема `schemas/events/analytics.consistency.violated.v1.json` (создана в T-009, владелец — EPIC-005).
 - **Зависимости**: T-131; **EPIC-002 T-069** (`internal/state/audit`).
@@ -171,7 +172,7 @@
 - **DoD**: `rebuild` на записи восстанавливает индекс до состояния, при котором `/v1/context/scope` даёт тот же набор фактов, что после онлайн-индексации (тест сравнения); обязателен при смене `MV_MEMORY_EMBED_MODEL` (проверка версии коллекции); `--blueprints` добавляет `authored`-факты; общий DoD §1.
 
 ### T-148: e2e памяти, деградация и профиль compose `memory` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 2.6
-- **Описание**: e2e «сводка из памяти = сводка из журнала»: запись S14 → `memory rebuild` → `/v1/context/absence` ⊇ фоновые события `journalContext`; e2e деградации: контекст `memory` остановлен → `narrative.output` доставляется без ошибки, в логе `memory_fallback`, `session-report` показывает `memory_fallback_rate`; проверка профиля compose `memory` (Qdrant + Neo4j + процесс `memory`).
+- **Описание**: e2e «сводка из памяти = сводка из журнала»: запись S14 → `memory rebuild` → `/v1/context/absence` ⊇ фоновые события `journalContext`; e2e деградации: контекст `memory` остановлен → `narrative.output` доставляется без ошибки, в логе `memory_fallback`, `mvctl report` показывает `memory_fallback_rate`; проверка профиля compose `memory` (Qdrant + Neo4j + процесс `memory`).
 - **Файлы**: `test/e2e/memory_test.go`, дополнение `docker-compose.yml` (профиль `memory` — ⚠ через tech-lead#1).
 - **Зависимости**: T-145, T-147, T-131.
 - **Ссылки**: `design.md` §4.3 (таблица деградации), §9 (строка e2e); C-09; US-005, US-036; критерий готовности 005-memory.
@@ -183,7 +184,7 @@
 
 | Задача | Что на стенде | Когда | Кто |
 |---|---|---|---|
-| T-131 / T-134 (часть) | `session-report` и `llm usage` на **живой сессии S1**, затем S2 (Redpanda + MinIO, не запись) | интеграция I1 / I2 | developer#2 + пользователь |
+| T-131 / T-134 (часть) | `mvctl report` и `llm usage` на **живой сессии S1**, затем S2 (Redpanda + MinIO, не запись) | интеграция I1 / I2 | developer#2 + пользователь |
 | T-137 (часть) | `--audit` на живом мире после сессии: снапшот + журнал ↔ объекты `entities-{world}` | интеграция I2 | developer#2 + пользователь |
 | **T-140** | закрепление порогов NFR-030/032/034 по `baseline.md` (T-013) и прогонам S1/S2 | подволна 2.4–2.6 | developer#2 + BA + пользователь |
 | T-142 (часть) | индексация на живом Ollama-эмбеддинге (`nomic-embed-text` / `bge-m3`), измерение `index_lag` | подволна 2.5 | developer#1 + пользователь |

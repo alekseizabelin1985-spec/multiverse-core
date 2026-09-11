@@ -2,6 +2,7 @@
 
 Версия 0.1.1 · 2026-09-09 · tech-lead#3 (TEAM-3) · этап A4 «Планирование», шаг 3 · к объединённому G3.
 **Правки сведения 3 внесены tech-lead#1 от имени tech-lead#3** (одна команда по решению пользователя; основание — `architecture/consolidation.md` §14, `contracts.md` v0.4): T-301 (схемы `group.*`/`session.ended`, OpenAPI), T-302 (CHECK `end_reason`), T-314 и T-355 (каскад `/forget`), T-352 (`no_leader`, `leader_id: null`), T-320 (`blocked` → `planned`); §8 З-1…З-6 — «решено», §9 риски 4–5 сняты. Структура подволн и состав задач не менялись.
+**Правки ревизии контрактов T-416 внесены tech-lead#1 (2026-09-11; один проход по всем эпикам по решению оркестратора)** — основание `contracts.md` v0.6–v0.7 (C-04 v1.3, C-05 v1.4, C-08 v1.3, Env), ADR-026: T-303 (`MV_CORE_ADDR`, списки `MV_GATEWAY_CLIENT_IDS`/`MV_GATEWAY_ACTOR_KIND_CLIENTS`), T-304 (конец встречи), T-307 (порядок `narrative_output`), T-350/T-351 (конец при открытом раунде), T-356, T-357, T-392 (имена переменных и подкоманды отчёта). Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 Команда: TEAM-3 (tech-lead#3, architect#3, developer#1–#2, code-reviewer#3, qa-engineer#3, tester#3).
 Ветка эпика: `epic/EPIC-004-gateway` от `integration/mvp-1` (одна на весь MVP-1; создаётся tech-lead#3 при старте волны 1; коммиты — `commits=ask`, один запрос на подволну).
 Диапазон номеров команды: **T-300…T-399** (TEAM-1 — T-001…T-199, TEAM-2 — T-200…T-299). Занято этим документом: T-301…T-320, T-350…T-357, T-390…T-393.
@@ -10,7 +11,7 @@
 
 ---
 
-## 0. Как читать и общий DoD
+## 0. Как читать и общий DoD [ ] **(оркестратор по T-416, 2026-09-11; C-05 п. 1д)** срок ожидания ответа на действие — не конец встречи: при варианте «не предлагать повтор» потребитель получает только срок, события отказа нет; шлюз сообщает игроку «ответа нет» и не закрывает встречу, конец — только по факту `resolved` или `encounter.ended` (тест).
 
 **Формат задачи:** `T-NNN: название · инкремент · подволна · исполнитель · размер · зависимости · ссылки · описание · DoD`.
 Размер: **S** ≤ полдня, **M** ≤ день-полтора (дифф ≤ ~600 строк с тестами). Задач размера L в эпике нет — это правило нарезки (design §3.4).
@@ -87,14 +88,14 @@
 1. `links/store.go` — интерфейс и SQLite-реализация `Store` (component §6): `Resolve` (нет строки → INSERT `pending_consent` + новый `link_id` ULID, обновляет `last_seen_at`), `Consent`, `AttachPlayer`, `ByPlayer`, `RouteFor`, `Forget`, `ForgetByPlayer`, `CharacterRequest`/`SaveCharacterRequest` (ключ `(link_id, action_key)`, TTL 24 ч), `Compact`.
 2. `links/pseudonym.go` — `NewPlayerID`, `NewLinkID`; `Link.LogValue() → "redacted"`.
 3. `links/forget.go` — `Forget` + `ForgetHooks` (в I1 подключены `outbox.DropForPlayer`, `session.End` — регистрируются позже; интерфейс и вызов уже здесь), checkpoint+vacuum в том же вызове.
-4. `api/`: `server.go` (таймауты component §5.1, `MV_GATEWAY_LISTEN`, graceful shutdown), `router.go`, `middleware.go` (порядок 1–8: recover, request_id, client/actor_kind/client_mismatch, body_limit 64 КиБ, `nolog`, ratelimit-заглушка, `pollguard`, timeout), `errors.go` (таблица `api-contracts.md` §1.6 + коды C-08 v1.1), `handlers_links.go`, `handlers_health.go` (минимальный `/health`).
-5. `config.go` — манифест `shared/env.Declare` для переменных gateway (component §11.3), `MV_GATEWAY_CLIENTS` парсер `client_id:platform:actor_kinds`.
+4. `api/`: `server.go` (таймауты component §5.1, адрес прослушивания — **`MV_CORE_ADDR`**, graceful shutdown), `router.go`, `middleware.go` (порядок 1–8: recover, request_id, client/actor_kind/client_mismatch, body_limit 64 КиБ, `nolog`, ratelimit-заглушка, `pollguard`, timeout), `errors.go` (таблица `api-contracts.md` §1.6 + коды C-08 v1.1), `handlers_links.go`, `handlers_health.go` (минимальный `/health`). *(T-416, 2026-09-11: заменено `MV_GATEWAY_LISTEN` — такой переменной нет. Адрес HTTP любого процесса задаёт только `MV_CORE_ADDR`, решение T-408, `contracts.md` v0.6 «Env». HTTP-сервер процесса даёт `shared/runtime`, gateway монтирует маршруты на `Deps.Mux`, C-01 v1.3.)*
+5. `config.go` — переменные gateway (component §11.3) читаются через объявления манифеста `shared/env`. Два списка: **`MV_GATEWAY_CLIENT_IDS`** — допущенные `X-Client-Id`; **`MV_GATEWAY_ACTOR_KIND_CLIENTS`** — клиенты с правом на `X-Actor-Kind: ci|sim` (C-08 v1.3). Платформа клиента для SEC-12 в MVP-1 — **фиксированное соответствие в коде** (`client_id → platform`). Отдельная переменная появится со вторым ботом (решение оркестратора по T-409, `journal.md` 2026-09-11). *(Заменено (T-416): «`MV_GATEWAY_CLIENTS` парсер `client_id:platform:actor_kinds`».)*
 
 **DoD** (+ DoD-common):
 - [ ] Unit `links`: `resolve` без строки → `pending_consent` + непустой `link_id`; повторный `resolve` — тот же `link_id`, обновлён `last_seen_at`; неполное согласие → остаётся `pending_consent`; `consented` ⇒ три timestamp не NULL; `AttachPlayer` при `dead` → новый `player_id`, `link_id` не изменился; уникальность `player_id`.
 - [ ] Unit `Forget`: каскад `character_requests`, вызов `ForgetHooks`, возврат `{deleted, player_id_detached}`; повтор — идемпотентно `{deleted:false}` без ошибки; `/forget` от аккаунта без персонажа → «нечего удалять» (US-009).
 - [ ] Unit `Link.LogValue()`: `slog` с атрибутом `Link` не печатает внешний ID и `link_id`.
-- [ ] Unit `api` (SEC-11/12): `403 client_unknown` при `X-Client-Id` вне `MV_GATEWAY_CLIENTS`; `403 actor_kind_forbidden`; `403 client_mismatch` для `/v1/clients/{id}/*`; `413 payload_too_large` на 65 КиБ; `409 poll_in_progress` на второй параллельный long-poll; `X-Request-Id` в ответе.
+- [ ] Unit `api` (SEC-11/12): `403 client_unknown` при `X-Client-Id` вне `MV_GATEWAY_CLIENT_IDS`; `403 actor_kind_forbidden` при `X-Actor-Kind: ci|sim` от клиента вне `MV_GATEWAY_ACTOR_KIND_CLIENTS` *(T-416: заменено `MV_GATEWAY_CLIENTS`, C-08 v1.3)*; `403 client_mismatch` для `/v1/clients/{id}/*`; `413 payload_too_large` на 65 КиБ; `409 poll_in_progress` на второй параллельный long-poll; `X-Request-Id` в ответе.
 - [ ] Unit `nolog` (SEC-01/02): при `400/500` на `POST /v1/links/*` и `POST /v1/characters` в логе есть только `request_id` и `code`, тела и внешнего ID нет.
 - [ ] `openapi_test.go` зелёный: маршруты `links`, `/health` из `router.go` есть в `api/gateway.openapi.yaml`; **OpenAPI обновлён** телами ответов этих маршрутов.
 - [ ] Семантика `/forget` (что удаляется, что остаётся) отражена в `description` соответствующих операций OpenAPI (SEC-26).
@@ -115,6 +116,7 @@
 - [ ] Unit `consumer`: дубль события по `event.id` не применяется дважды (NFR-013); курсоры продвигаются в одной транзакции с эффектом; события с `offset ≤ cursor(эффекты)` применяются только к проекции.
 - [ ] `readmodel` использует **только** типизированные геттеры `shared/entity` v2 — прямых обращений к `map[string]any` нет (риск design §8).
 - [ ] `/health.projection` возвращает `ok|missing|stale`.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, C-05 v1.4 п. 3–5, ADR-026 п. 4)** Read-model считает встречу законченной по **первому** из двух событий: факт сущности встречи со `state=resolved` (`entity.updated`, `system_events`) или `encounter.ended` (`world_events`). Второе событие пары состояние не меняет и повторного эффекта не даёт (ожидания, доставки). В журнале факт всегда раньше события, но между топиками порядок не гарантирован (C-01). Встреча, объявленная `encounter.started` раньше `entity.created`, держится как «объявлена, сущности ещё нет», и состояние это временное. Unit: оба порядка прихода «факт / `encounter.ended`» дают одно и то же закрытое состояние; оба порядка «`encounter.started` / `entity.created`» дают одну и ту же открытую встречу; действие после конца, пришедшего любым из двух путей, отвергается предусловием (`not_in_encounter`, T-305).
 
 ### T-305: `actions` — валидация, идемпотентность, лимит, `InputFilter`, публикация `player.*` · I1 · подволна 1.5 · developer#1 · M
 
@@ -167,6 +169,7 @@
 - [ ] Golden-тест `render.Mechanics`: попадание/промах/крит, `npc_attack`, `flee success/fail`, смерть, `rest`, `move` — тексты в `testdata/golden/`, файлы с `merge=binary` (ownership).
 - [ ] Unit long-poll: `Serve` не держит соединение БД во время ожидания; `Notify` после `Enqueue` будит ждущего ≤ 50 мс; периодическое пробуждение раз в 1 с работает при потере сигнала.
 - [ ] Sweeper: `ReleaseExpiredLeases`, `Expire` (TTL 24 ч → `dropped`), retention `processed_events`/`idempotency_keys` — по component §4.2; в `--mode=replay` выключен.
+- [ ] **(T-416, 2026-09-11; C-05 v1.4 п. 8 и «Гарантии»)** Шлюз **не переупорядочивает** `narrative_output`: доставки `narrative.output` встают в очередь игрока в порядке топика. Порядок «смерть после текста хода» обеспечивает издатель нарратива (T-233), по `based_on[]`, `kind` и времени шлюз ничего не переставляет. Unit: `kind=death` пришёл раньше `kind=turn` той же `correlation_id` → доставки выданы в порядке прихода, без задержки и перестановки.
 - [ ] **OpenAPI обновлён**: `pollDeliveries`, `ackDeliveries`, `streamDeliveries (501)`; `openapi_test` зелёный.
 
 ### T-308: `shared/testkit/gateway` — `FakeGateway` и `Harness` (замена v0 из F-10) · I1 · подволна 1.8 · developer#1 · M · **ранний merge**
@@ -379,6 +382,7 @@
 - [ ] Unit гонки «действие vs таймер»: одновременный `Accept` и срабатывание таймера не дают двух `round.closed` и не теряют действие.
 - [ ] В `solo` `round.*` не публикуются (C-04) — тест.
 - [ ] Публикуемые события валидны по схемам из T-301.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, ADR-026)** Конец встречи при открытом раунде — первое из «факт сущности встречи `state=resolved`» и `encounter.ended` (read-model T-304) — координатор обрабатывает **тем же путём**, что смертельный удар первым действием раунда. Путь один и для конца без действия группы (существо убито вне встречи, C-05 v1.4 п. 6). Новых значений `close_reason` не вводится. Unit: конец по факту и конец по `encounter.ended` при открытом раунде дают одинаковый итог раунда — один раз, без второго `round.closed`; то же для конца без единого действия группы в раунде.
 
 ### T-351: Раунды — `Restore`, `replay`, `idle`/`missed_rounds`, `OnParticipantsChanged` · I2 · подволна 2.2 · developer#1 · M
 
@@ -393,6 +397,7 @@
 - [ ] Unit `idle`: 2 пропуска → `participation=idle` + предложение по группе; участник исключён из `expected` и попал в `round.closed.idle[]`; первое действие → `active`, `missed_rounds=0`.
 - [ ] Unit `OnParticipantsChanged`: смерть/выход единственного `active` участника закрывает раунд корректно (US-009, критерий про `/forget` в открытом раунде).
 - [ ] `gateway` — единственный, кто предлагает `participation` (component §16 п. 3); тест на отсутствие расхождения `group_participation` и предложения.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, ADR-026)** `Restore` и `OnParticipantsChanged` ведут конец встречи при открытом раунде тем же путём, что T-350 (как смертельный удар первым действием раунда), без нового `close_reason`. Unit `Restore`: открытый раунд встречи, конец которой (факт `state=resolved` или `encounter.ended`) пришёл, пока шлюз лежал, закрывается этим путём один раз.
 
 ### T-352: `groups` — create/join/leave, лидер, `group.entered_region`, `GET /v1/groups/{id}`, предусловия группы · I2 · подволна 2.1 · developer#2 · M
 
@@ -466,12 +471,12 @@
 **Зависит от:** T-303. **Внешнее:** admin-порт `core` (C-06, EPIC-003 I1b) — для unit достаточно `httptest.Server`.
 **Ссылки:** C-06, C-08 v1.1, SEC-12, SEC-13; component §5.1, §5.2, §11.3; design §3.2 п. 7; `journal.md` (совладение раздела `admin` с EPIC-003).
 
-**Описание.** `httputil.ReverseProxy` на `POST /v1/admin/agents/{id}/tick`, `GET /v1/admin/agents`, `GET /v1/admin/llm/usage` (таймаут 30 с); `GET /v1/admin/sessions` — из `session.Active()` (без внешних ID); `DELETE /v1/admin/links/{player_id}`; допуск `ci`/`operator`; клиенты `ci/sim` по `MV_GATEWAY_CLIENTS`; раздел `admin` в `api/gateway.openapi.yaml` согласован с architect#2 (совладение).
+**Описание.** `httputil.ReverseProxy` на `POST /v1/admin/agents/{id}/tick`, `GET /v1/admin/agents`, `GET /v1/admin/llm/usage` (таймаут 30 с); `GET /v1/admin/sessions` — из `session.Active()` (без внешних ID); `DELETE /v1/admin/links/{player_id}`; допуск `ci`/`operator`; право клиента на `X-Actor-Kind: ci|sim` — по `MV_GATEWAY_ACTOR_KIND_CLIENTS` *(T-416: заменено `MV_GATEWAY_CLIENTS`, C-08 v1.3)*; раздел `admin` в `api/gateway.openapi.yaml` согласован с architect#2 (совладение).
 
 **DoD** (+ DoD-common):
 - [ ] Unit на `httptest.Server`: заголовки клиента пробрасываются, тело и статус возвращаются как есть, таймаут 30 с; `core` недоступен → `/health.core_admin=unavailable`, `degraded`.
 - [ ] Unit SEC-12: клиент без `ci`/`operator` → `403`; `GET /v1/admin/sessions` не содержит внешних ID.
-- [ ] Ревью prod-`.env`: `ci-harness` отсутствует в `MV_GATEWAY_CLIENTS` (SEC-12) — пункт вынесен в чек-лист T-392 и зафиксирован в README.
+- [ ] Ревью prod-`.env`: `ci-harness` отсутствует во всех трёх списках клиентов — `MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS` (SEC-12; умолчания только в манифесте, T-411) — пункт вынесен в чек-лист T-392 и зафиксирован в README. *(T-416: заменено `MV_GATEWAY_CLIENTS`.)*
 - [ ] Раздел `admin` в OpenAPI не конфликтует с описанием EPIC-003 (согласование в отчёте); `openapi_test` зелёный.
 - [ ] Может быть выполнена в конце I1, если EPIC-003 I1b выставил admin-порт (design §3.2 п. 7) — решение принимает tech-lead#3 на подволне 1.11.
 
@@ -488,7 +493,7 @@
 - [ ] Ветка `timeout`: молчащий участник получает `player.defended cause=round_timeout` до `round.closed`; после 2 пропусков — `idle`.
 - [ ] `forget` в группе: критерии US-009 (лидерство, состав, закрытие раунда) выполнены.
 - [ ] Прогон с `--chaos=duplicate` зелёный.
-- [ ] Фикстура прогона пригодна для `mvctl session-report` (EPIC-005) — отмечено в отчёте.
+- [ ] Фикстура прогона пригодна для `mvctl report` (EPIC-005) — отмечено в отчёте. *(T-416: было `mvctl session-report`.)*
 
 ---
 
@@ -524,7 +529,7 @@
 - [ ] Замер `ack_latency_p95_ms` от сообщения боту до ответа «принято» — значение записано; NFR-003 (≤ 300 мс p95) выполнен либо зафиксировано отклонение с причиной.
 - [ ] Учения `/forget`: реальная связка удаляется; `strings` по `links.db` и WAL = 0; повторный `/start` даёт новый `player_id`; недоставленные сообщения не приходят.
 - [ ] Privacy-скан на стенде при `MV_LOG_LEVEL=debug`: 0 внешних ID в логах обоих процессов, топиках, MinIO, `gateway.db`, `testdata/`; 0 фрагментов токена.
-- [ ] Ревью prod-`.env`: `ci-harness` отсутствует в `MV_GATEWAY_CLIENTS`; порты только на `127.0.0.1`.
+- [ ] Ревью prod-`.env`: `ci-harness` отсутствует во всех трёх списках клиентов — `MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS` (T-411); порты только на `127.0.0.1`. *(T-416: заменено `MV_GATEWAY_CLIENTS`.)*
 - [ ] S3 (восстановление после рестарта) проверен на стенде: снапшот gateway восстанавливается, игрок продолжает с того же места (US-011).
 - [ ] Чек-лист security-review по пунктам SEC-03, 06, 07, 08, 10, 11, 12, 26 отмечен целиком; незакрытые пункты — задачами.
 

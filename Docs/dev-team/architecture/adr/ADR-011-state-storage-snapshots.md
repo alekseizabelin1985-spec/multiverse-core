@@ -36,3 +36,5 @@ ADR-003 задаёт: State держит мир в памяти, PUT объек�
 - Позитивные: RPO = 0 без отдельного outbox (commit-record в объекте); один путь кода для recovery и live (курсор); указатель `latest.json` даёт потребителям целостный снапшот всегда; дедуп предложений без БД.
 - Негативные: `Journal` — дополнение к C-01 (совместимое, но требует реализации в kafka-адаптере и membus в волне 0); объект сущности растёт на `last_change`/`history` (≤ 10 КБ на сущность — незначимо); State сам реализует повторы на ошибках I/O.
 - Что придётся сделать: `shared/entity.LastChange`; `internal/state/{store,snapshot,recovery,dedup}.go`; запрос в C-01 (`Journal`, `Position`); тесты recovery (a)–(g) из `state-and-mechanics.md` §11; `mvctl session-report --audit` (EPIC-005) считает тот же `entity.StateHash`.
+
+*(Имя подкоманды заменено: `mvctl session-report` → `mvctl report`, см. T-416. Текст решения не переписан.)*

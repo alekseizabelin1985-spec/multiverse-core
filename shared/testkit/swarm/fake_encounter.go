@@ -150,8 +150,9 @@ type EncounterConfig struct {
 	// Log receives what the stub decided; it defaults to a logger that
 	// discards everything, so that a test says nothing unless it asks to.
 	Log *slog.Logger
-	// DedupCapacity is how many action identifiers are remembered against an
-	// at-least-once redelivery; zero selects the default of eventbus.Dedup.
+	// DedupCapacity is how many identifiers are remembered against an
+	// at-least-once redelivery — of the actions answered, and separately of the
+	// refusals answered; zero selects the default of eventbus.Dedup.
 	DedupCapacity int
 }
 
@@ -177,6 +178,8 @@ type EncounterConfig struct {
 // answer to the action — the dice are rolled once and the decision is
 // published once — and it is what the encounter agent of EPIC-003 will have to
 // do, which is why the stub shows the shape rather than avoiding the problem.
+// The retry ends with the first fact that names its proposal, and a retry that
+// would change who is left standing is not offered at all (propose).
 //
 // What it deliberately does not do, and who does it instead:
 //
@@ -222,6 +225,13 @@ type FakeEncounter struct {
 	// is not part of Phase 1 of the stub.
 	byPlayer map[string]*encounter
 	acted    *eventbus.Dedup
+	// refusals is the same guard as acted, over entity.update.rejected: a
+	// refusal delivered twice is one lost race, and answering the copy would
+	// spend a second attempt on it — or, once the retry has gone in, offer a
+	// package State has already applied (review #2 of T-219, Ma-1). It is a
+	// window of its own so that a burst of refusals cannot push the actions out
+	// of theirs.
+	refusals *eventbus.Dedup
 	started  bool
 
 	subscriptions sync.WaitGroup
@@ -246,8 +256,10 @@ type encounter struct {
 	round  int
 	active bool
 	// pending is the package of the action being answered right now, kept
-	// until State says whether it went in. One fight answers one action at a
-	// time, so one slot is all a fight ever needs and nothing here can grow.
+	// until State says whether it went in: a fact naming its proposal settles
+	// it (Observe), and so does the stub giving up on it (refused, propose).
+	// One fight answers one action at a time, so one slot is all a fight ever
+	// needs and nothing here can grow.
 	pending *answer
 	// touched says whether the action being answered right now moved
 	// participation. A package must not carry a participants[] identical to the
@@ -288,8 +300,7 @@ func (p *participant) payload() map[string]any {
 // It holds decisions rather than operations on purpose. A package refused for
 // a version conflict is offered again, and the second offer has to be computed
 // against the world as it is by then: the same swing takes the same damage off
-// whatever hit points the target turns out to have, and a target that has
-// fallen in the meantime is not struck at all. A record of the operations
+// whatever hit points the target turns out to have. A record of the operations
 // alone could only be re-sent under a new version, which would write hit
 // points the world has already left (ADR-013 p. 1, §4.5).
 //
@@ -297,6 +308,9 @@ func (p *participant) payload() map[string]any {
 // the world: the round the turn consumed, how the fight ended, where a
 // character who got away now stands. Those are the decisions of the action
 // itself, and a retry that changed them would be answering a different action.
+// That is also why a retry that would change who is left standing is not
+// offered at all (propose): the end of the fight rests on who fell, and it has
+// been decided and published already.
 type answer struct {
 	// cause is the player action being answered. It names the proposal, and
 	// every event of the package is derived from it.
@@ -326,7 +340,11 @@ type blow struct {
 	// decisionID is the combat.decided this blow came from — what the trophy
 	// of a killing blow names as its source (inv-03).
 	decisionID string
-	at         time.Time
+	// kills is what the decision said about the target: that it fell. It is
+	// published with the decision and the end of the fight follows from it, so
+	// a package that says otherwise is a package that contradicts both.
+	kills bool
+	at    time.Time
 }
 
 // restore is what one entity looked like before the stub folded a package into
@@ -375,6 +393,7 @@ func NewFakeEncounter(cfg EncounterConfig) (*FakeEncounter, error) {
 		facts:    make(map[string]*entity.Entity),
 		byPlayer: make(map[string]*encounter),
 		acted:    eventbus.NewDedup(cfg.DedupCapacity),
+		refusals: eventbus.NewDedup(cfg.DedupCapacity),
 	}, nil
 }
 
@@ -817,7 +836,7 @@ func (a *answer) strike(targetID, attackerID string, out mech.Outcome,
 	}
 	a.blows = append(a.blows, blow{
 		targetID: targetID, attackerID: attackerID, damage: out.Damage,
-		decisionID: decisionID, at: at,
+		decisionID: decisionID, kills: out.TargetDead, at: at,
 	})
 }
 
@@ -857,16 +876,23 @@ func (e *FakeEncounter) turnOps(enc *encounter, resolution, endedByEventID strin
 }
 
 // pack turns what the action decided into the package that carries it, against
-// the world as the stub sees it now.
+// the world as the stub sees it now, and says whether that world still agrees
+// with the decision about who is left standing.
 //
 // It is called once per attempt, which is what makes a retry a fresh answer
 // rather than the refused one with a new version on it: the damage of a blow
-// comes off the hit points the target has at this moment, and the target that
-// has fallen since is not struck at all. Everything the fight decided without
-// reading the world — the round, the end of the fight, where a character who
-// got away stands — is carried over unchanged from the first attempt.
-func (e *FakeEncounter) pack(enc *encounter, ans *answer) *changes {
-	pending := newChanges()
+// comes off the hit points the target has at this moment. Everything the fight
+// decided without reading the world — the round, the end of the fight, where a
+// character who got away stands — is carried over unchanged from the first
+// attempt.
+//
+// drift is empty when every blow still does to its target what the decision
+// said it did, and otherwise names the fighter the world now disagrees about:
+// one who has fallen since, one the same damage would now kill, one it would
+// no longer kill. There is no package then. On the first attempt drift is
+// always empty, because the decision was made from this very view a moment ago.
+func (e *FakeEncounter) pack(enc *encounter, ans *answer) (pending *changes, drift string) {
+	pending = newChanges()
 	if ans.fleeTo != nil {
 		if who := e.entityOf(ans.fleer); who != nil {
 			pending.add(who, entity.Op{
@@ -888,12 +914,10 @@ func (e *FakeEncounter) pack(enc *encounter, ans *answer) *changes {
 			continue
 		}
 		if target.IsTerminal() {
-			// Nobody strikes a corpse. A blow whose target fell between the
-			// decision and this package is dropped from it, and the turn it
-			// belongs to still travels.
-			e.log.Info("the target of a blow is already down, the blow is dropped",
-				"entity_id", b.targetID, "event_id", ans.cause.ID)
-			continue
+			// Nobody strikes a corpse, and a blow that can no longer be dealt
+			// is a decision the world has moved past: the decision either left
+			// this fighter standing or claimed the kill for somebody else.
+			return nil, b.targetID
 		}
 		before, threaded := hp[b.targetID]
 		if !threaded {
@@ -905,6 +929,9 @@ func (e *FakeEncounter) pack(enc *encounter, ans *answer) *changes {
 		}
 		hpMax, _ := target.HPMax()
 		after := e.rules.ClampHP(before-b.damage, hpMax)
+		if fell := after == 0; fell != b.kills {
+			return nil, b.targetID
+		}
 		hp[b.targetID] = after
 		e.wound(pending, target, b, after)
 	}
@@ -914,7 +941,7 @@ func (e *FakeEncounter) pack(enc *encounter, ans *answer) *changes {
 	} else {
 		e.log.Warn("the encounter entity is not in the world of the stub", "encounter_id", enc.id)
 	}
-	return pending
+	return pending, ""
 }
 
 // report publishes what a decision rests on and then the decision: one
@@ -1054,13 +1081,29 @@ func (e *FakeEncounter) wound(pending *changes, target *entity.Entity, b blow, h
 // with the version each entity was expected to be at (C-02, ADR-013 p. 1), and
 // applies it to the view of the stub.
 //
-// The empty package is a defect and not a turn: recordTurn puts the round on
-// the encounter entity for every action the fight accepts, so the only way here
+// The empty package is a defect and not a turn: turnOps puts the round on the
+// encounter entity for every action the fight accepts, so the only way here
 // with nothing to say is a stub that lost the entity it created. changes has
 // minItems 1, so publishing it would be a schema violation dressed up as a
 // turn; it is logged loudly instead.
+//
+// A retry the world has moved past is not offered (pack). Working the end of
+// the fight out again instead is not open to the stub: the decisions of the
+// action are published, and they are what the end rests on — encounter.ended
+// of a killing blow has already left, and a blow that did not kill was
+// answered by a bite of the fighter it did not kill. A package that changed who
+// fell would be answering a different action. So the stub gives up on it out
+// loud, exactly as on a race it keeps losing, with the view where the facts
+// put it (refused has rolled the refused attempt back).
 func (e *FakeEncounter) propose(ctx context.Context, enc *encounter, ans *answer) error {
-	pending := e.pack(enc, ans)
+	pending, drift := e.pack(enc, ans)
+	if drift != "" {
+		e.log.Error("the world moved past the decision, the package is not offered again",
+			"proposal_id", ans.proposalID(), "attempts", ans.attempts,
+			"entity_id", drift, "encounter_id", enc.id, "event_id", ans.cause.ID)
+		enc.pending = nil
+		return nil
+	}
 	sets := pending.sets()
 	if len(sets) == 0 {
 		e.log.Error("an action of the fight changed nothing at all",
@@ -1179,6 +1222,7 @@ func (e *FakeEncounter) Observe(ctx context.Context, ev eventbus.Event) error {
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.settle(p.ProposalID)
 	current, known := e.world[id]
 	if !known {
 		if ev.Type != TypeCreated {
@@ -1259,12 +1303,23 @@ func (e *FakeEncounter) fold(ent *entity.Entity, ops []entity.Op, version int64)
 // proposal identifier, one package, recomputed against the world it will now
 // be applied to (pack). It is not a second answer, and nothing here answers an
 // action twice.
+//
+// Every way out of here that is not an offer leaves the view where the facts
+// put it. The attempt State refused moved nothing, and a view that went on
+// holding it would pin the next action to a version State never reached —
+// losing that race too, and the one after it.
 func (e *FakeEncounter) refused(ctx context.Context, ev eventbus.Event) error {
 	pa := ev.Path()
 	proposal, _ := pa.GetString("proposal_id")
 	if !strings.HasPrefix(proposal, proposalPrefix) {
 		// Somebody else's package: the gateway proposes its own changes and
 		// answers for them itself (C-02 v1.1).
+		return nil
+	}
+	// Delivery is at-least-once (C-01), for a refusal as for an action: a copy
+	// of one lost race must not spend a second attempt on it.
+	if e.refusals.Seen(ev.ID) {
+		e.log.Debug("refusal already answered", "event_id", ev.ID, "proposal_id", proposal)
 		return nil
 	}
 	reason, _ := pa.GetString("reason")
@@ -1283,6 +1338,7 @@ func (e *FakeEncounter) refused(ctx context.Context, ev eventbus.Event) error {
 			"proposal_id", proposal, "entity_id", entityID)
 		return nil
 	}
+	e.rollback(ans)
 	if ans.attempts >= maxProposalAttempts {
 		// The end of the road, and it is said out loud: the action has been
 		// answered by nothing the world kept, and everything the fight decided
@@ -1294,11 +1350,26 @@ func (e *FakeEncounter) refused(ctx context.Context, ev eventbus.Event) error {
 		enc.pending = nil
 		return nil
 	}
-	e.rollback(ans)
 	e.log.Info("offering the package again after a version conflict",
 		"proposal_id", proposal, "attempt", ans.attempts+1,
 		"entity_id", entityID, "encounter_id", enc.id)
 	return e.propose(ctx, enc, ans)
+}
+
+// settle drops the package a fact has just answered for. A fact that names the
+// proposal says State applied it — the first attempt or a retry, it makes no
+// difference — and from then on there is nothing left to retry. A refusal of
+// that proposal turning up later answers an attempt that is over, and offering
+// the package again would fold into the view of the stub a change State drops
+// as already applied (§4.5), setting the two apart for good. The caller holds
+// the lock.
+func (e *FakeEncounter) settle(proposalID string) {
+	if proposalID == "" {
+		return
+	}
+	if enc, ans := e.awaiting(proposalID); ans != nil {
+		enc.pending = nil
+	}
 }
 
 // awaiting is the fight whose package is waiting for this answer. A fight
@@ -1317,6 +1388,7 @@ func (e *FakeEncounter) awaiting(proposalID string) (*encounter, *answer) {
 // factOf is the part of entity.created and entity.updated the stub reads.
 type factOf struct {
 	Entity     namedRef        `json:"entity"`
+	ProposalID string          `json:"proposal_id"`
 	Version    int64           `json:"version"`
 	Attributes map[string]any  `json:"attributes"`
 	Changed    []entity.Change `json:"changed"`
@@ -1514,8 +1586,8 @@ func (enc *encounter) participantsPayload() []map[string]any {
 }
 
 // dealt records the damage a character has done in this fight. It is the half
-// of participation a miss does not move; the round recordTurn writes is the
-// half it does.
+// of participation a miss does not move; the round turnOps writes is the half
+// it does.
 func (enc *encounter) dealt(playerID string, damage int, at time.Time) {
 	for _, p := range enc.players {
 		if p.id != playerID {

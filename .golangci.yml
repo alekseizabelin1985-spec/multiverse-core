@@ -75,9 +75,45 @@ linters:
             - "**/internal/**"
             - "**/cmd/**"
             - "!**/cmd/multiverse/fake_contexts.go"
+            - "!**/cmd/multiverse/bus_memory.go"
           deny:
             - pkg: multiverse-core.io/shared/testkit
-              desc: "shared/testkit is for tests: production code must not import a double (ADR-001 p. 3; ownership.md §1 names cmd/multiverse/fake_contexts.go as the single exception)"
+              desc: "shared/testkit is for tests: production code must not import a double (ADR-001 p. 3). Exceptions: cmd/multiverse/bus_memory.go (membus, the transport of --bus=memory, T-410) and cmd/multiverse/fake_contexts.go (testkit/swarm, the hook of I1-α, T-255; removed by T-256)"
+
+        # --bus=memory is a mode of the binary, not a double: foundation.md §2
+        # runs "--contexts=all --bus=memory" on membus, and membus lives in
+        # shared/testkit. The exception names one file and one package, the
+        # way the mechanics double above does, so the file cannot become a door
+        # for any other double (T-410). The trailing $ matters: depguard
+        # matches allow entries by prefix, and without it membusx or
+        # membus/anything would pass as well (review #1 of T-410, Mi-3).
+        # This one stays with the mode; the one below leaves with its hook.
+        cmd-multiverse-bus-memory:
+          list-mode: lax
+          files:
+            - "**/cmd/multiverse/bus_memory.go"
+          allow:
+            - multiverse-core.io/shared/testkit/membus$
+          deny:
+            - pkg: multiverse-core.io/shared/testkit
+              desc: "bus_memory.go may import shared/testkit/membus, the transport of --bus=memory, and nothing else of shared/testkit (T-410)"
+
+        # The hook of I1-α, on the same terms as bus_memory.go above: one file,
+        # one package, and the trailing $ so that swarmx or swarm/anything does
+        # not pass by prefix. MV_SWARM_FAKE=true mounts FakeEncounter and
+        # FakeNarrator under the name swarm (ADR-001 addendum p. 8, T-255);
+        # without the rule the exclusion of no-testkit-in-production would let
+        # this file import any double at all. Rule, exclusion and file leave
+        # together in T-256 (criterion of the mvp-1/i1 tag).
+        cmd-multiverse-fake-contexts:
+          list-mode: lax
+          files:
+            - "**/cmd/multiverse/fake_contexts.go"
+          allow:
+            - multiverse-core.io/shared/testkit/swarm$
+          deny:
+            - pkg: multiverse-core.io/shared/testkit
+              desc: "fake_contexts.go may import shared/testkit/swarm, the stub of I1-α, and nothing else of shared/testkit (T-255; removed by T-256)"
 
         # The combat double, for the same reason and on the same terms as the
         # mechanics double above: FakeEncounter resolves a fight, so it has to

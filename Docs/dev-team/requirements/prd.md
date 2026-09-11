@@ -298,7 +298,7 @@ MVP-1 означает «сознательно не делаем в этом и
 | FR-085 | **Сессии и род актора.** game-service ведёт сессии: сессия — серия ходов в одном scope от первого принятого действия до выхода всех участников, смерти всех участников или простоя ≥ 30 мин (допущение A-12); `session.id = "{scope.id}:{started_at_unix}"`; поле `actor_kind: human\|ci\|sim` задаётся клиентом при регистрации/действии (по умолчанию `human`; бот — `human`, тест-харнесс — `ci`, нагрузка — `sim`). game-service публикует `analytics.session.started`, `analytics.session.ended`, `analytics.turn.completed` с полями по `metrics.md` §4.2 (тайминги, статус хода, `gm_path`, `phase1_mode`, `generated_by`, `delivery`). В аналитике нет внешних ID, текста игрока и нарратива | Must | Must | PA §0, §4.2, §8 п. 4 |
 | FR-086 | **Нарушения консистентности как событие.** Проверка инвариантов после хода (тест-харнесс/страж) и сверка снапшота с агрегатом лога публикуют `analytics.consistency.violated {violation{code, layer, severity, detected_by, entity?, expected?, actual?}}`; список инвариантов «Тёмного леса» — часть блупринта/правил (NFR-020); значения — числа/идентификаторы, не текст | Must | Must | PA §8 п. 5 |
 | FR-087 | Завершение восстановления/replay публикует `analytics.replay.completed {run_id, mode, snapshot_id, events_replayed, llm_calls, dice_rolled_new, duration_ms, state_hash_before?, state_hash_after, identical?, events_hash_match?, incomplete_record}` | Must | Must | PA §8 п. 6 |
-| FR-088 | **Отчёт по сессии и журнал инцидентов оператора.** CLI `session-report` считает сводку сессии из событий шины (`analytics.*`, `llm.output`, `dice.rolled`) и дописывает строку в `ops/metrics/sessions.csv`; флаг `--audit` запускает сверку снапшота с логом (FR-086), `--json` сохраняет артефакт прогона (FR-101). Оператор ведёт `ops/metrics/incidents.csv` (`date, session_id, correlation_id, kind: world_break\|defect\|content\|other, manual_fix, description`) — единственный источник «ручной правки состояния» для критерия S7. Топик/маршрут `analytics.*` (отдельный `analytics_events` vs `system_events` с игнорированием в replay) — решение архитектора (OQ-A-07/08) | Should (CSV — Must) | Must | PA §6.2, §8 п. 8, 11 |
+| FR-088 | **Отчёт по сессии и журнал инцидентов оператора.** CLI `mvctl report` считает сводку сессии из событий шины (`analytics.*`, `llm.output`, `dice.rolled`) и дописывает строку в `ops/metrics/sessions.csv`; флаг `--audit` запускает сверку снапшота с логом (FR-086), `--json` сохраняет артефакт прогона (FR-101). Оператор ведёт `ops/metrics/incidents.csv` (`date, session_id, correlation_id, kind: world_break\|defect\|content\|other, manual_fix, description`) — единственный источник «ручной правки состояния» для критерия S7. Топик/маршрут `analytics.*` (отдельный `analytics_events` vs `system_events` с игнорированием в replay) — решение архитектора (OQ-A-07/08) | Should (CSV — Must) | Must | PA §6.2, §8 п. 8, 11 |
 
 ### 5.10. Авторские инструменты
 
@@ -315,7 +315,7 @@ MVP-1 означает «сознательно не делаем в этом и
 | ID | Требование | MVP-1 | Целевое | Источник |
 |---|---|---|---|---|
 | FR-100 | Сценарий запускается с фиксированным seed и записанными `llm.output`; повторный прогон даёт идентичные броски и события без сетевых вызовов LLM; время и таймеры при replay берутся из записанных событий (`tick.fired`, `round.closed`), не из `time.Now()` | Must | Must | SC-10, р2, DR-13 |
-| FR-101 | Артефакт прогона: JSON-сводка `session-report --json` (`ops/metrics/sessions/<session_id>.json`): список событий, нарративы, метрики (латентность, токены, вызовы по фазам/уровням) — сохраняется и сравним с другим прогоном | Should | Must | SC-10, PA §8 п. 9 |
+| FR-101 | Артефакт прогона: JSON-сводка `mvctl report --json` (`ops/metrics/sessions/<session_id>.json`): список событий, нарративы, метрики (латентность, токены, вызовы по фазам/уровням) — сохраняется и сравним с другим прогоном | Should | Must | SC-10, PA §8 п. 9 |
 | FR-102 | Сравнение двух вариантов (промпт/модель/провайдер) на одном сценарии с одинаковым seed | Could | Should | SC-10 |
 
 ### 5.12. Целевые домены (для брифов эпиков)
@@ -395,7 +395,7 @@ MVP-1 означает «сознательно не делаем в этом и
 | Блупринты, правила, законы, канон | Markdown/YAML, версия; `laws@vN`; `rules/dark-forest.yaml`; расписание тиков | Git (MVP-1) | один формат блупринта; версии законов для BR-02 |
 | Семантический индекс | эмбеддинги и граф связей событий (включая фоновые) | 005-memory: Qdrant + Neo4j (проекция, C-09) | перестраивается из лога; источник факта помечен; **Should, отрезаемая на G3/G4** — обязательные требования от индекса не зависят (FR-035, FR-127) |
 | События аналитики `analytics.*` | сессии, ходы с таймингами, нарушения консистентности, итог replay (`metrics.md` §4.2) | game-service, тест-харнесс, компонент восстановления | без внешних ID, текста игрока и нарратива; топик — архитектура |
-| Журнал сессий и инцидентов | `ops/metrics/sessions.csv`, `ops/metrics/incidents.csv` | CLI `session-report`, оператор | только `player_id` и счётчики; коммитятся в git |
+| Журнал сессий и инцидентов | `ops/metrics/sessions.csv`, `ops/metrics/incidents.csv` | CLI `mvctl report`, оператор | только `player_id` и счётчики; коммитятся в git |
 
 ---
 

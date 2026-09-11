@@ -1,0 +1,10 @@
+# Rule 8: a platform variable with a default of its own, different from the one
+# the manifest declares (shared/env/vars.go: operator,mvctl,ci-harness). This is
+# the very line T-411 removed: a container admitted `operator` alone while a
+# process started by hand admitted all three, and nothing told the operator
+# which list decides. The fix is `MV_CORE_ADMIN_CLIENTS:` with no value.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS:-operator}

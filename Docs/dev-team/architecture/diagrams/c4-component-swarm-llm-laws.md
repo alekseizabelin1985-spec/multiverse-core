@@ -89,6 +89,18 @@ C4Component
 
 ## Расхождения с деревом
 
+**Сверка T-409 (2026-09-11, architect#1).** «Закрыто» — документ приведён к дереву; «код» — прав контракт, названа задача; «открыто» — оставлено намеренно.
+
+| # | Статус | Что сделано |
+|---|---|---|
+| 1 | закрыто | `swarm-llm-laws.md` §2 и шапка: раскладка `shared/agent` помечена как целевая, as-is состав перечислен, переписывание — T-201/T-202 |
+| 2 | закрыто | ADR-025: истина — `shared/contracts/ownership.go`, тест равенства не нужен; `levels.go` — производный вид (C-02 v1.4, §16 п. 6) |
+| 3 | закрыто (T-220; сверка T-416) | `FakeNarrator` отвечает на все шесть поводов C-05 — шесть поводов на пять видов, `entry` покрывает вход и осмотр; соло-удар порождает `turn`, смерть — `death`, начало встречи — `world_event`. C-05 v1.4 «Заглушка» переписан по T-220; явный признак конца обмена (`combat.decided.exchange`) и порядок смерти после удара — C-05 v1.4 п. 7–8 |
+| 4 | закрыто | `swarm-llm-laws.md` C4 §1.1, §2, §9.1, §14: `openai_compat` — провайдер по умолчанию |
+| 5 | закрыто | `foundation.md` §1: правило «`shared/*` не импортирует `internal/*`» записано с двумя именованными исключениями линтера |
+
+Формулировки, записанные при рисовании (до сверки):
+
 1. **`shared/agent` — это не то, что описывает документ.** `components/swarm-llm-laws.md` §2 перечисляет целевые файлы `types.go`, `blueprint.go`, `parser.go`, `validator.go`, `levels.go`, `placeholders.go` и список удаляемых. В дереве ровно наоборот: все «удаляемые» на месте (`router.go`, `lifecycle.go`, `pipeline.go`, `worker_pool.go`, `state_manager.go`, `md_parser.go`, `blueprint_loader.go`, `helpers.go`, `interfaces.go`), ни одного целевого нет. В архив (`services/_archive/shared/agent/`) уехали только `filter.go`, `tools/*_tool.go`, `adapter.go` и e2e-тест.
 2. **`shared/agent/levels.go` отсутствует**, хотя `contracts.md` §16 п. 6 объявляет его единственной истиной таблицы владения, а тест равенства с `shared/contracts/ownership.go` — блокирующим merge. Сегодня блокировать нечего.
 3. **`FakeNarrator` v0 уже́ контракта.** `contracts.md` C-05 «Заглушка» перечисляет шесть поводов для нарратива: `player.entered_region`, `player.looked`, `encounter.started`, последний `combat.decided` цикла, `entity.updated status=dead`, `round.closed`. В коде таблица `narrated` знает три: вход, осмотр, закрытие раунда. Практическое следствие видно на [`seq-combat-solo.md`](seq-combat-solo.md): **соло-удар сегодня не порождает никакого нарратива**, и e2e это не ловит, потому что ожидания выводятся из той же таблицы.

@@ -101,6 +101,35 @@ func TestTheContextRunsAWholeFight(t *testing.T) {
 	}
 }
 
+// TestAContextWhoseNarratorWentDeafIsNotHealthy is the other half of /health.
+// A fight that runs while the narrator has stopped listening is a player who
+// swings and never reads a word; the context has to say so while it is still
+// running, and it can only do that if asking the narrator does not block
+// (question 6 of the review of T-219, T-220).
+func TestAContextWhoseNarratorWentDeafIsNotHealthy(t *testing.T) {
+	bus := refusingBus{Bus: newBus(t), refuse: swarm.Group}
+	ctx := swarm.NewFakeContext(swarm.ContextConfig{
+		WorldID:     worldID,
+		RulesPath:   filepath.Join("..", "..", "..", "rules", "dark-forest.yaml"),
+		FixturesDir: fixturesDir(t),
+	})
+	if err := ctx.Start(t.Context(), runtime.Deps{Bus: bus}); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() { _ = ctx.Stop(t.Context()) })
+
+	waitFor(t, "the health to report the narrator", func() bool {
+		return ctx.Health().Status == runtime.StatusFail
+	})
+	health := ctx.Health()
+	if msg, _ := health.Details["err"].(string); !strings.Contains(msg, errRefused.Error()) {
+		t.Errorf("health reports %q, want the refusal of the narrator", msg)
+	}
+	if err := ctx.Encounter().Err(); err != nil {
+		t.Errorf("the fight reports %v; it is the narrator that went deaf", err)
+	}
+}
+
 // TestTheContextRefusesToStartTwiceAndWithoutABus: a stub mounted twice, or
 // mounted with nothing to talk on, is a defect of the process that has to be
 // visible at start rather than as silence afterwards.

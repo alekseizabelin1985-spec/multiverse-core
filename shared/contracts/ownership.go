@@ -42,11 +42,13 @@ type OwnershipRule struct {
 	Create bool
 }
 
-// ownershipRules is a *static copy*. The truth is shared/agent/levels.go
-// (EPIC-003, T-202): the owner of the truth changes both in the same pull
-// request, marked contract-change, and the equality test of T-202 blocks the
-// merge on a divergence. Editing this copy alone is forbidden
-// (contracts.md §16 p. 6).
+// ownershipRules is the ownership table itself — its only source, not a copy
+// of one kept elsewhere (ADR-025, C-02 v1.4, contracts.md §16 p. 6). A row is
+// changed by the owner of its meaning (the swarm levels by EPIC-003, gateway
+// by EPIC-004, author and system by EPIC-002) in a pull request marked
+// contract-change. The blueprint validator of shared/agent gets its view of
+// the table from its caller, built from OwnershipRules; there is nothing to
+// compare this table with.
 //
 // Two conditions of §4.6 do not fit the shape of the rule and stay with State,
 // which checks them on top of the table:
@@ -145,9 +147,9 @@ var ownershipRules = []OwnershipRule{
 	{Proposer: ProposerMonitor},
 }
 
-// OwnershipRules returns the static copy of the ownership table. State is the
-// only consumer; it reads this copy and never the truth in shared/agent
-// (contracts.md C-02).
+// OwnershipRules returns a copy of the ownership table, so that no caller can
+// rewrite it through the slice. State is the only consumer that refuses by it
+// (contracts.md C-02, ADR-025).
 func OwnershipRules() []OwnershipRule {
 	rules := make([]OwnershipRule, len(ownershipRules))
 	for i, rule := range ownershipRules {

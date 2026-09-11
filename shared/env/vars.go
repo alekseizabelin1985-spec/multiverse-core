@@ -134,6 +134,14 @@ var (
 		OneOf("agent", "legacy"))
 	LawsBreachPhase = Declare("MV_LAWS_BREACH_PHASE", "false",
 		"enable the law breach phase (ADR-008); off for MVP-1", IsBool())
+	// SwarmFake belongs to the process, not to a context: cmd/multiverse reads
+	// it when it builds the context swarm, because at I1-α there is no swarm
+	// context to read it in (ADR-001 addendum p. 8). It leaves with the hook
+	// that reads it, in T-256.
+	SwarmFake = Declare("MV_SWARM_FAKE", "false",
+		"run the context swarm as the Phase 1 stub of I1-α (shared/testkit/swarm: "+
+			"FakeEncounter and FakeNarrator) instead of the swarm; read by "+
+			"cmd/multiverse/fake_contexts.go, a temporary hook removed by T-256", IsBool())
 
 	// --- llm (the default runtime is the native llama-server, ADR-005 add. 2) ---
 
@@ -141,11 +149,12 @@ var (
 		"LLM provider implementation (C-15 v1.1); openai in the cloud is this one with another URL and key",
 		OneOf("openai_compat", "ollama", "anthropic", "recorded", "fake"))
 	// The value may be written with or without a trailing /v1 — vendors hand
-	// out the address both ways, and scripts/lib/llm-endpoint.{sh,psm1} reduce
-	// it to the base address themselves and say so, rather than sending the
-	// operator to edit the value by hand (owner's decision, journal
-	// 2026-09-11). The path under the base is appended by whoever calls, so a
-	// value carrying /v1 must not be appended to twice.
+	// out the address both ways, and scripts/lib/llm-endpoint.sh and
+	// scripts/lib/LlmEndpoint.psm1 reduce it to the base address themselves
+	// and say so, rather than sending the operator to edit the value by hand
+	// (owner's decision, journal 2026-09-11). The path under the base is
+	// appended by whoever calls, so a value carrying /v1 must not be appended
+	// to twice.
 	//
 	// REQUIRED, with no default. It used to declare http://127.0.0.1:1234, and
 	// that made the one case the task exists to close — the line deleted from

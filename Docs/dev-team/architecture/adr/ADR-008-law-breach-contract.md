@@ -28,6 +28,8 @@
 6. **Семантика E-B (фиксируется контрактом сейчас)**: `immutable`-законы вселенной не пробиваются (`rejected reason=immutable_touched`); формулы механики пробой не меняет (`formula_change`); применение — с границы следующего раунда во всех scope мира (`effective_from.round_boundary=true`); один `pending_review` на мир (`breach_pending`); истечение окна ревью → `review_decided {decision: approved, reviewer_kind: timeout}`; откат — `vN+2 = vN`, факты под `vN+1` помечаются `retconned` в памяти, числовое состояние не откатывается; replay фазы пробоя — из `llm.output phase=breach`.
 7. **Защита от инъекции** (NFR-043): фаза пробоя не читает `<player_text>`; `player.said` не входит в контекст фазы пробоя по построению; тест с 10 инъекциями — 0 `world.law_breach.proposed`.
 
+*(Имя подкоманды в п. 3 заменено: `mvctl session-report` → `mvctl report`, см. T-416. Текст решения не переписан.)*
+
 ## Последствия
 
 - Позитивные: S11 достижим без смены контрактов; инварианты «Тёмного леса» проверяются в трёх местах уже в MVP-1; `laws_version` в каждом `llm.output` даёт аудит при ретроконе.

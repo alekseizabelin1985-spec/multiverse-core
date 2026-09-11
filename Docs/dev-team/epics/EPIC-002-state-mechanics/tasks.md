@@ -2,13 +2,14 @@
 
 Версия 0.1.1 · 2026-09-09 · tech-lead#1 (TEAM-1) · статус: к G3.
 **Правки сведения 3** (`architecture/consolidation.md` §14.1 З-2, `contracts.md` v0.4 C-02 v1.2, ADR-017 доп. 1 п. 5; внесено tech-lead#1): T-053 (`NPCTarget` — `abandoned` = `dead`), T-054 (inv-01 для `status ∈ dead|abandoned|ascended_final`), T-056 (`abandoned` — терминальный, переход только `alive → abandoned` от gateway, `cause=forget`). Схемы `entity.*.proposed` с `cause=forget` создаёт EPIC-001 T-006 (F-4b-1). Структура подволн не менялась.
+**Правки ревизии контрактов T-416** (`contracts.md` v0.7: C-01 v1.4, C-02 v1.4; ADR-025, ADR-027; внесено tech-lead#1 2026-09-11): T-055 — решение о `WithCauseID` для фактов State; T-060 — таймеры шины сужены до решения архитектора; T-061, критерии I1/I2 и §5 — `FakeEncounter` вместо `WithEncounterStub`, `mvctl report`, таблица владения одна. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 Команда TEAM-1 · ветка **`epic/EPIC-002-state-mechanics`** (от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0) · G2 утверждён 2026-09-09.
 Основание: `epics/EPIC-002-state-mechanics/design.md` v0.1 (§4.1 блоки I1-1…I1-12, §4.2 блоки I2-1…I2-6, §4.3 специфика, §9 тестируемость); `architecture/components/state-and-mechanics.md` v0.2 (§3–§7, §4.10, §11, §12, §16); `architecture/contracts.md` v0.2 (C-01 v1.1, C-02 v1.1, C-03 v1.1, C-13, C-14 v1.1); ADR-003, ADR-011, ADR-012, ADR-013, ADR-021; `plan/epics.md` v0.2 §2; `plan/teams.md` §4; `plan/ownership.md` v0.2; `epics/EPIC-001-foundation/design.md` §5 и `tasks.md` §8 (волны проекта).
 
 Диапазон номеров: **T-050…T-129** (TEAM-1). Слоты волны 1: **2 разработчика** — две нитки: `mechanics` (developer#1) ∥ `entity`/`state` (developer#2).
 Размер: **S** ≤ полдня · **M** ≤ одной сессии одного разработчика · L не допускается.
 
-**Стартовая точка — не «с нуля»**: `shared/entity` v2 (T-011), `internal/mechanics` типы + `Load` + `rules/dark-forest.yaml` (T-015), `FakeState` v0 / `FixedMechanics` (T-017), `Harness` v0 / `FakeNarrator` + `WithEncounterStub` (T-018), фикстуры (T-016) уже в `integration/mvp-1`.
+**Стартовая точка — не «с нуля»**: `shared/entity` v2 (T-011), `internal/mechanics` типы + `Load` + `rules/dark-forest.yaml` (T-015), `FakeState` v0 / `FixedMechanics` (T-017), `Harness` v0 (T-018), фикстуры (T-016) уже в `integration/mvp-1`; двойники боя и нарратива — `FakeEncounter` и `FakeNarrator` (EPIC-003 T-219, T-220; по C-05 v1.4 их дорабатывает T-419). *(T-416, 2026-09-11: прежде здесь стояло `FakeNarrator` + `WithEncounterStub` (T-018). `WithEncounterStub` снят сведением 2 и не делался — см. EPIC-001 T-018.)*
 
 ---
 
@@ -24,8 +25,8 @@
 8. Поведение соответствует критериям приёмки US задачи (US-003, US-005, US-011, US-017, US-006/US-007 для I2).
 
 **Критерии приёмки инкрементов** (ворота тимлида):
-- **I1**: `mvctl world init --fixtures testdata/fixtures/` создаёт «Тёмный лес» (6 сущностей, снапшот seq 0 `reason=bootstrap`); e2e **`solo-30` на `FakeNarrator(WithEncounterStub(Rules))`** — 30 ходов без расхождений снапшота и журнала; **recovery: рестарт → `identical=true`, `llm_calls=0`, `dice_rolled_new=0`** (`analytics.replay.completed mode=recovery`); участие в **I1-α** (живая игра через бота); unit ≥ 60 % ядра.
-- **I2**: `group-3x30` в CI зелёный; S2 с харнессом из трёх клиентов (после EPIC-004 I2); `mvctl session-report --audit` на записи S2 даёт `state_divergence = 0`.
+- **I1**: `mvctl world init --fixtures testdata/fixtures/` создаёт «Тёмный лес» (6 сущностей, снапшот seq 0 `reason=bootstrap`); e2e **`solo-30` на `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) с реальными `mechanics`** — 30 ходов без расхождений снапшота и журнала *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; **recovery: рестарт → `identical=true`, `llm_calls=0`, `dice_rolled_new=0`** (`analytics.replay.completed mode=recovery`); участие в **I1-α** (живая игра через бота); unit ≥ 60 % ядра.
+- **I2**: `group-3x30` в CI зелёный; S2 с харнессом из трёх клиентов (после EPIC-004 I2); `mvctl report --audit` на записи S2 даёт `state_divergence = 0` *(T-416: было `session-report --audit`; имя — C-10, T-409)*.
 
 ---
 
@@ -81,7 +82,7 @@
 - **Файлы**: `internal/state/{context,worker,proposal,apply,facts}.go`, `internal/state/memstore/**` + тесты.
 - **Зависимости**: T-050, T-052, T-054 (интерфейс `Invariants()`), C-01 (T-005/T-014).
 - **Ссылки**: `design.md` §4.1 I1-6; `state-and-mechanics.md` §4.5, §4.1; C-02 v1.1; NFR-012, NFR-013.
-- **DoD**: unit — цикл «предложение → факт» для create/update/atomic; версии строго +1 (0 пропусков и 0 повторов на 1000 предложений); факт несёт `causation_id` предложения и его `timestamp`; паника в обработчике → `/health fail` и остановка мира (тест); общий DoD §1.
+- **DoD**: unit — цикл «предложение → факт» для create/update/atomic; версии строго +1 (0 пропусков и 0 повторов на 1000 предложений); факт несёт `causation_id` предложения и его `timestamp`; паника в обработчике → `/health fail` и остановка мира (тест); **(T-410, 2026-09-11)** процесс ставит глобальные источники событий `eventbus.SetRegistry`/`SetClock`/`SetIDSource` из тех же объектов, что кладёт в `runtime.Deps` (сегодня не ставит, хотя `shared/eventbus/sources.go` говорит, что их ставит `cmd/multiverse`), — тест: id и время события, построенного конструктором, берутся из источников `Deps`; правка `cmd/multiverse` — через tech-lead#1, согласовать с T-060 (`--id-source=sequence`) *(подтверждено C-01 v1.4 «Источники конструкторов», T-416: T-055 — срок, первый настоящий издатель; контекст источники не ставит и не меняет)*; **(T-416, 2026-09-11; C-01 v1.4, ADR-027 п. 2)** решение EPIC-002 о `eventbus.WithCauseID` для фактов State (`entity.created`/`entity.updated`, `parts` — id сущности) принято и записано в `dev-log.md` с доводами. Архитектор рекомендует «да»: тогда «факты досылаются, если не были опубликованы» (C-02 «Гарантии») не даёт дублей у потребителей, дедуплицирующих по `id`. Учесть: повтор предложения под тем же `proposal_id` приходит новым событием с другим `causation_id` (C-05 п. 1). Если нужен один id факта на все повторы, в `parts` входит `proposal_id` — выбор за исполнителем с тимлидом. При «да» — тест: досылка факта по повтору предложения даёт факт с тем же `id`, разные сущности одного пакета — разные `id`. При «нет» — обоснование в `dev-log.md`. При «да» задача зависит от **T-417**; общий DoD §1.
 
 ### Подволна 1.4
 
@@ -101,7 +102,7 @@
 - **Файлы**: `internal/replay/**`, `cmd/multiverse/main.go` (регистрация).
 - **Зависимости**: T-003 (волна 0), C-01.
 - **Ссылки**: `design.md` §4.1 I1-10; `state-and-mechanics.md` §6; ADR-003, ADR-010; **US-017**, NFR-014, NFR-061.
-- **DoD**: unit — `EventClock` монотонен и не читает wall-clock; `NullTimers` не порождает тиков; `Recording` round-trip побайтово и `Index` находит запись по `(correlation_id, agent.id, phase, attempt)`; `--mode=replay` не даёт ни одного обращения к `time.Now` в доменном коде (`forbidigo` + тест); общий DoD §1.
+- **DoD**: unit — `EventClock` монотонен и не читает wall-clock; `NullTimers` не порождает тиков; `Recording` round-trip побайтово и `Index` находит запись по `(correlation_id, agent.id, phase, attempt)`; `--mode=replay` не даёт ни одного обращения к `time.Now` в доменном коде (`forbidigo` + тест); общий DoD §1. ~~**(ревью T-410, 2026-09-11)** шина в `--mode=replay` получает таймеры от тех же `NullTimers`/`EventClock`, что и контексты, или явно освобождена от них: сегодня она получает ручные таймеры, которые никто не двигает, и первая повторная доставка после ошибки обработчика повиснет до отмены — тест на повтор доставки в replay.~~ **Заменено (T-416):** из двух вариантов архитектор выбрал «шина освобождена». **(T-416, 2026-09-11; C-01 v1.4 «Таймеры повторной доставки» и «Источники конструкторов»)** Процесс даёт шине реальные таймеры (`clock.RealTimers`) в любом режиме, включая `--mode=replay`. `EventClock`/`NullTimers` получают только контексты (`Deps.Clock`, `Deps.Timers`): доменное время — у контекстов, у транспорта его нет. В `--mode=replay` глобальный источник времени конструкторов (`eventbus.SetClock`) — `EventClock`, согласовать с T-055. Паузы повтора (100/500/2000 мс) в байты событий не входят; число попыток и порядок — входят и совпадают с live. Тест: в replay ошибка обработчика → повторная доставка ×3 без зависания, затем `dead_letters`; тесту разрешено дать шине ручные таймеры и двигать их самому.
 
 ### Подволна 1.5
 
@@ -113,10 +114,10 @@
 - **DoD**: unit на `objstore.Memory` — снапшот, ротация K=5 (шестой удаляет первый), `latest.json` указывает на последний; integration (testcontainers MinIO из `versions.env`) — PUT/GET/List, `EnsureBucket` включает versioning/ILM, `latest.json` корректен после эмуляции падения между PUT; интент создаётся только при пакете > 1 сущности; общий DoD §1.
 
 ### T-061: e2e-харнесс `solo-30` (каркас прогона) · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.5
-- **Описание**: каркас e2e EPIC-002: один процесс `--contexts=all --bus=memory --mode=replay`, сборка `Harness` v0 (EPIC-004) + `FakeNarrator(WithEncounterStub(Rules))` (EPIC-003 v0) + реальные `mechanics`; сбор доменных событий, сверка порядка `player.attacked → dice.rolled → combat.decided → entity.update.proposed → entity.updated → narrative.output`; режим `--chaos=duplicate`. До готовности `state` работает на `FakeState`, затем переключается флагом.
+- **Описание**: каркас e2e EPIC-002: один процесс `--contexts=all --bus=memory --mode=replay`, сборка `Harness` v0 (EPIC-004) + `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) + реальные `mechanics` *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; сбор доменных событий, сверка порядка `player.attacked → dice.rolled → combat.decided → entity.update.proposed → entity.updated → narrative.output`; режим `--chaos=duplicate`. До готовности `state` работает на `FakeState`, затем переключается флагом.
 - **Файлы**: `internal/state/e2e_test.go` (или `test/e2e/solo30_test.go`, `-tags e2e`), хелперы в `internal/state/testsupport`.
 - **Зависимости**: T-053, T-018 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-11, §4.3 (`WithEncounterStub`); `epics.md` §2 (I1-α); `contracts.md` §17; NFR-062.
+- **Ссылки**: `design.md` §4.1 I1-11, §4.3 (`FakeEncounter`, T-219; *T-416: было `WithEncounterStub`*); `epics.md` §2 (I1-α); `contracts.md` §17, C-05 «Заглушка»; NFR-062.
 - **DoD**: `make test-e2e` прогоняет 30 ходов ≤ 1 мин без Docker и без сети; порядок событий хода соответствует §7.1; `dead_letters` = 0; каркас параметризован реализацией State (заглушка/реальная); общий DoD §1.
 
 ### Подволна 1.6
@@ -194,7 +195,7 @@
 - **DoD**: снапшот создаётся один раз на `session.ended` (дубли события не создают второй снапшот); в `--mode=replay` подписка отключена и снапшот берётся по счётчику; общий DoD §1.
 
 ### T-069: I2-4 · `internal/state/audit` — `Recompute` и `Compare` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.12
-- **Описание**: `audit.Recompute(snapshot *Snapshot, facts iter.Seq[eventbus.Event]) (hash string, entities []*entity.Entity, err error)` — применяет `entity.created/updated` к снапшоту **тем же** `applyFact`, что recovery; `audit.Compare(hashA, hashB) Divergence` (какая сущность, какое поле, какая версия). Библиотека для `mvctl session-report --audit` (EPIC-005 T-137) и для теста S3.
+- **Описание**: `audit.Recompute(snapshot *Snapshot, facts iter.Seq[eventbus.Event]) (hash string, entities []*entity.Entity, err error)` — применяет `entity.created/updated` к снапшоту **тем же** `applyFact`, что recovery; `audit.Compare(hashA, hashB) Divergence` (какая сущность, какое поле, какая версия). Библиотека для `mvctl report --audit` (EPIC-005 T-137; *T-416: было `session-report`*) и для теста S3.
 - **Файлы**: `internal/state/audit/**` + тесты.
 - **Зависимости**: T-059.
 - **Ссылки**: `design.md` §4.2 I2-4, §5 (строка `internal/state/audit`); `epics/EPIC-005-memory-ops/design.md` §3 п. 2, §5; `state-and-mechanics.md` §3.3, §4.8; US-038; NFR-032.
@@ -234,8 +235,8 @@
 |---|---|---|---|
 | C-01 (шина, журнал, часы, рантайм, `objstore`) | EPIC-001 (волна 0) | — (готово к старту) | contract-тест T-014 — ворота волны 1 |
 | `Harness` (генератор `player.*`) | EPIC-004 | `Harness` v0 (T-018) | для `group-3x30` нужен `Harness` v1 или генератор `round.*` — запрос EPIC-004 |
-| `FakeNarrator` + `WithEncounterStub` | EPIC-003 (v0 — EPIC-001) | v0 из T-018 | после слияния EPIC-003 I1b `WithEncounterStub` удаляется — e2e T-062 переводится на реального агента встречи (задача EPIC-003) |
-| `shared/agent/levels.go` ↔ `contracts.OwnershipRules` | EPIC-003 I1a | статичная таблица (T-006) | сверку двух таблиц делает EPIC-003; EPIC-002 ничего не меняет |
+| `FakeEncounter` + `FakeNarrator` *(T-416: было `FakeNarrator` + `WithEncounterStub`)* | EPIC-003 (T-219, T-220 приняты; по C-05 v1.4 — T-419) | `FakeEncounter` (T-219) — единственная заглушка боя | после слияния EPIC-003 I1b двойники заменяет настоящий агент встречи — e2e T-062 переводится на него (задача EPIC-003) |
+| таблица владения `contracts.OwnershipRules` *(T-416: было «`shared/agent/levels.go` ↔ `contracts.OwnershipRules`»)* | EPIC-001 (T-006); строки `author`/`system` — EPIC-002 | — (готова, T-006) | таблица одна (ADR-025, подтверждён T-416), сверять нечего; строки меняют владельцы семантики PR с `contract-change`; норма «путь ↔ причина» проверяется поверх таблицы (C-02 v1.4, T-056) |
 | `analytics.session.ended` | EPIC-004 | фикстуры `testdata/analytics` | I2-3 |
 | `internal/state/audit` | **поставщик** для EPIC-005 (T-137) | режим `partial` у `--audit` до T-069 | API согласовать до подволны 2.2 |
 

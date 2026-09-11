@@ -56,3 +56,5 @@
 5. **Покинутые персонажи (C-02 v1.2, FR-061)**: `status=abandoned` для правил стража эквивалентен `dead` — сущность видима (нужна для «его больше нет»), `ops` над ней → `law_violation dead_does_not_act` (inv-01 расширен на `status ∈ dead|abandoned|ascended_final`); таблица видимости §10.3 КД без изменений.
 
 Последствия: схема `llm.output.v1.json` (T-215) — enum из 6 значений; `guardian.Verdict.Status` — 3 значения (без изменений); шлюз сводит статусы парсера/фильтра/провайдера и вердикт в один `validation_status`; замер NFR-021/NFR-023 — по `llm.output.rejected` (+ `reasons[]`).
+
+*(Имя подкоманды в п. 3 заменено: `session-report` → `mvctl report`, см. T-416. Текст решения не переписан.)*

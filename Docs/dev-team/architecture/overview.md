@@ -231,7 +231,7 @@ C4Container
 | **LLM-шлюз и страж** (LLM Gateway + Guardian) | ядро (сквозной) | `llm.output` (журнал), бюджеты, словарь фильтра (a), реестр запретов | `internal/llm` (+`internal/llm/guardian`) → процесс `core` | `shared/oracle` + `shared/intent/oracle_client` + `orchestrator/oracle.go` + `oracle_llm_adapter.go` → один шлюз; ban-of-world выводится (роль стража — валидация в конвейере) | EPIC-003 |
 | **Законы и канон** (Laws) | ядро (контракт в MVP-1, механика — целевое) | `LawsVersion` (файл `laws/…@vN`), `LawBreach` (целевое) | `internal/laws` (загрузка/версии) → процесс `core` | нет аналога; universe-genesis-oracle (законы вселенной) — заморожен до E-E | EPIC-003 (контракт), EPIC-007 (механика) |
 | **Семантическая память** (Memory) | поддерживающий (проекция; Should в MVP-1) | векторный индекс, граф событий/сущностей; перестраивается из журнала | `internal/memory` → процесс `memory` (:8082) | semantic-memory: Neo4j-часть переиспользуем, Chroma → Qdrant | EPIC-005 |
-| **Аналитика и операции** (Ops) | поддерживающий | `analytics.*`, `ops/metrics/*.csv`, артефакты прогонов, baseline | `cmd/mvctl` (`session-report`, `blueprint validate`, `world init`, `replay`) | reality-monitor выводится; evolution-watcher заморожен (E-A) | EPIC-005 |
+| **Аналитика и операции** (Ops) | поддерживающий | `analytics.*`, `ops/metrics/*.csv`, артефакты прогонов, baseline | `cmd/mvctl` (`report`, `blueprint validate`, `world init`, `record`; имена — по реестру `cmd/mvctl/main.go`, T-409) | reality-monitor выводится; evolution-watcher заморожен (E-A) | EPIC-005 |
 | **Контракты и шина** (Contracts) | ядро-инфраструктура | реестр типов событий, JSON-схемы, топики, конверт события | `shared/eventbus`, `shared/jsonpath`, `shared/contracts`, `schemas/` | eventbus/jsonpath переиспользуем, конверт расширяем `meta`; `scope_management` удаляем | EPIC-001 |
 | Игровые домены-расширения: культивация и Планы, города, генерация миров, Entity-Actor | целевые расширения | свои сущности через `entity.*.proposed` и свои блупринты | `internal/ext/*` (после MVP-1) | cultivation-module, plan-manager, city-governor, world-generator, universe-genesis-oracle, ontological-archivist, entity-actor, evolution-watcher — **заморожены** (выведены из `go.work`, compose и Makefile; каталоги сохранены с `FROZEN.md`) | EPIC-006…EPIC-010 |
 
@@ -251,7 +251,7 @@ flowchart LR
     SW -->|HTTP контекст, деградация → журнал| MEM
     BUS -->|narrative.output, entity.updated| GW
     GW -->|analytics.*| BUS
-    BUS --> OPS[mvctl session-report]
+    BUS --> OPS[mvctl report]
 ```
 
 Правила единого языка, закрываемые этим документом: `scope` (не `zone`, не `location`) с типами `solo | group | region | world` в MVP-1 (`city`, `quest` зарезервированы — OQ-D-05); `страж` — автомат (валидация в LLM-шлюзе), `ревьюер` — человек; `GM` — экземпляр агента роя по блупринту, «один GM» = одна архитектура (BR-12); `Entity-Actor` — агент уровня `object` (зарезервировано), не отдельный сервис.
@@ -266,15 +266,19 @@ C4Context
     Person(ci, "Тест-харнесс CI", "actor_kind=ci; записанные LLM-выводы")
     System(mc, "multiverse-core", "платформа живых миров: gateway, core (state+mechanics+swarm+llm), memory, telegram-bot")
     System_Ext(tg, "Telegram Bot API", "long polling")
-    System_Ext(ollama, "Ollama (Qwen3)", "локальный LLM, structured output, две модели / одна MoE")
-    System_Ext(cloud, "Облачные LLM (OpenAI / Anthropic / DeepSeek)", "опционально, за флагом оператора")
+    System_Ext(llama, "llama-server (llama.cpp)", "ОСНОВНОЙ рантайм модели: нативный процесс вне compose; OpenAI-совместимый API, грамматика по JSON-схеме")
+    System_Ext(ollama, "Ollama", "необязательный второй рантайм (MV_LLM_PROVIDER=ollama), профиль gpu или нативно")
+    System_Ext(cloud, "Облачная OpenAI-совместимая модель", "тот же адаптер openai_compat с внешним MV_LLM_URL; гейт MV_LLM_CLOUD_ENABLED, в MVP-1 выключен")
     Rel(player, tg, "команды, нарратив")
     Rel(tg, mc, "getUpdates / sendMessage через telegram-bot")
     Rel(operator, mc, "compose, блупринты, CLI, .env")
-    Rel(ci, mc, "HTTP v1 + служебные эндпоинты")
-    Rel(mc, ollama, "HTTP /api/chat, keep_alive")
+    Rel(ci, mc, "HTTP v1 + служебные маршруты /v1/admin/* (будущее)")
+    Rel(mc, llama, "POST /v1/chat/completions, response_format json_schema, thinking off")
+    Rel(mc, ollama, "HTTP /api/chat, keep_alive; только при MV_LLM_PROVIDER=ollama")
     Rel(mc, cloud, "HTTPS, только player_id, лимит $")
 ```
+
+**Сверено с деревом 2026-09-11 (T-409).** Основной рантайм модели — нативный llama-server, Ollama — второй (U-8, ADR-005 доп. 2; `docker-compose.yml` сервиса `llama-server` не содержит). Адрес модели задаёт только `MV_LLM_URL` — обязательный, без значения по умолчанию, с `/v1` на конце или без (T-404). Служебных маршрутов `/v1/admin/*` в дереве ещё нет: `shared/runtime` умеет монтировать `Routes(mux)`, но ни один контекст их не монтирует — их пишут EPIC-003 (`swarm`, `llm`) и EPIC-002 (`state`). Актуальная форма с пометками «будущее» — [`diagrams/c4-context.md`](diagrams/c4-context.md).
 
 Внешние ID (Telegram user id) не пересекают границу «telegram-bot ↔ gateway» нигде, кроме `links/*` и создания персонажа (BR-07). Внутри системы — только `player_id`.
 
@@ -289,9 +293,9 @@ C4Container
     Person(operator, "Оператор")
     Container(bot, "telegram-bot", "Go, cmd/telegram-bot", "long polling Telegram; парсинг команд; уведомление об ИИ/18+; доставка сообщений; ЕДИНСТВЕННОЕ место с chat_id в памяти")
     Container(gw, "gateway", "Go, cmd/multiverse --contexts=gateway, :8088", "HTTP API v1; псевдонимизация; связки ПДн; сессии/раунды/идемпотентность; outbox доставок; read-model состояния; analytics.*")
-    Container(core, "core", "Go, cmd/multiverse --contexts=state,mechanics,swarm,llm,laws, :8090 (health/admin)", "единственный писатель состояния; правила и RNG; рой GM (роутер, жизненный цикл, планировщик тиков, бюджет); LLM-шлюз с record-replay, стражем и фильтром (a); законы laws@vN; /health и /v1/admin/* на MV_CORE_ADDR")
+    Container(core, "core", "Go, cmd/multiverse --contexts=state,mechanics,laws,llm,swarm, :8090 (health/admin)", "единственный писатель состояния; правила и RNG; рой GM (роутер, жизненный цикл, планировщик тиков, бюджет); LLM-шлюз с record-replay, стражем и фильтром (a); законы laws@vN; /health и /v1/admin/* на MV_CORE_ADDR")
     Container(mem, "memory", "Go, cmd/multiverse --contexts=memory, :8082", "проекция журнала: векторный индекс + граф; контекст агентов; сводка «пока тебя не было»; трасса по correlation_id")
-    Container(cli, "mvctl", "Go, cmd/mvctl", "session-report, --audit, blueprint validate, world init, replay, llm usage")
+    Container(cli, "mvctl", "Go, cmd/mvctl", "report (--audit), blueprint validate, world init, record, llm usage; сегодня есть contracts, env, storage, privacy, version")
     ContainerQueue(bus, "Redpanda", "Kafka API, 1 брокер, 1 партиция/топик", "player_events, world_events, game_events, system_events, narrative_output, llm_records, analytics_events; retention по топикам")
     ContainerDb(minio, "MinIO (сборка из исходников, ADR-021)", "S3; versioning — необязательная страховка", "entities-{world}: объект на сущность; snapshots-{world}: снапшоты state, swarm, gateway (+ latest.json указатели); prompts (по флагу); ops-artifacts")
     ContainerDb(sqlite, "SQLite (тома gateway)", "modernc.org/sqlite, CGO-free", "links.db — ПДн-связки (отдельный файл, отдельная политика бэкапа); gateway.db — сессии, раунды, ключи идемпотентности, outbox")
@@ -333,7 +337,9 @@ C4Container
 
 Что **не** в контейнерах MVP-1 и почему: TimescaleDB (нет клиента, метрики — CSV+CLI по FR-088; ADR-004); Redis (in-memory + снапшот достаточно при ≤ 20 агентах, NFR-083; ADR-004); ChromaDB (v1 API удалён в Chroma 1.x, v2 требует CGO и стороннего клиента; ADR-004) — **живёт только в compose-профиле `legacy`** вместе с as-is `semantic-memory` (:8083), потому что as-is narrative-orchestrator жёстко зависит от `/v1/context-with-events`; Redpanda Schema Registry (реестр — локальные JSON-схемы в репозитории, ADR-007); legacy narrative-orchestrator (только профиль `legacy` на время миграции, ADR-002); Kubernetes/облачный деплой (вне объёма).
 
-**Compose-профили** (`infrastructure.md` §1.3): без профиля — `redpanda`, `redpanda-init`, `minio`, `minio-init`, `gateway`, `core` (минимальный стек «соло без памяти и LLM»); `memory` — `qdrant`, `neo4j`, `memory`; `gpu` — `ollama` в контейнере (опционально: основной рантайм — нативный llama-server вне compose, `MV_LLM_URL=http://host.docker.internal:1234`); **`bot`** — `telegram-bot` (только при заданном `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; `env_file` с токеном только у него); `dev` — `redpanda-console`; `legacy` — as-is `narrative-orchestrator` + `semantic-memory` + `chromadb` до S5. **Все порты публикуются только на `127.0.0.1`** (ADR-009 дополнение п. 3; `compose-lint`): gateway 8088, core 8090, memory 8082, Redpanda 19092/9644, MinIO 9000/9001, Qdrant 6333/6334, Neo4j 7474/7687, Ollama 11434 (профиль `gpu`), Console 8092; нативный llama-server — `127.0.0.1:1234` (вне compose, `--host 127.0.0.1`). Переменные окружения платформы — с префиксом `MV_` (`shared/env.Declare`); сторонние (`OLLAMA_*`, `MINIO_ROOT_*`, `NEO4J_AUTH`) — без.
+**Состояние на 2026-09-11 (T-409).** Число процессов совпадает с этой диаграммой, содержимое — нет: `gateway`, `core` и `memory` — один и тот же бинарник с разным набором контекстов, и из семи контекстов написан один (`internal/mechanics`); остальные шесть зарегистрированы в `cmd/multiverse/contexts.go` пустыми заглушками, отвечающими `/health: ok`. Ответственность в таблице ниже — целевая; что работает сегодня и что играют двойники `shared/testkit/*` — [`diagrams/c4-container.md`](diagrams/c4-container.md). Адрес HTTP-сервера у всех трёх процессов — один `MV_CORE_ADDR` (в compose литералы `:8088`, `:8090`, `:8082`); `MV_GATEWAY_ADDR`/`MV_MEMORY_ADDR` выведены (T-408).
+
+**Compose-профили** (`infrastructure.md` §1.3): без профиля — `redpanda`, `redpanda-init`, `minio`, `minio-init`, `gateway`, `core` (минимальный стек «соло без памяти и LLM»); `memory` — `qdrant`, `neo4j`, `memory`; `gpu` — `ollama` в контейнере (опционально: основной рантайм — нативный llama-server вне compose; его адрес — только `MV_LLM_URL`, **обязательный и без значения по умолчанию**, например `http://host.docker.internal:<порт>`, T-404); **`bot`** — `telegram-bot` (только при заданном `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; `env_file` с токеном только у него); `dev` — `redpanda-console`; `legacy` — as-is `narrative-orchestrator` + `semantic-memory` + `chromadb` до S5. **Профили `bot` и `legacy` живут в отдельных файлах** `docker-compose.bot.yml` и `docker-compose.legacy.yml` (T-397): compose интерполирует файл целиком до фильтрации по профилю, и обязательная переменная профиля роняла бы весь стек; Makefile подключает файл по `PROFILES=...`. Профиль `legacy` сегодня намеренно не поднимается — тег образа Chroma в `build/versions.env` не выбран. **Все порты публикуются только на `127.0.0.1`** (ADR-009 дополнение п. 3; `compose-lint`): gateway 8088, core 8090, memory 8082, Redpanda 19092/9644, MinIO 9000/9001, Qdrant 6333/6334, Neo4j 7474/7687, Ollama 11434 (профиль `gpu`), Console 8092; нативный llama-server — `127.0.0.1:1234` (вне compose, `--host 127.0.0.1`). Переменные окружения платформы — с префиксом `MV_` (`shared/env.Declare`); сторонние (`OLLAMA_*`, `MINIO_ROOT_*`, `NEO4J_AUTH`) — без.
 
 ### 14. Стиль и принципы
 
@@ -347,7 +353,7 @@ C4Container
 8. **Идемпотентность и at-least-once** (FR-033): потребители дедуплицируют по `event.id` (окно = снапшот-курсор + LRU); State — по `proposal_id`; Gateway — по `action_key`.
 9. **Границы транзакций**: одна сущность = одна атомарная запись (объект MinIO с версией в содержимом, PUT целиком); пакет `atomic=true` — последовательные PUT после проверки всех версий в памяти State (State держит рабочий набор мира в памяти; при ≤ 50 сущностей/scope это единицы МБ). Межконтекстных транзакций нет; согласованность — через события и версии.
 10. **Ошибки**: обработчик события не «глотает» ошибку молча — `handled: bool` в логе (NFR-033), повтор ≤ N для временных сбоев, затем DLQ-топик `dead_letters` с исходным событием и причиной (одна строка в `redpanda-init`); паника в обработчике = дефект (NFR-012).
-11. **Наблюдаемость**: `slog` JSON с `service, context, correlation_id, event_id, agent.level, handled`; `/health` с зависимостями и `agents_by_level` у каждого процесса; метрики MVP-1 — из событий через `mvctl session-report`; Prometheus-эндпоинт — E-G.
+11. **Наблюдаемость**: `slog` JSON с `service, context, correlation_id, event_id, agent.level, handled`; `/health` с зависимостями и `agents_by_level` у каждого процесса; метрики MVP-1 — из событий через `mvctl report`; Prometheus-эндпоинт — E-G.
 12. **Приватность по построению** (BR-07, ADR-009): внешние ID существуют только в `links.db` и в памяти бота; все остальные хранилища и логи проверяются тестом NFR-041.
 13. **Деградация без LLM** (BR-14): шлюз возвращает `ErrUnavailable` → конвейер публикует `narrative.output generated_by=template`; фоновые тики — LOD 1 по таблицам блупринта.
 
@@ -362,7 +368,7 @@ C4Container
 | Векторный индекс | **Qdrant** (пин версии), официальный `github.com/qdrant/go-client` (gRPC, без CGO); эмбеддинги — Ollama `nomic-embed-text`/`bge-m3` через LLM-шлюз | образ `chroma:latest` сломал v1 API; v2 требует build-tag, CGO и сторонний клиент; Qdrant уже в compose, есть healthcheck; переписать `chroma*.go` (~600 строк) дешевле, чем поддерживать два пути сборки | Chroma (см. слева); отказ от векторов (C в OQ-A-05) — оставляем как **деградацию по умолчанию**: контекст агента строится из состояния + окна журнала, память — обогащение |
 | Граф | Neo4j **5.26 LTS** (пин), driver v5 | самая зрелая часть as-is; трасса и связи «кто с кем» полезны исследователю; Should в MVP-1 — стек стартует без него | Neo4j 2026.x CalVer (без LTS-гарантий); графовые запросы поверх Postgres (нет Postgres) |
 | Кэш | нет (in-memory в процессе + снапшот) | ≤ 20 агентов, ≤ 50 сущностей/scope; один процесс `core` | Redis (OQ-A-07): вернуть при выносе Swarm в отдельные процессы или при E-A |
-| Метрики / временные ряды | нет; `analytics_events` + `mvctl session-report` → CSV/JSON | metrics.md §6: дашборд MVP-1 — CSV; TimescaleDB без клиентов | TimescaleDB — удалить из compose; Prometheus/Grafana — E-G |
+| Метрики / временные ряды | нет; `analytics_events` + `mvctl report` → CSV/JSON | metrics.md §6: дашборд MVP-1 — CSV; TimescaleDB без клиентов | TimescaleDB — удалить из compose; Prometheus/Grafana — E-G |
 | LLM | LLM-шлюз с интерфейсом `Provider` (C-15 v1.1); реализации: **`openai_compat` — по умолчанию** (нативный llama-server: `/v1/chat/completions` + `response_format json_schema`, `chat_template_kwargs.enable_thinking=false`, семплинг фазы на запрос, `/v1/embeddings`, `/v1/models`, `/health`), `ollama` (native `/api/chat`, `format`=схема, `think=false`, `keep_alive=-1`) — второй, облако — тот же `openai_compat` с внешним `MV_LLM_URL`/`MV_LLM_API_KEY` за гейтом `MV_LLM_CLOUD_ENABLED`, `anthropic` — целевое; модель — на фазу/уровень из блупринта (ADR-005 доп. 2, U-8) | FR-070; решение пользователя U-8: LLM на машине запущен нативно через llama.cpp; llama-server даёт грамматику по JSON-схеме (NFR-022), учёт токенов (`usage`), здоровье и список моделей; один адаптер закрывает локаль и облако; Ollama остаётся для конфигураций C/A | Ollama native API как основной путь (было в v0.1–0.2 — заменено по U-8; остаётся вторым провайдером); thinking при structured output (llama.cpp #20345 — грамматика не применяется); LangChain-подобные обёртки |
 | Модели | **решение пользователя (OQ-A-18, уточнено U-8)**: базовая конфигурация — **(E)** одна `Qwen3.8-27B UD-Q3_K_XL` на llama-server на нарратив и тики, если проходит замер NFR-002/NFR-090 по матрице §18.1 (F-8); **иначе (C)** `qwen3:30b-a3b`; **иначе (A)** `qwen3:8b` + `qwen3:14b`; блупринты до `baseline.md` задают E | E: 13,1 ГБ весов + KV 256 КиБ/токен (64 слоя × 4 KV-головы × 256) ≈ 2–4 ГБ при 8–16k → 16–19 ГБ, помещается целиком; dense 27B — качество русского ожидаемо выше MoE-3B-активных, скорость — замер; Phase 1 в MVP-1 без LLM | (B) 8b + 30b-a3b с выгрузкой в RAM, (D) `qwen3:32b` dense, (E+) 27B + `qwen3-8b` в router-режиме — только материал замера |
 | Схемы и API | JSON Schema (draft 2020-12) для событий в `schemas/events/`, валидатор `santhosh-tekuri/jsonschema/v6` (as-is `gojsonschema` — только draft-07); OpenAPI 3.1 для HTTP в `api/gateway.openapi.yaml` (включая раздел `admin`) и `api/memory.openapi.yaml`; Go-типы — вручную или `oapi-codegen` (решение архитектора команды) | минимальный порог для одного разработчика; валидация на публикации; документ = контракт | protobuf/gRPC между контекстами (нет межпроцессных RPC, кроме memory); Redpanda Schema Registry (лишняя зависимость при одном издателе-библиотеке) |
@@ -401,6 +407,8 @@ C4Container
 
 Обозначения: `PE/WE/GE/SE/NO/LR/AE` — топики; `meta.cid` — `correlation_id` в конверте (ADR-007).
 
+**Это целевые потоки, а не снимок дерева (T-409).** На 2026-09-11 `Resolve` возвращает `ErrNotImplemented` (EPIC-002 T-053), бой решает табличный двойник `testkit/mechanics.FixedMechanics`, State, рой, gateway и LLM-шлюз — двойники или будущее; соло-удар сегодня нарратива не порождает (двойник нарратора не озвучивает `combat.decided`, EPIC-003 T-220). Какой шаг что исполняет сегодня — `diagrams/seq-combat-solo.md`, `seq-background-tick.md`, `seq-recovery.md`.
+
 #### 17.1. Ход игрока соло (`attack`) — UC-006/007, NFR-001/002
 
 ```mermaid
@@ -420,9 +428,9 @@ sequenceDiagram
     SW->>M: Resolve(attack, state, rng(cid))
     M-->>SW: outcome, rolls[0..3]
     SW->>BUS: GE dice.rolled ×k, GE combat.decided (npc_attack тоже)
-    SW->>BUS: SE entity.update.proposed {atomic, expected_version}
+    SW->>BUS: SE entity.update.proposed {atomic, expected_version} — hp обеих сторон, статус, трофей И сущность встречи
     BUS->>ST: apply → версия+1, инварианты laws@v1
-    ST->>BUS: SE entity.updated ×2 (wolf, player)
+    ST->>BUS: SE entity.updated по каждой изменённой сущности (wolf, player, encounter)
     BUS->>G: entity.updated → read-model, Delivery kind=mechanics
     G-->>B: long-poll deliveries → «Попадание! Урон 3»
     BUS->>SW: combat.decided → player-gm:solo:A (Phase 2)
@@ -474,7 +482,7 @@ sequenceDiagram
     SCH->>BUS: SE tick.fired {agent, tick{seq, mode:background, lod_allowed}, budget}
     BUS->>DGM: tick.fired
     alt lod_allowed = basic и бюджет есть
-        DGM->>L: Generate(phase=tick, model=qwen3:8b, schema=tick-region.json)
+        DGM->>L: Generate(phase=tick, model=<из блупринта; в базовой конфигурации E — та же модель, что нарратив>, schema=tick-region.json)
         L->>BUS: LR llm.output {phase:tick, actor_kind:system}
     else lod_allowed = rule-only
         DGM->>DGM: выбор из background_events[] по весам (rng(tick.id))
@@ -504,7 +512,9 @@ sequenceDiagram
     G->>G: gateway.db (сессии, раунды, outbox) — локально; read-model из snapshot state + entity.updated
 ```
 
-Режим replay задаётся `MODE=replay|live` на процесс; в тестах (NFR-061) — `--contexts=all --mode=replay --recording=testdata/recordings/solo-30.jsonl`.
+**Ожидание сигнала ограничено (C-14 v0.4, внесено в T-409).** `swarm` (и `gateway`, если его дизайн ждёт сигнал) ждёт `analytics.replay.completed` не дольше `MV_SWARM_REPLAY_WAIT` (по умолчанию 120 с, = RTO) и по истечении стартует с `/health degraded {state_replay: missing}` — та же ветка нужна в бою, когда State просто упал. Переменная появится в манифесте вместе с кодом, который её читает (C-14).
+
+Режим replay задаётся `MV_MODE=replay|live` на процесс (источник истины — манифест `shared/env`; флаг `--mode` перекрывает его для запуска вручную, T-408); в тестах (NFR-061) — `--contexts=all --mode=replay --recording=testdata/recordings/solo-30.jsonl`.
 
 #### 17.5. Пробой законов — контракт MVP-1, механика E-B (FR-045, BR-02)
 
@@ -519,8 +529,8 @@ sequenceDiagram
 | **Бюджет LLM** NFR-006/007, NFR-050…NFR-053 | LLM-шлюз считает вызовы по `(world, level, phase, provider)` в скользящем окне; фон: `B` вызовов/час/мир из блупринта глобального GM, при исчерпании планировщик передаёт `lod_allowed=rule-only`; облако — только при `MV_LLM_CLOUD_ENABLED=true` и (число `alive`-связок ≤ 1 или `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=true` с записью `config.cloud_enabled` в журнал); блупринт провайдера не выбирает; `cost_usd` по прайс-таблице конфигурации |
 | **Надёжность и восстановление** NFR-010…NFR-016 | снапшот State каждые N применённых фактов и по `analytics.session.ended`; снапшот Swarm по тику и по смене состава агентов; retention ≥ 30 дн.; идемпотентность по `event.id`; replay без LLM/RNG/часов (провайдеры-заглушки в режиме replay); `/health` с проверкой зависимостей раз в 10 с; деградация: `ErrUnavailable` → шаблон |
 | **Детерминизм** NFR-060/061 | `seed = SHA-256(event_id ‖ ":" ‖ roll_index)[0:8] → uint64`, RNG = `math/rand/v2` PCG(seed, 0), `1 + IntN(sides)`; функция одна в `internal/mechanics/rng.go`, тест 1000 × 4 бросков; время — `Clock` интерфейс, в replay — из событий |
-| **Консистентность** NFR-020…NFR-026 | инварианты 1–10 — код State (clamp HP, версии, позиции, единственность трофея по `item.source`) + законы `laws@v1`; страж в LLM-шлюзе (9 правил §2.4); `mvctl session-report --audit` сверяет снапшот с агрегатом журнала → `analytics.consistency.violated` |
-| **Наблюдаемость** NFR-030…NFR-036 | `slog` JSON, поля обязательны через middleware `eventbus.Subscribe`; `meta.correlation_id` во всех событиях цепочки копируется рантаймом автоматически (нельзя забыть); `/health`; `mvctl session-report`; трасса — `mvctl trace <cid>` по журналу (memory — обогащение) |
+| **Консистентность** NFR-020…NFR-026 | инварианты 1–10 — код State (clamp HP, версии, позиции, единственность трофея по `item.source`) + законы `laws@v1`; страж в LLM-шлюзе (9 правил §2.4); `mvctl report --audit` сверяет снапшот с агрегатом журнала → `analytics.consistency.violated` |
+| **Наблюдаемость** NFR-030…NFR-036 | `slog` JSON, поля обязательны через middleware `eventbus.Subscribe`; `meta.correlation_id` во всех событиях цепочки копируется рантаймом автоматически (нельзя забыть); `/health`; `mvctl report`; трасса — `mvctl trace <cid>` по журналу (memory — обогащение) |
 | **Безопасность и ПДн** NFR-040…NFR-048 | ADR-009 (+ дополнение по `threat-model.md`): allowlist Telegram user id в боте, только личные чаты; `links.db` отдельно (`link_id` — суррогат для идемпотентности, внешний ID нигде больше), физическое удаление с немедленным `wal_checkpoint`/`vacuum`, `route.external_id` только в момент выдачи доставки; все порты только на `127.0.0.1` (`compose-lint`); редакция токена бота в логах; валидация схем и политики топиков при чтении (`player_events` без `system`/`meta.agent`); rate limit и лимит тела; тест NFR-041 сканирует MinIO, топики, Qdrant, Neo4j, оба SQLite-файла, логи; записи для golden — только `actor_kind=ci` + `privacy-scan`; секреты — env, `gitleaks` в CI и pre-commit (allowlist только `*.example`); фильтр (a) fail-closed до записи `response_raw`; текст игрока и `generated`-факты памяти в промпте — как данные с экранированием (FR-055, SEC-17) |
 | **Тестируемость** NFR-060…NFR-065 | ADR-010 (+ дополнение): unit без сети; `integration` с testcontainers (версии из `build/versions.env`); e2e `--contexts=all --mode=replay` на записях в `testdata/recordings/`; золотой набор 20 ходов из CI-сессий; покрытие ядра ≥ 60 % в CI; contract-тест шины против `membus` и kafka; Actions по SHA, `govulncheck` блокирующий |
 | **Эксплуатация** NFR-070…NFR-076 | `make up` = compose с профилями `gpu`, `memory`, `dev`, `legacy`, `bot`; все образы с тегами из `build/versions.env` (MinIO — собственная сборка, ADR-021); `make health` обходит `/health` трёх процессов (:8088, :8090, :8082); `.env.example` сверяется с манифестом `shared/env.Declare` (NFR-074, префикс `MV_`); `--contexts` = параметр деплоя (NFR-075); `segment.ms=1d` гарантирует срабатывание retention |
@@ -546,7 +556,7 @@ sequenceDiagram
 |---|---|---|---|---|
 | 0. Фундамент (EPIC-001) | один модуль (`go 1.26`); `cmd/multiverse --contexts` + `shared/runtime`/`shared/clock`; `shared/contracts` + схемы + конверт `meta` + `Journal`; топики, retention и `segment.ms` в `redpanda-init` (том Redpanda as-is v24.2 **пересоздаётся** — прямого обновления до v26.1 нет; данные не нужны); compose с пинами из `build/versions.env`, профилями (`memory`, `gpu`, `dev`, `legacy`, `bot`) и всеми портами на `127.0.0.1`; MinIO из исходников (`build/minio.Dockerfile`, ADR-021); CI (unit/integration/e2e/contracts/security/compose-lint); `.mcp.env.example`; удаление секретов из индекса; перенос старых документов в `Docs/archive/`; матрица замера LLM → `ops/metrics/baseline.md` | eventbus, jsonpath, entity, `build/Dockerfile` | из индекса — только не-код: бинарники, логи, `.claude/worktrees/*` (первым шагом), `.env`/`.mcp.env`; **в `services/_archive/`** (не удаляя): ban-of-world, reality-monitor, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}`, `fake_deps`, `test_minio.go`, лишние Dockerfile; заморозка 8 сервисов (`FROZEN.md`, вне `go.work`, compose, Makefile); `make archive-legacy` — копия томов as-is вне git | `go build ./... && go vet ./... && go test -short ./...` зелёные в CI; секретов в HEAD нет; плейсхолдер в `shared/oracle/README.md` |
 | 1. Соло-цикл (EPIC-002 ∥ EPIC-003 ∥ EPIC-004, инкремент «соло») | State (единственный писатель, снапшот, replay), Mechanics (правила v0.1, seed), Swarm (global, domain, encounter, player-gm; планировщик тиков; бюджет), LLM-шлюз (`openai_compat` → llama-server, `ollama` вторым; record-replay, страж, фильтр (a)), Gateway (API v1 соло, links, сессии, outbox, allowlist в боте), telegram-bot (соло-команды) | `shared/agent` типы и парсер; `prompt_builder.go`; `world-generator` как образец тестов | narrative-orchestrator (+ as-is semantic-memory + Chroma) остаётся только в профиле `legacy` за флагом `MV_GM_PATH` (по умолчанию `agent`) для сравнения нарративов | S1 (30 ходов соло), S3 (replay), S8, S9, S10, S14 (фон с ускоренными тиками); `legacy_gm_path_share = 0` |
-| 2. Группа и память (инкремент «группа») | раунды в Gateway, `group.*`, `group-narrator`, `idle`/таймауты; Memory на Qdrant + Neo4j, сводка «пока тебя не было» из памяти; `mvctl session-report/--audit/--json`; baseline измерений закреплён в NFR | semantic-memory (Neo4j-часть, structured context) | narrative-orchestrator, as-is semantic-memory и Chroma → `services/_archive/`, профиль `legacy` и флаг `MV_GM_PATH` снимаются (S5) | S2 (30 раундов группы из 3), S4 (пороги зафиксированы), S6 (регион блупринтом), S7 (старт наблюдения) |
+| 2. Группа и память (инкремент «группа») | раунды в Gateway, `group.*`, `group-narrator`, `idle`/таймауты; Memory на Qdrant + Neo4j, сводка «пока тебя не было» из памяти; `mvctl report/--audit/--json`; baseline измерений закреплён в NFR | semantic-memory (Neo4j-часть, structured context) | narrative-orchestrator, as-is semantic-memory и Chroma → `services/_archive/`, профиль `legacy` и флаг `MV_GM_PATH` снимаются (S5) | S2 (30 раундов группы из 3), S4 (пороги зафиксированы), S6 (регион блупринтом), S7 (старт наблюдения) |
 | 3. Целевое (EPIC-006…EPIC-013) | по одному эпику за инкремент; порядок рекомендуемый: E-G наблюдаемость → E-B пробой → E-A Living Worlds → E-H доступ/Discord → E-D города → E-C культивация → E-E генерация → E-F авторские инструменты | замороженные сервисы — как исходный материал доменов, не как код «как есть» | — | S11–S13 |
 
 Фича-флаг миграции GM (`MV_GM_PATH=agent|legacy`, US-019): живёт в Gateway (какой путь получает `player.*`: топик один, но legacy-оркестратор запускается только в профиле `legacy` и реагирует на `gm.created`, которые Gateway публикует лишь при `MV_GM_PATH=legacy`); поле `gm_path` в `combat.decided`/`llm.output`/`analytics.turn.completed`; флаг и профиль удаляются в шаге 2 — критерий S5.

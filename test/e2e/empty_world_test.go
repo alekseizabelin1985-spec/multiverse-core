@@ -45,6 +45,11 @@ func TestTheEmptyWorldAnswersTheHealthProbe(t *testing.T) {
 	// also drop the toolchain settings the build of the platform runs with,
 	// and reading it back out is what shared/env exists to avoid (NFR-074).
 	t.Setenv(env.CoreAddr.Name(), addr)
+	// The empty world is the process without the fake of I1-α. A developer who
+	// exported MV_SWARM_FAKE=true in their shell must not change what this test
+	// proves — the child inherits the environment, runs from test/e2e without
+	// rules/ and would refuse to start (review #1 of T-255, Mi-2).
+	t.Setenv(env.SwarmFake.Name(), "false")
 	cmd := exec.CommandContext(ctx, binary, "--contexts=all", "--bus=memory")
 	var output strings.Builder
 	cmd.Stdout, cmd.Stderr = &output, &output

@@ -1,5 +1,7 @@
 # Компоненты блока EPIC-003: рой GM, LLM-шлюз, страж, законы
 
+> **Состояние дерева на 2026-09-11 (T-409).** Документ описывает **целевой** блок. Каталогов `internal/swarm`, `internal/llm`, `internal/laws` в дереве нет; нет и данных, на которых они работают: `blueprints/`, `laws/`, `schemas/agent/`, `config/absolute-limits.yaml`. `shared/agent` — as-is Agent GM Core, ни одного целевого файла (§2). От имени роя сегодня работают двойники `shared/testkit/swarm`: `FakeEncounter` (Phase 1 боя, с повтором при конфликте версий — C-05 v1.3) и `FakeNarrator` (три повода нарратива из шести — C-05 «Заглушка»). Провайдер по умолчанию — `openai_compat` (C-15 v1.1), не `ollama`. Правило для владельца: вливая настоящий контекст, тем же изменением снять пометку «будущее» с `diagrams/c4-component-swarm-llm-laws.md` (решение 2026-09-11).
+
 Версия 0.2 · 2026-09-09 · architect#2 (TEAM-2) · статус: утверждён на G2 в составе архитектуры; v0.2 — точечные правки по сведению (`architecture/consolidation.md` §4, §9) и решениям G2 (`journal.md`), сводка — **§20 «Дополнение после G2»**. Места, изменённые в тексте, помечены «(изм. G2)».
 Границы: `architecture/overview.md` Часть II (§11–§20), ADR-001…ADR-010, `contracts.md` (поставляем C-05, C-06, C-07, C-11, C-12, C-15; потребляем C-01, C-02, C-03, C-04, C-09, C-14), `plan/epics.md` EPIC-003 (I1/I2), `plan/ownership.md`. Требования: `prd.md` §5.13, FR-010…FR-018, FR-030…FR-046, FR-050…FR-056, FR-070…FR-072, FR-090…FR-092, FR-120…FR-128, BR-02, BR-05, BR-06, BR-08, BR-10, BR-14…BR-16; `nfr.md` §1, §3, §5–§7, §10; `use-cases.md` UC-004…UC-008, UC-016, UC-018…UC-026, UC-029, UC-030, UC-034; `api-contracts.md` §2, §3; `data-model.md` §4, §6–§8; `domain-review.md` §3.1; `metrics.md` §4.
 Решения уровня реализации — ADR-014 (планировщик), ADR-015 (формат блупринта v2 и валидатор), ADR-016 (парсер вывода LLM, язык, фильтр (a)), ADR-017 (страж и `reason`).
@@ -37,7 +39,7 @@ C4Component
     }
     Container_Boundary(llm, "internal/llm") {
         Component(gw, "Gateway", "Go", "Generate(Call): бюджет → провайдер+повторы → парсер → язык → фильтр (a) → запись → страж")
-        Component(prov, "providers/*", "Go", "ollama (native /api/chat), openai_compat (E-H), recorded (replay), fake (тесты)")
+        Component(prov, "providers/*", "Go", "openai_compat (по умолчанию: llama-server и облако за гейтом), ollama (native /api/chat), recorded (replay), fake (тесты)")
         Component(parser, "parser", "Go", "JSON с восстановлением (преамбула Qwen3, <think>, код-блоки) + JSON Schema 2020-12")
         Component(filter, "filter", "Go", "NarrativeFilter категории (a), fail-closed; config/absolute-limits.yaml")
         Component(guard, "guardian", "Go", "правила 3–6 §2.4: unknown_entity, player_agency, level_violation, law_violation; reason enum")
@@ -125,7 +127,7 @@ internal/llm/
   providers/
     registry.go       # providers.Registry: Register(name, factory); New(name, cfg)
     ollama/client.go  # native /api/chat, /api/embed; format=schema, think, keep_alive, options.num_ctx; токены из eval_count
-    openai_compat/    # response_format json_schema (E-H; в MVP-1 компилируется, включается флагом)
+    openai_compat/    # ПРОВАЙДЕР ПО УМОЛЧАНИЮ (C-15 v1.1, U-8): llama-server и любой OpenAI-совместимый сервер, облако — тот же адаптер с другим MV_LLM_URL за гейтом MV_LLM_CLOUD_ENABLED; /v1/chat/completions + response_format json_schema, enable_thinking=false. Прежняя пометка «E-H, включается флагом» устарела (T-409)
     recorded/         # RecordedProvider: ключ (correlation_id, agent.id, phase, attempt); промах = ошибка
     fake/             # FakeProvider: табличные ответы для unit/e2e; счётчик вызовов
   parser/
@@ -153,12 +155,17 @@ internal/laws/
   strain.go           # Strain: Inc(lawID), Snapshot(); в MVP-1 только накопление
   *_test.go
 
-shared/agent/
+shared/agent/        # ЦЕЛЕВАЯ раскладка. На 2026-09-11 (T-409) в каталоге лежит as-is Agent GM Core: router.go, lifecycle.go,
+                     # pipeline.go, worker_pool.go, state_manager.go, md_parser.go, blueprint_loader.go, blueprint_validator.go,
+                     # helpers.go, interfaces.go, agent_types.go, lod.go, tools/, examples/ — и ни одного целевого файла ниже.
+                     # В архив уехали только filter.go, tools/*_tool.go, adapter.go и e2e-тест. Каталог — неподключённая
+                     # вторая архитектура GM, а не типы роя; переписывание — EPIC-003 (T-201/T-202). Таблицы владения
+                     # в levels.go нет и не будет: истина — shared/contracts/ownership.go (ADR-025).
   types.go            # AgentLevel, LODLevel, AgentLifecycleState (из agent_types.go, без изменений)
   blueprint.go        # AgentBlueprint v2 (§13.1) + вложенные типы
   parser.go           # ParseFile/ParseBytes: frontmatter + секции ## system/phase1/phase2/tick/canon/description; чистый YAML
   validator.go        # Validate(bp, Env) []Issue{File, Field, Reason, Severity} — правила §3.2 (ADR-015)
-  levels.go           # реестр уровней: AllowedEventTypes(level, role), OwnedEntityTypes(level, role); monitor/object зарезервированы
+  levels.go           # реестр уровней: AllowedEventTypes(level, role); OwnedEntityTypes(level, role) — ПРОИЗВОДНАЯ от contracts.OwnershipRules, которую вызывающий передаёт в ValidationEnv (ADR-025); своей таблицы владения файл не держит; monitor/object зарезервированы
   placeholders.go     # словарь плейсхолдеров промптов
   lod.go              # без изменений (E-G)
   tools/registry.go   # без изменений (MVP-1 не использует; tools/*_tool.go удаляются)
@@ -403,7 +410,7 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 
 ### 5.4. `level_violation` на выходе
 
-Все публикации агентов идут через `Emitter.Emit`: тип ∉ `allowed_event_types` или `entity.*.proposed` с сущностью типа ∉ `owned_entity_types` (или вне scope агента для `task`) → `ErrLevelViolation`. Если источник — вывод LLM, элемент уже отброшен стражем (§10) и до Emitter не доходит; если источник — код роли, это дефект: событие не публикуется, лог `handled=false`, тест роли падает. Реестр белых списков уровня — `shared/agent/levels.go`, тот же экспортируется в `contracts.OwnershipRules` (C-02) для State.
+Все публикации агентов идут через `Emitter.Emit`: тип ∉ `allowed_event_types` или `entity.*.proposed` с сущностью типа ∉ `owned_entity_types` (или вне scope агента для `task`) → `ErrLevelViolation`. Если источник — вывод LLM, элемент уже отброшен стражем (§10) и до Emitter не доходит; если источник — код роли, это дефект: событие не публикуется, лог `handled=false`, тест роли падает. Белые списки типов событий уровня — `shared/agent/levels.go`; типы сущностей уровня — из `contracts.OwnershipRules` (`shared/contracts/ownership.go`), единственной таблицы владения, которую читает и State (C-02 v1.4, ADR-025; прежнее «экспортируется из `levels.go`» отменено в T-409).
 
 ---
 
@@ -502,11 +509,11 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 | Реализация | Транспорт | Особенности |
 |---|---|---|
 | `providers/ollama` | `POST {OLLAMA_URL}/api/chat` (native), `POST /api/embed` | `format` = JSON-схема фазы (объект), `think: false` (Phase tick/narrative MVP-1; поле блупринта `thinking`), `keep_alive: -1` (`LLM_KEEP_ALIVE`), `options{temperature, num_predict=max_tokens, num_ctx=LLM_NUM_CTX (8192), seed?}`, `stream: false`; токены из `prompt_eval_count`/`eval_count` (NFR-052); таймаут фазы через `context`; `Health` = `GET /api/tags` + `GET /api/ps` (модели резидентны). Клиент — `net/http` без зависимости от модуля `ollama` |
-| `providers/openai_compat` | `/v1/chat/completions`, `response_format: {type: json_schema}` | компилируется, включается `LLM_PROVIDER=openai|deepseek` + `LLM_CLOUD_ENABLED=true` (E-H) |
+| `providers/openai_compat` | `/v1/chat/completions`, `response_format: {type: json_schema}` | **провайдер по умолчанию** (C-15 v1.1, U-8, T-208): llama-server и любой OpenAI-совместимый сервер; адрес — только `MV_LLM_URL` (обязателен, без значения по умолчанию, `/v1` на конце допустим — T-404); облако — тот же адаптер с внешним адресом, `MV_LLM_API_KEY` и гейтом `MV_LLM_CLOUD_ENABLED=true`. Имена провайдера `openai`/`deepseek` выведены (ADR-005 доп. 2). Прежняя строка «компилируется, включается флагом (E-H)» устарела (T-409) |
 | `providers/recorded` | чтение `testdata/recordings/*.jsonl` или журнала `llm_records` | ключ `(meta.correlation_id, meta.agent.id, phase, attempt)`; промах → `ErrIncompleteRecord` (в `mode=replay` тест падает, в recovery — шаблон с пометкой) |
 | `providers/fake` | in-memory таблица `(phase, matcher) → Response` | счётчик вызовов для NFR-014/NFR-053; генератор записей через `testkit.RecordingWriter` |
 
-`providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `ollama`); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` при старте публикует `config.cloud_enabled {by: operator, provider, allow_external_players}` только если `MV_LLM_CLOUD_ENABLED=true` (без ключей и их фрагментов).
+`providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `openai_compat` — C-15 v1.1, манифест `shared/env/vars.go`; прежнее «по умолчанию `ollama`» устарело, T-409); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` при старте публикует `config.cloud_enabled {by: operator, provider, allow_external_players}` только если `MV_LLM_CLOUD_ENABLED=true` (без ключей и их фрагментов).
 
 ### 9.2. Конвейер `Generate` (порядок побочных эффектов — ADR-005 п. 2)
 
@@ -539,7 +546,7 @@ Generate(call):
 
 ### 9.4. Облако (BR-15, ADR-005 п. 6, ADR-009 п. 7)
 
-`LLM_CLOUD_ENABLED=true` + ключ + `LLM_PROVIDER=openai|deepseek|anthropic`; проверка «внешних игроков» требует числа связок `alive` — у `core` нет `links.db`, поэтому шлюз читает флаг `LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS` и публикует `config.cloud_enabled {by: operator, allow_external_players}` при старте; проверка фактического числа игроков — на стороне gateway/оператора (замечание в отчёте). В промпт уходят только `player_id`, имена персонажей и текст `say`.
+`MV_LLM_CLOUD_ENABLED=true` + `MV_LLM_API_KEY` + облачный `MV_LLM_URL` у провайдера `openai_compat` (`anthropic` — отдельный провайдер E-H; имена провайдера `openai`/`deepseek` выведены, ADR-005 доп. 2; гейт — по адресу, а не по имени провайдера; T-409); проверка «внешних игроков» требует числа связок `alive` — у `core` нет `links.db`, поэтому шлюз читает флаг `LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS` и публикует `config.cloud_enabled {by: operator, allow_external_players}` при старте; проверка фактического числа игроков — на стороне gateway/оператора (замечание в отчёте). В промпт уходят только `player_id`, имена персонажей и текст `say`.
 
 ### 9.5. Деградация и здоровье
 
@@ -766,7 +773,7 @@ categories:
 | Пакет-владелец | Переменные (значение по умолчанию) |
 |---|---|
 | `internal/swarm` | `MV_SWARM_BLUEPRINTS_DIR=blueprints`, `MV_SWARM_LLM_WORKERS=1`, `MV_SWARM_BACKGROUND_QUIET=5s`, `MV_SWARM_BACKGROUND_MAX_WAIT=30s`, `MV_SWARM_SNAPSHOT_EVERY_EVENTS=200`, `MV_SWARM_MAX_AGENTS=64`, `MV_SWARM_BACKGROUND_INDEX_TTL=720h`, `MV_SWARM_MONITOR_AGENTS_ENABLED=false`, `MV_SWARM_OBJECT_AGENTS_ENABLED=false`, `MV_MEMORY_URL` (пусто = `journalContext`) |
-| `internal/llm` | `MV_LLM_PROVIDER=ollama`, `MV_OLLAMA_URL=http://ollama:11434`, `MV_LLM_KEEP_ALIVE=-1`, `MV_LLM_NUM_CTX=8192`, `MV_LLM_TIMEOUT_NARRATIVE=20s`, `MV_LLM_TIMEOUT_TICK=30s`, `MV_LLM_TIMEOUT_DECISION=5s`, `MV_LLM_TIMEOUT_DEGRADED=3s`, `MV_LLM_LATIN_MAX_RATIO=0.10`, `MV_LLM_STORE_PROMPTS=false` (имя по ADR-005 доп. п. 1; ранее `LLM_PROMPT_STORE`), `MV_LLM_CLOUD_ENABLED=false`, `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false`, `MV_LLM_CLOUD_BUDGET_USD_PER_DAY`, `MV_LLM_TURN_CALLS_PER_MIN=0`, ключи `MV_OPENAI_API_KEY`/`MV_DEEPSEEK_API_KEY`/`MV_ANTHROPIC_API_KEY` (E-H), `MV_LLM_PRICES=config/llm-prices.yaml` |
+| `internal/llm` | `MV_LLM_PROVIDER=openai_compat` (по умолчанию, C-15 v1.1; `ollama` — вторым, и только тогда `MV_OLLAMA_URL=http://ollama:11434`), `MV_LLM_URL` (обязателен, без значения по умолчанию, T-404), `MV_LLM_KEEP_ALIVE=-1`, `MV_LLM_NUM_CTX=8192`, `MV_LLM_TIMEOUT_NARRATIVE=20s`, `MV_LLM_TIMEOUT_TICK=30s`, `MV_LLM_TIMEOUT_DECISION=5s`, `MV_LLM_TIMEOUT_DEGRADED=3s`, `MV_LLM_LATIN_MAX_RATIO=0.10`, `MV_LLM_STORE_PROMPTS=false` (имя по ADR-005 доп. п. 1; ранее `LLM_PROMPT_STORE`), `MV_LLM_CLOUD_ENABLED=false`, `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false`, `MV_LLM_CLOUD_BUDGET_USD_PER_DAY`, `MV_LLM_TURN_CALLS_PER_MIN=0`, ключи `MV_OPENAI_API_KEY`/`MV_DEEPSEEK_API_KEY`/`MV_ANTHROPIC_API_KEY` (E-H), `MV_LLM_PRICES=config/llm-prices.yaml` |
 | `internal/laws` | `MV_LAWS_DIR=laws`, `MV_LAWS_BREACH_PHASE_ENABLED=false` |
 | `shared/runtime` (EPIC-001), не блок | **`MV_CORE_ADDR=127.0.0.1:8090`** — адрес HTTP-сервера процесса `core`; `SWARM_ADMIN_ADDR` **упразднён**: контексты `swarm`/`llm` только монтируют маршруты `/v1/admin/agents*`, `/v1/admin/llm/usage` на `runtime.Mux`; gateway проксирует по `MV_CORE_URL` (C-06). `MV_BUS_VALIDATE_ON_READ=true` — валидация схем при чтении подписок роя (невалидное → `dead_letters`, handler не вызывается) |
 | gateway (EPIC-004), не блок | `MV_GM_PATH=agent` — читает gateway; `core` копирует `meta.gm_path` события-причины в `combat.decided.gm_path`/`llm.output.gm_path` |
@@ -917,7 +924,7 @@ sequenceDiagram
 | I1-0 | `GM_PATH=agent` по умолчанию в gateway (EPIC-004); legacy narrative-orchestrator только в compose-профиле `legacy` и реагирует на `gm.created`, которые gateway публикует лишь при `GM_PATH=legacy`; рой игнорирует deprecated-типы (§5.1 шаг 2) | compose, gateway, `swarm/router.go` |
 | I1-1 | перенос `prompt_builder.go` → `internal/llm/prompt` (секции ADR-005 п. 4), `clusterEvents/formatEventDescription` → `prompt/events.go`, тесты переписаны; `GMInstance` не переносится: его буфер событий = `journal.EventWindow`, TTL = `Lifecycle`, снапшот = `SwarmSnapshot`, `isOwnEvent` не нужен (подписки по типам), `spatial` — заморожен | `internal/llm/prompt` |
 | I1-2 | `shared/agent`: удаление файлов §2, расширение типов, новый парсер/валидатор; `examples/domain-dark-forest.md` → `blueprints/domain-dark-forest.md` (переписан под v2) | `shared/agent`, `blueprints/` |
-| I1-3 | `gm_path` пишется в `combat.decided`, `llm.output` из `meta.gm_path` события-причины; сравнение нарративов legacy/agent — `mvctl session-report` по `gm_path` | `swarm/emitter.go`, `llm/record.go` |
+| I1-3 | `gm_path` пишется в `combat.decided`, `llm.output` из `meta.gm_path` события-причины; сравнение нарративов legacy/agent — `mvctl report` по `gm_path` | `swarm/emitter.go`, `llm/record.go` |
 | I2-1 | `group-narrator`, раунд в `encounter`, `MemoryClient` к EPIC-005, `agent.blueprint_reloaded` | `roles/`, `context/memory.go`, `registry.go` |
 | I2-2 (последняя задача EPIC-003 I2, после зелёного S2) | (изм. G2, U-1/D-3) перенести `services/narrative-orchestrator` **и** `services/semantic-memory` as-is в `services/_archive/` с `ARCHIVED.md` (ничего не удалять), убрать профиль `legacy` (вместе с `chromadb`) из compose, deprecated-типы из реестра, флаг `MV_GM_PATH` (S5) | compose, `shared/contracts` (через system-architect), `services/_archive/` |
 
@@ -989,4 +996,4 @@ sequenceDiagram
 | **§13.4** (`enum` в `schemas/agent/tick-*.json`) | **Подтверждено** (TL2-7): файл схемы содержит полный набор типов MVP-1 для уровня; рантайм при компиляции подставляет пересечение с `allowed_event_types` блупринта; валидатор проверяет `allowed ⊆ enum` файла. Изменений в T-203 нет | TL2-7 |
 | **§14 п. 10** (`config.cloud_enabled`) | Событие публикуется контекстом `llm` **при каждом старте `core`** — и при `MV_LLM_CLOUD_ENABLED=true`, и при `false` — а также при изменении. Прежняя формулировка «только при `true`» отменена: иначе проекция gateway (`worlds[].llm.cloud_enabled`) после рестарта недетерминирована. Payload — булев флаг, без имени провайдера, URL и ключей (SEC-21) | З-3, C-06 v1.1; задача T-212 |
 | **§14** (издатели типов), §4.3/§5.1 (старт роя) | «Тип — владелец схемы; фактические издатели — `Spec.Publishers` реестра» (`contracts.md` v0.4 §0, §16 п. 7); `dice.rolled` (владелец EPIC-002) издают агент встречи и `FakeEncounter`; job `contracts` проверяет `source ∈ Spec.Publishers`. Старт догона: рой **ждёт** `analytics.replay.completed {mode: recovery}` с таймаутом `MV_SWARM_REPLAY_WAIT` (120 с) → `/health degraded {state_replay: missing}`; `testkit/state.FakeState` v0 сигнал публикует | TL2-2, TL2-5, TL2-6; задачи T-215, T-237, EPIC-001 T-006/T-017 |
-| **§13.2** (валидатор, `levels.go`) | В `shared/agent/levels.go` добавляется строка **gateway**: `Character.status: alive → abandoned`, `Group.leader_id` (включая `null`). `levels.go` — истина, `shared/contracts.OwnershipRules` — копия, правится **тем же PR** (метка `contract-change`, ревью tech-lead#1 + system-architect), тест равенства блокирует merge | TL2-3, З-2, `contracts.md` §16 п. 6; задача T-202 |
+| **§13.2** (валидатор, `levels.go`) | В `shared/agent/levels.go` добавляется строка **gateway**: `Character.status: alive → abandoned`, `Group.leader_id` (включая `null`). ~~`levels.go` — истина, `shared/contracts.OwnershipRules` — копия~~ (**отменено 2026-09-11, ADR-025, T-409:** строка gateway живёт только в `shared/contracts/ownership.go`, единственной истине; `levels.go` строки шлюза не держит), правится **тем же PR** (метка `contract-change`, ревью tech-lead#1 + system-architect), тест равенства блокирует merge | TL2-3, З-2, `contracts.md` §16 п. 6; задача T-202 |

@@ -1,0 +1,11 @@
+# Rule 8: a platform variable the manifest does not declare. Its default has
+# nothing to agree with, and mvctl env check cannot see it. The name is a real
+# one: contract C-08 used to call the gateway allow-list MV_GATEWAY_CLIENTS
+# while the manifest and compose said MV_GATEWAY_CLIENT_IDS (T-409). It is also
+# what keeps rule 8 honest: a declaration the manifest parser missed would
+# surface here as "not declared", never pass in silence.
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_CLIENTS: ${MV_GATEWAY_CLIENTS:-telegram-bot}

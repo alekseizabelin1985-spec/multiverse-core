@@ -5,6 +5,23 @@
 # Docs/dev-team/architecture/components/swarm-llm-laws.md §9.1, таблица провайдеров:
 # правило generic-api-key срабатывает на текст ячейки строки `providers/ollama`
 # (текст ячейки с параметрами генерации: max_tokens и num_ctx со значением по умолчанию),
-# гасит любую находку generic-api-key в строке 504. Файл — владение architect#2.
+# гасит любую находку generic-api-key в этой строке. Файл — владение architect#2.
+# Первый отпечаток — для скана диапазона ветки (строка 504 в коммите be33e93);
+# второй — для скана содержимого индекса, номер строки текущий: правки документа
+# выше таблицы сдвигают его (2026-09-11: 504 → 511, строка та же).
 be33e9373b8e4b5e15078e3707e77ffff10d81b2:Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:504
-Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:504
+# Та же строка таблицы провайдеров в коммите 744fb10 (F-0), где она стояла на 494-й:
+# скан всей истории (CI на ветке) находит её там; проверено 2026-09-11 — текст строки тот же.
+744fb100f355b243cb938278bd8cca325370804c:Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:494
+Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:511
+
+# НАСТОЯЩИЕ КЛЮЧИ в истории публичного репозитория, коммит 9ffca2d («Initial commit», 2026-02-07):
+# .env строки 20 и 25 и Docs/LLM_Client_Spec.md строка 68 — ключ oracle (sk-4659…) и ключ OpenRouter (sk-or-v1-…).
+# В HEAD этих файлов нет (.env удалён коммитом d6a2dc0); ключи живут только в истории, открыты с февраля и
+# считаются скомпрометированными. Решение владельца 2026-09-11: ключи отзываются владельцем, отпечатки
+# вносятся сюда вместо переписывания истории (git filter-repo отклонён: клоны и форки сохранили бы её).
+# Дата отзыва: 2026-09-11 — оба ключа (oracle sk-4659… и OpenRouter sk-or-v1-…) отозваны, подтверждено владельцем.
+# Любой другой ключ этими строками не гасится: отпечаток привязан к коммиту, файлу и строке.
+9ffca2d4636d08e85ecb594bd897501fad1d7855:.env:generic-api-key:20
+9ffca2d4636d08e85ecb594bd897501fad1d7855:.env:generic-api-key:25
+9ffca2d4636d08e85ecb594bd897501fad1d7855:Docs/LLM_Client_Spec.md:generic-api-key:68

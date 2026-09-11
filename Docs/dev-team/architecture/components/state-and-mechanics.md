@@ -1,5 +1,7 @@
 # Компоненты блока «Состояние и механика» (EPIC-002)
 
+> **Состояние дерева на 2026-09-11 (T-409).** `internal/state` и `internal/replay` в дереве **нет**; роль State играет `shared/testkit/state.FakeState` (в памяти, без объектного хранилища, интентов и снапшотов). `internal/mechanics` есть: типы C-03, `Load` правил, формулы, RNG, `ActorFromEntity`, `DiceRolledPayload`, реестр инвариантов — но `Resolve` и `ChangesFor` возвращают `ErrNotImplemented`, `NPCTarget` ещё без канала ошибки (T-053), у инвариантов нет проверок (T-054). Ответственность ниже — целевая. Правило для владельца: вливая настоящий контекст, тем же изменением снять пометку «будущее» с `diagrams/c4-component-state-and-mechanics.md` (решение 2026-09-11).
+
 Версия 0.3 · 2026-09-11 · architect#1 (TEAM-1) · статус: **утверждён на G2 (2026-09-09)**; запросы §14 приняты системным архитектором (`consolidation.md` §2, S-1…S-6 — «П»); детализация инкрементов — `epics/EPIC-002-state-mechanics/design.md`.
 **v0.3 — сведение расхождений волны 0** (§17): §4.4 (что живёт только в указателе), §4.5 п. 1а (одна сущность — один набор изменений) и п. 9 (`details.batch_size` снят), §4.10 (объект снапшота в фикстурах), §5.1 (сигнатуры C-03 v1.2), §5.3 (предел 1000 — часть грамматики), §5.4 (`NPCTarget` и его ошибка). Действует правило приоритета `contracts.md` v0.5: где принятый код и документ расходились, побеждала форма с доказательством.
 **Дополнение после G2**: правки по `consolidation.md` §9 внесены точечно с пометкой «Дополнение после G2»; сводка — §16. Где старый текст противоречит дополнению — действует дополнение.
@@ -14,7 +16,7 @@
 ```mermaid
 C4Component
     title core — компоненты блока EPIC-002 (C4 L3)
-    Container_Boundary(core, "core (cmd/multiverse --contexts=state,mechanics,swarm,llm,laws)") {
+    Container_Boundary(core, "core (cmd/multiverse --contexts=state,mechanics,laws,llm,swarm)") {
         Component(state, "internal/state", "Go", "единственный писатель состояния: предложения → факты; версии; инварианты; снапшоты; восстановление")
         Component(mech, "internal/mechanics", "Go, библиотека без I/O", "правила v0.1 из YAML; Resolve; NPCTarget; seed/RNG; Invariants()")
         Component(replay, "internal/replay", "Go, библиотека", "Mode; Cursor; EventClock; NullTimers; JournalReader; Recording")
@@ -63,6 +65,7 @@ cmd/mvctl/internal/world/
   init.go           mvctl world init --world <id> --fixtures <dir> [--bus kafka|memory]: EnsureBucket ×2 → bootstrap → снапшот seq 0 reason=bootstrap (Дополнение после G2: epics.md §2)
   status.go         mvctl world status: latest.json, entities_count, cursor, health
 internal/mechanics/
+  types.go          Actor, Action, Outcome, Roll, ProposedChange, Item, ErrNotImplemented — весь публичный словарь C-03 (есть в дереве; в раскладке v0.2 не был назван, T-409)
   rules.go          Rules, Load(path), RulesDocument (YAML-модель), валидация
   formula.go        мини-грамматика формул: DiceExpr, CheckExpr; парсер и вычислитель
   rng.go            Seed, NewRNG, roll (одна реализация детерминизма)
@@ -79,14 +82,13 @@ internal/replay/
   journal.go        ReadRange(bus, topic, from, to), Tail(bus, topic, from, h): обёртки над eventbus.Journal
   recording.go      Reader/Writer JSONL событий; Index по (type, ключ) для RecordedProvider (EPIC-003) и харнесса
   middleware.go     BusMiddleware: в режиме replay — EventClock.Observe перед handler, meta.replay=true при пробросе
-shared/entity/
-  entity.go         Entity{ID, Type, WorldID, Name, Version, CreatedAt, UpdatedAt, LastEventID, Attributes, LastChange, History}
-  ops.go            OpKind set|inc|append|remove; Op; ApplyOps(e, ops) → []Change; reservedPaths
-  change.go         Change{Path, Old, New}; LastChange{ProposalID, ProposalEventID, FactEventID, Cause, Changed, AppliedAt, Atomic, BatchSize}
+shared/entity/      (раскладка по дереву на 2026-09-11, T-409; файлов ref.go и change.go нет — их содержимое живёт ниже)
+  entity.go         Entity{ID, Type, WorldID, Name, Version, CreatedAt, UpdatedAt, LastEventID, Attributes, LastChange, History}; Ref{ID, Type}; LastChange
+  ops.go            OpKind set|inc|append|remove; Op; ApplyOps(e, ops) → []Change; Change{Path, Old, New}, ChangeSet; reservedPaths; set без изменения значения изменения не даёт
+  path.go           запись по пути операции (`members[0].participation`): splitPath, setIn, deleteIn; чтение пути делегировано shared/jsonpath
   hash.go           CanonicalJSON(e) без служебных полей; StateHash(entities)
   attrs.go          типизированные геттеры: HP(), HPMax(), Status(), Position(), Scope(), GroupID(), EncounterID(), Inventory(), Members()…
-  types.go          константы типов (world, region, player, npc, group, encounter), статусов, причин (cause), причин отказа
-  ref.go            Ref{ID, Type} ⇄ eventbus.EntityRef; Key() "{type}/{id}"
+  types.go          константы типов (world, region, player, npc, group, encounter), статусов, причин (cause), причин отказа; TerminalStatuses, IsTerminalStatus, StatusTransitionAllowed (матрица статусов, C-02 v1.4)
 rules/dark-forest.yaml
 schemas/events/entity.create.proposed.v1.json, entity.update.proposed.v1.json, entity.created.v1.json,
                entity.updated.v1.json, entity.update.rejected.v1.json, dice.rolled.v1.json,
@@ -171,7 +173,7 @@ func CanonicalJSON(e *Entity) []byte
 func StateHash(es []*Entity) string
 ```
 
-Хэш исключает `updated_at`, `history`, `last_change`, `last_event_id` — они не влияют на игровое состояние и позволяют `mvctl session-report --audit` (EPIC-005) пересчитать хэш из снапшота + `entity.updated.changed[]`. Метрика `recovery_state_identical` (metrics.md) сравнивает именно этот хэш.
+Хэш исключает `updated_at`, `history`, `last_change`, `last_event_id` — они не влияют на игровое состояние и позволяют `mvctl report --audit` (EPIC-005) пересчитать хэш из снапшота + `entity.updated.changed[]`. Метрика `recovery_state_identical` (metrics.md) сравнивает именно этот хэш.
 
 ---
 
@@ -396,7 +398,7 @@ sequenceDiagram
 
 ### 4.9. Снапшоты (C-14)
 
-Триггеры: каждые `MV_STATE_SNAPSHOT_EVERY=200` применённых фактов (счётчик на мир; Дополнение после G2: префикс `MV_`); `analytics.session.ended` (State подписан на `analytics_events` только как на триггер, группа `core.state.triggers`; в replay не читается — снапшот по счётчику; **I2**); `SIGTERM` (`Stop()` ждёт завершения текущего предложения, пишет снапшот с `reason=shutdown`, ≤ 10 с); admin `POST /v1/admin/state/{world}/snapshot` (харнесс S3, `X-Actor-Kind: ci`; маршрут смонтирован на HTTP-сервере процесса `shared/runtime`, `MV_CORE_ADDR`; в compose доступен через прокси gateway `/v1/admin/*` — C-06); `bootstrap` (seq 0 после `world init`, §4.10). Ротация: после успешной записи удаляются снапшоты старше пяти последних (`K=5`), `latest.json` не считается. Событие `snapshot.created {component: state, snapshot{id, seq, taken_at, cursor, laws_version, state_hash, size_bytes, key}}` публикуется после записи `latest.json`. Снапшот **не** блокирует обработку дольше сериализации (≤ 1 МБ, единицы мс): worker делает копию списка сущностей под своим же исполнением (сериализация в горутине, курсор фиксируется в момент копии).
+Триггеры: каждые `MV_SNAPSHOT_EVERY_FACTS=200` применённых фактов (счётчик на мир; Дополнение после G2: префикс `MV_`); `analytics.session.ended` (State подписан на `analytics_events` только как на триггер, группа `core.state.triggers`; в replay не читается — снапшот по счётчику; **I2**); `SIGTERM` (`Stop()` ждёт завершения текущего предложения, пишет снапшот с `reason=shutdown`, ≤ 10 с); admin `POST /v1/admin/state/{world}/snapshot` (харнесс S3, `X-Actor-Kind: ci`; маршрут смонтирован на HTTP-сервере процесса `shared/runtime`, `MV_CORE_ADDR`; в compose доступен через прокси gateway `/v1/admin/*` — C-06); `bootstrap` (seq 0 после `world init`, §4.10). Ротация: после успешной записи удаляются снапшоты старше пяти последних (`K=5`), `latest.json` не считается. Событие `snapshot.created {component: state, snapshot{id, seq, taken_at, cursor, laws_version, state_hash, size_bytes, key}}` публикуется после записи `latest.json`. Снапшот **не** блокирует обработку дольше сериализации (≤ 1 МБ, единицы мс): worker делает копию списка сущностей под своим же исполнением (сериализация в горутине, курсор фиксируется в момент копии).
 
 ### 4.10. Инициализация мира: `bootstrap.go` и `mvctl world init --fixtures` (Дополнение после G2)
 
@@ -587,6 +589,8 @@ type Invariant struct {
 }
 ```
 
+**Состояние на 2026-09-11 (T-409).** Реестр `internal/mechanics/invariants.go` существует — идентификаторы и места проверки (`Where`) заполнены, — но **у всех десяти записей `Check == nil`**: проверки пишет EPIC-002 **T-054** (соло: inv-01, 02, 03, 09, 10) и последующие задачи. У `inv-07` и `inv-08` `Check` останется `nil` навсегда — они проверяются по журналу, а не по миру. Таблица ниже — целевое распределение, а не описание работающего кода; «мёртвый не действует» (inv-01) сегодня реализовано в одном месте — `Actor.Alive()` (C-03). Файла законов `laws/dark-forest-world.v1.yaml`, с которым сверяется реестр, в дереве тоже нет (EPIC-003).
+
 | ID | Инвариант (NFR-020) | `state` (Applier) | `mechanics` | другие |
 |---|---|---|---|---|
 | inv-01 | `dead` не действует и не цель | `dead_entity` на изменение мёртвого; `status` мёртвого не меняется | `NPCTarget` исключает; `Resolve` → `ErrInvalidTarget` | gateway валидирует действие |
@@ -774,7 +778,7 @@ sequenceDiagram
 
 - Логи `slog` JSON (поля `service=core, context=state|mechanics, world, correlation_id, event_id, proposal_id, handled`): `applied {entities, versions, cause, duration_ms}`, `rejected {reason, entity, invariant_id}`, `snapshot {seq, reason, size_bytes, duration_ms}`, `recovery {snapshot_id, events_replayed, duration_ms, identical}`.
 - `/health` секция `state`: `{status, worlds: {<id>: {entities, cursor, lag: End-cursor, snapshot: {seq, taken_at, age_s}, pending_intents, unpublished_facts, applied_total, rejected_total_by_reason}}}`; `mechanics: {rules_version, rules_path, invariants: 10}`; `mode`.
-- Метрики MVP-1 — из событий через `mvctl session-report`: `state_divergence_count`, `invariant_violations` (по `rejected reason=law_violation`), `replay_*` из `analytics.replay.completed`, латентность применения — из разницы `entity.updated.timestamp`? — **нет**: timestamp наследуется от причины; латентность State считает gateway (`mechanics_at − received_at`) и, для стенда, лог `applied.duration_ms` (Prometheus — E-G).
+- Метрики MVP-1 — из событий через `mvctl report`: `state_divergence_count`, `invariant_violations` (по `rejected reason=law_violation`), `replay_*` из `analytics.replay.completed`, латентность применения — из разницы `entity.updated.timestamp`? — **нет**: timestamp наследуется от причины; латентность State считает gateway (`mechanics_at − received_at`) и, для стенда, лог `applied.duration_ms` (Prometheus — E-G).
 
 ---
 
@@ -856,7 +860,7 @@ sequenceDiagram
 
 | # | Решение | Где в документе |
 |---|---|---|
-| 1 | Все env с префиксом `MV_`: `MV_STATE_SNAPSHOT_EVERY`, `MV_SWARM_OBJECT_AGENTS_ENABLED`, `MV_CORE_ADDR` | §4.9, §8 |
+| 1 | Все env с префиксом `MV_`: `MV_SNAPSHOT_EVERY_FACTS`, `MV_SWARM_OBJECT_AGENTS_ENABLED`, `MV_CORE_ADDR` | §4.9, §8 |
 | 2 | Admin-маршрут State монтируется на HTTP-сервере процесса (`shared/runtime`, `Routes(mux)`, `MV_CORE_ADDR=127.0.0.1:8090`); спецификация — раздел `admin` `api/gateway.openapi.yaml` | §2, §4.9 |
 | 3 | Границы импортов `state → mechanics`, `cmd/multiverse → internal/replay` приняты; `cmd/mvctl/internal/world → internal/state` | §1 |
 | 4 | C-01 v1.1: `Journal`/`Position`/`Dedup` — реализация EPIC-001, State использует как есть | §4.8, §14 |
@@ -878,7 +882,7 @@ sequenceDiagram
 |---|---|---|
 | Раздел **«Мёртвые»** (терминальные статусы), §5.5 inv-01 | Терминальные статусы — **`status ∈ {dead, abandoned, ascended_final}`**. Покинутый персонаж (`abandoned`, следствие `/forget`) трактуется как `dead` во всех правилах: `dead_entity` при попытке изменения, inv-01 `dead_does_not_act`, `NPCTarget`, таблица видимости стража, исключение из scope, `expected[]`/`acted[]` и `participation=active`. Отличие от смерти: `narrative.output kind=death` **не** генерируется | З-2, C-02 v1.2, ADR-017 доп. 1 п. 5; задачи T-053, T-054, T-056 |
 | §4.4/§4.8 (`cause` в предложениях и фактах) | `cause` дополнена значением **`forget`**; переход `alive → abandoned` предлагает **только gateway** (`entity.update.proposed {atomic: true, cause: forget}`, `set status=abandoned`, `expected_version`, без `meta.agent`); предложение с `meta.agent` → `level_violation`; над `dead`/`ascended_final`/`abandoned` → `dead_entity`. Факт — `entity.updated {changed:[{path: status, old: alive, new: abandoned}], cause: forget}`. Схемы с `cause=forget` создаёт EPIC-001 F-4b (T-006) | З-2, C-02 v1.2; задача T-056 |
-| **§4.6** (`OwnershipRules`) | Добавляется строка **gateway**: `Character.status → abandoned` (только из `alive`) и `Group.leader_id` (включая `null`). Истина — `shared/agent/levels.go` (EPIC-003), `shared/contracts.OwnershipRules` — статичная копия; копия правится **тем же PR**, что и истина; State — только потребитель, узнаёт из отчёта PR | З-2, TL2-3, `contracts.md` §16 п. 6; задачи T-202 (EPIC-003), T-006 (EPIC-001) |
+| **§4.6** (`OwnershipRules`) | Добавляется строка **gateway**: `Character.status → abandoned` (только из `alive`) и `Group.leader_id` (включая `null`). ~~Истина — `shared/agent/levels.go` (EPIC-003), `shared/contracts.OwnershipRules` — статичная копия; копия правится **тем же PR**, что и истина~~ — **отменено 2026-09-11 (ADR-025, T-409)**: единственная истина — `shared/contracts/ownership.go`, строки меняют их владельцы PR `contract-change`; State — только потребитель, узнаёт из отчёта PR. Связку «путь ↔ причина» State проверяет поверх таблицы (C-02 v1.4) | З-2, TL2-3, `contracts.md` §16 п. 6; задачи T-202 (EPIC-003), T-006 (EPIC-001) |
 
 
 ---

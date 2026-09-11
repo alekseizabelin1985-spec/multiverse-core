@@ -48,7 +48,13 @@
 #   7. this file — the one compose always loads — interpolates cleanly on a
 #      clean machine: every ${VAR:?} in it resolves from build/versions.env or
 #      from a variable the README tells the operator to fill ([required] in
-#      .env.example). Anything else belongs in a per-profile file (T-397).
+#      .env.example). Anything else belongs in a per-profile file (T-397);
+#   8. a platform variable (MV_*) has one default, the manifest's
+#      (shared/env/vars.go): a ${MV_X:-d} in these files either repeats it or,
+#      for an address variable only, names a service of this network with a
+#      port or a scheme (redpanda:9092, http://core:8090); ${MV_X} and $MV_X
+#      with no modifier count as an empty default. Anything else is passed
+#      through as a key with no value (T-411).
 #
 # Known limitation of a single compose file (T-008; dev-log ОВ-40): a port
 # publication cannot be made conditional on a profile. Where §1.4 asks for a
@@ -233,8 +239,16 @@ services:
       # variable look adjustable while the port and the probe stayed fixed.
       MV_CORE_ADDR: ":8088"
       MV_GATEWAY_DATA_DIR: ${MV_GATEWAY_DATA_DIR:-/data}
-      MV_GATEWAY_CLIENT_IDS: ${MV_GATEWAY_CLIENT_IDS:-telegram-bot,mvctl}
-      MV_GATEWAY_ACTOR_KIND_CLIENTS: ${MV_GATEWAY_ACTOR_KIND_CLIENTS:-mvctl}
+      # The two allow-lists are passed through with no value and no default of
+      # their own (T-411, rule 8). When .env carries the line, it decides — an
+      # empty value included, which for an allow-list means nobody. When .env
+      # is silent, compose leaves the variable out of the container and the
+      # manifest's default applies, the same one a process started by hand
+      # gets. `${VAR}` or `${VAR:-}` would NOT do that: both hand the process
+      # an empty list. The defaults that stood here were a second, narrower
+      # list: the CI harness was admitted outside a container, refused inside.
+      MV_GATEWAY_CLIENT_IDS:
+      MV_GATEWAY_ACTOR_KIND_CLIENTS:
       MV_CORE_URL: ${MV_CORE_URL:-http://core:8090}
     ports:
       - "127.0.0.1:8088:8088"
@@ -269,7 +283,11 @@ services:
       # variable in .env stays what it always really was — the address of a
       # process the operator starts by hand on the host (go run, mvctl).
       MV_CORE_ADDR: ":8090"
-      MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS:-operator}
+      # Passed through like the allow-lists of the gateway (T-411): .env or the
+      # manifest, never a third list written here. The `operator` that stood
+      # here kept mvctl and the CI harness out of /v1/admin/* in a container
+      # while a process started by hand let them in.
+      MV_CORE_ADMIN_CLIENTS:
       # Empty value = memory is off, a documented degradation (FR-035); with the
       # `memory` profile set MV_MEMORY_URL=http://memory:8082 in .env.
       MV_MEMORY_URL: ${MV_MEMORY_URL:-}

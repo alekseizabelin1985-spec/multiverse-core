@@ -81,13 +81,13 @@
 | контракты | `mvctl contracts check`, `mvctl blueprint validate blueprints/`, `mvctl env check` | job `contracts` |
 | golden | `mvctl golden check solo-30` | job `e2e`; обновление — `mvctl golden update` отдельной задачей с ревью |
 | запись LLM | `mvctl record --scenario <name>` на стенде → `testdata/recordings/*.jsonl` | только `actor_kind=ci` и фикстурные игроки; `.gitattributes: merge=binary`, текстовый diff сохраняется |
-| отчёт сессии | `mvctl session-report <session_id> [--audit] [--json] [--weekly] [--from-recording]` | CSV `ops/metrics/sessions.csv`, JSON `ops/metrics/sessions/<id>.json` |
+| отчёт сессии | `mvctl report <session_id> [--audit] [--json] [--weekly] [--from-recording]` | CSV `ops/metrics/sessions.csv`, JSON `ops/metrics/sessions/<id>.json` |
 | трасса | `mvctl trace <correlation_id>` (журнал, Must) / `GET /v1/trace/{id}` (память, Should) | NFR-034 |
 | замер | `make bench` на стенде → `ops/metrics/baseline.md` | протокол B1–B8 |
 
 ### 2.2. Тестовый инструментарий (что должно существовать)
 
-`shared/testkit`: `membus` (шина + `Journal` + `--chaos`), `Dedup`, `Versions()`, `containers`; `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`; `testkit/gateway.Harness`, `FakeGateway`; `testkit/swarm.FakeNarrator` (+`WithEncounterStub`, `FakeEncounter`), `RecordingWriter`, `template/ru.go`; `shared/clock.Manual`/`ManualTimers`; `internal/replay.EventClock`/`NullTimers`; `providers/{fake,recorded}`; фикстуры `testdata/fixtures/{world,region,npc,players}.json`, `testdata/analytics/*.jsonl`, `testdata/recordings/*.jsonl`, `testdata/golden/`.
+`shared/testkit`: `membus` (шина + `Journal` + `--chaos`), `Dedup`, `Versions()`, `containers`; `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`; `testkit/gateway.Harness`, `FakeGateway`; `testkit/swarm.FakeNarrator`, `FakeEncounter`, `RecordingWriter`, `template/ru.go`; `shared/clock.Manual`/`ManualTimers`; `internal/replay.EventClock`/`NullTimers`; `providers/{fake,recorded}`; фикстуры `testdata/fixtures/{world,region,npc,players}.json`, `testdata/analytics/*.jsonl`, `testdata/recordings/*.jsonl`, `testdata/golden/`.
 
 ### 2.3. CI (`.github/workflows/go.yml`, F-7)
 
@@ -99,7 +99,7 @@
 | Артефакт | Кто ведёт | Когда |
 |---|---|---|
 | Прогон CI (ссылка + номер) | автоматически | каждый PR |
-| `ops/metrics/sessions.csv` + `sessions/<id>.json` | tester#N через `session-report` | каждый прогон S1/S2 и каждая живая сессия |
+| `ops/metrics/sessions.csv` + `sessions/<id>.json` | tester#N через `mvctl report` | каждый прогон S1/S2 и каждая живая сессия |
 | `ops/metrics/incidents.csv` | оператор/tester | при ручной правке состояния (`manual_fix=true`) |
 | `ops/metrics/baseline.md` | architect#1 + человек | после каждого замера B1–B8 |
 | Отчёт инкремента (что прогнали, дефекты, отклонения) | qa-engineer#1 | на выходе из интеграции I1-α / I1 / I2 |
@@ -121,7 +121,7 @@
 | S4 | латентность на целевом железе | ST-04 (B1, B7), INT-09 | С | 003 + architect#1 | I1 замер, I2 фиксация |
 | S5 | одна архитектура GM, `legacy_gm_path_share = 0` | INT-14, ST-07 | А + С | 003 | I2 |
 | S6 | новый регион блупринтом без Go | E2E-18, ST-08, CT-11 | А + С | 003 | I1b/I2 |
-| S7 | 8 сессий / 3 групповых за 4 недели без поломок | ST-15 (наблюдение), `session-report --weekly` | С | 005-ops (инструмент) | после G4 |
+| S7 | 8 сессий / 3 групповых за 4 недели без поломок | ST-15 (наблюдение), `mvctl report --weekly` | С | 005-ops (инструмент) | после G4 |
 | S8 | ноль внешних затрат, включая фон | E2E-04 (счётчик провайдеров), ST-16 | А + С | 003 | I1 |
 | S9 | приватность и уведомление | E2E-08, E2E-10, E2E-11, ST-03, ST-05 | А + С | 004 | I1 |
 | S10 | секреты вне репозитория, токены отозваны | job `security`, ST-11 | А + С | 001 | волна 0 |
@@ -275,7 +275,7 @@
 | E2E-13 | `chaos-duplicate` / `reorder-topics` | NFR-013 | P1 | I1 |
 | E2E-14 | `stubs`/`empty-world` | готовность заглушек, `/health`, NFR-075 | P2 | волна 0 |
 | E2E-15 | `golden check` (20 ходов + 3 тика) | NFR-065/048/090 | P1 | I1b |
-| E2E-16 | `session-report --from-recording`, `--json`, `trace` | US-038, US-003, NFR-032/034 | P2 | I1 |
+| E2E-16 | `mvctl report --from-recording`, `--json`, `trace` | US-038, US-003, NFR-032/034 | P2 | I1 |
 | E2E-17 | `memory-absence` | US-005/US-036 через память | P3 | I2 (отрезаемо) |
 | E2E-18 | `second-region` (`domain-swamp`, `git diff --stat -- '*.go'` = 0) | S6, US-015 | P1 | I1b |
 | E2E-19 | `limits` (`429`, `413`, `409 already_acted`, `409 poll_in_progress`) | NFR-049 | P2 | I1 / I2 |
@@ -299,7 +299,7 @@
 | ST-12 | Чек-лист качества: выборка 100 ходов (урон, смерть, инвентарь, позиция, погода, канон) | NFR-023/024 | P2 | qa-engineer#2 + человек | после I1 |
 | ST-13 | Сверка суммы `tokens` из `llm.output` с отчётом Ollama на 100 вызовах | NFR-052 | P2 | tester#2 | вместе с B7 |
 | ST-14 | Нагрузка: 6 `sim`-игроков в одном scope 5 мин + один «флудящий»; латентность остальных | NFR-005/049/080 | P2 | tester#3 | I2 |
-| ST-15 | Наблюдение S7: 4 недели, `session-report --weekly`, `incidents.csv` | S7 | P2 | человек + qa-engineer#1 | после G4 |
+| ST-15 | Наблюдение S7: 4 недели, `mvctl report --weekly`, `incidents.csv` | S7 | P2 | человек + qa-engineer#1 | после G4 |
 | ST-16 | Провайдер и облако: ключ не задан; облако при внешних игроках; денежный лимит; `config.cloud_enabled` без ключей | US-014, NFR-046/050/051 | P2 | tester#2 + security-engineer | I2 |
 
 **Итого кейсов уровня стратегии: 75 (auto 59 — CT 15, IT 10, E2E 20, INT 14; manual 16 — ST); P1 — 51.** Юнит-кейсы разработчиков в счёт не входят (их перечень — в `components/*.md` и `epics/*/design.md`).
@@ -318,7 +318,7 @@
 | G-6 | US-010 «`make down` → данные сохраняются в томах» и восстановление из бэкапа `links.db` (SEC-05) — только в чек-листе оператора | С | ST-01/ST-05 с явным шагом восстановления (devops) |
 | G-7 | US-011 «рестарт между Phase 1 и Phase 2»: у EPIC-002 покрыта висящая запись, у EPIC-003 — свой `recovery`; сквозной случай ничей | В | INT-06 (обязателен на интеграции I1) |
 | G-8 | US-005 «`authored` важнее `generated`» проверяется в 005-memory юнитом, но не со стороны роя | С | INT-08; при отрезании 005-memory — на факте из окна журнала |
-| G-9 | NFR-031 «100 % событий цепочки несут `correlation_id`» — нет автоматической проверки полноты цепочки | С | утверждение в INT-01 и в `session-report --audit` |
+| G-9 | NFR-031 «100 % событий цепочки несут `correlation_id`» — нет автоматической проверки полноты цепочки | С | утверждение в INT-01 и в `mvctl report --audit` |
 | G-10 | S7 не может быть критерием выхода MVP-1 (наблюдение 4 недели после G4) | Н | зафиксировать в §6: S7 — критерий продукта, не тестирования |
 
 ---
@@ -352,7 +352,7 @@
 | INT-06 | C-14 | 10 ходов → остановка процесса → старт: `state` догоняет журнал от `state/latest.json` до `End` → `analytics.replay.completed mode=recovery identical=true, llm_calls=0, dice_rolled_new=0` → `swarm` и `gateway` строят проекции от своих `latest.json` и догоняют `entity.updated`; ход 11 принимается; **I2:** открытый раунд восстановлен, `round.closed` не продублирован | P1 | I1 / I2 |
 | INT-07 | C-02 (atomic) + C-04 (раунд) + C-05 | Группа из 3: одновременные удары → `round.closed acted[]` по времени приёма → пакет `atomic=true` → три `entity.updated` по версиям; конфликт версии → `version_conflict` + повтор; `group.entered_region` меняет позицию всех `alive` одним пакетом; смерть лидера → `group.leader_changed cause=death`; молчащий → `defend`, после двух пропусков → `idle` и не выбирается целью | P1 | I2 |
 | INT-08 | C-09 | Память остановлена → `journalContext`, нарратив без ошибки игроку, `memory_fallback` в логе, задержка в пределах NFR-002. Память поднята → `/v1/context/scope` возвращает факт `authored` из блупринта выше противоречащего `generated`; сводка `absence` ⊇ события журнала | P2 | I2 |
-| INT-09 | C-10 | Прогон S1/S2 → парные `analytics.session.started/ended`; `turn.completed` на каждый ход, включая `status=rejected`; `mvctl session-report --json` даёт латентности и вызовы LLM; `--audit` без `state_divergence`; в `analytics_events` 0 текста и внешних ID; повторный replay игнорирует `analytics.*` | P1 | I1 / I2 |
+| INT-09 | C-10 | Прогон S1/S2 → парные `analytics.session.started/ended`; `turn.completed` на каждый ход, включая `status=rejected`; `mvctl report --json` даёт латентности и вызовы LLM; `--audit` без `state_divergence`; в `analytics_events` 0 текста и внешних ID; повторный replay игнорирует `analytics.*` | P1 | I1 / I2 |
 | INT-10 | C-01 | На реальной Redpanda: публикация невалидного payload → `dead_letters` без вызова handler; после зелёного прогона `dead_letters` пуст; `player_events` не принимает событие с `meta.agent` | P2 | I1 |
 | INT-11 | C-11/C-12 | `mvctl laws bump` → `world.laws.changed` → ответ агента со старой `laws_version` отклонён (`law_violation`), один повтор с новой версией, второй провал → шаблон; `laws_version` в 100 % `llm.output`/`narrative.output`/`snapshot.created` | P2 | I1 |
 | INT-12 | C-05/C-08 | Доставки строго по порядку на `player_id`, одна в лизинге; без `ack` — повтор через 30 с; дубль события не даёт второго сообщения; бот офлайн → доставка после восстановления, действие не потеряно | P2 | I1-α, I1 |
@@ -370,7 +370,7 @@
 | `testkit/mechanics.FixedMechanics` | `mechanics.Rules` | CT-04 | I1 |
 | `testkit/gateway.Harness` v0 | `internal/gateway` + бот | CT-05, CT-08 | I1-α |
 | `testkit/gateway.FakeGateway` | `internal/gateway` | CT-08 | I1-α |
-| `testkit/swarm.FakeNarrator` (+`WithEncounterStub`, `FakeEncounter`) | рой `internal/swarm` | CT-06 | I1 (и удаление `WithEncounterStub` — критерий I1) |
+| `testkit/swarm.FakeNarrator`, `FakeEncounter` | рой `internal/swarm` | CT-06 | I1 (и удаление хука `MV_SWARM_FAKE` из `cmd/multiverse` — критерий I1) |
 | `journalContext` | `internal/memory` | CT-09 | I2 |
 | `providers/fake`, `providers/recorded` | `providers/ollama` | CT-14 + ST-04 | I1 |
 
@@ -378,10 +378,10 @@
 
 1. Все кейсы волны из §5.2 выполнены; P1 — 100 % пройдены, P2 — ≥ 90 % и ни один открытый P2 не связан с потерей/искажением данных.
 2. Нет открытых дефектов Blocker/Critical/Major по кейсам волны (§7).
-3. Все пары «заглушка ↔ реализация» из §5.4, актуальные для волны, дали пустой дифф; неактуальные заглушки удалены (`WithEncounterStub` — критерий I1).
+3. Все пары «заглушка ↔ реализация» из §5.4, актуальные для волны, дали пустой дифф; неактуальные заглушки удалены (хук `MV_SWARM_FAKE` из `cmd/multiverse` — критерий I1).
 4. `make ci` зелёный на `integration/mvp-1`; `dead_letters` пуст; `invariant_violations = 0`; `world_break_count = 0`.
 5. `security-review.md` эпиков волны без открытых Critical/Major (`threat-model.md` §6).
-6. `session-report` по прогону приложен (CSV + JSON); для I1 и I2 — свежий `baseline.md` с замерами волны.
+6. `mvctl report` по прогону приложен (CSV + JSON); для I1 и I2 — свежий `baseline.md` с замерами волны.
 7. Регрессионный набор (§7.4) прогнан целиком и зелёный.
 
 ---
@@ -399,7 +399,7 @@
 
 ### 6.2. Дополнительно для G4 (MVP-1)
 
-- S1, S2, S3, S5, S6, S8, S9, S10, S14 подтверждены прогонами; S4 — измерен и пороги зафиксированы; **S7 — не критерий выхода тестирования** (наблюдение 4 недели после G4, ведётся `session-report --weekly` + `incidents.csv`).
+- S1, S2, S3, S5, S6, S8, S9, S10, S14 подтверждены прогонами; S4 — измерен и пороги зафиксированы; **S7 — не критерий выхода тестирования** (наблюдение 4 недели после G4, ведётся `mvctl report --weekly` + `incidents.csv`).
 - Выполнены пункты 1–9 «Проверки перед релизом MVP-1» (`threat-model.md` §7) — ответственный security-engineer.
 - `privacy-scan` зелёный **на живом стенде**, не только в e2e.
 - Записи `testdata/recordings/*.jsonl` и golden соответствуют текущим промптам (последнее обновление — осознанной задачей с ревью диффа).
@@ -429,7 +429,7 @@ BUG-<NNN> · <краткая суть в одну строку>
 Шаги: 1) … 2) … 3) …
 Ожидаемое: <со ссылкой на критерий US/NFR/контракт C-NN>
 Фактическое: <что произошло; фрагмент события/лога без ПДн>
-Артефакты: correlation_id, session-report JSON, ссылка на прогон
+Артефакты: correlation_id, `mvctl report` JSON, ссылка на прогон
 Почему не поймали раньше: <уровень, на котором должен был отсечься>
 Регрессионный кейс: <ID нового или дополненного кейса>
 ```
@@ -533,7 +533,7 @@ BUG-<NNN> · <краткая суть в одну строку>
 | qa-engineer#1 (TEAM-1) | эта стратегия, интеграционные планы волн, `testing/regression.md`, тест-планы EPIC-001/002/005, отчёты инкрементов |
 | qa-engineer#2 (TEAM-2) | тест-план EPIC-003 (I1a/I1b/I2), чек-лист качества нарратива (ST-12) |
 | qa-engineer#3 (TEAM-3) | тест-план EPIC-004 (I1/I2), приватность и лимиты |
-| tester#1/#2/#3 | выполнение кейсов, ведение дефектов, `session-report` по прогонам |
+| tester#1/#2/#3 | выполнение кейсов, ведение дефектов, `mvctl report` по прогонам |
 | developer#N | unit- и contract-тесты своего кода, каркасы e2e своих сценариев, тест к каждому исправлению дефекта |
 | code-reviewer#N | проверка наличия теста к исправлению и уровня, на котором он добавлен |
 | security-engineer | `security-review.md`, §7 threat-model перед G4 |

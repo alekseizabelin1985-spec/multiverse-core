@@ -50,7 +50,7 @@
 | Секреты | `.env`, `.mcp.env`, `.claude/settings.local.json` вне индекса; `gitleaks` в pre-commit и CI; allowlist **только `*.example`**; compose без паролей по умолчанию; `git filter-repo` — только по команде владельца | §4.4, §4.5 |
 | Данные | Redpanda 8 топиков `-p 1 -r 1`, retention 30/90/180 дней, `segment.ms=1d`; MinIO: versioning + ILM включает `objstore.EnsureBucket`, `prompts-*` без versioning и ILM 30 дн.; Qdrant и Neo4j (без APOC) перестраиваемые; SQLite `links.db`/`gateway.db` в именованном томе `gateway-data`, бэкап `links.db` шифрованный `age`, ≤ 30 дней | §5 |
 | LLM-рантайм | **нативный `llama-server` (llama.cpp) на `127.0.0.1:1234`, вне compose** (U-8, ADR-005 доп. 2): `scripts/llm-server.ps1`/`.sh`, `make llm-up/llm-down/llm-health`; провайдер `openai_compat` (`/v1/chat/completions` + `response_format json_schema`); прогрев не нужен — модель грузится при старте, `/health` 503 = loading. Ollama — **опциональный** второй рантайм (нативно или профиль `gpu`) для конфигураций C/A и эмбеддингов; матрица замера — `scripts/llm-bench.ps1`/`.sh`, варианты **E** (базовый кандидат), E+, C, A | §6 |
-| Наблюдаемость | `slog` JSON в stdout, ротация docker-логов (платформа `50m × 5`, бот **`10m × 3`**); `/health` у каждого процесса; метрики MVP-1 — `mvctl session-report` → CSV; Prometheus/Grafana — EPIC-012 | §7 |
+| Наблюдаемость | `slog` JSON в stdout, ротация docker-логов (платформа `50m × 5`, бот **`10m × 3`**); `/health` у каждого процесса; метрики MVP-1 — `mvctl report` → CSV; Prometheus/Grafana — EPIC-012 | §7 |
 | Деплой/откат | образ `multiverse-core:<git-sha>`; `MV_IMAGE_TAG` в `.env`; откат = предыдущий тег + при необходимости восстановление файла SQLite из бэкапа (ADR-019: `Down` не пишутся); бэкап перед каждым релизом | §8 |
 | Архив вместо удаления | весь выводимый из сборки код → `services/_archive/<исходный путь>/` + `ARCHIVED.md` (U-1); из индекса удаляется только не-код (бинарники, логи, секреты); данные as-is — `make archive-legacy` перед пересозданием томов | §4.6, §5.5 |
 
@@ -85,7 +85,7 @@ telegram-bot ──HTTP──▶ gateway (:8088) ──┐   /v1/admin/* → п�
 mvctl (CLI, не демон) ── читает шину/MinIO, публикует в шину (laws bump, world init) через 127.0.0.1:19092
 ```
 
-Один бинарник `cmd/multiverse`, флаг `--contexts` (или `MV_CONTEXTS`) задаёт набор контекстов процесса. У каждого процесса есть HTTP-сервер `MV_<PROCESS>_ADDR` (`shared/runtime`): `/health` (NFR-030) и служебные маршруты, которые монтируют контексты (`/v1/admin/agents*`, `/v1/admin/llm/usage`). Порт `core` — **8090** (`MV_CORE_ADDR=:8090`; 8081 исторически занимал Schema Registry — D-7); gateway проксирует `/v1/admin/*` на `MV_CORE_URL` (ADR-010 п. 1, ADR-009 п. 9 — только клиентам из allow-list). Раздел `admin` описан в `api/gateway.openapi.yaml` (system-analyst).
+Один бинарник `cmd/multiverse`, флаг `--contexts` задаёт набор контекстов процесса (переменной `MV_CONTEXTS` нет — `serve.go` читает только флаг, T-409). У каждого процесса ровно один HTTP-сервер (`shared/runtime`), и его адрес — **`MV_CORE_ADDR`** при любом наборе контекстов: в compose у `gateway` это `:8088`, у `core` — `:8090`, у `memory` — `:8082`, записанные литералом рядом с опубликованным портом. `MV_GATEWAY_ADDR` и `MV_MEMORY_ADDR` выведены из манифеста (T-408): их никто не читал, а compose лишь копировал их значение в `MV_CORE_ADDR`. На сервере: `/health` (NFR-030) и служебные маршруты, которые монтируют контексты (`/v1/admin/agents*`, `/v1/admin/llm/usage`). Порт `core` — **8090** (`MV_CORE_ADDR=:8090`; 8081 исторически занимал Schema Registry — D-7); gateway проксирует `/v1/admin/*` на `MV_CORE_URL` (ADR-010 п. 1, ADR-009 п. 9 — только клиентам из allow-list). Раздел `admin` описан в `api/gateway.openapi.yaml` (system-analyst).
 
 ### 1.3. Compose-профили (ADR-001 доп. п. 6)
 
@@ -97,6 +97,8 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 | `bot` | `telegram-bot` | когда задан `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; `env_file`/`environment` с токеном — только у этого сервиса (D-10, `compose-lint` проверяет) |
 | `dev` | `redpanda-console` | удобство разработчика; консоли только здесь (SEC-33) |
 | `legacy` | as-is `narrative-orchestrator` (`build/legacy.Dockerfile`), **as-is `semantic-memory` (`127.0.0.1:8083`) и `chromadb`** | только на время миграции GM (`MV_GM_PATH=legacy`, S5); оркестратор жёстко ходит в `/v1/context-with-events` без деградации (`orchestrator.go:117,177`), поэтому Chroma живёт здесь до S5 и удаляется вместе с профилем в EPIC-003 I2 (D-3, ADR-004 доп. п. 8). Legacy-сервисы читают **свои as-is переменные** (без `MV_`), собираются из `services/narrative-orchestrator`, `services/semantic-memory` (замороженные, `FROZEN.md`), не из корневого модуля |
+
+**Где живут профили (T-397, внесено в T-409).** Профили без профиля, `memory`, `gpu`, `dev` — в `docker-compose.yml`; **`bot` — в отдельном `docker-compose.bot.yml`, `legacy` — в отдельном `docker-compose.legacy.yml`**. Причина: `docker compose` интерполирует файл **целиком** до фильтрации по профилю, и обязательная переменная профиля (токен бота, образ Chroma) роняла бы запуск всего стека на чистой машине. Makefile подключает нужный файл сам по `PROFILES=...` (правило линтера композиции: файл, который загружается всегда, интерполируется на чистой машине). Состояние профилей на 2026-09-11: **`bot`** описан целиком, но бинарника `cmd/telegram-bot` ещё нет (EPIC-004) — `make up PROFILES=bot` поднимет стек и упадёт на старте контейнера бота, а не на проверке конфигурации; **`legacy`** не поднимается намеренно — `CHROMA_IMAGE` в `build/versions.env` пуст до выбора тега, это громкий отказ вместо тихой ошибки.
 
 Набор профилей задаётся `COMPOSE_PROFILES` в `.env` (`COMPOSE_PROFILES=memory,bot`); `make up PROFILES=...` переопределяет. Жизнеспособность профиля `legacy` подтверждается до старта волны 1 (`epics.md` §6 F-6); запасной вариант S5 — «флаг удалён, `gm_path=agent` в 100 % `llm.output`».
 
@@ -321,9 +323,16 @@ CMD ["server", "/data", "--console-address", ":9001"]
 Проверяет `docker compose config --format json` (после интерполяции):
 1. каждый `image:` имеет явный тег ≠ `latest` и совпадает со значением из `build/versions.env` (NFR-071);
 2. каждая публикация порта имеет вид `127.0.0.1:<host>:<container>`; у `redpanda-init`, `minio-init`, `chromadb`, `narrative-orchestrator` публикаций нет; консоли (`redpanda-console`, MinIO `9001`, Neo4j `7474`) — только в профиле `dev`;
-3. нет паролей по умолчанию: в `environment` нет литералов для `MINIO_ROOT_PASSWORD`, `NEO4J_AUTH`, `MV_*_KEY`, `MV_*_PASSWORD`, `MV_TELEGRAM_BOT_TOKEN` (только `${VAR:?}`); `git grep -i minioadmin` пуст вне `Docs/` и `services/_archive/`;
+Правил **восемь** — ровно столько, сколько перечисляет шапка `scripts/compose-lint.sh` (прежняя редакция этого раздела знала пять и держала правило про `llama-server` внутри пятого; сверка T-416):
+1. каждый `image:` имеет явный тег ≠ `latest` и совпадает со значением из `build/versions.env` (NFR-071);
+2. каждая публикация порта имеет вид `127.0.0.1:<host>:<container>`; у `redpanda-init`, `minio-init`, `chromadb`, `narrative-orchestrator` публикаций нет; консоли (`redpanda-console`, MinIO `9001`, Neo4j `7474`) — только в профиле `dev`;
+3. нет паролей по умолчанию: в `environment` нет литералов для `MINIO_ROOT_PASSWORD`, `NEO4J_AUTH`, `MV_*_KEY`, `MV_*_PASSWORD`, `MV_TELEGRAM_BOT_TOKEN` (только `${VAR:?}`); ключ без значения для обязательного секрета — тоже нарушение: при молчащем `.env` его нет в контейнере, и образ стартует на встроенной учётке (T-411); `git grep -i minioadmin` пуст вне `Docs/` и `services/_archive/`;
 4. `MV_TELEGRAM_BOT_TOKEN` присутствует только у сервиса `telegram-bot` (профиль `bot`); `env_file` у других сервисов не содержит токен;
-5. `NEO4J_PLUGINS` отсутствует (T-17); `OLLAMA_ORIGINS` не `*`, `OLLAMA_HOST` не `0.0.0.0` в контейнерном профиле (SEC-15); **сервиса `llama-server` в compose нет** (нативный процесс, ADR-005 доп. 2 п. 7), а `MV_LLM_URL` у сервисов платформы указывает на `host.docker.internal`, `127.0.0.1`, имя сервиса внутри сети или RFC1918 — публичный host требует `MV_LLM_CLOUD_ENABLED=true` и в compose по умолчанию запрещён (SEC-15, ADR-005 доп. 2 п. 3).
+5. `NEO4J_PLUGINS` отсутствует (T-17); `OLLAMA_ORIGINS` не `*`, `OLLAMA_HOST` не `0.0.0.0` в контейнерном профиле (SEC-15);
+6. **сервиса `llama-server` в compose нет** (нативный процесс, ADR-005 доп. 2 п. 7), а `MV_LLM_URL` у сервисов платформы указывает на `host.docker.internal`, `127.0.0.1`, имя сервиса внутри сети или RFC1918 — публичный host требует `MV_LLM_CLOUD_ENABLED=true` и в compose по умолчанию запрещён (SEC-15, ADR-005 доп. 2 п. 3);
+7. файл compose, который загружается всегда, интерполируется без единой ошибки на чистой машине — `.env.example` с заполненными переменными `[required]` плюс `build/versions.env`; обязательная переменная профиля, которой у чистой машины нет, живёт в файле профиля (`docker-compose.bot.yml`, `docker-compose.legacy.yml`), и эти файлы проверяются правилами 1–6, но не 7 (T-397);
+8. у платформенной переменной одно умолчание — манифеста (T-411): `${MV_X:-d}` допустим, только если `d` равно умолчанию `MV_X` в `shared/env/vars.go`, **либо** `MV_X` входит в набор адресов сервисов сети — `MV_KAFKA_BROKERS`, `MV_MINIO_ENDPOINT`, `MV_CORE_URL`, `MV_QDRANT_ADDR`, `MV_NEO4J_URI`, `MV_TELEGRAM_GATEWAY_URL` — и каждый элемент `d` называет сервис этой сети в той же форме, что умолчание манифеста (схема ↔ схема, `host:port` ↔ `host:port`; `contracts.md` §16 п. 5, v0.7). `${MV_X}` и `$MV_X` без модификатора при непустом умолчании манифеста — нарушение (процесс получил бы пустое значение, а для списка допуска это «никого»); законная форма передачи — ключ без значения (`MV_X:`). Имя, которого манифест не объявляет или объявляет выведенным, — нарушение. Для сторонних переменных с умолчанием платформы (`OLLAMA_*`) умолчание compose обязано совпадать с умолчанием `DeclareExternal` в `shared/env/infra.go`.
+**Состояние на 2026-09-11:** до задачи T-413 правило 8 выделяет адресные переменные эвристикой («умолчание манифеста выглядит адресом»), которая ошибается в обе стороны (ревью #2 T-411, N-4: `MV_CORE_ADDR` — адрес прослушивания, а не сервиса), а равенство для `OLLAMA_*` не проверяет — у них в манифесте пока пустые умолчания с `RequiredWhen`. Обе правки — T-413.
 Выход ≠ 0 при любом нарушении; тот же скрипт — `make compose-lint`.
 
 Ветки (ADR-010, `teams.md` §3, `epics.md` v0.2 п. 4): интеграционная ветка **`integration/mvp-1`** (создана в F-0 от `feature/agent-gm-core`), ветки эпиков `epic/EPIC-00N-<slug>` на весь MVP-1, `main` — то, что задеплоено. CI одинаков на всех; правило защиты `main` и `integration/mvp-1` — required checks `unit, integration, e2e, contracts, security, compose-lint`, линейная история, без force-push, CODEOWNERS-ревью. Порядок слияния инкрементов — `epics.md` §5/§6; отдельного «интеграционного» CI не нужно — тот же workflow на `integration/mvp-1`. Сборка интеграционной ветки перед этапом интеграции = зелёный `go.yml` на `integration/mvp-1` после слияния каждого инкремента + `make ci-full` на машине владельца перед I1-α.
@@ -420,8 +429,8 @@ NEO4J_PASSWORD=                      # обязательна при профи�
 MV_ENV=dev                           # dev|ci|prod
 MV_LOG_LEVEL=info                    # debug|info|warn|error
 MV_LOG_FORMAT=json                   # json|text
-MV_MODE=live                         # live|replay
-MV_BUS=redpanda                      # redpanda|memory (memory — только e2e/отладка одного процесса)
+MV_MODE=live                         # live|replay; источник истины — манифест, --mode перекрывает для запуска вручную (T-408)
+MV_BUS=kafka                         # kafka|memory — по протоколу, не по продукту; redpanda выведено и отвергается (T-408); memory — только --contexts=all
 MV_BUS_VALIDATE_ON_READ=true         # валидация схемы при чтении (ADR-007 доп. п. 4)
 MV_KAFKA_BROKERS=redpanda:9092       # go run на хосте: 127.0.0.1:19092
 MV_MINIO_ENDPOINT=minio:9000         # без схемы; на хосте 127.0.0.1:9000
@@ -432,7 +441,7 @@ MV_WORLD_ID=dark-forest-world        # мир по умолчанию для mvc
 MV_BACKUP_AGE_RECIPIENT=             # публичный ключ age для бэкапа links.db (не секрет; §5.6)
 
 # ===== gateway =====
-MV_GATEWAY_ADDR=:8088
+# адреса нет: процесс слушает MV_CORE_ADDR, в compose у gateway — литерал ":8088" (MV_GATEWAY_ADDR выведен, T-408)
 MV_GATEWAY_DATA_DIR=/data            # links.db, gateway.db (том gateway-data)
 MV_GATEWAY_CLIENT_IDS=telegram-bot,ci-harness,mvctl   # allow-list X-Client-Id (ADR-009 п. 9); в prod без ci-harness
 MV_GATEWAY_ACTOR_KIND_CLIENTS=ci-harness,mvctl        # кому разрешён X-Actor-Kind ci|sim
@@ -447,7 +456,7 @@ MV_LAWS_BREACH_PHASE=false
 
 # ===== llm (рантайм по умолчанию — нативный llama-server, ADR-005 доп. 2) =====
 MV_LLM_PROVIDER=openai_compat        # openai_compat|ollama|anthropic|recorded|fake
-MV_LLM_URL=http://host.docker.internal:1234       # из контейнеров; go run / mvctl на хосте: http://127.0.0.1:1234
+MV_LLM_URL=                          # ОБЯЗАТЕЛЕН, без значения по умолчанию (T-404): единственный источник адреса модели и порта llama-server; из контейнеров http://host.docker.internal:<порт>, на хосте http://127.0.0.1:<порт>; /v1 на конце допустим и отбрасывается
 MV_LLM_API_KEY=                      # пусто для локального llama-server; секрет — только для облачного эндпоинта
 MV_LLM_NUM_CTX=8192                  # контекст на слот; --ctx-size llama-server = MV_LLM_NUM_CTX × число слотов
 MV_LLM_STORE_PROMPTS=false           # полные промпты в prompts-{world} (ILM 30 дн.)
@@ -461,8 +470,8 @@ MV_LLM_BIN=D:\Models\llama\llama\llama-server.exe
 MV_LLM_MODEL_FILE=D:\Models\unsloth\Qwen3.8\Qwen3.8-27B-UD-Q3_K_XL.gguf   # single-режим (-m)
 MV_LLM_MODELS_DIR=D:\Models\         # router-режим (--models-dir, БЕЗ -m); варианты A/E+
 MV_LLM_SLOT_SAVE_PATH=D:\Models\llama\llama-slots
-MV_LLM_HOST=127.0.0.1                # наружу не публикуется (SEC-15)
-MV_LLM_PORT=1234
+MV_LLM_HOST=127.0.0.1                # интерфейс, который слушает llama-server; наружу не публикуется (SEC-15)
+# MV_LLM_PORT выведен (T-404): порт берётся из MV_LLM_URL — второй источник адреса разошёлся на стенде (1234 против 8888)
 MV_LLM_SLOTS=1                       # --parallel; 1 = как OLLAMA_NUM_PARALLEL=1
 MV_LLM_NGL=99                        # --n-gpu-layers
 MV_LLM_THREADS=32                    # --threads (i9-13900)
@@ -480,7 +489,7 @@ MV_LLM_REASONING=off                 # серверный --reasoning on|off|aut
 #   MV_CORE_URL=http://127.0.0.1:8090
 
 # ===== memory (профиль memory) =====
-MV_MEMORY_ADDR=:8082
+# адреса нет: процесс слушает MV_CORE_ADDR, в compose у memory — литерал ":8082" (MV_MEMORY_ADDR выведен, T-408)
 MV_QDRANT_ADDR=qdrant:6334           # gRPC
 MV_NEO4J_URI=neo4j://neo4j:7687
 MV_NEO4J_USER=neo4j
@@ -701,13 +710,15 @@ Consumer-группы: `{process}.{context}` (например `core.state`, `me
 | Neo4j 5.18 → 5.26.30 | пересоздать том (граф перестраивается) | данные производные |
 | Qdrant `latest` → 1.19.1 | пересоздать | клиентов не было, данных нет |
 
+**Правило именования томов (записано в T-409, `diagrams/deployment.md`).** Тома целевого стека названы иначе, чем as-is (`redpanda-data` против `redpanda_data` и так далее), и это правило, а не косметика: при первом запуске старые данные — включая учётные записи прежнего MinIO — не примонтируются молча к новому сервису. Переименовывать том целевого стека обратно в as-is имя нельзя.
+
 `make archive-legacy` (ADR-004 доп. п. 6; однократно, вне git): `docker compose down` → `docker run --rm -v multiverse_minio_data:/src:ro -v "$PWD/backups/legacy-<date>":/dst alpine:3.22 tar czf /dst/minio-as-is.tgz -C /src .` → то же для `multiverse_redpanda_data` → `sha256sum` в `backups/legacy-<date>/SHA256SUMS`. Одноразовый скрипт `scripts/migrate-from-as-is.sh`: `make archive-legacy` → удаление перечисленных томов → `make up` → `mvctl world init`.
 
 ### 5.6. Бэкапы и восстановление
 
 | Что | Как | Периодичность | Хранение | Проверка restore |
 |---|---|---|---|---|
-| Том `minio_data` (истина: сущности + снапшоты; `prompts-*` **исключён**, SEC-22) | `make backup` → остановить `core` → `docker run --rm -v multiverse_minio_data:/src:ro -v "$BACKUP_DIR":/dst alpine:3.22 tar czf /dst/minio-<date>.tgz --exclude='prompts-*' -C /src .` → запустить `core`; альтернатива без остановки — `mc mirror --overwrite --exclude 'prompts-*/**' local/ ./backups/minio-<date>/` | перед каждым `make deploy`; еженедельно (Task Scheduler → `pwsh scripts/backup.ps1`) | `%USERPROFILE%\multiverse-backups\` (вне репозитория и Docker-томов; OneDrive `Documents` не синхронизируется — U-6, отдельного требования нет), последние 4 еженедельных + все предрелизные за 30 дней | ежемесячно: `make restore FILE=… TARGET=scratch` в отдельный compose-проект (`COMPOSE_PROJECT_NAME=mv-restore`) → `mvctl session-report --audit` → `state_hash` совпадает со снапшотом |
+| Том `minio_data` (истина: сущности + снапшоты; `prompts-*` **исключён**, SEC-22) | `make backup` → остановить `core` → `docker run --rm -v multiverse_minio_data:/src:ro -v "$BACKUP_DIR":/dst alpine:3.22 tar czf /dst/minio-<date>.tgz --exclude='prompts-*' -C /src .` → запустить `core`; альтернатива без остановки — `mc mirror --overwrite --exclude 'prompts-*/**' local/ ./backups/minio-<date>/` | перед каждым `make deploy`; еженедельно (Task Scheduler → `pwsh scripts/backup.ps1`) | `%USERPROFILE%\multiverse-backups\` (вне репозитория и Docker-томов; OneDrive `Documents` не синхронизируется — U-6, отдельного требования нет), последние 4 еженедельных + все предрелизные за 30 дней | ежемесячно: `make restore FILE=… TARGET=scratch` в отдельный compose-проект (`COMPOSE_PROJECT_NAME=mv-restore`) → `mvctl report --audit` → `state_hash` совпадает со снапшотом |
 | Том `redpanda_data` (журнал после снапшота) | тот же `tar` при остановленном `redpanda` | вместе с MinIO | там же | восстановление вместе с MinIO; после старта `core` — `analytics.replay.completed identical=true` |
 | `links.db` (ПДн; SEC-05) | `docker compose exec gateway /multiverse db backup --out /data/backup/links-<date>.db` → `docker cp` на хост → `age -r "$MV_BACKUP_AGE_RECIPIENT" -o links-<date>.db.age` → удалить открытую копию (на хосте и в томе) | вместе с остальным (объём ≤ 10 записей — можно после каждого изменения) | **отдельный каталог** `%USERPROFILE%\multiverse-backups\links\`; **≤ 30 дней**, скрипт чистит старше; предрелизная копия — основа отката миграции (ADR-019: `Down` нет) | ежеквартально (T-16 п. 5): `age -d` → `multiverse db check` (`PRAGMA integrity_check`) |
 | `gateway.db` (сессии, outbox) | тем же `db backup` без шифрования | вместе | там же | как выше |
@@ -761,7 +772,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $bin  = $env:MV_LLM_BIN
 $host_ = ($env:MV_LLM_HOST ?? '127.0.0.1')                 # ТОЛЬКО loopback (SEC-15)
-$port  = [int]($env:MV_LLM_PORT ?? 1234)
+# T-404: порт — из MV_LLM_URL, разбор общий со всей обвязкой (scripts/lib/LlmEndpoint.psm1 и scripts/lib/llm-endpoint.sh);
+# MV_LLM_PORT выведен, и если он остался в .env, скрипт говорит удалить строку. Точная форма — в самих скриптах, здесь не дублируется.
 
 $args = @(
   '--host', $host_, '--port', $port,
@@ -791,7 +803,7 @@ Start-Process -FilePath $bin -ArgumentList $args -PassThru |
 
 | Аргумент владельца | В скрипте | Обоснование |
 |---|---|---|
-| `--host 127.0.0.1 --port 1234` | **да**, из `MV_LLM_HOST`/`MV_LLM_PORT` | только loopback; наружу порт не публикуется (SEC-15, §1.4) |
+| `--host 127.0.0.1 --port 1234` | **да**: интерфейс — `MV_LLM_HOST`, порт — из `MV_LLM_URL` (T-404: `MV_LLM_PORT` выведен, потому что второй источник адреса разошёлся на стенде — сервер слушал 8888, проверка стучалась в 1234) | только loopback; наружу порт не публикуется (SEC-15, §1.4) |
 | `--n-gpu-layers 99` | да (`MV_LLM_NGL`) | вся модель на GPU; вариант E укладывается в 24 ГБ (13,1 ГБ весов + KV) |
 | `--batch-size 16000`, `--threads 32` | да (`MV_LLM_BATCH_SIZE`, `MV_LLM_THREADS`) | значения владельца сохранены как дефолты; влияют на prompt-фазу, участвуют в замере |
 | `--flash-attn on`, `--kv-offload`, `--kv-unified` | да | `--kv-unified` + `--parallel 1` = один общий KV-кэш, аналог `OLLAMA_NUM_PARALLEL=1`; приоритет интерактива перед фоном обеспечивает планировщик роя (ADR-014), а не сервер |
@@ -963,7 +975,7 @@ Write-Host "written $out"
 4. VRAM — `nvidia-smi` в момент прогона (NFR-076); для варианта E ожидание ≈ 16–19 ГБ (13,1 ГБ весов + KV 256 КиБ/токен: ≈ 2 ГБ @8k, ≈ 4 ГБ @16k) — если факт заметно выше, значит часть слоёв или KV ушла в RAM, строку помечать вручную в `baseline.md`.
 5. `llamacpp_build` в каждой строке — результаты замера привязаны к билду; после обновления llama.cpp замер варианта-победителя повторяется (§12).
 6. `scripts/llm-bench.sh` реализует ту же схему (`curl` + `jq`, вычисления в `awk`); **колонки CSV идентичны** — расхождение колонок ловится ревью при F-8.
-7. B5–B8 (старт стека, RTO, стоимость фона) — через `make up` с таймером и `mvctl session-report` после EPIC-002/003/005; `make up` больше не включает прогрев LLM, поэтому `stack_up_time_s` измеряет только контейнеры, а время готовности LLM — отдельная величина из `make llm-up`.
+7. B5–B8 (старт стека, RTO, стоимость фона) — через `make up` с таймером и `mvctl report` после EPIC-002/003/005; `make up` больше не включает прогрев LLM, поэтому `stack_up_time_s` измеряет только контейнеры, а время готовности LLM — отдельная величина из `make llm-up`.
 
 ### 6.5. Ollama как опциональный второй рантайм
 
@@ -994,11 +1006,11 @@ Ollama остаётся установленной и поддерживаетс
  "store":{"versioning":true,"lifecycle":true},
  "agents_by_level":{"global":1,"domain":1,"task":2},"checked_at":"…"}
 ```
-Зависимости опрашиваются раз в 10 с (NFR-016: отказ виден ≤ 30 с); HTTP-код 200 для `ok|degraded`, 503 для `down`; ответ не раскрывает секреты, пути и версии зависимостей (SEC-29). Compose `healthcheck` каждого сервиса платформы — `/multiverse health --url http://127.0.0.1:<port>/health` (`interval: 15s`, `start_period: 30s`); `make health` печатает сводку по всем и вызывает `make llm-health` (§6.3). Значение `llm`: `ok` — `GET $MV_LLM_URL/health` = 200 и модель блупринта есть в `/v1/models`; **`loading`** — 503 от llama-server (модель ещё грузится, это не отказ; провайдер повторяет запрос); `degraded` — сервер отвечает, но нужной модели в списке нет (`model_not_resident`); `unavailable` — соединение не устанавливается. `degraded`/`loading` не переводят процесс в `down`: нарратив деградирует до шаблонов (FR-080/NFR-072).
+Зависимости опрашиваются раз в 10 с (NFR-016: отказ виден ≤ 30 с); HTTP-код 200 для `ok|degraded`, 503 для `down`; ответ не раскрывает секреты, пути и версии зависимостей (SEC-29). Compose `healthcheck` каждого сервиса платформы — сам бинарник, `/multiverse health` **без `--url`**: адрес пробы выводится из того же `MV_CORE_ADDR`, который слушает процесс (`cmd/multiverse/health.go`), поэтому проба не может целиться в адрес, которого процесс не держит (T-408; прежний литерал в compose был второй копией адреса). В образе нет ни оболочки, ни `curl` — следствие для диагностики: контейнер, который не собрался, не даст никакого вывода пробы (T-409); `make health` печатает сводку по всем и вызывает `make llm-health` (§6.3). Значение `llm`: `ok` — `GET $MV_LLM_URL/health` = 200 и модель блупринта есть в `/v1/models`; **`loading`** — 503 от llama-server (модель ещё грузится, это не отказ; провайдер повторяет запрос); `degraded` — сервер отвечает, но нужной модели в списке нет (`model_not_resident`); `unavailable` — соединение не устанавливается. `degraded`/`loading` не переводят процесс в `down`: нарратив деградирует до шаблонов (FR-080/NFR-072).
 
 ### 7.3. Метрики MVP-1 (metrics.md §6)
 
-Без Prometheus: `mvctl session-report` читает `analytics_events`, `llm_records`, `game_events` за окно сессии → Markdown в консоль + строка в `ops/metrics/sessions.csv`; `--background --since 24h` → `ops/metrics/background.csv`; `--audit` → `analytics.consistency.violated`; `--json` → `ops/metrics/sessions/<session_id>.json`. `ops/metrics/incidents.csv` — ручной журнал оператора. Всё в Git (ПДн нет). Ресурсный след (NFR-073) — `docker stats --no-stream` и `nvidia-smi` в `make bench` (B5).
+Без Prometheus: `mvctl report` читает `analytics_events`, `llm_records`, `game_events` за окно сессии → Markdown в консоль + строка в `ops/metrics/sessions.csv`; `--background --since 24h` → `ops/metrics/background.csv`; `--audit` → `analytics.consistency.violated`; `--json` → `ops/metrics/sessions/<session_id>.json`. `ops/metrics/incidents.csv` — ручной журнал оператора. Всё в Git (ПДн нет). Ресурсный след (NFR-073) — `docker stats --no-stream` и `nvidia-smi` в `make bench` (B5).
 
 ### 7.4. Что уходит в EPIC-012 (E-G)
 
@@ -1058,8 +1070,8 @@ Ollama остаётся установленной и поддерживаетс
 Логи сервера — stdout процесса (`make llm-up` перенаправляет в `ops/llm-server.log`, ротация не настраивается: файл удаляется при рестарте). `--verbose` в служебном режиме **не** включаем (объём, SEC-02).
 
 ### 9.4. Восстановление
-- **После падения процесса/машины (тома целы):** `make up` → `make health` → в логах `core` `replay.completed` → `mvctl session-report --audit` → `state_divergence_count = 0`.
-- **Из бэкапа на чистой машине:** установить Docker Desktop, llama.cpp (билд `LLAMACPP_BUILD`) и скачать модель `.gguf`, `git clone`, `.env` из менеджера паролей владельца → `make minio-image` → `make restore FILE=minio-<date>.tgz` (распаковка в том при остановленных сервисах) → то же для `redpanda-<date>.tgz` → `age -d links-<date>.db.age > links.db` и `docker cp` в том `gateway-data` (`/data/links.db`, права 0600, владелец 65532) → `make llm-up` → `make up` → `make health` → `mvctl memory rebuild` (профиль `memory`) → `mvctl session-report --audit`.
+- **После падения процесса/машины (тома целы):** `make up` → `make health` → в логах `core` `replay.completed` → `mvctl report --audit` → `state_divergence_count = 0`.
+- **Из бэкапа на чистой машине:** установить Docker Desktop, llama.cpp (билд `LLAMACPP_BUILD`) и скачать модель `.gguf`, `git clone`, `.env` из менеджера паролей владельца → `make minio-image` → `make restore FILE=minio-<date>.tgz` (распаковка в том при остановленных сервисах) → то же для `redpanda-<date>.tgz` → `age -d links-<date>.db.age > links.db` и `docker cp` в том `gateway-data` (`/data/links.db`, права 0600, владелец 65532) → `make llm-up` → `make up` → `make health` → `mvctl memory rebuild` (профиль `memory`) → `mvctl report --audit`.
 - **Порча индекса памяти:** `docker compose stop memory` → `docker volume rm` томов qdrant/neo4j (или `mvctl memory reset`) → `docker compose up -d memory` → `mvctl memory rebuild --since 30d`.
 - **Переполнение диска:** `docker system df`; `make image-prune`; проверить `segment.ms` и retention (`rpk topic describe -c`); ILM MinIO (`mc ilm ls local/entities-<world>`).
 
@@ -1074,15 +1086,15 @@ Ollama остаётся установленной и поддерживаетс
 
 ### 9.7. Ежедневный/еженедельный чек оператора
 - Перед сессией (вручную): `make llm-up` — LLM-процесс службой не сделан, после перезагрузки Windows он не поднимется сам (§6.1).
-- Ежедневно (автоматически, Task Scheduler): `make health` (ненулевой код → уведомление; включает `llm-health`), `mvctl session-report --background --since 24h` (строка в `background.csv`).
-- Еженедельно: `make backup`, `docker system df`, `mvctl session-report --weekly`, ревью `incidents.csv`, PR Dependabot.
+- Ежедневно (автоматически, Task Scheduler): `make health` (ненулевой код → уведомление; включает `llm-health`), `mvctl report --background --since 24h` (строка в `background.csv`).
+- Еженедельно: `make backup`, `docker system df`, `mvctl report --weekly`, ревью `incidents.csv`, PR Dependabot.
 - Ежемесячно: сверка `build/versions.env` с Docker Hub (Dependabot compose не видит) **и `LLAMACPP_BUILD` с релизами `ggml-org/llama.cpp`** — обновление только отдельной задачей (§9.3); ежеквартально — учения восстановления `links.db` (§5.6).
 
 ### 9.8. Карточки процессов (заготовки для `docs/ops/runbook.md`)
 
 | | `gateway` | `core` | `memory` (профиль `memory`) | `telegram-bot` (профиль `bot`) |
 |---|---|---|---|---|
-| Команда | `/multiverse --contexts=gateway` | `/multiverse --contexts=state,mechanics,swarm,llm,laws` | `/multiverse --contexts=memory` | `/telegram-bot` |
+| Команда | `/multiverse --contexts=gateway` | `/multiverse --contexts=state,mechanics,laws,llm,swarm` | `/multiverse --contexts=memory` | `/telegram-bot` |
 | Порт / health | `127.0.0.1:8088/health` | `127.0.0.1:8090/health` | `127.0.0.1:8082/health` | `127.0.0.1:8089/health` |
 | Зависимости в `/health.deps` | `bus`, `sqlite`, `core` (для admin-прокси) | `bus`, `objstore`, `llm`, `memory` (опц.) | `bus`, `qdrant`, `neo4j` | `gateway` |
 | Данные | том `gateway-data` (`links.db`, `gateway.db`) | MinIO (`entities-*`, `snapshots-*`, `prompts-*`), журнал Redpanda | тома `qdrant_storage`, `neo4j_data` (производные) | нет (без курсора; состояние — в gateway) |

@@ -1,5 +1,7 @@
 # Компоненты EPIC-004: gateway и telegram-bot
 
+> **Состояние дерева на 2026-09-11 (T-409).** Документ описывает **целевой** блок. В дереве нет ни `internal/gateway`, ни `cmd/telegram-bot`, ни миграций, ни `api/gateway.openapi.yaml`; `cmd/multiverse --contexts=gateway` поднимает пустой контекст, отвечающий `/health`. Существует только двойник `shared/testkit/gateway.Harness` v0 (издатель `player.*` прямо в шину, без HTTP, сессий, раундов и идемпотентности); `FakeGateway` — будущее (T-308). Адрес процесса — `MV_CORE_ADDR`, клиенты — `MV_GATEWAY_CLIENT_IDS` и `MV_GATEWAY_ACTOR_KIND_CLIENTS` (манифест `shared/env/vars.go`). Правило для владельца: вливая настоящий контекст, тем же изменением снять пометку «будущее» с `diagrams/c4-component-gateway-and-bot.md` (решение 2026-09-11).
+
 Статус: **утверждён на G2 (2026-09-09), правки сведения внесены** · Версия 0.2 · 2026-09-09 · architect#3 (TEAM-3) · изменения v0.2 — §17 (по `architecture/consolidation.md` §3, §6, §9; `contracts.md` v0.2; решениям пользователя U-5…U-7).
 Границы: `architecture/overview.md` §12–§18, ADR-001, ADR-003, ADR-004, ADR-006, ADR-007, ADR-009, ADR-010; контракты `contracts.md` C-04, C-08, C-10 (поставляем), C-01, C-02, C-05, C-06, C-14 (потребляем); `plan/epics.md` EPIC-004 (I1 «соло», I2 «группа»); `plan/ownership.md` (`internal/gateway/**`, `cmd/telegram-bot/**`, `api/gateway.openapi.yaml`, `internal/gateway/migrations/*.sql`, `links.db`, `gateway.db`).
 Источники требований: `analysis/api-contracts.md` §1, §2.3.1–2.3.3, 2.3.11, 2.3.14; `analysis/data-model.md` §5, §9.3–9.6, 9.10–9.11; `analysis/use-cases.md` UC-001…UC-005, UC-007, UC-009, UC-012, UC-014…UC-017, UC-020, UC-025, UC-027, UC-031; `analysis/integrations.md` §1, §7; `requirements/prd.md` FR-001…FR-009, FR-023, FR-025, FR-060, FR-061, FR-084…FR-088, BR-07, BR-09, BR-13, BR-17; `requirements/nfr.md` NFR-001, NFR-003, NFR-013, NFR-036, NFR-041, NFR-042, NFR-045, NFR-092; `requirements/domain-review.md` §3.2; `project/metrics.md` §4.2.
@@ -344,7 +346,7 @@ CREATE INDEX ix_processed_at ON processed_events(processed_at);
 CREATE TABLE cursors (topic TEXT PRIMARY KEY, offset INTEGER NOT NULL, event_id TEXT, updated_at TEXT NOT NULL);
 ```
 
-Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys` и `character_requests` — `expires_at < now` (TTL 24 ч); `deliveries` — `state='pending' AND expires_at < now` → `dropped`; `delivered`/`dropped` старше 7 дней — DELETE; `processed_events` — старше 24 ч или сверх 50 000 строк; `turns`/`sessions`/`rounds` — не удаляются в MVP-1 (объём: ≤ 1 000 строк/сессия; источник для `session-report` — шина, не эти таблицы).
+Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys` и `character_requests` — `expires_at < now` (TTL 24 ч); `deliveries` — `state='pending' AND expires_at < now` → `dropped`; `delivered`/`dropped` старше 7 дней — DELETE; `processed_events` — старше 24 ч или сверх 50 000 строк; `turns`/`sessions`/`rounds` — не удаляются в MVP-1 (объём: ≤ 1 000 строк/сессия; источник для `mvctl report` — шина, не эти таблицы).
 
 Единственный писатель — процесс `gateway`; `SetMaxOpenConns(1)` на каждую БД, транзакции короткие; long-poll **не держит** соединение во время ожидания (ждёт на `Notifier`, §8.3).
 
@@ -358,14 +360,14 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 
 1. `recover` → `500 internal` с `handled=false` в логе (NFR-012: паника = дефект).
 2. `request_id` (ULID) → заголовок `X-Request-Id` и поле лога.
-3. `client`: `X-Client-Id` обязателен и ∈ `MV_GATEWAY_CLIENTS` (иначе `403 client_unknown`, C-08 v1.1); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент; для маршрутов `/v1/clients/{client_id}/*` — `{client_id}` обязан совпадать с `X-Client-Id` (иначе `403 client_mismatch`, SEC-12).
+3. `client`: `X-Client-Id` обязателен и ∈ `MV_GATEWAY_CLIENT_IDS` (иначе `403 client_unknown`, C-08 v1.3); права на `X-Actor-Kind: ci|sim` — список `MV_GATEWAY_ACTOR_KIND_CLIENTS` (оба имени — по манифесту `shared/env/vars.go`, T-409; прежняя одна строка `MV_GATEWAY_CLIENTS="client:platform:kinds"` в манифест не принята). **Открыто для EPIC-004:** платформа клиента, по которой `route.external_id` выдаётся только клиенту платформы связки (SEC-12), в двух списках манифеста не выражена; рекомендация — в MVP-1 фиксированное соответствие в коде (`telegram-bot → telegram`, прочие клиенты платформы не имеют и внешнего маршрута не получают), переменная появится вместе со вторым ботом (E-H); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент; для маршрутов `/v1/clients/{client_id}/*` — `{client_id}` обязан совпадать с `X-Client-Id` (иначе `403 client_mismatch`, SEC-12).
 4. `body_limit` 64 КиБ через `http.MaxBytesReader` → `413 payload_too_large` (SEC-11); `Content-Type` проверка на `POST/DELETE` с телом.
 5. `nolog` для `POST /v1/links/*`, `DELETE /v1/links`, `POST /v1/characters`: тело и `external_id` не попадают в лог ни при какой ошибке (только `request_id`, `code`).
 6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` — **30 действий/мин, burst 5** (`MV_GATEWAY_RATE_ACTIONS_PER_MIN=30`, `MV_GATEWAY_RATE_ACTIONS_BURST=5`; стартовые значения по SEC-11, уточняются замером) → `429 rate_limited` с `Retry-After`. Бакеты — в памяти, `player_id` → bucket, уборка неактивных раз в 10 мин; в `replay` лимит выключен.
 7. `pollguard` на `GET /v1/clients/{client_id}/deliveries`: один активный long-poll на `client_id` (`sync.Map` client → in-flight); второй параллельный → `409 poll_in_progress` (C-08 v1.1) — защита от истощения соединений (T-13).
 8. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с).
 
-Сервер: `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`, `MV_GATEWAY_LISTEN` по умолчанию `127.0.0.1:8088` (в compose внутри контейнера `0.0.0.0:8088`, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3).
+Сервер: `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`, адрес — **`MV_CORE_ADDR`**, как у любого процесса `cmd/multiverse` (один процесс — один HTTP-сервер; `serve.go` отдаёт его mux всем контекстам `--contexts`, и в процессе с контекстом `gateway` API игрока живёт на том же адресе, что `/health`). В compose у сервиса `gateway` — `MV_CORE_ADDR: ":8088"` литералом, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3. Переменных `MV_GATEWAY_LISTEN` и `MV_GATEWAY_ADDR` нет (вторая выведена из манифеста в T-408, первая в манифест не попадала; T-409).
 
 ### 5.2. Маршруты и обработчики
 
@@ -380,7 +382,7 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 | `GET /v1/players/{player_id}` | `readmodel.Character(id)` + `session.Current(scope)` | 200 `CharacterState`; `404 player_not_found`; для `creating` — 200 с `status:"creating"` и минимальными полями | — |
 | `POST /v1/players/{player_id}/actions` | §7.2 (`actions`), `group.*` → `groups` (§7.4) | 202 `{correlation_id, turn{seq, session_id, round_seq?}, status:"accepted", acked_at}`; `group.*` → 200 состав / 202 `{status:"pending", group_id, correlation_id}` (C-08 v1.1); ошибки §1.6 + `429 rate_limited`, `413 payload_too_large`, `409 already_acted` | `idempotency_keys` по `(player_id, action_key)`: повтор → тот же ответ и `correlation_id` |
 | `GET /v1/groups/{group_id}` | `readmodel.Group(id)` | 200 состав, лидер, позиция, встреча; 404 `unknown_target` | — |
-| `GET /v1/clients/{client_id}/deliveries` | `outbox.Serve` §8.3 | 200 `{deliveries[], cursor}`; `wait_ms ≤ 25000`, `limit ≤ 100`; `client_id` == `X-Client-Id` (иначе `403 client_mismatch`); второй параллельный запрос → `409 poll_in_progress`; `route.external_id` подставляется только если `platform` связки == платформе клиента из `MV_GATEWAY_CLIENTS` (иначе доставка не выдаётся этому клиенту, SEC-12) | — |
+| `GET /v1/clients/{client_id}/deliveries` | `outbox.Serve` §8.3 | 200 `{deliveries[], cursor}`; `wait_ms ≤ 25000`, `limit ≤ 100`; `client_id` == `X-Client-Id` (иначе `403 client_mismatch`); второй параллельный запрос → `409 poll_in_progress`; `route.external_id` подставляется только если `platform` связки == платформе клиента (как платформа клиента задаётся при двух списках манифеста `MV_GATEWAY_CLIENT_IDS`/`MV_GATEWAY_ACTOR_KIND_CLIENTS` — открытый вопрос §5.1, T-409; иначе доставка не выдаётся этому клиенту, SEC-12) | — |
 | `POST /v1/clients/{client_id}/deliveries/ack` | `outbox.Ack` | 200 `{acked: n, unknown: [ids]}` | да |
 | `GET /v1/clients/{client_id}/stream` | — | `501 not_implemented` (E-H) | — |
 | `POST /v1/scopes/{scope_id}/rounds/close` | `rounds.Close(explicit)` | 200 `{round{seq, close_reason:"explicit"}}`; `409 no_open_round` (C-08 v1.1); только `ci` | да (повтор при закрытом → 409) |
@@ -864,8 +866,8 @@ C4Component
 | Мера | Реализация |
 |---|---|
 | Круг игроков (SEC-06/07) | **allowlist Telegram user id** `MV_TELEGRAM_ALLOWED_USER_IDS` в конфигурации бота (решение пользователя U-7); проверка — первый шаг обработки `Update`, до любого вызова gateway; чужой — один отказ без деталей, связка не создаётся, ID не логируется; **только личные чаты**, связка по `from.id`; общий чат группы и инвайт-коды — E-H |
-| Сетевая изоляция (SEC-13) | `MV_GATEWAY_LISTEN=127.0.0.1:8088` по умолчанию (бот на той же машине); в compose — публикация **всех** портов только на `127.0.0.1` (`compose-lint`); admin-порт `core` доступен gateway по compose-сети, наружу не публикуется |
-| Доверенные клиенты (SEC-12) | `MV_GATEWAY_CLIENTS="telegram-bot:telegram:human;ci-harness:ci:ci,sim;operator:*:human"` — `client_id:platform:allowed_actor_kinds`; неизвестный клиент — `403 client_unknown`; `{client_id}` пути == `X-Client-Id` (`403 client_mismatch`); `route.external_id` — только клиенту платформы связки; служебные и admin-маршруты — только клиенты с `ci` или роль `operator`; `ci-harness` отсутствует в prod-`.env` (профиль `dev`/`test`) |
+| Сетевая изоляция (SEC-13) | адрес процесса — `MV_CORE_ADDR` (по умолчанию `127.0.0.1:8090` для запуска вручную; в compose у `gateway` — `:8088` внутри сети, наружу `127.0.0.1:8088`; T-408/T-409); в compose — публикация **всех** портов только на `127.0.0.1` (`compose-lint`); admin-порт `core` доступен gateway по compose-сети, наружу не публикуется |
+| Доверенные клиенты (SEC-12) | `MV_GATEWAY_CLIENT_IDS=telegram-bot,ci-harness,mvctl` — список допущенных `X-Client-Id`; `MV_GATEWAY_ACTOR_KIND_CLIENTS=ci-harness,mvctl` — кому разрешён `X-Actor-Kind: ci|sim` (имена и значения по умолчанию — манифест `shared/env/vars.go`; прежняя форма одной строки `client_id:platform:allowed_actor_kinds` в манифест не принята, платформа клиента — открытый вопрос §5.1; T-409); неизвестный клиент — `403 client_unknown`; `{client_id}` пути == `X-Client-Id` (`403 client_mismatch`); `route.external_id` — только клиенту платформы связки; служебные и admin-маршруты — только клиенты с `ci` или роль `operator`; `ci-harness` отсутствует в prod-`.env` (профиль `dev`/`test`) |
 | Секреты (SEC-08) | `MV_TELEGRAM_BOT_TOKEN` только из env (пустой → бот не стартует с понятной ошибкой); **редакция токена**: `privacy.Handler` заменяет `bot<digits>:<token>` → `bot<redacted>` в любом сообщении лога и в тексте ошибок HTTP-клиента библиотеки (включая `409 Conflict` и сетевые ошибки; `errors.Handler` бота оборачивает всё через `privacy.Redact`); `WithDebug` запрещён; unit-тест «строка ошибки не содержит токен»; ключей у gateway нет; `.env.example` содержит все переменные §11.3 (NFR-074) |
 | ПДн в БД (SEC-03/04/05) | внешний ID — только `links.db` (в т. ч. `character_requests` через `link_id`); `gateway.db` — только `player_id`; `links.db` файл `0600`, каталог `0700`, `secure_delete=ON`, `auto_vacuum=INCREMENTAL`, `wal_checkpoint(TRUNCATE)` + `incremental_vacuum` сразу после `/forget`; именованный том; бэкап — по политике DevOps (`infrastructure.md`: шифрование `age`, срок ≤ 30 дней) |
 | ПДн в логах (SEC-01/02) | `slog` через `shared/logging`; middleware `nolog` для `links/*` и `characters`; в gateway внешние ID не попадают в `slog.Attr` по построению (тип `links.Link` имеет `LogValue()` → `redacted`); бот — `privacy.Handler` отбрасывает атрибуты `chat_id`, `external_id`, `username`, `text`; библиотека Telegram — без `WithDebug` в проде; тест NFR-041 (EPIC-005) читает логи обоих процессов |
@@ -878,7 +880,7 @@ C4Component
 
 - Старт: открыть БД → миграции → `readmodel.LoadFromStateSnapshot` (`snapshots-{world}/state/latest.json` через `objstore`; нет объекта → пустая проекция, `/health.projection=missing`, worlds заполнятся из `entity.created`) → подписки с курсора **снапшота State** для проекции; побочные эффекты (outbox, turns, rounds, analytics) — только для событий с `offset > cursors[topic]` из `gateway.db` (два курсора: «проекция» и «эффекты»); `processed_events` — дедуп внутри окна.
 - `--mode=replay`: таймеры раундов, sweeper сессий/ходов, лизинг outbox не работают; `round.opened/closed`, `analytics.*` не публикуются (читаются); `Publish` действий харнесса разрешён (e2e подаёт действия). Признак «конца журнала» — `Journal.End(ctx, topic)` (C-01 v1.1, G-9 принято с изменением: отдельного `Bus.Lag()` нет): gateway читает через `Journal.ReadRange` от курсоров до `End` по каждому из четырёх читаемых топиков; когда по всем `позиция ≥ End − 1`, контекст переключается в `live` (подписки `Subscribe` с consumer-группой `gateway.consumer`, включение таймеров/sweeper'ов от `deadline_at`/`last_action_at`). Реализуют и `membus`, и kafka-адаптер — одна семантика (contract-тест F-5t).
-- Снапшот gateway (`snapshot` компонент): объект `snapshots-{world}/gateway/{ts}-{seq}.json` = `{cursors, projection_hash, active_sessions[], open_rounds[], laws_version}` + `snapshot.created component=gateway {snapshot{id, taken_at, cursor, laws_version, state_hash: projection_hash, size_bytes}}` — по `SIGTERM` и по каждому `analytics.session.ended`; хранить последние 5. Назначение — аудит (`mvctl session-report --audit`) и быстрая сверка проекции; истина для gateway — `gateway.db`.
+- Снапшот gateway (`snapshot` компонент): объект `snapshots-{world}/gateway/{ts}-{seq}.json` = `{cursors, projection_hash, active_sessions[], open_rounds[], laws_version}` + `snapshot.created component=gateway {snapshot{id, taken_at, cursor, laws_version, state_hash: projection_hash, size_bytes}}` — по `SIGTERM` и по каждому `analytics.session.ended`; хранить последние 5. Назначение — аудит (`mvctl report --audit`) и быстрая сверка проекции; истина для gateway — `gateway.db`.
 
 ### 11.3. Конфигурация (env, через `shared/env.Declare`; префикс `MV_` обязателен — `contracts.md` §16 п. 5, G-11/D-4)
 
@@ -886,9 +888,10 @@ C4Component
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `MV_GATEWAY_LISTEN` | `127.0.0.1:8088` | адрес HTTP |
-| `MV_GATEWAY_DATA_DIR` | `/var/lib/multiverse/gateway` | каталог `links.db`, `gateway.db` (именованный том) |
-| `MV_GATEWAY_CLIENTS` | `telegram-bot:telegram:human;ci-harness:ci:ci,sim` | allow-list клиентов (в prod-`.env` — без `ci-harness`) |
+| `MV_CORE_ADDR` | `127.0.0.1:8090` (в compose у `gateway` — `:8088`) | адрес HTTP процесса — один на процесс при любом `--contexts` (T-408); `MV_GATEWAY_LISTEN`/`MV_GATEWAY_ADDR` не существуют |
+| `MV_GATEWAY_DATA_DIR` | `/data` | каталог `links.db`, `gateway.db` (именованный том `gateway-data`); значение по манифесту `shared/env/vars.go` |
+| `MV_GATEWAY_CLIENT_IDS` | `telegram-bot,ci-harness,mvctl` | allow-list `X-Client-Id` (в prod-`.env` — без `ci-harness`); имя по манифесту, C-08 v1.3 |
+| `MV_GATEWAY_ACTOR_KIND_CLIENTS` | `ci-harness,mvctl` | кому разрешён `X-Actor-Kind: ci\|sim` |
 | `MV_CORE_URL` | `http://core:8090` | прокси `/v1/admin/*` к процессу `core` (C-06, D-7) |
 | `MV_GATEWAY_SESSION_IDLE` | `30m` | BR-17 |
 | `MV_GATEWAY_TURN_TIMEOUT` | `60s` | `turn.completed status=timeout` |
@@ -902,11 +905,11 @@ C4Component
 | `MV_GATEWAY_INPUT_FILTER` | `noop` | точка вставки `InputFilter` (§5.4); иные значения в MVP-1 → ошибка старта |
 | `MV_GATEWAY_ENCOUNTER_GRACE` | `10s` | `encounter_unavailable` |
 | `MV_GM_PATH` | `agent` | `agent\|legacy`: при `legacy` `actions.publish` дополнительно издаёт `gm.created` (US-019/FR-014; один `if`, удаляется в EPIC-003 I2) |
-| `MV_MODE` | `live` | `live\|replay` (общий флаг процесса, ADR-003) |
+| `MV_MODE` | `live` | `live\|replay` (общий для процесса, ADR-003); источник истины — манифест, флаг `--mode` перекрывает для запуска вручную (T-408) |
 | `MV_LOG_LEVEL` | `info` | оба процесса |
 | `MV_TELEGRAM_BOT_TOKEN` | — (обязательна) | бот; только из `env_file` сервиса `telegram-bot` (профиль `bot`, `compose-lint`) |
 | `MV_TELEGRAM_ALLOWED_USER_IDS` | — (пусто = всем отказ) | allowlist Telegram user id через запятую (SEC-06, U-7) |
-| `MV_BOT_GATEWAY_URL` | `http://127.0.0.1:8088` | бот → gateway |
+| `MV_TELEGRAM_GATEWAY_URL` | `http://127.0.0.1:8088` | бот → gateway (имя по манифесту `shared/env/vars.go`; прежнее `MV_BOT_GATEWAY_URL` в манифест не попало, T-409) |
 | `MV_BOT_CLIENT_ID` | `telegram-bot` | `X-Client-Id` |
 | `MV_BOT_ACTION_KEY_SALT` | производное от токена | §10.3 |
 | `MV_BOT_RATE_COMMANDS_PER_MIN` | `20` | лимит команд на user id (SEC-11) |

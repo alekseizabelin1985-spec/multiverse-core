@@ -1039,32 +1039,141 @@ func TestAPackageRefusedForAVersionConflictIsOfferedAgain(t *testing.T) {
 	}
 }
 
-// TestARetryDoesNotStrikeAFighterWhoHasFallen is the other half of working the
-// package out again: the world that moved may have moved past the blow
-// altogether. Nobody strikes a corpse, and the round the action spent travels
-// all the same — a round nobody wrote down can be closed by nothing.
-func TestARetryDoesNotStrikeAFighterWhoHasFallen(t *testing.T) {
-	enc, bus := fightStub(t)
+// TestARetryThatWouldChangeWhoIsStandingIsNotOffered is the other half of
+// working the package out again (review #2 of T-219, Mi-1): the world that
+// moved may have moved past the decision itself. The decision is published,
+// and the end of the fight rests on it — encounter.ended of a killing blow has
+// already left, and a blow that did not kill was answered by a bite of the
+// fighter it did not kill. A retry that changed who fell would be answering a
+// different action, so it is not offered, and the stub says so out loud.
+//
+// It replaces TestARetryDoesNotStrikeAFighterWhoHasFallen, which dropped the
+// blow on the corpse, sent the round anyway and stayed green over an encounter
+// left open above a dead wolf.
+func TestARetryThatWouldChangeWhoIsStandingIsNotOffered(t *testing.T) {
+	survives := func(id string) bool {
+		// A plain hit (d6, never ten hit points) answered by a bite that
+		// misses: the package is about the wolf and the round.
+		return tkmech.Verdict(id, 0) == tkmech.VerdictHit && !hits(tkmech.Verdict(id, 2))
+	}
+	kills := func(id string) bool { return tkmech.Verdict(id, 0) == tkmech.VerdictHit }
+
+	for _, tc := range []struct {
+		name  string
+		world []func(*entity.Entity)
+		blow  func(string) bool
+		moved eventbus.Event
+	}{
+		{name: "the wolf fell to somebody else", blow: survives, moved: died(wolfID)},
+		{name: "the same damage would now kill", blow: survives, moved: hurt(wolfID, 2, 10, 1)},
+		{
+			name:  "the killing blow would no longer kill",
+			world: []func(*entity.Entity){attr(wolfID, entity.AttrHP, 1)},
+			blow:  kills, moved: hurt(wolfID, 2, 1, 10),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			said := &strings.Builder{}
+			enc, bus := fightStubLogging(t, said, tc.world...)
+			act(t, enc, entered(playerA, nameA, regionID, regName))
+			act(t, enc, attackWhere(t, tc.blow))
+			proposal := proposalOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed))
+			ended := len(ofType(eventsOf(t, bus, eventbus.TopicWorldEvents), swarm.TypeEncounterEnded))
+
+			observe(t, enc, tc.moved)
+			observe(t, enc, refusal(proposal, swarm.ReasonVersionConflict, wolfID))
+
+			if offers := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents),
+				swarm.TypeUpdateProposed); len(offers) != 1 {
+				t.Fatalf("%d packages: a retry that changes who is standing contradicts the "+
+					"decision it answers for, and is not offered", len(offers))
+			}
+			if !strings.Contains(said.String(), "the world moved past the decision") {
+				t.Errorf("the stub dropped the package in silence; the log says:\n%s", said)
+			}
+			if got := len(ofType(eventsOf(t, bus, eventbus.TopicWorldEvents),
+				swarm.TypeEncounterEnded)); got != ended {
+				t.Errorf("%d encounter.ended after the refusal, %d before it", got, ended)
+			}
+
+			// The package is let go of rather than kept for the next refusal:
+			// nothing that arrives about it later brings it back.
+			observe(t, enc, refusal(proposal, swarm.ReasonVersionConflict, wolfID))
+			if offers := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents),
+				swarm.TypeUpdateProposed); len(offers) != 1 {
+				t.Errorf("%d packages after a second refusal of a package the stub let go of", len(offers))
+			}
+		})
+	}
+}
+
+// TestARefusalDeliveredAgainAfterTheRetryWentInOffersNothing is the at-least-once
+// delivery of C-01 turned on the refusal (review #2 of T-219, Ma-1). The retry
+// has gone in, and a copy of the refusal that caused it arrives afterwards — a
+// rebalance of a real bus is enough. Answering it would offer a third package
+// under the identifier State has already applied: State drops it in silence,
+// while the stub has already folded it into its view, takes the damage off a
+// second time and pins the next action to a version State never reached.
+//
+// Two things stand in the way, and the test needs both. A refusal is
+// remembered by its identifier, as an action is (the copy delivered twice in a
+// row). A fact that names the proposal settles the package, so that even a
+// refusal under a new identifier — State answering a redelivered first offer,
+// a window that has forgotten — finds nothing left to retry.
+func TestARefusalDeliveredAgainAfterTheRetryWentInOffersNothing(t *testing.T) {
+	enc, bus := fightStubWith(t, attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40))
 	act(t, enc, entered(playerA, nameA, regionID, regName))
 	act(t, enc, attackWhere(t, func(id string) bool {
 		return tkmech.Verdict(id, 0) == tkmech.VerdictHit && !hits(tkmech.Verdict(id, 2))
 	}))
 	first := onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed)
-
-	observe(t, enc, died(wolfID))
-	observe(t, enc, refusal(proposalOf(t, first), swarm.ReasonVersionConflict, wolfID))
-
-	offers := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
-	if len(offers) != 2 {
-		t.Fatalf("%d packages, want the refused one offered again", len(offers))
+	damage := 40 - hpProposedFor(t, first, wolfID)
+	offers := func() []eventbus.Event {
+		return ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
 	}
-	for _, set := range changeSets(t, offers[1]) {
-		if set.Ref().ID == wolfID {
-			t.Errorf("the second offer strikes %s, which fell before it was made", wolfID)
+
+	// Somebody else wounded the wolf, State refused the package for it, and the
+	// refusal came twice.
+	observe(t, enc, hurt(wolfID, 2, 40, 38))
+	lost := refusal(proposalOf(t, first), swarm.ReasonVersionConflict, wolfID)
+	observe(t, enc, lost)
+	observe(t, enc, lost)
+	if got := offers(); len(got) != 2 {
+		t.Fatalf("%d packages: one lost race delivered twice is one retry, not two", len(got))
+	}
+	retry := offers()[1]
+
+	// State applied the retry, and the fact of it names the proposal.
+	left := 38 - damage
+	observe(t, enc, hurtBy(wolfID, proposalOf(t, retry), 3, 38, left))
+
+	// The refusal again, afterwards: the same copy once more, and a refusal of
+	// the same proposal under an identifier the stub has not seen.
+	observe(t, enc, lost)
+	observe(t, enc, refusal(proposalOf(t, first), swarm.ReasonVersionConflict, wolfID))
+	if got := offers(); len(got) != 2 {
+		t.Fatalf("%d packages: the retry State applied was offered again under %s",
+			len(got), proposalOf(t, first))
+	}
+
+	// And the view of the stub is the world of State: the next swing is decided
+	// against the hit points the wolf has there and pinned to its version.
+	act(t, enc, attackWhere(t, func(id string) bool { return hits(tkmech.Verdict(id, 0)) }))
+	var swing eventbus.Event
+	for _, ev := range ofType(eventsOf(t, bus, eventbus.TopicGameEvents), swarm.TypeCombatDecided) {
+		if action, _ := ev.Path().GetString("action"); action == "attack" {
+			swing = ev
 		}
 	}
-	if roundProposedFor(t, offers[1]) != roundProposedFor(t, first) {
-		t.Error("the round the action spent did not survive the retry")
+	if before, _ := swing.Path().GetInt("hp.defender_before"); before != left {
+		t.Errorf("the next swing finds the wolf at %d hit points, State holds %d", before, left)
+	}
+	all := offers()
+	if len(all) != 3 {
+		t.Fatalf("%d packages after the next swing, want 3", len(all))
+	}
+	if v := expectedVersionOf(t, all[2], wolfID); v != 3 {
+		t.Errorf("the next swing pins the wolf at version %d, State holds it at 3", v)
 	}
 }
 
@@ -1112,12 +1221,18 @@ func TestARefusedPackageMovedNothingAtAll(t *testing.T) {
 // lost the race twice in a row against a world nobody else is writing is not
 // racing any more, and a loop nobody can see is worse than a defect somebody
 // can read about.
+//
+// Giving up takes the last attempt out of the view as well (review #2 of
+// T-219, Mi-2): State applied none of the three, and a view that kept the
+// third would pin the next action to a version State never reached — so that
+// one would lose the race too, and the round it spent would never be written.
 func TestTheStubGivesUpOnAPackageItKeepsLosingWith(t *testing.T) {
 	said := &strings.Builder{}
 	enc, bus := fightStubLogging(t, said)
 	act(t, enc, entered(playerA, nameA, regionID, regName))
 	act(t, enc, attack(playerA, nameA, wolfID))
-	proposal := proposalOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed))
+	first := onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed)
+	proposal := proposalOf(t, first)
 
 	// One refusal more than the stub is allowed to answer.
 	for range 4 {
@@ -1130,6 +1245,29 @@ func TestTheStubGivesUpOnAPackageItKeepsLosingWith(t *testing.T) {
 	}
 	if !strings.Contains(said.String(), "gave up") {
 		t.Errorf("the stub gave up in silence; the log says:\n%s", said)
+	}
+
+	act(t, enc, attack(playerA, nameA, wolfID))
+	offers = ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
+	next := offers[len(offers)-1]
+	if proposalOf(t, next) == proposal {
+		t.Fatal("the next swing was not answered with a package of its own")
+	}
+	pinned := 0
+	for _, set := range changeSets(t, next) {
+		for _, was := range changeSets(t, first) {
+			if was.Ref().ID != set.Ref().ID {
+				continue
+			}
+			pinned++
+			if *set.ExpectedVersion != *was.ExpectedVersion {
+				t.Errorf("the next swing pins %s at version %d; nothing State applied has "+
+					"moved it from %d", set.Ref(), *set.ExpectedVersion, *was.ExpectedVersion)
+			}
+		}
+	}
+	if pinned == 0 {
+		t.Fatal("the next swing names nobody the lost package named: the test proves nothing")
 	}
 }
 
@@ -1205,7 +1343,8 @@ func fightStubWith(t *testing.T, changes ...func(*entity.Entity)) (*swarm.FakeEn
 
 // fightStubLogging is the stub over the fixtures with everything it says
 // written into a buffer, for the tests that are about what it says.
-func fightStubLogging(t *testing.T, said *strings.Builder) (*swarm.FakeEncounter, *membus.Bus) {
+func fightStubLogging(t *testing.T, said *strings.Builder,
+	changes ...func(*entity.Entity)) (*swarm.FakeEncounter, *membus.Bus) {
 	t.Helper()
 	bus := newBus(t)
 	fixed := mechanics(t)
@@ -1216,7 +1355,13 @@ func fightStubLogging(t *testing.T, said *strings.Builder) (*swarm.FakeEncounter
 	if err != nil {
 		t.Fatalf("encounter: %v", err)
 	}
-	if err := enc.Seed(mustFixtures(t)); err != nil {
+	world := mustFixtures(t)
+	for _, change := range changes {
+		for _, e := range world {
+			change(e)
+		}
+	}
+	if err := enc.Seed(world); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	return enc, bus
@@ -1591,14 +1736,20 @@ func attackAnything(id, name string) eventbus.Event {
 }
 
 // hurt is the entity.updated State publishes when somebody else wounded the
-// wolf.
+// wolf — or healed it, when to is above from.
 func hurt(id string, version, from, to int) eventbus.Event {
+	return hurtBy(id, "p-elsewhere", version, from, to)
+}
+
+// hurtBy is the entity.updated State publishes when it applied the package
+// named by proposalID and the hit points of one fighter moved with it.
+func hurtBy(id, proposalID string, version, from, to int) eventbus.Event {
 	return eventbus.NewRoot(swarm.TypeUpdated, contracts.SourceTestkitState, worldID, nil,
 		eventbus.ActorSystem, map[string]any{
 			"entity":      map[string]any{"entity": map[string]any{"id": id, "type": entity.TypeNPC}},
 			"version":     version,
 			"cause":       "combat",
-			"proposal_id": "p-elsewhere",
+			"proposal_id": proposalID,
 			"changed": []map[string]any{
 				{"path": entity.AttrHP, "old": from, "new": to},
 			},

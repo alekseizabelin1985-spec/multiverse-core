@@ -12,7 +12,7 @@
 
 **Входит** (по `ownership.md` §1): `internal/gateway/**` (контекст `gateway` процесса `cmd/multiverse`), `cmd/telegram-bot/**`, `api/gateway.openapi.yaml` (включая раздел `admin` — прокси C-06), `internal/gateway/migrations/{links,gateway}/*.sql`, `shared/testkit/gateway` (`FakeGateway`, `Harness` — замена v0 из F-10), схемы событий `schemas/events/{player.*,group.*,round.*,analytics.session.*,analytics.turn.completed}.v1.json`, префикс `snapshots-{world}/gateway/`, файлы `links.db`/`gateway.db`, перенос `services/game-service` → `services/_archive/game-service/` после S9 (U-1).
 
-**Не входит.** Механика и State (EPIC-002), рой/LLM/фильтр (a) на выходе/`NarrativeFilter` (EPIC-003), память и `mvctl session-report` (EPIC-005), шина/контракты/`membus`/CI-каркас (EPIC-001), Discord-бот, WebSocket-стрим (`501`), аутентификация клиентов, инвайт-коды, общий чат группы, свободный текст команд, право на забвение — E-H (EPIC-013). Изменения `shared/*` и контрактов — только запросом к system-architect.
+**Не входит.** Механика и State (EPIC-002), рой/LLM/фильтр (a) на выходе/`NarrativeFilter` (EPIC-003), память и `mvctl report` (EPIC-005), шина/контракты/`membus`/CI-каркас (EPIC-001), Discord-бот, WebSocket-стрим (`501`), аутентификация клиентов, инвайт-коды, общий чат группы, свободный текст команд, право на забвение — E-H (EPIC-013). Изменения `shared/*` и контрактов — только запросом к system-architect.
 
 **Границы, которые нельзя нарушать:** gateway не пишет сущности мира (только `entity.*.proposed`, C-02); `round.closed` публикуется до обработки раунда; таймеры только через `Clock`, в `--mode=replay` выключены; `player_events` — только `actor_kind ∈ human|ci|sim`; внешний ID — только `links.db`; `cmd/telegram-bot` импортирует из платформенного кода только `internal/gateway/{client,api}`.
 
@@ -28,7 +28,7 @@
 | US-011 снапшот gateway, восстановление (FR-031…033, NFR-010/011; C-14) | I1 | §11.2, компонент `snapshot` | e2e `recovery` (рестарт контекста in-process → сессии/раунды/outbox сохранены); S3 на интеграции |
 | US-016 точки вставки фильтра — вход (FR-056; Should) | I1 | §5.4 `InputFilter` (noop, `FilterResult.Text` → шина) | unit: тестовая реализация «заменить слово» → в `player.said.text` заменённый текст |
 | US-019 фича-флаг миграции — часть gateway (FR-014) | I1 | §11.3 `MV_GM_PATH`, §13 строка `gm.created` | unit: при `legacy` публикуется `gm.created`, при `agent` — нет; удаляется в EPIC-003 I2 (S5) |
-| US-038 события аналитики (FR-084…FR-088, BR-17, NFR-036) | I1 | §7.6 (`session`, `turns`) | unit парность `session.started/ended`, `turn.completed` на каждый принятый/отклонённый ход; e2e — фикстура для `session-report` (EPIC-005) |
+| US-038 события аналитики (FR-084…FR-088, BR-17, NFR-036) | I1 | §7.6 (`session`, `turns`) | unit парность `session.started/ended`, `turn.completed` на каждый принятый/отклонённый ход; e2e — фикстура для `mvctl report` (EPIC-005) |
 | US-006 групповая сессия из трёх (FR-003, FR-005, FR-025, BR-06, BR-13, NFR-005) | I2 | §7.4 (`groups`), §8.1 (групповая доставка) | e2e `group-3x30` (три клиента `ci-harness`); S2 на интеграции |
 | US-007 бой по раундам (FR-025, FR-030, FR-033, BR-03, BR-13, NFR-012) | I2 | §9, ADR-020 (`rounds`) | unit `rounds` с `FakeClock` (all_acted, timeout, explicit, idle, смерть, restore, replay); e2e `group-3x30` с `rounds/close` |
 | US-002 / US-004 (вклад: доставка `template`, S1) | I1 | §8.1 (`narrative` с `generated_by`) | интеграция I1 (S1/S9) — приёмка EPIC-003 |
@@ -79,7 +79,7 @@
 4. **`POST /v1/scopes/{scope_id}/rounds/close`** (только `ci`) + `Harness.CloseRound`; e2e `group-3x30` тремя клиентами `ci-harness` (три `external_id` платформы `ci`).
 5. **Групповая доставка** — `outbox` адресаты по scope (`combat.decided` всем `alive`, `narrative.output` по `recipients[]`, `group.*`/`round.opened` участникам, `player.said` всем кроме автора); бот — команды `/group create|join|leave`, клавиатура боя для группы, тексты состава/раунда.
 6. **`/forget`-каскад для группы** — `ForgetHooks`: выход из группы (`group.left`, atomic-предложение; во встрече — без исполнения `flee`, встреча остаётся Task-агенту), передача лидерства, `session.UpdateParticipants`, `DropForPlayer`; e2e `forget` в группе.
-7. **Прокси `/v1/admin/*` к `MV_CORE_URL`** и `actor_kind` `ci/sim` для клиентов по `MV_GATEWAY_CLIENTS`; раздел `admin` в OpenAPI. (Может быть сделан в конце I1, если EPIC-003 I1b успел выставить admin-порт — тогда S14 на интеграции I1 идёт через gateway.)
+7. **Прокси `/v1/admin/*` к `MV_CORE_URL`** и `actor_kind` `ci/sim` для клиентов из `MV_GATEWAY_ACTOR_KIND_CLIENTS` (список допуска клиентов — `MV_GATEWAY_CLIENT_IDS`; прежняя одна строка `MV_GATEWAY_CLIENTS` в манифест не принята, C-08 v1.3); раздел `admin` в OpenAPI. (Может быть сделан в конце I1, если EPIC-003 I1b успел выставить admin-порт — тогда S14 на интеграции I1 идёт через gateway.)
 
 **Готовность I2:** S2 с харнессом из трёх клиентов на интеграции; unit `rounds` полный набор; стенд — группа из трёх живых Telegram-аккаунтов из allowlist (владелец + тестеры).
 
@@ -88,13 +88,13 @@
 | Направление | Контракт | До готовности реального | Кто и когда заменяет |
 |---|---|---|---|
 | Потребляем | C-02 факты State | `testkit/state.FakeState` v0 (F-10, в `integration/mvp-1` с конца волны 0) | EPIC-002 I1 — реализация State; TEAM-3 заглушку не правит, дефекты — запрос владельцу |
-| Потребляем | C-05 нарратив/механика | `testkit/swarm.FakeNarrator` v0 (F-10): `narrative.output generated_by=template` на `combat.decided`/`round.closed`/`player.looked`; `combat.decided` для I1-α публикует `FixedMechanics`+`FakeState` через харнесс-сценарий или EPIC-002 I1 механика | EPIC-003 I1a (реальный `FakeNarrator` на шаблонах) → I1b (рой) |
+| Потребляем | C-05 нарратив/механика | `testkit/swarm.FakeNarrator` (T-220: все шесть поводов C-05, `generated_by=template`) и `testkit/swarm.FakeEncounter` (T-219: Phase 1 боя — `dice.rolled`, `combat.decided`, атомарный пакет, `encounter.*`); механика до EPIC-002 T-053 — `FixedMechanics`. Для read-model встречи и координатора — правила C-05 v1.4 п. 4–6 и C-04 v1.3: конец встречи — первое из «факт сущности `state=resolved`» и `encounter.ended` | EPIC-003 I1a (реальный `FakeNarrator` на шаблонах) → I1b (рой) |
 | Потребляем | C-14 `state/latest.json` | фикстура `testdata/snapshots/state/latest.json` (F-10); `readmodel.bootstrap` пишется против неё | EPIC-002 I1 (реальный указатель + объект) |
 | Потребляем | C-01 шина/журнал | `membus` с `Journal.End()` (F-5t) | kafka-адаптер — тот же интерфейс, integration-тест `consumer` на testcontainers |
 | Потребляем | C-06 admin `core` | не нужен до I2 п. 7; для unit прокси — `httptest.Server` | EPIC-003 I1b |
 | Поставляем | C-04 `player.*` | `testkit/gateway.Harness` v0 (F-10): генератор `player.*` из фикстур в `membus` без HTTP — им пользуются EPIC-002/003 с волны 1 | TEAM-3 в I1 п. 6 заменяет v0 реализацией, **сохраняя сигнатуры v0** (`Harness.Act(player, action)` → тот же тип события); слияние — с I1 (порядок 002 → 004 → 003) |
 | Поставляем | C-08 HTTP API | `testkit/gateway.FakeGateway` — внутри команды: бот пишется против интерфейса `client` (unit на `httptest`) и против `FakeGateway`, когда он готов | TEAM-3, I1 п. 6 (после п. 1–5) |
-| Поставляем | C-10 аналитика | схемы `analytics.session.*`, `analytics.turn.completed` в `schemas/events/` — первая задача I1 (нужны EPIC-005 005-ops для `session-report`) | TEAM-3, I1 |
+| Поставляем | C-10 аналитика | схемы `analytics.session.*`, `analytics.turn.completed` в `schemas/events/` — первая задача I1 (нужны EPIC-005 005-ops для `mvctl report`) | TEAM-3, I1 |
 
 Порядок слияния I1 в `integration/mvp-1`: 002 → **004** → 003 (`teams.md` §3.3); I2: 002 → 003 → **004** → 005. Первая задача I1 — схемы событий C-04/C-10 + `openapi.yaml` скелет (контракты видны другим командам раньше кода).
 
@@ -132,7 +132,7 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 
 - **Данные**: две новые БД SQLite (`links.db`, `gateway.db`) — схемы §4.1–4.2 компонентного документа v0.2 (`link_id`, `character_requests(link_id, action_key)`, `rounds.timeout_ms/idle_after_missed`); миграции только `0001_init.sql` для каждой (I2 не добавляет миграций — таблицы группы/раундов уже в I1). Объекты `snapshots-{world}/gateway/{ts}-{seq}.json` + `latest.json` (указатель, C-14 v1.1). Данные as-is game-service не мигрируются.
 - **API**: `api/gateway.openapi.yaml` v1.0.0 по §5.6 с кодами C-08 v1.1; события C-04/C-10 по `api-contracts.md` §2.3.1–2.3.3, 2.3.14 (system-analyst правит §1.1/§1.6 под v0.2 — параллельная задача A4).
-- **Конфигурация**: переменные `MV_*` §11.3 (gateway 21, бот 10); `MV_TELEGRAM_ALLOWED_USER_IDS` заполняет владелец; prod-`.env` без `ci-harness` в `MV_GATEWAY_CLIENTS`; профиль `bot` compose с `env_file` только у `telegram-bot`; том `MV_GATEWAY_DATA_DIR` именованный, `0700`.
+- **Конфигурация**: переменные `MV_*` §11.3 (gateway 21, бот 10); `MV_TELEGRAM_ALLOWED_USER_IDS` заполняет владелец; prod-`.env` держит все три списка клиентов (`MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS`) и без `ci-harness` в каждом (`.env.example`, T-411); профиль `bot` compose с `env_file` только у `telegram-bot`; том `MV_GATEWAY_DATA_DIR` именованный, `0700`.
 
 ---
 
