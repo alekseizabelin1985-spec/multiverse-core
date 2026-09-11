@@ -11290,3 +11290,256 @@ v1.4. Сейчас текущая версия C-01 — v1.5, а «v1.4a» по 
 ### Предложения в бэклог
 
 Новых нет. Пункты 2–3 ревью #1 записаны в карточке для system-architect.
+## T-415 · ревью #1 · 2026-09-11 · code-reviewer#2
+
+### Границы ревью
+
+Ревью #1 задачи T-415 (S). Работа лежит незакоммиченной в `.worktrees/T-415` (ветка `task/T-415-silent-paths` от
+`epic/EPIC-001-foundation`, HEAD `72a24ec`): 9 изменённых и 6 новых файлов, всё в области задачи. Прочитаны: раздел
+«### T-415» в `tasks.md`, карточка T-415 (выполнение, отклонения, запись для dev-log, бэклог), ADR-023 п. 4, C-01 в
+`contracts.md` (строки 156 и 169: `recover` в `StartAll` там уже предусмотрен), `ownership.md` (`shared/runtime` —
+общий код), ревью-источники T-410 (N-1, N-3, M7c, R5b), T-220 (Mi-1 нарратора, EPIC-003), T-426 #1/#2. Пункт про
+`.claude/hooks/go-fmt.ps1` исключён оркестратором и не проверялся.
+
+Прогоны и мутанты — в копии рабочей папки (`git ls-files -co --exclude-standard` → подкаталог scratchpad), флак —
+в выгрузке HEAD (`git archive HEAD`). Способ `-overlay` не применялся. После каждого мутанта файл восстановлен и сверен
+`cmp` с рабочей папкой, итоговый `diff -rq` пуст. Копии удалены по точному пути. В рабочей папке T-415 менялись
+только этот раздел и строка ревью в карточке. Живые процессы запускали только e2e-тесты: `--bus=memory`, порт от
+`freeAddress`, сигнал — в группу дочернего процесса. Redpanda, контейнеры и LLM не трогались. `-race` недоступен (нет cgo).
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 1, Nit 4.
+
+Все семь пунктов сделаны, на каждый есть тест, и тест краснеет на своём мутанте. Это подтверждено моими прогонами:
+мутанты автора повторены, добавлены свои. Экспортируемый API не менялся ни в `shared/runtime`, ни в
+`shared/eventbus`: добавлены только неэкспортируемые `start`, `panicText`, `deliverNext`, сигнатуры `StartAll` и
+`Subscribe` прежние. Новое поведение `StartAll` (паника превращается в ошибку старта) C-01 уже описывает
+(`contracts.md:156`, `:169`: «там `recover` даёт `runtime.StartAll`, T-415»), поэтому это **не contract-change** —
+оценку оркестратора подтверждаю. Mi-1 — ложный след отказа публикации у `FakeEncounter` при штатной остановке. Его
+лучше закрыть до коммита: правка на две строки плюс тест.
+
+### Замечания
+
+#### Minor
+
+**Mi-1. `shared/testkit/swarm/fake_encounter.go:1532-1538` (`refusedPublication`): публикация, прерванная остановкой,
+записывается как отказ шины.** Штатная остановка по ADR-023 п. 4 идёт через отмену контекста вызывающего:
+`FakeContext.Stop` зовёт `cancel()`, затем `Wait()` (`fake_context.go:184-185`). Если в этот момент обработчик
+публикует, `membus.Publish` возвращает `context.Canceled` (`membus.go:206`). `refusedPublication` без разбора пишет
+`ERROR «publication refused by the bus»` и кладёт ошибку в липкий `failure`. Тогда `Wait()`, а за ним
+`FakeContext.Stop`, возвращают `testkit/swarm: publish …: context canceled`, а `serve` пишет в лог строку `stop`
+уровня `ERROR`. Doc-комментарии `Wait` (`:562-563`) и `FakeContext.Stop` (`fake_context.go:171-173`) обещают на
+чистой остановке `nil`. До T-415 этот путь молчал правильно: `Delivery` при отменённом контексте
+возвращала ошибку, `membus` превращала её в `nil`, `subErr` не трогался.
+Зонд P1 (в копии): `openFight`, затем `Act` с отменённым контекстом → `Act = testkit/swarm: publish dice.rolled:
+context canceled`, `Err() = то же`, в логе `publication refused by the bus`.
+*Как исправить:* в `refusedPublication` передавать `ctx` и при `ctx.Err() != nil` не звать `e.fail`, а
+писать строку уровня `Debug`/`Info` («publication interrupted by the stop») и возвращать ошибку как раньше. Тест:
+`Act` с отменённым контекстом → `Err() == nil`, в логе нет `ERROR`. Нарратор (`fake_narrator.go:815-817`) на отмене
+тоже пишет `ERROR`, но в `Err()` ничего не кладёт; его правка вне задачи (бэклог EPIC-003).
+
+#### Nit
+
+**N-1. `fake_encounter.go:1327` — ветка `encounter.ended` в `announce` без теста.** Мутант MA (в этой ветке
+`refusedPublication` заменён на прежний `fmt.Errorf`) выживает на `shared/testkit/swarm` и `cmd/multiverse`. Тесты
+покрывают `publish` (`combat.decided`) и `encounter.started`, но не третий путь. *Как исправить:* третий кейс в
+`fake_encounter_failure_test.go` — отказ `encounter.ended` на факте закрывающего пакета.
+
+**N-2. `cmd/multiverse/serve_test.go:333-338` — проверка поля через `reflect` ловит переименование, но не смену
+типа.** При переименовании поля сообщение понятное: «has no field skipValidateOnRead any more: follow the rename
+here». Если поле станет не `bool` (например, уйдёт в структуру настроек), `field.Bool()` упадёт паникой `reflect:
+call of reflect.Value.Bool on … Value` без подсказки. *Как исправить:* перед `Bool()` проверить
+`field.Kind() != reflect.Bool` → `t.Fatalf` с тем же советом. Сам выбор `reflect` верный: экспортируемый геттер у
+`eventbus.Kafka` был бы contract-change.
+
+**N-3. `test/e2e/lifecycle_test.go:62` — сигнал отправляется без проверки, что процесс ещё жив.** Если дочерний
+процесс умер между ответом `/health` и `interrupt`, `GenerateConsoleCtrlEvent` получит id группы, лидера которой
+уже нет. Задеть чужие процессы при живом дочернем тест не может: группа создана `CREATE_NEW_PROCESS_GROUP`, её id
+равен pid дочернего, событие идёт только в неё. Прогон дал PASS, не SKIP. *Как исправить:* перед `interrupt`
+вставить `select { case <-proc.exited: t.Fatalf(…код выхода…); default: }` — дёшево и снимает вопрос целиком.
+
+**N-4. `.golangci.yml:156` (`internal-state`), `:179-181` (`internal-swarm`) — та же дыра по префиксу, её проще
+закрыть сейчас, чем держать в бэклоге.** Мутант: пакет `internal/mechanicsx` и импорт из поддельного `internal/state`
+при текущем конфиге проходят. С `internal/mechanics$` в `internal-state` получаем `depguard` «not allowed from list
+'internal-state'». Цена нулевая: пакетов `internal/state` и `internal/swarm` ещё нет, у `internal/mechanics` нет
+подпакетов, ломать нечего. У `internal-swarm` так же открыты `internal/laws` и `internal/llm`. Если контексту позже
+понадобятся подпакеты, их добавят парой `…/mechanics$` + `…/mechanics/` осознанно. Правка в том же файле, что уже
+меняет T-415. Если оркестратор не хочет расширять задачу — оставить в бэклоге, как предложил автор.
+
+### Ответы на вопросы поручения
+
+1. **`StartAll`.** Паника в `Routes` и в `Start` превращается в ошибку `start context <имя>: panic: <значение>`.
+   Запущенные до неё контексты останавливаются в обратном порядке, упавший не останавливается: мутант MS
+   (`contexts[:i+1]`) краснеет, двойного `Stop` нет — `run` после ошибки `StartAll` только возвращает её, а
+   `closeBus` отложен первым. Лента `start first|stop first|bus closed` закреплена тестом `serve_test`. Стек только
+   в логе: мутант MK (стек пустой) краснеет, тест проверяет, что в ошибке нет `goroutine`. `panic(nil)` и
+   непечатаемое значение покрыты. **Паника в `Stop` во время отката** (зонд P2): уходит из `StartAll`, контексты
+   до паникующего не останавливаются (`stopped=` пусто), `closeBus` в `run` выполняется при раскрутке. Это не
+   регрессия: `StopAll` на обычной остановке ведёт себя так же, и задача про панику в `Start`. Бэклог п. 2.
+   `runtime.Goexit` в `Start` (только в тестах) `recover` не видит — так устроен Go, замечанием не считаю.
+2. **`membus.deliverNext`.** Единственный `defer g.mu.Unlock()`, явных `Unlock` нет, двойного снятия нет. `Close`
+   берёт только `st.mu` и `g.mu` не трогает, как и раньше. Порядок прежний: `changed` берётся под блокировкой до
+   `t.at`, курсор двигается только после учтённой доставки. После `Goexit` курсор стоит, событие получает следующая
+   подписка группы (at-least-once, C-01). Публичный API `shared/eventbus` не менялся, contract-change нет. Мутант
+   MG (явные `Unlock` без `defer`) → «the group is stuck» за 5 с.
+3. **`FakeEncounter`.** Правка минимальная: отдельный `failMu` (порядок блокировок `mu → failMu`, обратного пути
+   нет), три точки через `refusedPublication`. Липкий `Err()` → `/health fail` до перезапуска — для двойника
+   приемлемо и честно, пакет мог потеряться. Отличие от нарратора осознанное: у нарратора после итерации 2 T-220
+   запоминание идёт после публикации, повтор восстанавливает ход, в `Err()` ничего нет. У встречи запоминание
+   раннее (иначе повтор бросит кости второй раз), поэтому след и нужен. Правку принятого файла EPIC-003 подтверждает
+   tech-lead#2 — автор это отметил. Липкость нужно ограничить Mi-1: сейчас она срабатывает и на штатной остановке.
+4. **e2e.** Сигнальный тест чужие процессы задеть не может (см. N-3). Во флаки по порту не верю:
+   `freeAddress` — прежний приём с известным коротким окном, финальный `DialTimeout` после выхода получает отказ
+   соединения. Проба с `exited` отказывает быстро: `TestTheProbeGivesUpOnAProcessThatExited` — 3,8 с вместе со
+   сборкой; мутант MP (без ветки `exited`) — красный, но за 17,9 с. `p.err` и `ProcessState` читаются после
+   `<-exited`, гонки нет.
+5. **depguard `$`.** Мутант ML: `internal/mechanicsx` из обоих двойников → 2 × `depguard` со своими `desc`. Контроль
+   (без `$`) — 0 issues. По `internal-state`/`internal-swarm` см. N-4.
+6. **M7c через `reflect`.** Мутант M7c → `value "false": … = false, want true`. Хрупкость — N-2.
+7. **Сторож `%w`.** Мутант MW (`(cause: %v)` → `%w`) краснеет на всех четырёх подкейсах с понятным текстом
+   («the kafka Subscribe would return nil and drop the consumer»). Предостережение ревью #2 T-426 закреплено.
+
+### Что проверено экспериментом
+
+| # | Мутант | Результат |
+|---|---|---|
+| M0 | контроль: `func broken( {` в конце `lifecycle.go` | красный, сборка |
+| MR | `r := recover()` → `var r any` | красный: `runtime` («StartAll let the panic out»), лента `serve_test` |
+| MS | откат `contexts[:i]` → `contexts[:i+1]` | красный: «stopped [mechanics state], want [state]» |
+| MK | стек в логе пустой | красный: «the panic left no error with its stack in the log» |
+| MG | `deliverNext` без `defer`, явные `Unlock` | красный: «the group is stuck» (5 с) |
+| MW | `(cause: %v)` → `(cause: %w)` | красный, 4 из 4 подкейсов |
+| M7c | `cfg.SkipValidateOnRead = false` перед `NewKafka` | красный |
+| ME | без `e.fail(wrapped)` | красный: оба теста следа |
+| MA | ветка `encounter.ended` без `refusedPublication` | **выжил** — N-1 |
+| MP | проба без ветки `exited` | красный, 17,9 с |
+| R5b | `serve` зовёт `run` без `withSignals` | e2e красный: `exit code 3221225786 (0xc000013a)`; юнит-тесты `cmd/multiverse` зелёные (как и заявлено) |
+| ML | `internal/mechanicsx` из двух двойников | 2 × depguard; контроль без `$` — 0 issues |
+| ML-s | то же из `internal/state`, текущий конфиг / с `$` | проходит / depguard `internal-state` — N-4 |
+
+Зонды: P1 (`Act` с отменённым контекстом → липкий `Err`, `ERROR` в логе) — Mi-1; P2 (паника в `Stop` при откате
+уходит наружу, `stopped` пуст) — бэклог п. 2.
+
+**Флак `TestTheFactsOfStateMoveTheVersionTheStubProposesAgainst`** воспроизведён на выгрузке HEAD без правок T-415:
+`-count=40` → `index out of range [-1]`, `fake_encounter_test.go:853`. К T-415 отношения не имеет: тест не менялся,
+T-415 не трогает порядок публикаций на успешном пути. Причина в самом тесте (`:852`): `settled` истинно при
+`decided > before` и `len(AppliedProposals()) >= len(proposals)` = `0 >= 0`, когда решение уже опубликовано, а
+предложение ещё нет. Затем `proposals[len(proposals)-1]` падает. Правка — добавить в `settled` условие
+`len(proposals) > 0`. Файл EPIC-003, бэклог п. 1.
+
+**Прогоны в копии** (go1.26.8 windows/amd64, golangci-lint 2.13.2):
+- `go build ./... && go vet ./... && go vet -tags e2e ./test/...` — 0;
+- `go test -short -count=1 ./...` — 27 пакетов ok, 0 FAIL (флак на этом прогоне не выпал);
+- `go test -tags e2e -count=1 ./test/...` — `test/e2e` ok (13 с): 4 теста PASS, `TestTheProcessStopsCleanlyOnASignal`
+  выполнен (PASS, не SKIP); `test/fixtures` ok;
+- `golangci-lint run ./...` — 0 issues.
+
+### Предложения в бэклог
+
+1. EPIC-003 (tech-lead#2): флак `fake_encounter_test.go:852-853` — `len(proposals) > 0` в `settled`.
+2. system-architect (`shared/runtime`): паника в `Stop` — и при откате `StartAll`, и в `StopAll` на обычной
+   остановке — уходит наружу, оставшиеся контексты не останавливаются, шина закрывается при раскрутке. Если это
+   важно для ADR-023 п. 4, нужен `recover` в `StopAll` по образцу `start`: ошибка `stop context <имя>: panic: …`,
+   стек в лог, остальные контексты продолжают останавливаться.
+3. EPIC-003: нарратор на отменённом контексте пишет `ERROR «narrative not published»` (`fake_narrator.go:815-817`) —
+   тот же ложный след, что в Mi-1, только в логе.
+4. EPIC-003: позднее запоминание у `FakeEncounter` вместе с идемпотентностью полуопубликованного хода (п. 2 бэклога
+   автора) — подтверждаю.
+
+## T-415 · ревью #2 · 2026-09-11 · code-reviewer#2
+
+### Границы ревью
+
+Повторное ревью после итерации 2 (developer#1). Проверены только исправления по ревью #1 (Mi-1, N-1…N-4) и
+флак EPIC-003, который оркестратор включил в итерацию, плюс регрессия от них. Работа по-прежнему незакоммичена в
+`.worktrees/T-415`, по сравнению с итерацией 1 добавился один изменённый файл, `fake_encounter_test.go`. Прочитаны:
+свой раздел «T-415 · ревью #1», раздел «Итерация 2» и запись для dev-log в карточке, дифф `.golangci.yml`,
+`fake_encounter.go` (`refusedPublication`), `fake_encounter_failure_test.go`, `fake_encounter_test.go`, `serve_test.go`,
+`lifecycle_test.go`, для вопроса о гонке в Mi-1 — `Deliver` в `shared/eventbus/delivery.go`.
+
+Прогоны и мутанты — в новой копии рабочей папки (`git ls-files -co --exclude-standard` → scratchpad), серии флака на
+HEAD — в выгрузке `git archive HEAD`. Первым шёл контрольный мутант. После каждого мутанта файл восстановлен и сверен
+`cmp` с рабочей папкой, итоговый `diff -rq` пуст, копии удалены по точному пути. В рабочей папке менялись только этот
+раздел и строка в карточке. `.worktrees/T-429` и основная папка не открывались.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 0.
+
+Все пять замечаний ревью #1 закрыты, каждое подтверждено моим мутантом или повтором зонда. Правка флака строже
+поручения, и это правильно: что проверяет тест, она не ослабляет, а гонку ожидания закрывает с обеих сторон. Гонка
+в Mi-1 существует (зонд P3), но для двойника безвредна: событие остаётся незакоммиченным и приходит снова.
+
+### Статус замечаний ревью #1
+
+| # | Статус | Доказательство |
+|---|---|---|
+| Mi-1 | **закрыто** | `fake_encounter.go:1538-1549`: при `ctx.Err() != nil` — строка `Info` «publication interrupted by the stop», без `e.fail`, ошибка возвращается обработчику. Зонд P1 ревью #1 теперь даёт `Err() = nil` и ни одного `ERROR`. Тест `TestAPublicationCutShortByTheStopLeavesNoTrace` покрывает `Act` и `Observe` (announce). Мой мутант MI (ветка → `if false`) красный на обоих подкейсах: «Err() = … context canceled … want nil» |
+| N-1 | **закрыто** | `TestARefusedEndLeavesATrace`; мутант MA ревью #1 (прежний `fmt.Errorf` в ветке `ended`) теперь красный: «Err() = <nil>, want the refusal of encounter.ended» |
+| N-2 | **закрыто** | `serve_test.go:337-339`: `field.Kind() != reflect.Bool` → `t.Fatalf` с советом до вызова `Bool()`. Проверено чтением, мутант автора с `int` понятен |
+| N-3 | **закрыто** | `lifecycle_test.go:62-68`: `select` по `proc.exited` → `t.Fatalf` до `interrupt`. Сигнальный тест выполнен (PASS, не SKIP) |
+| N-4 | **закрыто** | `.golangci.yml`: `internal/mechanics$` у `internal-state`; `internal/mechanics$`, `internal/laws$`, `internal/llm$` у `internal-swarm`. Мутант: `internal/{mechanics,laws,llm}x` из поддельных `internal/swarm` и `internal/state` → 4 × depguard со своими `desc`. Контроль (все `$` сняты) — 0 issues |
+
+### Флак `TestTheFactsOfStateMoveTheVersionTheStubProposesAgainst` (EPIC-003)
+
+**Не ослабляет ли правка тест.** Нет. Что тест доказывает, решают итоговые проверки
+(`fake_encounter_test.go:867-891`): State не отказал ни одному предложению (`TypeRejected` нет, значит, нет
+version_conflict), бой закончился, версия волка ≥ 2, волк ранен, `dead_letters` пусты. Правка их не трогает.
+Условие ожидания (`:841`, `:858-859`) только упорядочивает удары: следующий удар уходит, когда предложение этого
+обмена опубликовано и применено. Это и есть сценарий теста — «следующее предложение делается против версии, которую
+оставили факты». Раньше ожидание могло кончиться раньше срока. Строгое условие к тому же даёт `closes()` именно
+предложение текущего обмена, а не прошлого. Обмен, который решён, но ничего не предложил, строгое условие не спрячет:
+тест упадёт громко, по сроку `waitFor`.
+
+**Статистика (мои серии, `-short -count=40 -run '…$'`):**
+
+| Вариант | Серии | Красные |
+|---|---|---|
+| HEAD (выгрузка, без правки) | 2 | **2** (`index out of range [-1]`; серия обрывается на первой панике) |
+| итерация 2 (строгое условие) | 4 | **0** из 160 прогонов |
+| мутант MF: условие HEAD в копии (переменная оставлена через `_ =`) | 2 | **2** — серия ловит флак |
+| мутант MF2: вариант `len(proposals) > 0` | 4 | 0 — таймаут автора (1 из 6) у меня не воспроизвёлся. Ранний выход по уже применённым прошлым предложениям виден из кода, строгое условие закрывает его логически, а не статистически |
+
+С автором сходится: HEAD красный, правка — 0 красных. Правка файла EPIC-003 записана в карточке как
+подтверждённая tech-lead#2.
+
+### Mi-1: гонка «настоящий отказ в момент отмены»
+
+Зонд P3: шина отказывает публикации `dice.rolled` по своей причине, а контекст обработчика в этот момент уже
+отменён. Итог — `Act` = отказ шины (`errors.Is(err, errPublishRefused)`), `Err() = nil`, в логе `Info`
+«publication interrupted by the stop» с текстом отказа, `ERROR` нет. Настоящий отказ при этом не попадает в
+`Err()`. **Для двойника это приемлемо**, и потери здесь нет:
+- `Delivery.Deliver` при ошибке обработчика и отменённом контексте возвращает `ctx.Err()` и не паркует
+  (`delivery.go:121-125`). `membus` не двигает курсор, kafka не коммитит, событие приходит в следующем запуске.
+  `acted` живёт в памяти, поэтому новый запуск ответит заново.
+- `Err()` читает только `/health` и `Wait`/`Stop`, а после `Stop` `/health` у `FakeContext` и так `degraded`.
+- Текст отказа остаётся в логе.
+Более строгий вариант — `errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)` вместе с
+`ctx.Err() != nil`. Он имеет смысл для настоящего агента, где `Err()` будет значить больше, и лежит в бэклоге EPIC-003
+(п. 1 ниже), а не в замечаниях.
+
+### Что проверено экспериментом
+
+| # | Мутант | Результат |
+|---|---|---|
+| M0 | контроль: `func broken( {` в конце `fake_encounter.go` | красный, сборка |
+| MI | ветка остановки в `refusedPublication` выключена | красный, 2 подкейса |
+| MA | ветка `ended` без `refusedPublication` (выживал в ревью #1) | красный |
+| MF | условие ожидания флака возвращено к HEAD | красный, 2 из 2 серий |
+| MF2 | условие `len(proposals) > 0` | зелёный, 0 из 4 серий (см. выше) |
+| N4 | `internal/{mechanics,laws,llm}x` из `internal/swarm`, `internal/state` | 4 × depguard; контроль без `$` — 0 issues |
+
+Зонд P3 — выше. Прогоны в копии (go1.26.8 windows/amd64, golangci-lint 2.13.2):
+- `go build ./... && go vet ./... && go vet -tags e2e ./test/...` — 0;
+- `go test -short -count=1 ./...` — все пакеты ok, 0 FAIL;
+- `go test -tags e2e -count=1 ./test/e2e/` — ok (12 с), 4 теста PASS, сигнальный выполнен;
+- `golangci-lint run ./...` — 0 issues.
+
+### Предложения в бэклог
+
+1. EPIC-003 (T-229, настоящий агент встречи): исключение остановки сузить до ошибок отмены
+   (`errors.Is(err, context.Canceled/DeadlineExceeded)`), чтобы настоящий отказ шины в момент отмены попадал в
+   `Err()`. Для двойника не требуется.
+2. Пункты 2–4 бэклога ревью #1 (`recover` в `StopAll`; `ERROR` нарратора на отмене; позднее запоминание) остаются
+   в силе, в итерацию не входили.

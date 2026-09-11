@@ -243,7 +243,16 @@ type FakeEncounter struct {
 	started  bool
 
 	subscriptions sync.WaitGroup
-	subErr        error
+	// failMu guards failure. It is a lock of its own because a publication
+	// fails while mu is held, and Err must answer without waiting for a turn.
+	failMu sync.Mutex
+	// failure is the first thing that went wrong on the bus: a subscription
+	// that stopped on its own, or a publication the bus refused. The second
+	// used to leave no trace at all (T-415): the action is remembered as
+	// answered before its package goes out, so the retry of the bus finds it
+	// answered and returns nil — no dead letter, no log line, nothing on
+	// /health.
+	failure error
 }
 
 // encounter is one fight in progress, as the stub keeps it. It is not the
@@ -534,29 +543,37 @@ func (e *FakeEncounter) subscribe(ctx context.Context, topic string, h eventbus.
 	go func() {
 		defer e.subscriptions.Done()
 		if err := e.bus.Subscribe(ctx, topic, EncounterGroup+"-"+topic, h); err != nil {
-			e.mu.Lock()
-			if e.subErr == nil {
-				e.subErr = fmt.Errorf("testkit/swarm: subscribe %s: %w", topic, err)
-			}
-			e.mu.Unlock()
+			e.fail(fmt.Errorf("testkit/swarm: subscribe %s: %w", topic, err))
 			e.log.Error("subscription stopped", "topic", topic, "err", err)
 		}
 	}()
 }
 
+// fail records the first failure of the stub; later ones are in the log.
+func (e *FakeEncounter) fail(err error) {
+	e.failMu.Lock()
+	defer e.failMu.Unlock()
+	if e.failure == nil {
+		e.failure = err
+	}
+}
+
 // Wait blocks until every subscription started by Start has stopped and reports
-// the first failure among them. A subscription cancelled through its context is
-// not a failure and reports nil (C-01).
+// the first failure of the stub (Err). A subscription cancelled through its
+// context is not a failure and reports nil (C-01).
 func (e *FakeEncounter) Wait() error {
 	e.subscriptions.Wait()
 	return e.Err()
 }
 
-// Err is the first failure of a subscription, or nil while they are healthy.
+// Err is the first failure of the stub — a subscription that stopped on its
+// own, or a publication the bus refused — or nil while it is healthy. The
+// health of FakeContext reads it, so a failed publication shows as fail on
+// /health instead of passing unseen.
 func (e *FakeEncounter) Err() error {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.subErr
+	e.failMu.Lock()
+	defer e.failMu.Unlock()
+	return e.failure
 }
 
 // ActiveEncounter is the identifier of the fight a character is standing in.
@@ -1300,14 +1317,14 @@ func (e *FakeEncounter) announce(ctx context.Context, factType, entityID, propos
 	case factType == TypeCreated && enc.opening != nil:
 		started := *enc.opening
 		if err := e.bus.Publish(ctx, started); err != nil {
-			return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterStarted, err)
+			return e.refusedPublication(ctx, started, err)
 		}
 		enc.opening, enc.active = nil, true
 		e.log.Info("encounter opened", "encounter_id", enc.id, "event_id", started.ID)
 	case factType == TypeUpdated && enc.closing != nil && proposalID == enc.closing.proposalID:
 		ended := enc.closing.ended
 		if err := e.bus.Publish(ctx, ended); err != nil {
-			return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterEnded, err)
+			return e.refusedPublication(ctx, ended, err)
 		}
 		e.log.Info("encounter ended", "encounter_id", enc.id, "reason", enc.closing.reason,
 			"rounds", enc.round, "event_id", ended.ID)
@@ -1502,9 +1519,33 @@ func (e *FakeEncounter) publish(ctx context.Context, cause eventbus.Event, typ s
 	ev := eventbus.Derive(cause, typ, Source, payload,
 		append([]eventbus.DeriveOption{eventbus.WithAgent(agent)}, opts...)...)
 	if err := e.bus.Publish(ctx, ev); err != nil {
-		return ev, fmt.Errorf("testkit/swarm: publish %s: %w", typ, err)
+		return ev, e.refusedPublication(ctx, ev, err)
 	}
 	return ev, nil
+}
+
+// refusedPublication leaves the trace of a publication the bus refused — an
+// error in the log and in Err — and returns the error the handler answers
+// with. The error alone is not enough: the retry of the bus finds the action
+// already answered and returns nil, so nothing else would ever say the package
+// was lost (T-415).
+//
+// A publication cut short by the stop is not a refusal. The stop of the
+// process cancels the context of the subscriptions (ADR-023 p. 4), the bus
+// answers the cancellation, and a trace in Err would turn a clean stop into a
+// failed one — Wait and FakeContext.Stop promise nil for it (review #1 of
+// T-415, Mi-1). The event stays unanswered and goes to the next run.
+func (e *FakeEncounter) refusedPublication(ctx context.Context, ev eventbus.Event, err error) error {
+	wrapped := fmt.Errorf("testkit/swarm: publish %s: %w", ev.Type, err)
+	if ctx.Err() != nil {
+		e.log.Info("publication interrupted by the stop", "type", ev.Type, "event_id", ev.ID,
+			"cause_id", ev.Meta.CausationID, "err", err)
+		return wrapped
+	}
+	e.fail(wrapped)
+	e.log.Error("publication refused by the bus", "type", ev.Type, "event_id", ev.ID,
+		"cause_id", ev.Meta.CausationID, "err", err)
+	return wrapped
 }
 
 // encounterAgent is the agent one act of the fight is attributed to. The

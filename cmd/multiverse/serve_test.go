@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -42,11 +44,12 @@ func (r *recorder) list() []string {
 // reads the journal — the case ADR-023 p. 4 is about: a context stopped by the
 // runtime may need the bus to finish, so the bus must outlive it.
 type witness struct {
-	name     string
-	rec      *recorder
-	startErr error
-	started  chan runtime.Deps
-	deps     runtime.Deps
+	name       string
+	rec        *recorder
+	startErr   error
+	startPanic any
+	started    chan runtime.Deps
+	deps       runtime.Deps
 }
 
 func (p *witness) Name() string        { return p.name }
@@ -58,6 +61,9 @@ func (p *witness) Health() runtime.Status {
 func (p *witness) Start(_ context.Context, deps runtime.Deps) error {
 	if p.startErr != nil {
 		return p.startErr
+	}
+	if p.startPanic != nil {
+		panic(p.startPanic)
 	}
 	p.deps = deps
 	p.rec.add("start " + p.name)
@@ -227,12 +233,18 @@ func TestServeClosesTheBusAfterEveryContextStopped(t *testing.T) {
 // contexts that did start have been stopped.
 func TestServeClosesTheBusLastWhenTheStartFails(t *testing.T) {
 	tests := map[string]struct {
-		failStart bool
-		occupy    bool
-		want      string
+		failStart  bool
+		panicStart bool
+		occupy     bool
+		want       string
 	}{
 		"a context fails to start": {failStart: true, want: "second"},
-		"the port is taken":        {occupy: true, want: "listen"},
+		// T-415: a panic in Start takes the same way out as an error. Before
+		// StartAll recovered it, the deferred Close ran during the unwinding
+		// with first still up, and the timeline read "bus closed" before
+		// "stop first" — had the test process survived the panic at all.
+		"a context panics in Start": {panicStart: true, want: "start context second: panic: boom"},
+		"the port is taken":         {occupy: true, want: "listen"},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -249,6 +261,9 @@ func TestServeClosesTheBusLastWhenTheStartFails(t *testing.T) {
 			contexts := []runtime.Context{&witness{name: "first", rec: rec}}
 			if tc.failStart {
 				contexts = append(contexts, &witness{name: "second", rec: rec, startErr: errors.New("boom")})
+			}
+			if tc.panicStart {
+				contexts = append(contexts, &witness{name: "second", rec: rec, startPanic: "boom"})
 			}
 
 			// A start that fails returns at once. The deadline only bounds a run
@@ -287,6 +302,47 @@ func TestOpenBusBuildsTheTransportTheValueNames(t *testing.T) {
 
 	if _, err := openBus("nats", reg, clock.RealTimers{}, slog.New(slog.DiscardHandler)); err == nil {
 		t.Error("openBus(nats) = nil error: a value outside the enum got a transport")
+	}
+}
+
+// The last step of SEC-16 on the kafka side: TestKafkaConfigCarriesTheManifest
+// checks the configuration up to the call, and this checks that the call hands
+// it on — the adapter holds the flag in an unexported field, so it is read by
+// reflection. Without it a line that changes cfg between kafkaConfig and
+// eventbus.NewKafka survives every test that runs without a broker (mutant
+// M7c of review #2 of T-410, N-3; T-415). The broker-backed check is T-394.
+func TestOpenBusHandsTheKafkaAdapterTheValidationFlag(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		skip  bool
+	}{{"", false}, {"false", true}, {"true", false}} {
+		t.Run("value "+strconv.Quote(tc.value), func(t *testing.T) {
+			if tc.value == "" {
+				clearVar(t, env.BusValidateOnRead.Name())
+			} else {
+				t.Setenv(env.BusValidateOnRead.Name(), tc.value)
+			}
+			bus, err := openBus(busKafka, contracts.Default(), clock.RealTimers{}, slog.New(slog.DiscardHandler))
+			if err != nil {
+				t.Fatalf("openBus(kafka): %v", err)
+			}
+			defer func() { _ = bus.Close() }()
+			adapter, ok := bus.(*eventbus.Kafka)
+			if !ok {
+				t.Fatalf("openBus(kafka) = %T, want *eventbus.Kafka", bus)
+			}
+			field := reflect.ValueOf(adapter).Elem().FieldByName("skipValidateOnRead")
+			if !field.IsValid() {
+				t.Fatal("eventbus.Kafka has no field skipValidateOnRead any more: follow the rename here")
+			}
+			if field.Kind() != reflect.Bool {
+				t.Fatalf("eventbus.Kafka.skipValidateOnRead is a %s now, not a bool: follow the change here", field.Kind())
+			}
+			if got := field.Bool(); got != tc.skip {
+				t.Errorf("the adapter skips validation on read = %v, want %v for %s=%q",
+					got, tc.skip, env.BusValidateOnRead.Name(), tc.value)
+			}
+		})
 	}
 }
 

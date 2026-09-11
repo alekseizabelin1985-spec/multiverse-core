@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -221,6 +222,91 @@ func TestStartAllStopsStartedContextsOnFailure(t *testing.T) {
 	}
 	if strings.Join(stopped, ",") != "state" {
 		t.Fatalf("stopped = %v, want [state]", stopped)
+	}
+}
+
+// panicking is a context whose Start or Routes panics with value.
+type panicking struct {
+	fake
+	value    any
+	inRoutes bool
+}
+
+func (p *panicking) Start(context.Context, runtime.Deps) error { panic(p.value) }
+
+func (p *panicking) Routes(*http.ServeMux) {
+	if p.inRoutes {
+		panic(p.value)
+	}
+}
+
+// unprintable panics when fmt asks it for its text, and so does the value of
+// that panic: fmt gives up and re-panics, which is the second panic StartAll
+// must not let out either.
+type unprintable struct{}
+
+func (unprintable) String() string { panic(unprintable{}) }
+
+// T-415: a panic in Start is a failed start, not an unwinding that closes the
+// bus under the contexts started before it (ADR-023 p. 4). The contexts
+// already up are stopped, the error names the context and the value, and the
+// stack goes to the log of the process rather than into the error.
+func TestStartAllTurnsAPanicIntoAFailedStart(t *testing.T) {
+	tests := map[string]struct {
+		value    any
+		inRoutes bool
+		want     string
+	}{
+		"a string":             {value: "boom", want: "panic: boom"},
+		"an error":             {value: errors.New("broken wiring"), want: "panic: broken wiring"},
+		"nil":                  {value: nil, want: "panic: panic called with nil argument"},
+		"in Routes":            {value: "bad pattern", inRoutes: true, want: "panic: bad pattern"},
+		"an unprintable value": {value: unprintable{}, want: "runtime_test.unprintable (printing the value panicked)"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var started, stopped []string
+			var logged strings.Builder
+			first := &fake{name: "state", started: &started, stopped: &stopped}
+			second := &panicking{fake: fake{name: "mechanics", stopped: &stopped}, value: tc.value, inRoutes: tc.inRoutes}
+			third := &fake{name: "swarm", started: &started, stopped: &stopped}
+			deps := runtime.Deps{Mux: http.NewServeMux(), Log: slog.New(slog.NewTextHandler(&logged, nil))}
+
+			var err error
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						t.Fatalf("StartAll let the panic out: %v", r)
+					}
+				}()
+				err = runtime.StartAll(context.Background(), []runtime.Context{first, second, third}, deps)
+			}()
+
+			if err == nil {
+				t.Fatal("StartAll = nil error, want the panic of mechanics as a failed start")
+			}
+			if !strings.Contains(err.Error(), "start context mechanics") || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %q, want it to name mechanics and %q", err, tc.want)
+			}
+			if strings.Contains(err.Error(), "goroutine") {
+				t.Errorf("the stack went into the error, which ends up in one line of stderr: %q", err)
+			}
+			if strings.Join(started, ",") != "state" || strings.Join(stopped, ",") != "state" {
+				t.Errorf("started %v, stopped %v; want state started and stopped, nothing after mechanics", started, stopped)
+			}
+			if !strings.Contains(logged.String(), "level=ERROR") || !strings.Contains(logged.String(), "goroutine") {
+				t.Errorf("the panic left no error with its stack in the log: %q", logged.String())
+			}
+		})
+	}
+}
+
+// A process without a logger still gets the error: Deps.Log is optional.
+func TestStartAllTurnsAPanicIntoAnErrorWithoutALogger(t *testing.T) {
+	p := &panicking{fake: fake{name: "gateway"}, value: "boom"}
+	if err := runtime.StartAll(context.Background(), []runtime.Context{p}, runtime.Deps{}); err == nil ||
+		!strings.Contains(err.Error(), "panic: boom") {
+		t.Fatalf("StartAll = %v, want the panic as an error", err)
 	}
 }
 
