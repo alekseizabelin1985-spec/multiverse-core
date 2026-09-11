@@ -237,7 +237,8 @@ for _, path := range acc.GetAllPaths() { fmt.Println(path) }
    (`winget install ezwinports.make` на Windows).
 2. `cp .env.example .env`, заполнить всё, что помечено `[required]` в комментарии
    над переменной в `.env.example` — правило, а не фиксированный список: состав
-   меняется вместе с файлом (сейчас шесть переменных).
+   меняется вместе с файлом, а расхождение пометок с композицией ловит правило 7
+   `compose-lint` (T-413).
 3. `make minio-image && make up && make health` — поднять инфраструктуру и пустые
    контексты платформы.
 4. Сборка — одна цель на весь модуль: `make build` (`go build -o bin/ ./cmd/...`).

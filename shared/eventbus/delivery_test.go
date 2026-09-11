@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -408,6 +410,283 @@ func TestChainAppliesMiddlewareOutsideIn(t *testing.T) {
 	if strings.Join(order, ",") != strings.Join(want, ",") {
 		t.Errorf("order = %v, want %v", order, want)
 	}
+}
+
+func TestDeliverParksAPanicAtOnceWithoutRetrying(t *testing.T) {
+	cases := map[string]struct {
+		value any
+		want  string
+	}{
+		"a string": {value: "boom", want: "eventbus: handler panic: boom"},
+		"an error": {value: errHandler, want: "eventbus: handler panic: " + errHandler.Error()},
+		"a nil":    {value: nil, want: "eventbus: handler panic: panic called with nil argument"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			deterministicSources(t)
+			sink := &recordingSink{}
+			ev := validEvent(t)
+
+			calls := 0
+			err := testDelivery(sink).Deliver(t.Context(), Position{Topic: TopicPlayerEvents, Offset: 9}, ev,
+				func(context.Context, Event) error {
+					calls++
+					panic(tc.value)
+				})
+
+			// nil: the event is accounted for and its offset may be committed.
+			if err != nil {
+				t.Fatalf("deliver: %v", err)
+			}
+			if calls != 1 {
+				t.Errorf("handler called %d times, want 1: a panic is a defect and is not retried", calls)
+			}
+			letters := sink.all()
+			if len(letters) != 1 {
+				t.Fatalf("%d dead letters, want 1", len(letters))
+			}
+			dl := letters[0]
+			if dl.Original.ID != ev.ID {
+				t.Errorf("dead letter carries %q, want the original %q", dl.Original.ID, ev.ID)
+			}
+			if dl.Attempts != 1 {
+				t.Errorf("attempts = %d, want 1: the number of the call that panicked", dl.Attempts)
+			}
+			if !strings.HasPrefix(dl.Error, tc.want) {
+				t.Errorf("error = %q, want it to start with %q", dl.Error, tc.want)
+			}
+			if strings.Contains(dl.Error, "goroutine") {
+				t.Errorf("the stack went into the dead letter: %q", dl.Error)
+			}
+		})
+	}
+}
+
+func TestDeliverParksAPanicAfterAFailedAttemptWithItsCallNumber(t *testing.T) {
+	deterministicSources(t)
+	sink := &recordingSink{}
+
+	calls := 0
+	err := testDelivery(sink).Deliver(t.Context(), Position{Topic: TopicPlayerEvents}, validEvent(t),
+		func(context.Context, Event) error {
+			calls++
+			if calls == 1 {
+				return errHandler
+			}
+			panic("boom on the retry")
+		})
+
+	if err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("handler called %d times, want 2: the retries stop at the panic", calls)
+	}
+	letters := sink.all()
+	if len(letters) != 1 {
+		t.Fatalf("%d dead letters, want 1", len(letters))
+	}
+	if letters[0].Attempts != 2 {
+		t.Errorf("attempts = %d, want 2", letters[0].Attempts)
+	}
+	if !strings.HasPrefix(letters[0].Error, ErrHandlerPanic.Error()) {
+		t.Errorf("error = %q, want the panic rather than the earlier handler error", letters[0].Error)
+	}
+}
+
+func TestDeliverReportsAFailingSinkAfterAPanic(t *testing.T) {
+	deterministicSources(t)
+	errSink := errors.New("dead letter topic unreachable")
+
+	calls := 0
+	err := testDelivery(&recordingSink{err: errSink}).Deliver(t.Context(), Position{Topic: TopicPlayerEvents}, validEvent(t),
+		func(context.Context, Event) error {
+			calls++
+			panic("boom")
+		})
+
+	// Neither handled nor parked: the offset must stay uncommitted, as for an
+	// ordinary failure whose dead letter could not be written.
+	if !errors.Is(err, errSink) {
+		t.Errorf("err = %v, want the sink error", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), ErrHandlerPanic.Error()) {
+		t.Errorf("err = %v, want it to name the panic it could not park", err)
+	}
+	if calls != 1 {
+		t.Errorf("handler called %d times, want 1", calls)
+	}
+}
+
+func TestDeliverLogsAPanicAsAnErrorWithItsStack(t *testing.T) {
+	deterministicSources(t)
+	logs := &recordingLog{}
+	d := testDelivery(&recordingSink{})
+	d.Log = slog.New(logs)
+	ev := validEvent(t)
+
+	if err := d.Deliver(t.Context(), Position{Topic: TopicPlayerEvents, Offset: 13}, ev,
+		func(context.Context, Event) error { panicInAHandler(); return nil }); err != nil {
+		t.Fatalf("deliver: %v", err)
+	}
+
+	records := logs.all()
+	if len(records) != 1 {
+		t.Fatalf("%d log records, want 1", len(records))
+	}
+	rec := records[0]
+	if rec.Level != slog.LevelError {
+		t.Errorf("level = %s, want ERROR: the trace service_panics counts (NFR-012)", rec.Level)
+	}
+	attrs := attrsOf(rec)
+	for key, want := range map[string]string{
+		"panic":      "a handler went wrong",
+		"handled":    "false",
+		"event_id":   ev.ID,
+		"event_type": ev.Type,
+		"topic":      TopicPlayerEvents,
+		"offset":     "13",
+		"consumer":   "core.state",
+		"attempts":   "1",
+	} {
+		if got := attrs[key]; got != want {
+			t.Errorf("%s = %q, want %q", key, got, want)
+		}
+	}
+	// The stack is the stack of the handler, not of the recover: it names the
+	// function that panicked.
+	if !strings.Contains(attrs["stack"], "panicInAHandler") {
+		t.Errorf("stack does not show the frame that panicked:\n%s", attrs["stack"])
+	}
+}
+
+func TestHandlerPanicKeepsAnErrorValueMatchable(t *testing.T) {
+	err := handlerPanic(errHandler, panicText(errHandler))
+	if !errors.Is(err, ErrHandlerPanic) || !errors.Is(err, errHandler) {
+		t.Errorf("err = %v, want it to match both ErrHandlerPanic and the panic value", err)
+	}
+	if want := "eventbus: handler panic: " + errHandler.Error(); err.Error() != want {
+		t.Errorf("err = %q, want %q", err.Error(), want)
+	}
+}
+
+// nestedStringer and nestedError panic, when printed, with a value that panics
+// when printed too: fmt recovers from the first panic and re-panics on the
+// second (review #1 of T-426, Mi-1).
+type nestedStringer struct{}
+
+func (nestedStringer) String() string { panic(nestedStringer{}) }
+
+type nestedError struct{}
+
+func (nestedError) Error() string { panic(nestedError{}) }
+
+func TestDeliverParksAPanicWhoseValueCannotBePrinted(t *testing.T) {
+	cases := map[string]struct {
+		value    any
+		typeName string
+	}{
+		"String panics": {value: nestedStringer{}, typeName: "eventbus.nestedStringer"},
+		"Error panics":  {value: nestedError{}, typeName: "eventbus.nestedError"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			deterministicSources(t)
+			sink := &recordingSink{}
+			logs := &recordingLog{}
+			d := testDelivery(sink)
+			d.Log = slog.New(logs)
+
+			err := d.Deliver(t.Context(), Position{Topic: TopicPlayerEvents}, validEvent(t),
+				func(context.Context, Event) error { panic(tc.value) })
+
+			if err != nil {
+				t.Fatalf("deliver: %v", err)
+			}
+			letters := sink.all()
+			if len(letters) != 1 {
+				t.Fatalf("%d dead letters, want 1: the panic of printing the value escaped the catch", len(letters))
+			}
+			if dl := letters[0]; !strings.HasPrefix(dl.Error, ErrHandlerPanic.Error()) || !strings.Contains(dl.Error, tc.typeName) {
+				t.Errorf("error = %q, want ErrHandlerPanic naming %s", dl.Error, tc.typeName)
+			}
+			records := logs.all()
+			if len(records) != 1 || records[0].Level != slog.LevelError {
+				t.Fatalf("log = %v, want one ERROR record", records)
+			}
+			if got := attrsOf(records[0])["panic"]; !strings.Contains(got, tc.typeName) {
+				t.Errorf("panic = %q, want the type name %s", got, tc.typeName)
+			}
+		})
+	}
+}
+
+// A panic while the subscription is stopping is parked all the same, unlike an
+// ordinary error, which returns the cancellation and is redelivered: C-01 v1.5
+// makes no exception for a shutdown, and a panic redelivered after the
+// restart would only panic again (review #1 of T-426, Mi-2).
+func TestDeliverParksAPanicDuringShutdown(t *testing.T) {
+	deterministicSources(t)
+	sink := &recordingSink{}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	calls := 0
+	err := testDelivery(sink).Deliver(ctx, Position{Topic: TopicPlayerEvents}, validEvent(t),
+		func(context.Context, Event) error {
+			calls++
+			cancel()
+			panic("boom during shutdown")
+		})
+
+	if err != nil {
+		t.Fatalf("deliver = %v, want nil: the panic is parked, not left for redelivery", err)
+	}
+	if calls != 1 {
+		t.Errorf("handler called %d times, want 1", calls)
+	}
+	letters := sink.all()
+	if len(letters) != 1 || letters[0].Attempts != 1 {
+		t.Errorf("dead letters = %+v, want one with attempts 1", letters)
+	}
+}
+
+// panicInAHandler gives the stack a frame with a name the test can look for.
+func panicInAHandler() {
+	panic("a handler went wrong")
+}
+
+// recordingLog keeps what a delivery logs.
+type recordingLog struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (h *recordingLog) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *recordingLog) Handle(_ context.Context, r slog.Record) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.records = append(h.records, r.Clone())
+	return nil
+}
+
+func (h *recordingLog) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *recordingLog) WithGroup(string) slog.Handler      { return h }
+
+func (h *recordingLog) all() []slog.Record {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]slog.Record(nil), h.records...)
+}
+
+func attrsOf(r slog.Record) map[string]string {
+	attrs := make(map[string]string)
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.String()
+		return true
+	})
+	return attrs
 }
 
 func TestWaitHonoursTheBackoffDuration(t *testing.T) {

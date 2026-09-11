@@ -19,6 +19,9 @@ var (
 	ErrNoRegistry = errors.New("eventbus: no contract registry configured")
 	// ErrClosed is returned by a bus that has been closed.
 	ErrClosed = errors.New("eventbus: bus is closed")
+	// ErrHandlerPanic is the error a dead letter carries when the handler
+	// panicked (C-01 v1.5); the panic value follows it in the text.
+	ErrHandlerPanic = errors.New("eventbus: handler panic")
 )
 
 // TypeSpec is the part of a registry entry the bus itself needs: where the

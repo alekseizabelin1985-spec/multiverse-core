@@ -203,6 +203,42 @@ func TestCloseIsIdempotentAndRefusesLaterWork(t *testing.T) {
 	}
 }
 
+// The read loops of the adapter — Subscribe, ReadRange and Tail — hand every
+// message to deliver and commit or advance only on its nil. This is that step
+// with a panicking handler, the part of the kafka path that runs without a
+// broker; the loops themselves meet the panic in the contract case on
+// Redpanda.
+func TestKafkaDeliverParksAHandlerPanic(t *testing.T) {
+	deterministicSources(t)
+	bus := newTestBus(t)
+	sink := &recordingSink{}
+	d := bus.delivery("core.state")
+	d.DLQ = sink
+	d.Backoff = noPause
+	ev := validEvent(t)
+	body, err := json.Marshal(ev)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	calls := 0
+	err = bus.deliver(t.Context(), d, Position{Topic: TopicPlayerEvents, Offset: 4}, body,
+		func(context.Context, Event) error {
+			calls++
+			panic("boom")
+		})
+
+	if err != nil {
+		t.Fatalf("deliver: %v, want nil so that the offset is committed", err)
+	}
+	if calls != 1 {
+		t.Errorf("handler called %d times, want 1", calls)
+	}
+	if letters := sink.all(); len(letters) != 1 || letters[0].Original.ID != ev.ID || letters[0].Attempts != 1 {
+		t.Errorf("dead letters = %+v, want the event parked after one call", letters)
+	}
+}
+
 func TestDeadLetterSinkWrapsTheOriginal(t *testing.T) {
 	deterministicSources(t)
 	ev := NewRoot("player.attacked", "gateway", "dark-forest-world", nil, ActorHuman, nil)

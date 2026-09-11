@@ -130,6 +130,7 @@ func Run(t *testing.T, target Target) {
 		{"WithoutValidationOnReadTheEventReachesTheHandler", withoutValidationOnReadItReachesTheHandler},
 		{"UndecodableMessageGoesToDeadLetters", undecodableGoesToDeadLetters},
 		{"RetriesThenDeadLetterAndTheStreamMovesOn", retriesThenDeadLetter},
+		{"AHandlerPanicIsParkedWithoutRetry", handlerPanicIsParkedWithoutRetry},
 		{"SubscribeReturnsNilOnAnOrderlyStop", subscribeReturnsNilOnStop},
 		{"PublishOfOneEventIsNotBatched", publishOfOneEventIsNotBatched},
 		// The big body is left until after the other dead-letter cases: every
@@ -855,6 +856,96 @@ func retriesThenDeadLetter(t *testing.T, target Target) {
 	}
 	if dl.FailedAt.IsZero() {
 		t.Error("the dead letter does not say when it failed")
+	}
+}
+
+// handlerPanicIsParkedWithoutRetry: a panic of the handler is a defect, not a
+// transient failure (C-01 v1.5). It is parked at once — one call, attempts 1 —
+// and the stream moves on, on a subscription and in the journal alike, because
+// both read through eventbus.Delivery. Before v1.5 the panic took the whole
+// process down, and the event, never committed, took it down again after every
+// restart.
+func handlerPanicIsParkedWithoutRetry(t *testing.T, target Target) {
+	r := newRun(t, target)
+	base := r.end(eventbus.TopicPlayerEvents)
+
+	poison := r.looked("panic")
+	good := r.looked("after the panic")
+	const panicValue = "contract: the handler panics on this event"
+
+	var calls atomic.Int64
+	handled := make(chan struct{}, 1)
+	sub := r.subscribeWith(eventbus.TopicPlayerEvents, func(_ context.Context, ev eventbus.Event) error {
+		switch ev.ID {
+		case poison.ID:
+			calls.Add(1)
+			panic(panicValue)
+		case good.ID:
+			select {
+			case handled <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	})
+	// stop checks what Subscribe returned: a subscription the panic ended with
+	// an error would fail the case there.
+	defer sub.stop(t)
+
+	r.publish(poison)
+	r.publish(good)
+
+	select {
+	case <-handled:
+	case <-testkit.After(Timeout):
+		t.Fatal("the event after the one the handler panicked on was never handled")
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("the handler was called %d times on the event that panicked, want 1: a panic is not retried", got)
+	}
+	dl := r.waitForDeadLetter(t, func(dl eventbus.DeadLetter) bool { return dl.Original.ID == poison.ID })
+	checkPanicLetter(t, dl, panicValue)
+
+	// The journal parks it the same way, under a consumer of its own.
+	var journalCalls atomic.Int64
+	next, err := target.Journal.ReadRange(t.Context(), eventbus.TopicPlayerEvents, base, base+2,
+		func(_ context.Context, ev eventbus.Event) error {
+			if ev.ID == poison.ID {
+				journalCalls.Add(1)
+				panic(panicValue)
+			}
+			return nil
+		})
+	if err != nil || next != base+2 {
+		t.Fatalf("ReadRange over the panicking event = (%d, %v), want (%d, nil)", next, err, base+2)
+	}
+	if got := journalCalls.Load(); got != 1 {
+		t.Errorf("the journal called the handler %d times on the event that panicked, want 1", got)
+	}
+	var fromJournal eventbus.DeadLetter
+	waitFor(t, func() bool {
+		letters, err := target.DeadLetters(t.Context())
+		if err != nil {
+			t.Fatalf("read dead letters: %v", err)
+		}
+		for _, l := range letters {
+			if l.Original.ID == poison.ID && l.Consumer != r.group {
+				fromJournal = l
+				return true
+			}
+		}
+		return false
+	}, "the dead letter the journal parked")
+	checkPanicLetter(t, fromJournal, panicValue)
+}
+
+func checkPanicLetter(t *testing.T, dl eventbus.DeadLetter, panicValue string) {
+	t.Helper()
+	if dl.Attempts != 1 {
+		t.Errorf("dead letter of %s has Attempts = %d, want 1", dl.Consumer, dl.Attempts)
+	}
+	if want := eventbus.ErrHandlerPanic.Error() + ": " + panicValue; dl.Error != want {
+		t.Errorf("dead letter of %s says %q, want %q", dl.Consumer, dl.Error, want)
 	}
 }
 

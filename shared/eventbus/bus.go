@@ -6,8 +6,14 @@ import "context"
 // after the retries are exhausted the event goes to dead_letters and the
 // stream moves on, so that one bad event cannot block a topic.
 //
-// A panic is not caught: by NFR-012 a panic is a defect and must bring the
-// process down with a stack trace, not be swallowed by the delivery loop.
+// A panic is caught at the delivery boundary (C-01 v1.5). It is a defect
+// (NFR-012), not a transient failure, so it is not retried: the event is
+// parked in dead_letters at once with ErrHandlerPanic and the number of the
+// call that panicked, the panic and its stack are logged at Error level with
+// handled=false, and the offset is committed once the dead letter is written.
+// The bus decides only what happens to the event. A stateful context that
+// cannot prove its state intact after a panic in its own handler puts its own
+// recover at its own boundary and stops itself.
 type Handler func(ctx context.Context, ev Event) error
 
 // Middleware wraps a handler; logging.BusMiddleware is the one every
@@ -30,7 +36,8 @@ func Chain(h Handler, mws ...Middleware) Handler {
 //
 // Guarantees (C-01): at-least-once delivery; order within a topic; an unknown
 // or invalid type is not published but reported as an error; a handler error
-// is retried three times and then parked in dead_letters.
+// is retried three times and then parked in dead_letters; a handler panic is
+// parked at once, without a retry.
 type Bus interface {
 	// Publish sends the event to the topic its type is registered under.
 	Publish(ctx context.Context, ev Event) error

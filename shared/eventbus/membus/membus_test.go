@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -241,6 +242,157 @@ func TestPublishRefusesACancelledContext(t *testing.T) {
 	end, err := bus.End(t.Context(), eventbus.TopicPlayerEvents)
 	if err != nil || end != 0 {
 		t.Fatalf("End = (%d, %v), want (0, nil): nothing was written", end, err)
+	}
+}
+
+// panicOn builds a handler that panics on one event and reports every other
+// event of the world to handled.
+func panicOn(poison eventbus.Event, calls *atomic.Int64, handled chan<- string) eventbus.Handler {
+	return func(_ context.Context, ev eventbus.Event) error {
+		if ev.ID == poison.ID {
+			calls.Add(1)
+			panic("membus: the handler panics on this event")
+		}
+		handled <- ev.ID
+		return nil
+	}
+}
+
+// panicLetter returns the one dead letter parked for poison.
+func panicLetter(t *testing.T, bus *membus.Bus, poison eventbus.Event) eventbus.DeadLetter {
+	t.Helper()
+	letters, err := bus.DeadLetters()
+	if err != nil {
+		t.Fatalf("dead letters: %v", err)
+	}
+	if len(letters) != 1 || letters[0].Original.ID != poison.ID {
+		t.Fatalf("dead letters = %+v, want the one event the handler panicked on", letters)
+	}
+	dl := letters[0]
+	if dl.Attempts != 1 {
+		t.Errorf("attempts = %d, want 1: a panic is not retried", dl.Attempts)
+	}
+	if !strings.HasPrefix(dl.Error, eventbus.ErrHandlerPanic.Error()) {
+		t.Errorf("error = %q, want ErrHandlerPanic", dl.Error)
+	}
+	return dl
+}
+
+// The journal reads through the same Delivery as a subscription, so a panic in
+// a catch-up read is parked and the read goes on rather than taking the
+// process down (C-01 v1.5).
+func TestReadRangeParksAHandlerPanicAndReadsOn(t *testing.T) {
+	bus := newBus(t)
+	poison, good := looked("w", "poison"), looked("w", "good")
+	for _, ev := range []eventbus.Event{poison, good} {
+		if err := bus.Publish(t.Context(), ev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+
+	var calls atomic.Int64
+	handled := make(chan string, 2)
+	next, err := bus.ReadRange(t.Context(), eventbus.TopicPlayerEvents, 0, 2, panicOn(poison, &calls, handled))
+
+	if err != nil || next != 2 {
+		t.Fatalf("ReadRange = (%d, %v), want (2, nil): the parked event counts as read", next, err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("handler called %d times on the event that panicked, want 1", got)
+	}
+	if len(handled) != 1 || <-handled != good.ID {
+		t.Error("the event after the panic was not handled")
+	}
+	if dl := panicLetter(t, bus, poison); dl.Consumer != "journal."+eventbus.TopicPlayerEvents {
+		t.Errorf("consumer = %q, want the journal of the topic", dl.Consumer)
+	}
+}
+
+func TestTailParksAHandlerPanicAndFollowsOn(t *testing.T) {
+	bus := newBus(t)
+	poison, good := looked("w", "poison"), looked("w", "good")
+
+	var calls atomic.Int64
+	handled := make(chan string, 2)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- bus.Tail(ctx, eventbus.TopicPlayerEvents, 0, panicOn(poison, &calls, handled)) }()
+
+	for _, ev := range []eventbus.Event{poison, good} {
+		if err := bus.Publish(t.Context(), ev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+	select {
+	case id := <-handled:
+		if id != good.ID {
+			t.Fatalf("Tail handled %s, want the event after the panic", id)
+		}
+	case <-testkit.After(5 * time.Second):
+		t.Fatal("Tail did not go on past the event the handler panicked on")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Tail returned %v, want nil", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("handler called %d times on the event that panicked, want 1", got)
+	}
+	panicLetter(t, bus, poison)
+}
+
+// The cursor of a group moves past the event its handler panicked on once the
+// dead letter is written: the next subscription of the group does not get it
+// again, which is the restart loop C-01 v1.5 exists to break.
+func TestSubscribeCommitsTheEventItsHandlerPanickedOn(t *testing.T) {
+	bus := newBus(t)
+	poison, good := looked("w", "poison"), looked("w", "good")
+	for _, ev := range []eventbus.Event{poison, good} {
+		if err := bus.Publish(t.Context(), ev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+
+	var calls atomic.Int64
+	handled := make(chan string, 4)
+	subscribe := func() (context.CancelFunc, <-chan error) {
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- bus.Subscribe(ctx, eventbus.TopicPlayerEvents, "g", panicOn(poison, &calls, handled)) }()
+		return cancel, done
+	}
+	receive := func(want string) {
+		t.Helper()
+		select {
+		case id := <-handled:
+			if id != want {
+				t.Fatalf("handled %s, want %s", id, want)
+			}
+		case <-testkit.After(5 * time.Second):
+			t.Fatalf("event %s was never handled", want)
+		}
+	}
+
+	cancel, done := subscribe()
+	receive(good.ID)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("the subscription returned %v after a panic, want nil", err)
+	}
+
+	marker := looked("w", "marker")
+	if err := bus.Publish(t.Context(), marker); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	cancel, done = subscribe()
+	defer func() { cancel(); <-done }()
+	receive(marker.ID)
+	if got := calls.Load(); got != 1 {
+		t.Errorf("the handler met the poison %d times, want 1: the group got it again after the panic", got)
+	}
+	if dl := panicLetter(t, bus, poison); dl.Consumer != "g" {
+		t.Errorf("consumer = %q, want the group", dl.Consumer)
 	}
 }
 

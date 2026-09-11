@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"multiverse-core.io/shared/clock"
@@ -54,10 +55,10 @@ type DeadLetterFunc func(ctx context.Context, dl DeadLetter) error
 func (f DeadLetterFunc) WriteDeadLetter(ctx context.Context, dl DeadLetter) error { return f(ctx, dl) }
 
 // Delivery is the read side of the C-01 contract, shared by every bus
-// implementation: validation on read, the topic policy, the retries and the
-// dead-letter fallback. Keeping it in one place is what makes the kafka
-// adapter and membus behave identically, which the contract test of F-5t
-// checks against both.
+// implementation: validation on read, the topic policy, the retries, the catch
+// of a handler panic and the dead-letter fallback. Keeping it in one place is
+// what makes the kafka adapter and membus behave identically, which the
+// contract test of F-5t checks against both.
 type Delivery struct {
 	// Consumer names who was reading, recorded in the dead letter. For a
 	// subscription it is the consumer group, for the journal the topic.
@@ -82,6 +83,12 @@ type Delivery struct {
 // returns nil when the event is done with — handled, or parked in
 // dead_letters — so that the caller may commit its offset. An error means the
 // event was not accounted for and must not be committed.
+//
+// A panic of the handler is caught here, at the delivery boundary, and nowhere
+// else (C-01 v1.5): the event is parked at once with ErrHandlerPanic, without a
+// retry, and the panic is logged at Error level with its stack. Without the
+// catch the event that brought the process down would be redelivered after the
+// restart and bring it down again, together with every context it hosts.
 func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler) error {
 	ctx = ContextWithPosition(ctx, pos)
 
@@ -100,7 +107,14 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 				return err
 			}
 		}
-		lastErr = h(ctx, ev)
+		panicked, err := d.call(ctx, pos, ev, h, attempt+1)
+		if panicked {
+			// A panic is a defect, not a transient failure (C-01 v1.5): a retry
+			// would run the handler again over state the panic may have left half
+			// changed, and a deterministic panic would simply happen four times.
+			return d.deadLetter(ctx, ev, err, attempt+1, nil)
+		}
+		lastErr = err
 		if lastErr == nil {
 			return nil
 		}
@@ -209,17 +223,96 @@ func (d Delivery) wait(ctx context.Context, pause time.Duration) error {
 	}
 }
 
+// call runs the handler once and turns a panic into ErrHandlerPanic. The panic
+// is logged from inside the deferred function because that is the only place
+// where debug.Stack still shows the frames of the handler that panicked.
+func (d Delivery) call(ctx context.Context, pos Position, ev Event, h Handler, attempt int) (panicked bool, err error) {
+	defer func() {
+		r := recover()
+		if r == nil {
+			return
+		}
+		text := panicText(r)
+		panicked, err = true, handlerPanic(r, text)
+		d.logPanic(ctx, ev, pos, attempt, text, debug.Stack())
+	}()
+	return false, h(ctx, ev)
+}
+
+// panicText prints the panic value once, and is the only place that does. The
+// value is whatever the handler panicked with, so its String or Error method
+// may panic in turn; fmt recovers from the first such panic but re-panics when
+// the value of that panic cannot be printed either, and a panic escaping here
+// would leave the deferred function of call and take the process down after
+// all (review #1 of T-426, Mi-1). The type name is what is left to say then.
+func panicText(value any) (text string) {
+	defer func() {
+		if recover() != nil {
+			text = fmt.Sprintf("%T (printing the value panicked)", value)
+		}
+	}()
+	return fmt.Sprint(value)
+}
+
+// panicError is the error a panic is parked with. Its text is the one
+// panicText rendered, never the value printed again: %w would call Error on a
+// value that may panic.
+type panicError struct {
+	text  string
+	cause error
+}
+
+func (e *panicError) Error() string { return ErrHandlerPanic.Error() + ": " + e.text }
+
+// Unwrap keeps both ErrHandlerPanic and a panic value that is an error
+// matchable with errors.Is.
+func (e *panicError) Unwrap() []error {
+	if e.cause == nil {
+		return []error{ErrHandlerPanic}
+	}
+	return []error{ErrHandlerPanic, e.cause}
+}
+
+// handlerPanic builds the error a panic is parked with from the value and the
+// text panicText made of it.
+func handlerPanic(value any, text string) error {
+	err := &panicError{text: text}
+	if cause, ok := value.(error); ok {
+		err.cause = cause
+	}
+	return err
+}
+
+// logPanic leaves the trace NFR-012 counts as service_panics. It is Error, not
+// the Warn of an ordinary parked event: catching the panic changes what the
+// defect costs, it does not make it anything other than a defect.
+func (d Delivery) logPanic(ctx context.Context, ev Event, pos Position, attempt int, text string, stack []byte) {
+	if d.Log == nil {
+		return
+	}
+	attrs := append(d.eventAttrs(ev, pos),
+		slog.Int("attempts", attempt),
+		slog.Bool("handled", false),
+		slog.String("panic", text),
+		slog.String("stack", string(stack)),
+	)
+	d.Log.ErrorContext(ctx, "event handler panicked; the event goes to dead letters", attrs...)
+}
+
 func (d Delivery) log(ctx context.Context, msg string, ev Event, pos Position, err error) {
 	if d.Log == nil {
 		return
 	}
-	d.Log.WarnContext(ctx, msg,
+	d.Log.WarnContext(ctx, msg, append(d.eventAttrs(ev, pos), slog.Any("error", err))...)
+}
+
+func (d Delivery) eventAttrs(ev Event, pos Position) []any {
+	return []any{
 		slog.String("event_id", ev.ID),
 		slog.String("event_type", ev.Type),
 		slog.String("correlation_id", ev.CorrelationID()),
 		slog.String("topic", pos.Topic),
 		slog.Int64("offset", pos.Offset),
 		slog.String("consumer", d.Consumer),
-		slog.Any("error", err),
-	)
+	}
 }

@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T18:40:44+03:00",
+  "updatedAt": "2026-09-11T19:29:16+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1101,7 +1101,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T18:12:02+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -1291,14 +1291,45 @@ window.DEVTEAM_STATE =
         {
           "id": "T-426",
           "title": "Перехват паники обработчика в eventbus.Delivery (C-01 v1.5)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T18:46:31+03:00",
+          "finishedAt": "2026-09-11T19:29:16+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 42,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 18:46",
+              "to": "11.09 18:59",
+              "duration": "13m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 18:59",
+              "to": "11.09 19:08",
+              "duration": "9m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 19:08",
+              "to": "11.09 19:15",
+              "duration": "6m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 19:15",
+              "to": "11.09 19:24",
+              "duration": "9m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 19:24",
+              "to": "11.09 19:29",
+              "duration": "4m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-426.md"
         },
         {
@@ -1313,6 +1344,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-428.md"
+        },
+        {
+          "id": "T-429",
+          "title": "compose-lint: значения из docker compose config --no-interpolate вместо разбора строк YAML",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-429.md"
         }
       ],
       "defects": [],
@@ -4220,7 +4264,7 @@ window.DEVTEAM_STATE =
       "task": "T-413",
       "action": "правила 3 и 8 линтера композиции, умолчания OLLAMA, пометки required",
       "startedAt": "2026-09-11T18:12:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T18:53:13+03:00"
     },
     {
       "role": "code-reviewer",
@@ -4231,6 +4275,76 @@ window.DEVTEAM_STATE =
       "action": "ревью #1: перенос membus, depguard на shared/eventbus",
       "startedAt": "2026-09-11T18:23:58+03:00",
       "finishedAt": "2026-09-11T18:33:55+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-426",
+      "action": "перехват паники обработчика в eventbus.Delivery",
+      "startedAt": "2026-09-11T18:46:31+03:00",
+      "finishedAt": "2026-09-11T18:59:33+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-413",
+      "action": "ревью #1: правила 3, 7, 8 и самопроверка фикстур",
+      "startedAt": "2026-09-11T18:53:13+03:00",
+      "finishedAt": "2026-09-11T19:14:27+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-426",
+      "action": "ревью #1: перехват паники, парковка, коммит офсета",
+      "startedAt": "2026-09-11T18:59:33+03:00",
+      "finishedAt": "2026-09-11T19:08:59+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-426",
+      "action": "итерация 2: вложенная паника при печати, тест остановки",
+      "startedAt": "2026-09-11T19:08:59+03:00",
+      "finishedAt": "2026-09-11T19:15:14+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-413",
+      "action": "итерация 2: пробел перед двоеточием в правиле 3, фикстуры на новые условия",
+      "startedAt": "2026-09-11T19:14:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-426",
+      "action": "ревью #2: panicText, panicError, тест остановки",
+      "startedAt": "2026-09-11T19:15:14+03:00",
+      "finishedAt": "2026-09-11T19:24:33+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-426",
+      "action": "приёмка по DoD после ревью #2",
+      "startedAt": "2026-09-11T19:24:33+03:00",
+      "finishedAt": "2026-09-11T19:29:16+03:00"
     }
   ],
   "events": [
@@ -6513,6 +6627,90 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "code-reviewer",
       "text": "T-418 ревью #1: принять (Nit 2)"
+    },
+    {
+      "at": "2026-09-11T18:46:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит bcd92c4: T-418, membus переименован целиком, история через --follow сохранена"
+    },
+    {
+      "at": "2026-09-11T18:46:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-426 начата: перехват паники обработчика"
+    },
+    {
+      "at": "2026-09-11T18:53:13+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-413 готова: явный набор сетевых переменных, OLLAMA в манифесте, правило 7 сверяет required; 34 фикстуры, 26 мутантов"
+    },
+    {
+      "at": "2026-09-11T18:53:13+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-413 на ревью #1"
+    },
+    {
+      "at": "2026-09-11T18:59:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-426 готова: паника обработчика паркуется без повтора, Error со стеком; 7 мутантов"
+    },
+    {
+      "at": "2026-09-11T18:59:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-426 на ревью #1"
+    },
+    {
+      "at": "2026-09-11T19:08:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-426 ревью #1: принять (Minor 2, Nit 2); закрываются в задаче"
+    },
+    {
+      "at": "2026-09-11T19:08:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-426 итерация 2 начата"
+    },
+    {
+      "at": "2026-09-11T19:14:27+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-413 ревью #1: вернуть (Major 1 — регрессия правила 3, Minor 3, Nit 3)"
+    },
+    {
+      "at": "2026-09-11T19:14:27+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-429: compose-lint из docker compose config --no-interpolate"
+    },
+    {
+      "at": "2026-09-11T19:15:14+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-426 итерация 2: вложенная паника при печати паркуется, тест остановки"
+    },
+    {
+      "at": "2026-09-11T19:15:14+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-426 на ревью #2"
+    },
+    {
+      "at": "2026-09-11T19:24:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-426 ревью #2: принять, замечаний нет"
+    },
+    {
+      "at": "2026-09-11T19:24:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-426 на приёмке у tech-lead#1"
     }
   ],
   "blockers": [],
