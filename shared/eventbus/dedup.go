@@ -41,19 +41,49 @@ func NewDedup(capacity int) *Dedup {
 // window. An empty identifier is never remembered and always reports false:
 // an envelope without an id is rejected by validation, and remembering it
 // would make every such envelope a duplicate of the previous one.
+//
+// Seen remembers before the event is handled. That is the right order for a
+// consumer whose repeat would do harm (the encounter agent would roll the dice
+// twice); a consumer whose only side effect is one publish wants Has and Add
+// instead, or a failed publish is lost without a trace (C-01 v1.4, ADR-027).
 func (d *Dedup) Seen(id string) bool {
 	if id == "" {
 		return false
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if el, ok := d.index[id]; ok {
-		d.order.MoveToFront(el)
-		return true
+	return d.remember(id)
+}
+
+// Has reports whether the identifier is in the window and leaves the window
+// untouched: it neither remembers the identifier nor makes it more recent.
+// Together with Add it is the two-step form of Seen, for a consumer that may
+// remember an event only once its side effect has succeeded (C-01 v1.4,
+// ADR-027 p. 3).
+//
+// The two steps are not atomic. They rely on the handler not being called
+// concurrently for the same event, which both implementations of the bus
+// guarantee by delivering a topic one event at a time.
+func (d *Dedup) Has(id string) bool {
+	if id == "" {
+		return false
 	}
-	d.index[id] = d.order.PushFront(id)
-	d.evict()
-	return false
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, ok := d.index[id]
+	return ok
+}
+
+// Add remembers the identifier, exactly as Seen does: an identifier already in
+// the window becomes the most recent, and the oldest one is evicted beyond the
+// capacity. An empty identifier is ignored for the reason given on Seen.
+func (d *Dedup) Add(id string) {
+	if id == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.remember(id)
 }
 
 // Len returns the number of identifiers currently remembered.
@@ -93,13 +123,22 @@ func (d *Dedup) Restore(ids []string) {
 		if id == "" {
 			continue
 		}
-		if el, ok := d.index[id]; ok {
-			d.order.MoveToFront(el)
-			continue
-		}
-		d.index[id] = d.order.PushFront(id)
-		d.evict()
+		d.remember(id)
 	}
+}
+
+// remember makes the identifier the most recent entry of the window and
+// reports whether it was there already. Seen, Add and Restore all go through
+// it, so the three cannot disagree on eviction. It must be called with d.mu
+// held and a non-empty id.
+func (d *Dedup) remember(id string) bool {
+	if el, ok := d.index[id]; ok {
+		d.order.MoveToFront(el)
+		return true
+	}
+	d.index[id] = d.order.PushFront(id)
+	d.evict()
+	return false
 }
 
 // evict must be called with d.mu held.

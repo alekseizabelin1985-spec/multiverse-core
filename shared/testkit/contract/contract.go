@@ -123,6 +123,7 @@ func Run(t *testing.T, target Target) {
 		{"JournalTailFollowsUntilTheContextIsDone", journalTailFollows},
 		{"AGroupResumesFromItsCursor", groupResumesFromItsCursor},
 		{"DedupDropsTheRepeatedDelivery", dedupDropsTheRepeat},
+		{"TwoStepDedupRemembersOnlyAfterTheSideEffect", twoStepDedupAfterTheSideEffect},
 		{"AnUncommittedEventIsDeliveredAgain", uncommittedIsDeliveredAgain},
 		{"CancellingASubscriptionStopsItOnTheBacklog", cancellingStopsOnTheBacklog},
 		{"InvalidOnReadGoesToDeadLettersWithoutTheHandler", invalidOnReadGoesToDeadLetters},
@@ -497,6 +498,76 @@ func dedupDropsTheRepeat(t *testing.T, target Target) {
 	defer mu.Unlock()
 	if len(handled) != 2 || handled[0] != repeated.ID || handled[1] != marker.ID {
 		t.Fatalf("handled %v, want the repeated event once (%s) and the marker (%s)", handled, repeated.ID, marker.ID)
+	}
+}
+
+// twoStepDedupAfterTheSideEffect: a consumer whose only side effect is one
+// publish asks with Has and remembers with Add after the side effect has
+// succeeded (C-01 v1.4, ADR-027 p. 3). The first attempt fails; the bus's own
+// retry must then do the work, and the repeat that follows must be dropped.
+// With Seen the retry would be dropped too and the work lost without a trace
+// (review #1 of T-220, Mi-1) — which is why this runs on the transport, whose
+// retry and redelivery the consumer relies on, and not only on the window.
+func twoStepDedupAfterTheSideEffect(t *testing.T, target Target) {
+	r := newRun(t, target)
+
+	repeated := r.looked("repeated")
+	marker := r.looked("marker")
+
+	window := testkit.NewDedup(0)
+	var delivered, failed, sideEffects, dropped atomic.Int64
+	markerHandled := make(chan struct{}, 1)
+	sub := r.subscribeWith(eventbus.TopicPlayerEvents, func(_ context.Context, ev eventbus.Event) error {
+		switch ev.ID {
+		case marker.ID:
+			// Non-blocking: delivery is at-least-once, and a marker arriving
+			// twice on a broker must not hang the handler on a full channel.
+			select {
+			case markerHandled <- struct{}{}:
+			default:
+			}
+			return nil
+		case repeated.ID:
+		default:
+			return nil
+		}
+		delivered.Add(1)
+		if window.Has(ev.ID) {
+			dropped.Add(1)
+			return nil
+		}
+		if failed.Load() == 0 {
+			failed.Add(1)
+			return errors.New("contract: the side effect of the first attempt fails")
+		}
+		sideEffects.Add(1)
+		window.Add(ev.ID)
+		return nil
+	})
+	defer sub.stop(t)
+
+	if err := target.Duplicate(t.Context(), repeated); err != nil {
+		t.Fatalf("duplicate publish: %v", err)
+	}
+	r.publish(marker)
+
+	// The marker follows the repeat in one topic, so once it is handled the
+	// failed attempt, its retry and the second copy have all been delivered.
+	select {
+	case <-markerHandled:
+	case <-testkit.After(Timeout):
+		t.Fatal("the marker event was never handled")
+	}
+
+	if got := delivered.Load(); got < 3 {
+		t.Fatalf("the repeated event %s reached the handler %d time(s), want at least 3 (a failed attempt, its retry, the duplicate): nothing here exercises the two steps on %s",
+			repeated.ID, got, target.Name)
+	}
+	if got := sideEffects.Load(); got != 1 {
+		t.Errorf("the side effect ran %d time(s), want exactly once: 0 means the failed attempt was remembered, 2 that the duplicate was not dropped", got)
+	}
+	if dropped.Load() < 1 {
+		t.Error("the duplicate after the successful attempt was not dropped")
 	}
 }
 

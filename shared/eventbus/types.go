@@ -177,9 +177,12 @@ func NewRoot(typ, source, worldID string, scope *ScopeRef, actorKind string, pay
 //
 // The timestamp is inherited always, not only during replay: two runs of the
 // same recording must produce the same bytes (NFR-061).
+//
+// The identifier comes from the process-wide generator unless WithCauseID
+// derives it from the cause; the generator is then not called at all, so a
+// derived event does not shift the sequence of the events built after it.
 func Derive(parent Event, typ, source string, payload map[string]any, opts ...DeriveOption) Event {
 	ev := Event{
-		ID:        nextID(),
 		Type:      typ,
 		Timestamp: parent.Timestamp,
 		Source:    source,
@@ -208,7 +211,11 @@ func Derive(parent Event, typ, source string, payload map[string]any, opts ...De
 		scope := *parent.Scope
 		ev.Scope = &scope
 	}
-	return applyOptions(ev, opts)
+	ev = applyOptions(ev, opts)
+	if ev.ID == "" {
+		ev.ID = nextID()
+	}
+	return ev
 }
 
 // CorrelationID returns the identifier of the root of the chain, falling back

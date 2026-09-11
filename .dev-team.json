@@ -7,7 +7,7 @@
   "hasUI": false,
   "git": {
     "branches": true,
-    "commits": "ask"
+    "commits": "auto"
   },
   "parallelism": {
     "maxTeams": 1,
