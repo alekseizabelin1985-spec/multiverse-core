@@ -169,7 +169,7 @@ func (d Delivery) deadLetter(ctx context.Context, ev Event, cause error, attempt
 		cause = fmt.Errorf("%w: handler failed without an error", ErrInvalidEnvelope)
 	}
 	if d.DLQ == nil {
-		return fmt.Errorf("eventbus: no dead letter sink for %s: %w", ev.Type, cause)
+		return fmt.Errorf("eventbus: no dead letter sink for %s (cause: %v)", ev.Type, cause)
 	}
 	body, truncated := truncateRaw(raw)
 	dl := DeadLetter{

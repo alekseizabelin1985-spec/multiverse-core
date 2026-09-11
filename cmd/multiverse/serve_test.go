@@ -48,6 +48,7 @@ type witness struct {
 	rec        *recorder
 	startErr   error
 	startPanic any
+	stopPanic  any
 	started    chan runtime.Deps
 	deps       runtime.Deps
 }
@@ -88,6 +89,9 @@ func (p *witness) Stop(ctx context.Context) error {
 		return nil
 	}
 	p.rec.add("stop " + p.name)
+	if p.stopPanic != nil {
+		panic(p.stopPanic)
+	}
 	return nil
 }
 
@@ -229,16 +233,51 @@ func TestServeClosesTheBusAfterEveryContextStopped(t *testing.T) {
 	}
 }
 
+// T-430: a panic in the Stop of a context does not cut the shutdown short. The
+// contexts before it in the start order still stop, reading the journal on a
+// bus that is still open, the bus closes last (ADR-023 p. 4), and the panic
+// reaches the log of the process with its stack. Before StopAll recovered it,
+// the panic left run, the deferred Close ran during the unwinding and first was
+// never stopped — had the test process survived the panic at all.
+func TestServeClosesTheBusLastWhenAContextPanicsInStop(t *testing.T) {
+	onLoopback(t)
+	rec := &recorder{}
+	started := make(chan runtime.Deps, 1)
+	first := &witness{name: "first", rec: rec}
+	second := &witness{name: "second", rec: rec, started: started, stopPanic: "boom"}
+	p := newProcess([]runtime.Context{first, second}, recordingOpen(rec))
+	// Written by run only; read after runUntilStarted has received its end.
+	var logged strings.Builder
+	p.log = slog.New(slog.NewTextHandler(&logged, nil))
+
+	runUntilStarted(t, p, started, nil)
+
+	want := []string{"start first", "start second", "stop second", "stop first", "bus closed"}
+	if got := rec.list(); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("lifetime = %q, want %q", got, want)
+	}
+	if !strings.Contains(logged.String(), "stop context second: panic: boom") || !strings.Contains(logged.String(), "goroutine") {
+		t.Errorf("the log of the process has no error with the panic of second and its stack: %q", logged.String())
+	}
+}
+
 // The failed paths out of run close the bus too, and still only after the
 // contexts that did start have been stopped.
 func TestServeClosesTheBusLastWhenTheStartFails(t *testing.T) {
 	tests := map[string]struct {
 		failStart  bool
 		panicStart bool
+		stopPanic  bool
 		occupy     bool
 		want       string
 	}{
 		"a context fails to start": {failStart: true, want: "second"},
+		// T-430: a panic in the Stop of the rollback is one more cause on the
+		// same line, not an unwinding past the bus.
+		"a context panics in Stop on the rollback": {
+			failStart: true, stopPanic: true,
+			want: "start context second: boom; stop context first: panic: stuck",
+		},
 		// T-415: a panic in Start takes the same way out as an error. Before
 		// StartAll recovered it, the deferred Close ran during the unwinding
 		// with first still up, and the timeline read "bus closed" before
@@ -258,7 +297,11 @@ func TestServeClosesTheBusLastWhenTheStartFails(t *testing.T) {
 				t.Setenv(env.CoreAddr.Name(), lis.Addr().String())
 			}
 			rec := &recorder{}
-			contexts := []runtime.Context{&witness{name: "first", rec: rec}}
+			first := &witness{name: "first", rec: rec}
+			if tc.stopPanic {
+				first.stopPanic = "stuck"
+			}
+			contexts := []runtime.Context{first}
 			if tc.failStart {
 				contexts = append(contexts, &witness{name: "second", rec: rec, startErr: errors.New("boom")})
 			}

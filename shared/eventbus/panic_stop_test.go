@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,6 +19,10 @@ import (
 // Subscribe while its context is alive. The event would stay uncommitted and
 // the consumer would simply stop.
 //
+// The same holds for a Delivery without a dead letter sink (T-430, C-01 v1.6).
+// Both buses always set one, so the branch is unreachable today, but a change
+// that reached it with %w would open the same trap there.
+//
 // If the chain ever has to carry more, wrap ErrHandlerPanic alone and keep this
 // test: it must stay green.
 func TestAFailedDeadLetterIsNeverTakenForTheEndOfTheReader(t *testing.T) {
@@ -29,21 +34,35 @@ func TestAFailedDeadLetterIsNeverTakenForTheEndOfTheReader(t *testing.T) {
 		"a panic with an error wrapping EOF":   func() error { panic(fmt.Errorf("read: %w", io.EOF)) },
 		"an error wrapping EOF, retries spent": func() error { return fmt.Errorf("read: %w", io.EOF) },
 	}
+	sinks := map[string]struct {
+		sink DeadLetterSink
+		want func(error) bool
+	}{
+		"the sink fails": {
+			sink: &recordingSink{err: errSink},
+			want: func(err error) bool { return errors.Is(err, errSink) },
+		},
+		"no sink": {
+			want: func(err error) bool { return err != nil && strings.Contains(err.Error(), "no dead letter sink") },
+		},
+	}
 	for name, cause := range causes {
-		t.Run(name, func(t *testing.T) {
-			d := testDelivery(&recordingSink{err: errSink})
-			d.Backoff = []time.Duration{}
-			ctx := t.Context()
+		for sinkName, s := range sinks {
+			t.Run(name+", "+sinkName, func(t *testing.T) {
+				d := testDelivery(s.sink)
+				d.Backoff = []time.Duration{}
+				ctx := t.Context()
 
-			err := d.Deliver(ctx, Position{Topic: TopicPlayerEvents}, validEvent(t),
-				func(context.Context, Event) error { return cause() })
+				err := d.Deliver(ctx, Position{Topic: TopicPlayerEvents}, validEvent(t),
+					func(context.Context, Event) error { return cause() })
 
-			if !errors.Is(err, errSink) {
-				t.Fatalf("err = %v, want the failure of the sink", err)
-			}
-			if stopped(ctx, err) {
-				t.Errorf("stopped(live context, %q) = true: the kafka Subscribe would return nil and drop the consumer", err)
-			}
-		})
+				if !s.want(err) {
+					t.Fatalf("err = %v, want the failure to park the event", err)
+				}
+				if stopped(ctx, err) {
+					t.Errorf("stopped(live context, %q) = true: the kafka Subscribe would return nil and drop the consumer", err)
+				}
+			})
+		}
 	}
 }
