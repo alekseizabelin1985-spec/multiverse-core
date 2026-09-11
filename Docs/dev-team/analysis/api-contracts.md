@@ -408,9 +408,14 @@
   "hp": { "defender_before": 7, "defender_after": 4, "defender_max": 10 },
   "rolls": [ { "event": { "id": "…" }, "index": 0 }, { "event": { "id": "…" }, "index": 1 } ],
   "rules_version": "0.1", "phase1_mode": "rules", "lod": "rule-only",
-  "free_attack": false }
+  "free_attack": false,
+  "exchange": { "index": 0, "last": false } }
 ```
-`gm_path` и `agent` — в `meta`. Для `flee`: `outcome.success`, `outcome.threshold`, `living_enemies`. Изменение состояния — отдельным `entity.update.proposed` (из `mechanics.ChangesFor`; `meta.causation_id = combat.decided.id`); рекомендация C-03 — один `atomic` пакет на раунд, допускается по одному предложению на `combat.decided`.
+`gm_path` и `agent` — в `meta`. Для `flee`: `outcome.success`, `outcome.threshold`, `living_enemies`.
+
+**`exchange{index, last}` (C-05 v1.4 п. 7; схема — T-419).** Место решения в обмене, который отвечает на одно действие. `index` — номер решения в обмене с 0: решение по действию игрока — 0, ответ существа — 1. `last` — признак последнего решения обмена. Поле опционально ради совместимости (`schema_version` не меняется), но если объект есть, в нём обязательны оба поля (`required: [index, last]`, `additionalProperties: false`). Настоящий агент встречи заполняет поле всегда и ставит `last=true` ровно на одном решении обмена: на смертельном ударе без ответа — на решении с `index` 0, на обмене «удар + ответ NPC» — на решении с `index` 1. Нарратор хода закрывает ход по `exchange.last`. Вывод конца обмена из `action`/`target_dead`/`success`/`free_attack`/`living_enemies` остаётся только для издателя без поля.
+
+Изменение состояния — отдельным `entity.update.proposed` из `mechanics.ChangesFor`: **один `atomic` пакет на обмен** (соло — на действие, группа — на раунд), под `proposal_id` обмена и после всех решений обмена (C-03, C-05 v1.3 п. 1). `meta.causation_id` пакета — событие, на которое отвечает обмен: действие игрока или `round.closed`, а не `combat.decided`. *(Уточнение T-425. Прежняя редакция называла причиной `combat.decided.id` и допускала «по одному предложению на `combat.decided`». Оба варианта сняты правилом «одно действие — один пакет» C-05 v1.3 п. 1: решений на обмен два, пакет один, и причина пакета должна быть одна и та же при повторе под тем же `proposal_id`. Так делает двойник T-219/T-419, а причину той же формы берёт `encounter.ended` — ADR-027, «Уточнение исполнения» п. 3.)*
 
 #### 2.3.7. Встреча (`encounter.*`) — издатель GM региона (`started`), агент встречи (`ended`)
 `encounter{entity}`, `participants[]{entity{player}}`, `npcs[]{entity{npc}, name}`, `region{entity}`, `scope` (игрока/группы); **`encounter.started.round{timeout: "60s", idle_after_missed: 2}`** (опц., C-05 v1.1) — параметры раунда группы из блупринта `encounter-*` (`round` в блупринте; числа — `rules/dark-forest.yaml`); gateway использует их для таймера и порога `idle`, при отсутствии — значения по умолчанию `MV_GATEWAY_ROUND_TIMEOUT` / `MV_GATEWAY_ROUND_IDLE_AFTER_MISSED`. `encounter.ended`: `reason: npc_dead|players_out|abandoned`, `killer{entity}?`, `rounds: int`.

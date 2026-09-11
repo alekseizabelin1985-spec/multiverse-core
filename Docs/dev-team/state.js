@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T17:14:21+03:00",
+  "updatedAt": "2026-09-11T17:38:22+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1229,6 +1229,39 @@ window.DEVTEAM_STATE =
             }
           ],
           "card": "epics/EPIC-001-foundation/tasks/T-420.md"
+        },
+        {
+          "id": "T-425",
+          "title": "Ревизия контрактов 2: подтверждения исполнения волны 1",
+          "status": "done",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-11T17:20:10+03:00",
+          "finishedAt": "2026-09-11T17:38:22+03:00",
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 18,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 17:20",
+              "to": "11.09 17:38",
+              "duration": "18m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-425.md"
+        },
+        {
+          "id": "T-426",
+          "title": "Перехват паники обработчика в eventbus.Delivery (C-01 v1.5)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-426.md"
         }
       ],
       "defects": [],
@@ -2156,7 +2189,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-419",
           "title": "Двойники по C-05 v1.4: встреча после факта, признак конца обмена, окно нарратора на Dedup",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-11T15:36:52+03:00",
           "finishedAt": null,
@@ -3944,7 +3977,27 @@ window.DEVTEAM_STATE =
       "task": "T-419",
       "action": "итерация 3: действие и факт без id не роняют двойник",
       "startedAt": "2026-09-11T17:13:49+03:00",
+      "finishedAt": "2026-09-11T17:20:10+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-230",
+      "action": "нарезка T-230 до подволны 1.10",
+      "startedAt": "2026-09-11T17:16:43+03:00",
       "finishedAt": null
+    },
+    {
+      "role": "system-architect",
+      "instance": 1,
+      "team": "—",
+      "initiative": "EPIC-001",
+      "task": "T-425",
+      "action": "ревизия 2: подтверждения исполнения волны 1",
+      "startedAt": "2026-09-11T17:20:10+03:00",
+      "finishedAt": "2026-09-11T17:38:22+03:00"
     }
   ],
   "events": [
@@ -6077,6 +6130,42 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "developer",
       "text": "T-419 итерация 3 начата"
+    },
+    {
+      "at": "2026-09-11T17:16:43+03:00",
+      "initiative": "EPIC-003",
+      "role": "tech-lead",
+      "text": "Нарезка T-230 (роль encounter) начата"
+    },
+    {
+      "at": "2026-09-11T17:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит f3665d1: T-414, 13 путей; тесты на коммитируемом дереве зелёные"
+    },
+    {
+      "at": "2026-09-11T17:20:10+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-419 итерация 3: пустой id не роняет двойник; ждёт приёмки tech-lead#2"
+    },
+    {
+      "at": "2026-09-11T17:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "system-architect",
+      "text": "T-425: ревизия 2 начата"
+    },
+    {
+      "at": "2026-09-11T17:38:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "system-architect",
+      "text": "T-425: контракты v0.8 — recover в Delivery, подтверждения ADR-027 и C-05 v1.5"
+    },
+    {
+      "at": "2026-09-11T17:38:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-426: перехват паники обработчика в eventbus.Delivery"
     }
   ],
   "blockers": [],

@@ -13,13 +13,13 @@ C4Component
     title Фундамент — компоненты, все существуют в дереве
 
     Container_Boundary(cmd, "cmd") {
-        Component(mv, "multiverse", "Go, main.go, serve.go, health.go, db.go, contexts.go", "разбор флагов --contexts/--mode/--bus/--recording/--id-source; сборка Deps; старт и остановка контекстов; подкоманды health и db. contexts.go регистрирует семь ПУСТЫХ контекстов")
+        Component(mv, "multiverse", "Go, main.go, serve.go, bus.go, bus_memory.go, health.go, db.go, contexts.go, fake_contexts.go", "подкоманды serve, health, db, version; форма без подкоманды (только флаги) - та же команда serve; неизвестное первое слово - отказ с кодом 2 и перечнем подкоманд. serve: флаги --contexts/--mode/--bus/--recording/--id-source, сборка Deps, старт и остановка контекстов. contexts.go регистрирует семь ПУСТЫХ контекстов, fake_contexts.go подменяет swarm двойником при MV_SWARM_FAKE=true")
         Component(mvctl, "mvctl", "Go, cmd/mvctl", "env check, contracts check, topics, storage init, privacy scan; каркас подкоманд без cobra")
     }
 
     Container_Boundary(shared, "shared") {
         Component(rt, "runtime", "Go", "Context{Name,DependsOn,Start,Stop,Health}, Deps, Mode, Status, Registry с топологическим порядком, HTTP-сервер процесса и Aggregate для /health, интерфейс Routes")
-        Component(eb, "eventbus", "Go", "Event и Meta, NewRoot/Derive, Bus и Journal, kafka-адаптер на kafka-go, Dedup LRU, Chain middleware, обёртка DeadLetter с тремя повторами 100/500/2000 мс, восемь констант топиков")
+        Component(eb, "eventbus", "Go", "Event и Meta, NewRoot/Derive, WithCauseID - id из причины (UUIDv5, префикс длины у частей), Bus и Journal, kafka-адаптер на kafka-go, Dedup LRU - Seen одним шагом, Has/Add в два, Chain middleware, Delivery - валидация при чтении, три повтора 100/500/2000 мс, обёртка DeadLetter, восемь констант топиков")
         Component(ct, "contracts", "Go, santhosh-tekuri/jsonschema/v6", "реестр типов: Spec с Topic, SchemaVersion, Owner, Publishers, Consumers, Policy, Reserved, Deprecated; Lookup, Validate, Topics; OwnershipRules - статичная копия таблицы владения; список допустимых значений Source")
         Component(sch, "schemas", "Go + JSON Schema 2020-12", "embed.go отдаёт FS со схемами; schemas/events - 58 файлов, включая _common.json и _envelope.json")
         Component(jp, "jsonpath", "Go", "Accessor над map[string]any: GetString/GetInt/GetBool/GetSlice/GetMap, доступ по индексу, Has, GetAllPaths")
@@ -59,8 +59,8 @@ C4Component
 Ничего из нарисованного — все компоненты существуют. Будущее в фундаменте — только то, чего на диаграмме нет:
 
 - **Наполнение семи контекстов.** `cmd/multiverse/contexts.go` регистрирует `state, laws, mechanics, llm, swarm, gateway, memory` как `stub{}`: `Start` ничего не делает, `Health` всегда `ok`. Владельцы заменяют регистрацию в своих ветках.
-- **Хук `MV_SWARM_FAKE`.** `contracts.md` §0 и ADR-001 дополнение п. 8 описывают файл `cmd/multiverse/fake_contexts.go`, монтирующий двойников роя в `core`. Файла в дереве нет; двойники работают только в тестах на `membus`.
-- **Переезд `membus` в `shared/eventbus/membus`** (C-01 v1.4, ADR-001 доп. 2026-09-11). До него `cmd/multiverse/bus_memory.go` импортирует `shared/testkit` по узкому временному исключению линтера (один файл, пакет `…/testkit/membus$`). В индексе на 2026-09-11 это единственный такой импорт; хук T-255 (`fake_contexts.go`, в работе) добавит второй, и после переезда он останется единственным. После переезда компонент `testkit` на диаграмме теряет `membus`, а `eventbus` его получает.
+- **Удаление хука `MV_SWARM_FAKE`.** Файл `cmd/multiverse/fake_contexts.go` в дереве есть (T-255, коммит `bdba170`; на диаграмме — в компоненте `multiverse`): при `MV_SWARM_FAKE=true` он подменяет контекст `swarm` двойником. Будущее — только его удаление при слиянии EPIC-003 I1 (T-256, ADR-001 доп. п. 8).
+- **Переезд `membus` в `shared/eventbus/membus`** (C-01 v1.4, ADR-001 доп. 2026-09-11). До него `cmd/multiverse/bus_memory.go` импортирует `shared/testkit` по узкому временному исключению линтера (один файл, пакет `…/testkit/membus$`). Второй такой импорт — хук T-255 (`fake_contexts.go`, закоммичен в `bdba170`); после переезда он останется единственным. После переезда компонент `testkit` на диаграмме теряет `membus`, а `eventbus` его получает.
 - **Подкоманды `multiverse db backup|check`** возвращают «в этот процесс не вкомпилирована ни одна база» до появления `internal/gateway`.
 
 ## Расхождения с деревом
@@ -74,6 +74,7 @@ C4Component
 | 3 | закрыто | `state-and-mechanics.md` §2: раскладка `shared/entity` по дереву — `Ref`/`LastChange` в `entity.go`, `Change`/`ChangeSet` в `ops.go`, `path.go` назван |
 | 4 | закрыто | подкоманда отчёта — `mvctl report` во всех документах области T-409 (`overview.md`, `infrastructure.md`, `components/*.md`, C-10, `analysis/*.md`); `c4-container.md` поправлен. Хвост закрыт T-416: `plan/epics.md` и `design.md` эпиков приведены; в `tasks.md` эпиков и в `plan/{roadmap,teams,decomposition-review}.md` старое имя осталось — это область тимлида и PM, список правок — в отчёте T-416 |
 | 5 | закрыто | `contracts.md` §0: легаси-типы названы; `foundation.md` §6 описывал их и раньше |
+| 6 | закрыто (T-425, 2026-09-11) | компонент `multiverse` называл только «подкоманды health и db». По дереву (`cmd/multiverse/main.go`, T-414, коммит `f3665d1`): подкоманды `serve`, `health`, `db`, `version`; форма без подкоманды, только с флагами, — та же команда `serve` (её используют образ, compose, `make replay` и e2e); неизвестное первое слово — отказ с кодом 2 и перечнем. Файлы `bus.go`, `bus_memory.go`, `fake_contexts.go` внесены в компонент; хук T-255 больше не «будущее»; `eventbus` показан с `WithCauseID` и `Dedup.Has/Add` (T-417) |
 
 Формулировки, записанные при рисовании (до сверки):
 
