@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:38:34+03:00",
+  "updatedAt": "2026-09-12T01:44:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1875,30 +1875,71 @@ window.DEVTEAM_STATE =
         {
           "id": "T-435",
           "title": "U-2: решение по базовой конфигурации LLM по трём зачётным прогонам E; включать ли Qwen3.6-35B-A3B в матрицу",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "architect#1",
           "startedAt": "2026-09-12T00:38:07+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-12T01:43:54+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 62,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "12.09 00:38",
+              "to": "12.09 00:54",
+              "duration": "16m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "12.09 00:54",
+              "to": "12.09 01:07",
+              "duration": "13m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "12.09 01:10",
+              "to": "12.09 01:23",
+              "duration": "12m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "12.09 01:23",
+              "to": "12.09 01:30",
+              "duration": "6m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "12.09 01:30",
+              "to": "12.09 01:38",
+              "duration": "8m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "12.09 01:38",
+              "to": "12.09 01:43",
+              "duration": "5m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-435-llm-baseline-decision",
-          "worktree": ".worktrees/T-435"
+          "worktree": null,
+          "mergeCommit": "a6ed215875e94dd5690670eea96b7c10c571e523",
+          "mergedAt": "2026-09-12T01:44:59+03:00"
         },
         {
           "id": "T-436",
           "title": "kafka-адаптер: Close не отменяет контекст обработчика (C-01 v1.7, ADR-023 п. 4); якорь в контракт-наборе",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-12T01:44:59+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-436-kafka-close-handler-ctx",
+          "worktree": ".worktrees/T-436"
         },
         {
           "id": "T-437",
@@ -1931,6 +1972,19 @@ window.DEVTEAM_STATE =
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
           "status": "todo",
           "assignee": "architect#2",
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
+        },
+        {
+          "id": "T-440",
+          "title": "Редакционно: overview.md §18.1 — порядок E → Qwen3.6 → C → A и правило выбора (доп. 3 ADR-005); владение infrastructure.md в ownership.md привести к факту",
+          "status": "todo",
+          "assignee": "system-architect#1",
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
@@ -5636,6 +5690,16 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "приёмка решения U-2",
       "startedAt": "2026-09-12T01:38:34+03:00",
+      "finishedAt": "2026-09-12T01:43:54+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-436",
+      "action": "kafka: Close не отменяет контекст обработчика; якорь",
+      "startedAt": "2026-09-12T01:44:59+03:00",
       "finishedAt": null
     }
   ],
@@ -8201,6 +8265,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-395 закоммичена 5a09026 [contract-change], слита в эпик (e5e8d7c). T-435 ревью #1: вернуть (3 Major — от ответов владельца). Заведены T-437, T-438, T-439. T-434 начата"
+    },
+    {
+      "at": "2026-09-12T01:44:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-435 закоммичена f93b3a7, слита в эпик (a6ed215) — решение U-2 в эпике. T-436 начата (developer#1). Заведена T-440 (редакционно: overview.md §18.1, владение infrastructure.md)"
     }
   ],
   "blockers": [],
