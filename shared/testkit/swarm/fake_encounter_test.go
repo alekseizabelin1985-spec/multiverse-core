@@ -838,18 +838,25 @@ func TestTheFactsOfStateMoveTheVersionTheStubProposesAgainst(t *testing.T) {
 			break
 		}
 		before := len(ofType(eventsOf(t, bus, eventbus.TopicGameEvents), swarm.TypeCombatDecided))
+		proposedBefore := len(ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed))
 		if err := bus.Publish(ctx, attack(playerA, nameA, wolfID)); err != nil {
 			t.Fatalf("publish an attack: %v", err)
 		}
-		// The exchange is over when it has been decided and when State has
-		// answered every proposal made so far: that is the moment the version
-		// the next swing proposes against is settled.
+		// The exchange is over when it has been decided, its package has been
+		// proposed, and State has answered every proposal made so far: that is
+		// the moment the version the next swing proposes against is settled.
 		// A package that closes the fight has one thing more to wait for: the
 		// end, which the stub announces after the fact of it (C-05 v1.4 p. 5).
 		waitFor(t, "the exchange to be decided and applied", func() bool {
 			decided := len(ofType(eventsOf(t, bus, eventbus.TopicGameEvents), swarm.TypeCombatDecided))
 			proposals := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
-			settled := decided > before && len(world.AppliedProposals()) >= len(proposals)
+			// The decision goes out before its package. Until the package of this
+			// exchange is out, the proposals seen are those of the exchanges before
+			// it — none at all on the first swing (index -1), all of them applied
+			// on a later one, which settled the wait early and sent the next swing
+			// into a fight still closing (review #1 of T-415, flake of EPIC-003).
+			settled := decided > before && len(proposals) > proposedBefore &&
+				len(world.AppliedProposals()) >= len(proposals)
 			if !settled || !closes(t, proposals[len(proposals)-1]) {
 				return settled
 			}

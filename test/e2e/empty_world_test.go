@@ -14,6 +14,7 @@ package e2e_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os/exec"
@@ -36,35 +37,13 @@ const startupBudget = 60 * time.Second
 
 func TestTheEmptyWorldAnswersTheHealthProbe(t *testing.T) {
 	binary := build(t)
-	addr := freeAddress(t)
+	addr := emptyWorldEnv(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	// The address travels through the environment of the test process, which
-	// the child inherits: replacing the whole environment of the child would
-	// also drop the toolchain settings the build of the platform runs with,
-	// and reading it back out is what shared/env exists to avoid (NFR-074).
-	t.Setenv(env.CoreAddr.Name(), addr)
-	// The empty world is the process without the fake of I1-α. A developer who
-	// exported MV_SWARM_FAKE=true in their shell must not change what this test
-	// proves — the child inherits the environment, runs from test/e2e without
-	// rules/ and would refuse to start (review #1 of T-255, Mi-2).
-	t.Setenv(env.SwarmFake.Name(), "false")
-	cmd := exec.CommandContext(ctx, binary, "--contexts=all", "--bus=memory")
-	var output strings.Builder
-	cmd.Stdout, cmd.Stderr = &output, &output
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start %s: %v", binary, err)
-	}
-	t.Cleanup(func() {
-		cancel()
-		_ = cmd.Wait()
-		if t.Failed() {
-			t.Logf("output of the process:\n%s", output.String())
-		}
-	})
+	proc := launch(ctx, t, binary, nil, "--contexts=all", "--bus=memory")
 
-	status := probe(ctx, t, "http://"+addr+"/health")
+	status := probe(ctx, t, "http://"+addr+"/health", proc)
 	if status.Status != "ok" {
 		t.Fatalf("/health says %q, want ok: %+v", status.Status, status.Details)
 	}
@@ -133,21 +112,99 @@ type health struct {
 	Details map[string]any `json:"details"`
 }
 
-// probe polls the endpoint until it answers or the budget runs out.
-func probe(ctx context.Context, t *testing.T, url string) health {
+// emptyWorldEnv sets up the environment the child inherits and returns the
+// address it will listen on.
+//
+// The address travels through the environment of the test process, which the
+// child inherits: replacing the whole environment of the child would also drop
+// the toolchain settings the build of the platform runs with, and reading it
+// back out is what shared/env exists to avoid (NFR-074).
+//
+// The empty world is the process without the fake of I1-α. A developer who
+// exported MV_SWARM_FAKE=true in their shell must not change what a test
+// proves — the child inherits the environment, runs from test/e2e without
+// rules/ and would refuse to start (review #1 of T-255, Mi-2).
+func emptyWorldEnv(t *testing.T) string {
 	t.Helper()
-	deadline := testkit.After(startupBudget)
+	addr := freeAddress(t)
+	t.Setenv(env.CoreAddr.Name(), addr)
+	t.Setenv(env.SwarmFake.Name(), "false")
+	return addr
+}
+
+// process is a child the test started and the end of it, watched from the
+// moment it starts: exited closes when the process is gone, and err is then
+// what Wait said.
+type process struct {
+	cmd    *exec.Cmd
+	output *strings.Builder
+	exited chan struct{}
+	err    error
+}
+
+// launch starts the binary with args, configured by configure when it is not
+// nil, and watches it. The process is killed and waited for when the test
+// ends, and what it printed is logged if the test failed.
+func launch(ctx context.Context, t *testing.T, binary string, configure func(*exec.Cmd), args ...string) *process {
+	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
+	cmd := exec.CommandContext(ctx, binary, args...)
+	// One writer for both streams: exec then copies them from one goroutine,
+	// and the builder is read only once the process has exited.
+	p := &process{cmd: cmd, output: &strings.Builder{}, exited: make(chan struct{})}
+	cmd.Stdout, cmd.Stderr = p.output, p.output
+	if configure != nil {
+		configure(cmd)
+	}
+	if err := cmd.Start(); err != nil {
+		cancel()
+		t.Fatalf("start %s: %v", binary, err)
+	}
+	go func() {
+		p.err = cmd.Wait()
+		close(p.exited)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-p.exited
+		if t.Failed() {
+			t.Logf("output of the process:\n%s", p.output.String())
+		}
+	})
+	return p
+}
+
+// probe polls the endpoint until it answers, and fails the test when the
+// budget runs out or the process exits first.
+func probe(ctx context.Context, t *testing.T, url string, p *process) health {
+	t.Helper()
+	status, err := waitHealthy(ctx, url, p, startupBudget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return status
+}
+
+// waitHealthy polls the endpoint until it answers or the budget runs out —
+// unless the process exits first. A process that died on start has nothing to
+// wait for, and the probe says so at once with its exit code instead of
+// polling a closed port for the whole budget (review #1 of T-255, Nit-3;
+// T-415).
+func waitHealthy(ctx context.Context, url string, p *process, budget time.Duration) (health, error) {
+	deadline := testkit.After(budget)
 	client := &http.Client{Timeout: 2 * time.Second}
 	var last error
 	for {
 		status, err := get(ctx, client, url)
 		if err == nil {
-			return status
+			return status, nil
 		}
 		last = err
 		select {
+		case <-p.exited:
+			return health{}, fmt.Errorf("the process exited before %s answered: %w", url, p.err)
 		case <-deadline:
-			t.Fatalf("no answer from %s within %s: %v", url, startupBudget, last)
+			return health{}, fmt.Errorf("no answer from %s within %s: %w", url, budget, last)
 		case <-clock.RealTimers{}.After(50 * time.Millisecond).C():
 		}
 	}
