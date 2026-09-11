@@ -1,0 +1,14 @@
+# Rule 8: a literal equal to the manifest's default is refused all the same —
+# variant (b) of T-431, not (c). The container gets the right 2 today, but the
+# OLLAMA_MAX_LOADED_MODELS of .env is ignored, and a change of the default in
+# infra.go would leave this line behind (contracts.md §16 p. 5, v0.9; T-432).
+#
+# expect-rule: 8
+# expect-text: OLLAMA_MAX_LOADED_MODELS carries the literal '2'
+# expect-text: rule 8 accepts ${OLLAMA_MAX_LOADED_MODELS:-2}, the default of shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_MAX_LOADED_MODELS: 2

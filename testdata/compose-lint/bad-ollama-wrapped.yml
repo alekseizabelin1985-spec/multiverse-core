@@ -1,0 +1,16 @@
+# Rule 8: its own interpolation, with the manifest's default, but with text
+# around it. The OLLAMA_KEEP_ALIVE of .env does reach the container — with an
+# `m` glued to it, so `-1` becomes `-1m` and `5m` becomes `5mm`: not the value
+# the operator set (contracts.md §16 p. 5, v0.9; review #1 T-432, Mi-1, N-1).
+# The default inside equals the one of infra.go, so nothing else fires.
+#
+# expect-rule: 8
+# expect-text: OLLAMA_KEEP_ALIVE wraps ${OLLAMA_KEEP_ALIVE:--1} in other text ('${OLLAMA_KEEP_ALIVE:--1}m')
+# expect-text: the value must be the interpolation alone
+# expect-text: rule 8 accepts ${OLLAMA_KEEP_ALIVE:--1}, the default of shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_KEEP_ALIVE: "${OLLAMA_KEEP_ALIVE:--1}m"

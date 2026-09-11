@@ -1,0 +1,13 @@
+# A clean file for the literal check of rule 8 (contracts.md §16 p. 5, v0.9;
+# T-432): the one allowed form, ${OLLAMA_X:-<the default of infra.go>}, written
+# as items of an `environment` list, where the value is the text after `=`.
+# An OLLAMA_* that infra.go does not declare (OLLAMA_DEBUG) is not rule 8's,
+# literal or not: nobody tunes it through the .env of the platform.
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+      - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-f16}
+      - OLLAMA_DEBUG=0
