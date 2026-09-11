@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T00:02:35+03:00",
+  "updatedAt": "2026-09-12T00:11:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -893,7 +893,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T23:24:51+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -968,15 +968,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-406",
           "title": "Удалить readySubscriber из заглушки состояния, закрепить гарантию первого офсета кейсом контракта",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-12T00:06:30+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-406.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-406.md",
+          "branch": "task/T-406-drop-ready-subscriber",
+          "worktree": ".worktrees/T-406"
         },
         {
           "id": "T-408",
@@ -1747,6 +1749,19 @@ window.DEVTEAM_STATE =
           "worktree": null,
           "mergeCommit": "50f643d134dd9a2eeb36f2a1f49715fa4cd246ff",
           "mergedAt": "2026-09-11T23:52:10+03:00"
+        },
+        {
+          "id": "T-434",
+          "title": "llm-bench: прогрев через python-помощник (экранирование id-пути), путь матрицы вне репо — имя + sha256, first_call_ms пустой при не-200; паритет .ps1",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
         }
       ],
       "defects": [],
@@ -5235,7 +5250,7 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "ревью #1 замера LLM",
       "startedAt": "2026-09-11T23:59:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T00:11:24+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -5245,6 +5260,26 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "прогон 2 E на чистом llama.cpp (Qwen3.8-27B)",
       "startedAt": "2026-09-12T00:02:35+03:00",
+      "finishedAt": "2026-09-12T00:06:30+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-406",
+      "action": "удалить readySubscriber, кейс контракта первого офсета",
+      "startedAt": "2026-09-12T00:06:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "итерация 2 по ревью #1 (C-1, M-1, прогоны 2–3 в baseline)",
+      "startedAt": "2026-09-12T00:11:24+03:00",
       "finishedAt": null
     }
   ],
@@ -7768,6 +7803,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-432 закоммичена 817a141, слита в эпик (48b88fd)"
+    },
+    {
+      "at": "2026-09-12T00:06:30+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-402 прогон 2 E на чистом llama.cpp: phase2 p95 2585 мс — pass. T-406 начата (developer#1, .worktrees/T-406)"
+    },
+    {
+      "at": "2026-09-12T00:11:24+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-402 прогон 3 E (после перезапуска сервера владельцем): phase2 p95 2916 мс — pass. Ревью #1 T-402: вернуть (C-1 — абсолютный путь профиля в meta.matrix, M-1 — вывод о роутере как факт) — итерация 2. Заведена T-434"
     }
   ],
   "blockers": [],
