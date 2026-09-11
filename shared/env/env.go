@@ -79,7 +79,8 @@ type Var struct {
 }
 
 // condition makes a variable required only for some values of another one:
-// OLLAMA_* matter only when MV_LLM_PROVIDER is ollama (ADR-005 add. 2 p. 2).
+// MV_OLLAMA_URL matters only when MV_LLM_PROVIDER is ollama (ADR-005 add. 2
+// p. 2).
 type condition struct {
 	name   string
 	values []string

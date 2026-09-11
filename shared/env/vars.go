@@ -12,8 +12,13 @@ package env
 //
 // Defaults are the values of a process started on the host with `go run`
 // (infrastructure.md §4.3); compose overrides them with the names of the
-// services on its own network. A variable with no sensible default carries an
-// empty one and is marked Required or RequiredWhen.
+// services on its own network — for the six network addresses of
+// contracts.md §16 p. 5 only (MV_KAFKA_BROKERS, MV_MINIO_ENDPOINT, MV_CORE_URL,
+// MV_QDRANT_ADDR, MV_NEO4J_URI, MV_TELEGRAM_GATEWAY_URL), and in the shape of
+// the default declared here; rule 8 of scripts/compose-lint.sh holds every
+// other compose default to the one below (T-411, T-413). A variable with no
+// sensible default carries an empty one and is marked Required or
+// RequiredWhen.
 //
 // A variable that is read as a number, a flag or a duration also declares its
 // kind, so that a value which will not parse is reported by mvctl env check

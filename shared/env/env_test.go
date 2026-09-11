@@ -360,9 +360,12 @@ func TestValidateRequiredAndEnum(t *testing.T) {
 	}
 }
 
-// The requirement of the Ollama block is conditional: it holds only while the
-// selected provider is ollama (ADR-005 add. 2 p. 2, tasks.md T-007).
-func TestValidateOllamaBlockIsRequiredOnlyForTheOllamaProvider(t *testing.T) {
+// The Ollama provider needs one thing the manifest cannot guess — the address,
+// MV_OLLAMA_URL, conditionally required (ADR-005 add. 2 p. 2, tasks.md T-007).
+// The OLLAMA_* block is not required at all any more: it carries the settings
+// of the stand as defaults (contracts.md §16 p. 5, T-413), so an environment
+// without a single OLLAMA_* line is complete.
+func TestValidateOllamaProviderNeedsItsAddressAndNotTheOllamaBlock(t *testing.T) {
 	openaiCompat := MapSource(map[string]string{
 		"MV_LLM_PROVIDER":     "openai_compat",
 		"MV_LLM_URL":          "http://127.0.0.1:8888",
@@ -373,26 +376,74 @@ func TestValidateOllamaBlockIsRequiredOnlyForTheOllamaProvider(t *testing.T) {
 		t.Fatalf("openai_compat without the Ollama block = %v, want nil", err)
 	}
 
-	ollama := MapSource(map[string]string{
-		"MV_LLM_PROVIDER":        "ollama",
-		"MV_MINIO_ACCESS_KEY":    "key",
-		"MV_MINIO_SECRET_KEY":    "secret",
-		"OLLAMA_KEEP_ALIVE":      "-1",
-		"OLLAMA_NUM_PARALLEL":    "1",
-		"OLLAMA_FLASH_ATTENTION": "1",
-		"OLLAMA_KV_CACHE_TYPE":   "f16",
-	})
-	err := Validate(ollama)
-	if err == nil {
-		t.Fatal("the ollama provider without OLLAMA_MAX_LOADED_MODELS and MV_OLLAMA_URL is accepted")
+	ollama := map[string]string{
+		"MV_LLM_PROVIDER":     "ollama",
+		"MV_LLM_URL":          "http://127.0.0.1:8888",
+		"MV_MINIO_ACCESS_KEY": "key",
+		"MV_MINIO_SECRET_KEY": "secret",
 	}
-	for _, want := range []string{"MV_OLLAMA_URL", "OLLAMA_MAX_LOADED_MODELS", "MV_LLM_PROVIDER is ollama"} {
+	err := Validate(MapSource(ollama))
+	if err == nil {
+		t.Fatal("the ollama provider without MV_OLLAMA_URL is accepted")
+	}
+	for _, want := range []string{"MV_OLLAMA_URL", "MV_LLM_PROVIDER is ollama"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("Validate error = %q, want it to mention %q", err, want)
 		}
 	}
-	if strings.Contains(err.Error(), "OLLAMA_KEEP_ALIVE") {
-		t.Fatalf("Validate error = %q, want no complaint about a variable that is set", err)
+	for _, block := range []string{"OLLAMA_KEEP_ALIVE", "OLLAMA_MAX_LOADED_MODELS", "OLLAMA_NUM_PARALLEL",
+		"OLLAMA_FLASH_ATTENTION", "OLLAMA_KV_CACHE_TYPE", "OLLAMA_ORIGINS"} {
+		if strings.Contains(err.Error(), block) {
+			t.Fatalf("Validate error = %q, want no complaint about %s: the block has defaults", err, block)
+		}
+	}
+
+	ollama["MV_OLLAMA_URL"] = "http://127.0.0.1:11434"
+	if err := Validate(MapSource(ollama)); err != nil {
+		t.Fatalf("the ollama provider with its address and no OLLAMA_* line = %v, want nil", err)
+	}
+}
+
+// The manifest's defaults of the OLLAMA_* block are the settings of the stand
+// (infrastructure.md §6.4, §6.5) and the loopback origins of SEC-15, and they
+// are the very values docker-compose.yml substitutes in profile gpu — rule 8
+// of scripts/compose-lint.sh compares the two. A default changed here without
+// compose, or the other way round, turns the linter red; a default dropped
+// here brings back the empty declaration T-413 removed.
+func TestOllamaBlockCarriesTheSettingsOfTheStandAsDefaults(t *testing.T) {
+	want := map[string]string{
+		"OLLAMA_KEEP_ALIVE":        "-1",
+		"OLLAMA_MAX_LOADED_MODELS": "2",
+		"OLLAMA_NUM_PARALLEL":      "1",
+		"OLLAMA_FLASH_ATTENTION":   "1",
+		"OLLAMA_KV_CACHE_TYPE":     "f16",
+		"OLLAMA_ORIGINS":           "http://127.0.0.1,http://localhost",
+	}
+	silent := MapSource(map[string]string{})
+	for name, def := range want {
+		v, ok := Lookup(name)
+		if !ok {
+			t.Errorf("%s is not declared", name)
+			continue
+		}
+		if got := v.Default(); got != def {
+			t.Errorf("%s default = %q, want %q (infrastructure.md §6.4, SEC-15)", name, got, def)
+		}
+		if got := v.StringFrom(silent); got != def {
+			t.Errorf("%s from a silent environment = %q, want the default %q", name, got, def)
+		}
+		if cond, _, conditional := v.RequiredWhen(); conditional {
+			t.Errorf("%s is still required while %s holds a value; a default makes the requirement void", name, cond)
+		}
+		if v.IsRequired() {
+			t.Errorf("%s is marked required; it has a default", name)
+		}
+		if !v.IsExternal() || v.Scope() != ScopeTooling {
+			t.Errorf("%s: external=%v scope=%q, want a third-party tooling variable", name, v.IsExternal(), v.Scope())
+		}
+	}
+	if origins, _ := Lookup("OLLAMA_ORIGINS"); strings.Contains(origins.Default(), "*") {
+		t.Errorf("OLLAMA_ORIGINS default %q is a wildcard (SEC-15)", origins.Default())
 	}
 }
 

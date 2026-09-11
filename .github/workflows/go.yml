@@ -350,16 +350,12 @@ jobs:
       - name: The house rules
         run: scripts/compose-lint.sh
 
-      - name: The negative fixtures stay rejected
-        # A rule that quietly stopped firing looks exactly like a clean file.
-        run: |
-          for bad in testdata/compose-lint/bad-*.yml; do
-            if scripts/compose-lint.sh -f "$bad" >/dev/null 2>&1; then
-              echo "compose-lint: $bad broke a rule but passed the linter" >&2
-              exit 1
-            fi
-            echo "compose-lint: $bad rejected, as it must be"
-          done
+      - name: The fixtures of the linter
+        # A rule that quietly stopped firing looks exactly like a clean file,
+        # and a fixture rejected by another rule proves nothing about its own:
+        # every bad-*.yml must be rejected by the rule of its `# expect-rule:`
+        # line, every good-*.yml must pass (T-413). Same call as make.
+        run: scripts/compose-lint.sh --fixtures
 
       - name: hadolint build/Dockerfile
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0

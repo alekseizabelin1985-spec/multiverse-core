@@ -1,0 +1,14 @@
+# Rule 8: the form rule 8 recommends for a platform variable is wrong for a
+# third-party one with a manifest default. With .env silent, `KEY:` leaves the
+# variable out of the container and Ollama runs on the image's own default,
+# not on the f16 of the manifest (contracts.md §16 p. 5).
+#
+# expect-rule: 8
+# expect-text: OLLAMA_KV_CACHE_TYPE is passed through with no value
+# expect-text: the image's own default
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_KV_CACHE_TYPE:

@@ -4,6 +4,9 @@
 # this allow-list that is nobody. It is the "naive fix" T-411 warned against,
 # and the linter did not see it (T-411 review #1 Mi-2). The fix is a key with
 # no value: `MV_CORE_ADMIN_CLIENTS:`.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
 services:
   core:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}

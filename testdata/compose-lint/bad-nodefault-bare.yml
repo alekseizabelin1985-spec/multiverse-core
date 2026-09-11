@@ -3,6 +3,10 @@
 # list, that is nobody, instead of the manifest's default (T-411 review #1
 # Mi-2). `$$MV_X` would be compose's escape for a literal and is not an
 # interpolation; this line is one.
+#
+# expect-rule: 8
+# expect-text: $MV_GATEWAY_CLIENT_IDS has neither a default nor
+# expect-text: pass it through as a key with no value
 services:
   gateway:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}

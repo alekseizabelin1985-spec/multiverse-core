@@ -1,0 +1,18 @@
+# Rule 8, the key-with-no-value check of the OLLAMA_* block, with the colon
+# aligned: `OLLAMA_KEEP_ALIVE :` is the same key as `OLLAMA_KEEP_ALIVE:`, and the
+# container would run on the image's own default instead of -1 (T-413 review #1
+# Ma-1).
+#
+# One space before the first colon, several before the second: a pattern that
+# allows only one space loses the second key (T-413 review #2 N-1).
+#
+# expect-rule: 8
+# expect-text: OLLAMA_KEEP_ALIVE is passed through with no value
+# expect-text: OLLAMA_NUM_PARALLEL is passed through with no value
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_KEEP_ALIVE :
+      OLLAMA_NUM_PARALLEL      :

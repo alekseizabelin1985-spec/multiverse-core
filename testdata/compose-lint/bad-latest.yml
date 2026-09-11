@@ -1,5 +1,8 @@
 # Rule 1: a floating tag on a third-party image, and one that does not come
 # from build/versions.env (NFR-071).
+#
+# expect-rule: 1
+# expect-text: must carry a version
 services:
   neo4j:
     image: neo4j:latest

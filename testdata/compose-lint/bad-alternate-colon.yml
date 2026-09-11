@@ -1,0 +1,12 @@
+# Rule 8: `${MV_X:+x}` hands the process compose's own `operator` whenever the
+# operator set anything at all, and an EMPTY value when .env is silent — never
+# the operator's list and never the manifest's. It used to pass in silence
+# (review #2 T-411, N-6).
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS:+operator} hands the process compose's own text
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS:+operator}

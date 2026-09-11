@@ -1,0 +1,11 @@
+# Rule 8: `${MV_X+x}`, the colon-less spelling of bad-alternate-colon.yml — the
+# same substitution of compose's own text, and the same empty value when .env
+# is silent (review #2 T-411, N-6).
+#
+# expect-rule: 8
+# expect-text: ${MV_GATEWAY_CLIENT_IDS+mvctl} hands the process compose's own text
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_CLIENT_IDS: ${MV_GATEWAY_CLIENT_IDS+mvctl}

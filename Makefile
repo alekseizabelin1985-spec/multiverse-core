@@ -198,15 +198,12 @@ vuln: ## govulncheck over the module
 .PHONY: compose-lint
 compose-lint: ## The eight house rules of the compose files (§3.1.1), then the linter's own fixtures
 	@scripts/compose-lint.sh
-	# A rule that quietly stopped firing looks exactly like a clean file, so
-	# every negative fixture has to stay rejected (testdata/compose-lint).
-	for bad in testdata/compose-lint/bad-*.yml; do
-		if scripts/compose-lint.sh -f "$$bad" >/dev/null 2>&1; then
-			echo "compose-lint: $$bad broke a rule but passed the linter" >&2
-			exit 1
-		fi
-		echo "compose-lint: $$bad rejected, as it must be"
-	done
+	# A rule that quietly stopped firing looks exactly like a clean file, and a
+	# fixture rejected by another rule proves nothing about its own: every
+	# bad-*.yml must be rejected by exactly the rule of its `# expect-rule:`
+	# line, for the reason of its `# expect-text:` lines, and every good-*.yml
+	# must pass (testdata/compose-lint, T-413). The same call runs in CI.
+	scripts/compose-lint.sh --fixtures
 
 .PHONY: ci
 ci: lint test contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker

@@ -1,0 +1,13 @@
+# Rule 8 and the quotes of strip_comment (T-413 review #1 Mi-2, probe q1): a
+# `#` inside quotes is text, not a YAML comment, and compose interpolates what
+# follows it. With .env silent the note below becomes `x #` — the allow-list
+# with no modifier. A comment-stripper blind to quotes would cut the line at the
+# `#` and see nothing.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: "x #${MV_CORE_ADMIN_CLIENTS}"

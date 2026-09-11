@@ -45,7 +45,8 @@
 #   2. every published port is bound to 127.0.0.1 (SEC-13); the init containers,
 #      chromadb and narrative-orchestrator publish nothing; consoles only in
 #      profile `dev` (SEC-33);
-#   3. no default passwords: secrets appear as ${VAR:?} and nowhere else;
+#   3. no default passwords: secrets appear as ${VAR:?} and nowhere else — a
+#      quoted key counts as a key, and $${VAR} is compose's escape, a literal;
 #   4. MV_TELEGRAM_BOT_TOKEN reaches the telegram-bot service only (D-10);
 #   5. NEO4J_PLUGINS is absent (T-17), OLLAMA_ORIGINS is not a wildcard and
 #      OLLAMA_HOST is not 0.0.0.0 (SEC-15);
@@ -57,13 +58,17 @@
 #   7. this file — the one compose always loads — interpolates cleanly on a
 #      clean machine: every ${VAR:?} in it resolves from build/versions.env or
 #      from a variable the README tells the operator to fill ([required] in
-#      .env.example). Anything else belongs in a per-profile file (T-397);
-#   8. a platform variable (MV_*) has one default, the manifest's
-#      (shared/env/vars.go): a ${MV_X:-d} in these files either repeats it or,
-#      for an address variable only, names a service of this network with a
-#      port or a scheme (redpanda:9092, http://core:8090); ${MV_X} and $MV_X
-#      with no modifier count as an empty default. Anything else is passed
-#      through as a key with no value (T-411).
+#      .env.example), and every such variable carries that marker (T-413).
+#      Anything else belongs in a per-profile file (T-397);
+#   8. a variable has one default, the manifest's (shared/env/vars.go, and
+#      shared/env/infra.go for OLLAMA_*): a ${X:-d} in these files repeats it.
+#      The six network addresses of contracts.md §16 p. 5 — MV_KAFKA_BROKERS,
+#      MV_MINIO_ENDPOINT, MV_CORE_URL, MV_QDRANT_ADDR, MV_NEO4J_URI,
+#      MV_TELEGRAM_GATEWAY_URL — may name a service of this network instead,
+#      in the shape of the manifest's default (redpanda:9092, http://core:8090).
+#      ${MV_X}, $MV_X, ${MV_X:+x} and a default that is another interpolation
+#      are refused; a platform variable is otherwise passed through as a key
+#      with no value (T-411, T-413).
 #
 # Known limitation of a single compose file (T-008; dev-log ОВ-40): a port
 # publication cannot be made conditional on a profile. Where §1.4 asks for a

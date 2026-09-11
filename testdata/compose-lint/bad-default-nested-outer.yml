@@ -1,0 +1,16 @@
+# Rule 8, a nested interpolation with a platform variable outside and inside
+# (review #1 T-411, N-1). The actor-kind list falls back to the client list:
+# a default that is another variable is a second source by construction,
+# whatever the inner default says. And the inner default is a default like any
+# other — `mvctl` against the manifest's list. The linter used to read the outer
+# default up to the first `}`, report the garbled `${MV_GATEWAY_CLIENT_IDS:-mvctl`
+# as its value, and never look at the inner one at all.
+#
+# expect-rule: 8
+# expect-text: MV_GATEWAY_ACTOR_KIND_CLIENTS falls back to another variable here ('${MV_GATEWAY_CLIENT_IDS:-mvctl}')
+# expect-text: MV_GATEWAY_CLIENT_IDS defaults to 'mvctl' here
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_ACTOR_KIND_CLIENTS: ${MV_GATEWAY_ACTOR_KIND_CLIENTS:-${MV_GATEWAY_CLIENT_IDS:-mvctl}}

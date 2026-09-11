@@ -3,6 +3,9 @@
 # profile, so this single line stops `config`, `up` and `ps` on every machine
 # that has no bot token — which is every machine that does not run the bot
 # (T-397). The service belongs in docker-compose.bot.yml instead.
+#
+# expect-rule: 7
+# expect-text: does not interpolate on a clean machine
 services:
   telegram-bot:
     profiles: ["bot"]

@@ -4,6 +4,9 @@
 # while the manifest and compose said MV_GATEWAY_CLIENT_IDS (T-409). It is also
 # what keeps rule 8 honest: a declaration the manifest parser missed would
 # surface here as "not declared", never pass in silence.
+#
+# expect-rule: 8
+# expect-text: MV_GATEWAY_CLIENTS is not declared
 services:
   gateway:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}

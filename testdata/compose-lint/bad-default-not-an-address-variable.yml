@@ -6,6 +6,9 @@
 # fixture of the address GATE alone (T-411 review #1 Mi-1). The review's bare
 # `telegram-bot` is caught twice — by this gate and by the port-or-scheme check
 # of bad-default-address-without-port.yml.
+#
+# expect-rule: 8
+# expect-text: MV_GATEWAY_CLIENT_IDS is not in the explicit set of network addresses
 services:
   gateway:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}

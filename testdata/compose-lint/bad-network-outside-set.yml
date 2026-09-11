@@ -1,0 +1,17 @@
+# Rule 8: a network variable outside the explicit set. MV_OLLAMA_URL really is
+# the address of a service of this network in profile gpu, and one day it may
+# earn its place — but the set is a list in the contract (contracts.md §16
+# p. 5), not a guess from the shape of the value, so a forgotten addition is
+# loud and the refusal says where the variable has to be added.
+#
+# expect-rule: 8
+# expect-text: MV_OLLAMA_URL is not in the explicit set of network addresses
+# expect-text: add it to the explicit set NETWORK_ADDRESSES of rule 8
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: ${MV_OLLAMA_URL:-http://ollama:11434}

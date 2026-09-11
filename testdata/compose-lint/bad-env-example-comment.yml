@@ -4,6 +4,9 @@
 # trailing comment only after a non-empty value, so `MINIO_ROOT_USER=  # ...`
 # arrives as the text of its own comment — non-empty, which silences ${VAR:?}
 # and starts MinIO with a rubbish root user (T-397).
+#
+# expect-rule: 7
+# expect-text: is empty and carries an inline comment
 services:
   minio:
     image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}

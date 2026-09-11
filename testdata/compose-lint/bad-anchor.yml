@@ -1,5 +1,8 @@
 # Rule 3: an anchor that is not called x-platform-env. Secrets do not become
 # safe by being merged in from a differently named block (SEC-14).
+#
+# expect-rule: 3
+# expect-text: NEO4J_PASSWORD carries the literal
 x-extra-env: &extra-env
   NEO4J_PASSWORD: fixture-only-not-a-secret
   MV_MINIO_SECRET_KEY: fixture-only-not-a-secret-0000

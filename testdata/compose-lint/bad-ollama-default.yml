@@ -1,0 +1,14 @@
+# Rule 8 for a third-party variable the manifest gives a default of its own
+# (DeclareExternal in shared/env/infra.go; contracts.md §16 p. 5, T-413). The
+# manifest says OLLAMA_NUM_PARALLEL=1 — the setting of the stand, §6.4 — and
+# compose may only repeat it; a 4 here is a second source of one value, the
+# class T-411 closed for the platform variables.
+#
+# expect-rule: 8
+# expect-text: OLLAMA_NUM_PARALLEL defaults to '4' here and to '1' in shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-4}

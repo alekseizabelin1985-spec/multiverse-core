@@ -1,0 +1,9 @@
+# A clean file for rule 8 (review #1 T-411, N-1): `$$` is compose's escape for
+# a literal dollar. `$${MV_CORE_ADMIN_CLIENTS:-operator}` reaches the container
+# as the text `${MV_CORE_ADMIN_CLIENTS:-operator}` for its own shell to expand,
+# and `$$MV_WORLD_ID` as `$MV_WORLD_ID` — neither is a default compose writes,
+# and the linter used to refuse the first one as if it were.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    command: ["sh", "-c", "echo $${MV_CORE_ADMIN_CLIENTS:-operator} $$MV_WORLD_ID"]
