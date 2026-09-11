@@ -52,13 +52,17 @@ linters:
         # has to speak the types of C-03 (Outcome, Roll, Actor, Action) or it and
         # *mechanics.Rules cannot satisfy one interface, which is the whole point
         # of the double. The exception names one directory and one package: the
-        # double of mechanics may see mechanics and nothing else.
+        # double of mechanics may see mechanics and nothing else. The trailing $
+        # is what makes it one package: depguard matches allow entries by
+        # prefix, so without it internal/mechanicsx or internal/mechanics/any
+        # would pass as well (the hole review #1 of T-410, Mi-3, closed for
+        # membus; T-415).
         shared-testkit-mechanics:
           list-mode: lax
           files:
             - "**/shared/testkit/mechanics/**"
           allow:
-            - multiverse-core.io/internal/mechanics
+            - multiverse-core.io/internal/mechanics$
           deny:
             - pkg: multiverse-core.io/internal
               desc: "the mechanics double may see internal/mechanics and no other context (ADR-001 p. 3, exception recorded in journal.md 2026-09-10)"
@@ -110,13 +114,14 @@ linters:
         # real *mechanics.Rules stop satisfying one interface and the double
         # stops being a double. Named rule rather than //nolint on the import:
         # a directive lives out of sight of this file and gets copied by the
-        # next author who does not know why it was there (T-219).
+        # next author who does not know why it was there (T-219). The trailing $
+        # keeps it to that one package, as for the mechanics double (T-415).
         shared-testkit-swarm:
           list-mode: lax
           files:
             - "**/shared/testkit/swarm/**"
           allow:
-            - multiverse-core.io/internal/mechanics
+            - multiverse-core.io/internal/mechanics$
           deny:
             - pkg: multiverse-core.io/internal
               desc: "the combat double may see internal/mechanics and no other context (ADR-001 p. 3)"
@@ -141,14 +146,18 @@ linters:
             - pkg: multiverse-core.io/internal
               desc: "this context has no depguard rule yet: declare its allowed neighbours in .golangci.yml before importing internal/* (ADR-001 p. 3)"
 
-        # state owns the world and uses mechanics as a pure library.
+        # state owns the world and uses mechanics as a pure library. The
+        # neighbour is named with a trailing $, like the doubles above: depguard
+        # matches allow entries by prefix, and internal/mechanicsx must not pass
+        # as mechanics. A subpackage a context needs is added as a second entry
+        # (…/mechanics/) on purpose (review #1 of T-415, N-4).
         internal-state:
           list-mode: lax
           files:
             - "**/internal/state/**"
           allow:
             - multiverse-core.io/internal/state
-            - multiverse-core.io/internal/mechanics
+            - multiverse-core.io/internal/mechanics$
           deny:
             - pkg: multiverse-core.io/internal
               desc: "state uses mechanics as a library and talks to every other context over the bus (ADR-001 p. 3)"
@@ -164,16 +173,18 @@ linters:
             - pkg: multiverse-core.io/internal
               desc: "mechanics is a pure library: contexts depend on it, not the other way round (ADR-001 addendum p. 2)"
 
-        # swarm is the only context allowed to use mechanics, laws and llm as libraries.
+        # swarm is the only context allowed to use mechanics, laws and llm as
+        # libraries — each of them one package, with the trailing $ for the
+        # reason given at internal-state.
         internal-swarm:
           list-mode: lax
           files:
             - "**/internal/swarm/**"
           allow:
             - multiverse-core.io/internal/swarm
-            - multiverse-core.io/internal/mechanics
-            - multiverse-core.io/internal/laws
-            - multiverse-core.io/internal/llm
+            - multiverse-core.io/internal/mechanics$
+            - multiverse-core.io/internal/laws$
+            - multiverse-core.io/internal/llm$
           deny:
             - pkg: multiverse-core.io/internal
               desc: "swarm uses mechanics, laws and llm as libraries; it changes the world by proposing entity operations over the bus (C-02, ADR-001 p. 3)"
