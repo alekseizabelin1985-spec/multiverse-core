@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
-	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -243,159 +241,11 @@ func TestStartAnnouncesRecovery(t *testing.T) {
 	}
 }
 
-// readyBus is a bus that can say when its subscription is live, and records
-// the order in which the stub used it. eventbus.Bus cannot report that moment
-// — Subscribe blocks until the subscription ends — so a bus that can implements
-// SubscribeReady, and this double is what shows whether the stub waits for the
-// report before it announces anything (C-14: subscribe, then signal).
-//
-// The gate is what makes the order a fact rather than a coincidence: without
-// it the report follows the call so closely that a stub which never waited
-// for it still looked orderly on most runs (review #2 of T-017, Minor-6).
-type readyBus struct {
-	*membus.Bus
-	// gate, when it is not nil, holds the subscription after it has been
-	// recorded and before it is reported live. The test owns the moment it
-	// opens, so the window between the two steps is as wide as the test wants
-	// instead of as wide as the scheduler happens to make it.
-	gate  chan struct{}
-	mu    sync.Mutex
-	steps []string
-}
-
-func (b *readyBus) SubscribeReady(ctx context.Context, topic, group string,
-	h eventbus.Handler, ready chan<- struct{}) error {
-	b.record("subscribe " + topic)
-	if b.gate != nil {
-		<-b.gate
-	}
-	close(ready)
-	return b.Subscribe(ctx, topic, group, h)
-}
-
-func (b *readyBus) Publish(ctx context.Context, ev eventbus.Event) error {
-	b.record("publish " + ev.Type)
-	return b.Bus.Publish(ctx, ev)
-}
-
-func (b *readyBus) record(step string) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.steps = append(b.steps, step)
-}
-
-func (b *readyBus) recorded() []string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return append([]string(nil), b.steps...)
-}
-
-// gateWindow is how long a subscription held open is watched for a stub that
-// went on without waiting for it.
-//
-// It is not a synchronisation and it cannot make this test red by accident:
-// while the gate is held a Start that waits for the report cannot proceed at
-// all, however slow the machine is. The window only bounds how long a Start
-// that does not wait has to give itself away, and that one needs no more than
-// a hash of the world and one marshalled event.
-const gateWindow = 250 * time.Millisecond
-
-// TestStartSubscribesBeforeItAnnounces pins the order a consumer leans on: it
-// starts proposing the moment it sees the signal, so the signal must not go
-// out before the subscription is live. The bus here reports that moment; on a
-// bus that cannot, the next test states what holds instead.
-func TestStartSubscribesBeforeItAnnounces(t *testing.T) {
-	bus := &readyBus{Bus: newBus(t), gate: make(chan struct{})}
-	fake := seeded(t, bus, objstore.NewMemoryWithClock(clock.NewManual(testkit.Epoch)))
-	ctx, cancel := context.WithCancel(context.Background())
-	// The gate is opened whatever happens: the subscription goroutine sits in
-	// it, and Wait would otherwise join a goroutine nothing releases.
-	open := sync.OnceFunc(func() { close(bus.gate) })
-	defer func() { open(); cancel(); _ = fake.Wait() }()
-
-	started := make(chan error, 1)
-	go func() { started <- fake.Start(ctx) }()
-
-	waitFor(t, "the subscription to reach the bus", func() bool {
-		return len(bus.recorded()) > 0
-	})
-	// From here the subscription is held open, so anything the stub does next
-	// it does without knowing whether it is live.
-	if step, raced := racedTheGate(bus, started); raced {
-		t.Fatalf("%q while the subscription was still being made: the signal went out before it was live",
-			step)
-	}
-	open()
-
-	if err := <-started; err != nil {
-		t.Fatalf("start: %v", err)
-	}
-
-	want := []string{
-		"subscribe " + eventbus.TopicSystemEvents,
-		"publish " + state.TypeReplayDone,
-	}
-	have := bus.recorded()
-	if len(have) != len(want) || have[0] != want[0] || have[1] != want[1] {
-		t.Errorf("the stub did %v, want %v: the signal went out before the subscription was live",
-			have, want)
-	}
-}
-
-// racedTheGate reports what the stub did while its subscription was held, if
-// it did anything at all: a second step on the bus, or a Start that returned.
-// Both mean the same thing — it did not wait for the report.
-func racedTheGate(bus *readyBus, started <-chan error) (string, bool) {
-	deadline := testkit.After(gateWindow)
-	for {
-		if steps := bus.recorded(); len(steps) > 1 {
-			return steps[1], true
-		}
-		select {
-		case <-started:
-			return "Start returned", true
-		case <-deadline:
-			return "", false
-		case <-clock.RealTimers{}.After(time.Millisecond).C():
-		}
-	}
-}
-
-// readyReporter is the shape FakeState.subscribe looks for when it decides
-// whether a bus can name the moment its subscription is live. It is written
-// out a second time here on purpose: the stub picks its branch with a type
-// assertion, which no compiler checks, so the assumption behind the fallback
-// needs a test of its own (review #2 of T-017, Nit-4).
-type readyReporter interface {
-	SubscribeReady(ctx context.Context, topic, group string, h eventbus.Handler,
-		ready chan<- struct{}) error
-}
-
-// TestTheBusOfTheTestsDoesNotReportReadiness states the assumption the
-// fallback branch of FakeState.subscribe rests on, so that it fails the day it
-// stops being true instead of being silently bypassed.
-//
-// The method name is checked by reflection rather than by a type assertion:
-// a membus that grew SubscribeReady with a different signature would satisfy
-// no interface here, the stub would quietly stay on the fallback, and an
-// assertion of shape alone would keep passing.
-func TestTheBusOfTheTestsDoesNotReportReadiness(t *testing.T) {
-	if _, found := reflect.TypeOf(newBus(t)).MethodByName("SubscribeReady"); found {
-		t.Fatal("membus now has SubscribeReady: check the signature against " +
-			"readySubscriber in state.go — if it matches, the fallback branch " +
-			"and readySubscriber go away and the order is pinned on the real bus")
-	}
-	if _, ok := any(&readyBus{}).(readyReporter); !ok {
-		t.Fatal("readyBus no longer matches the shape state.go looks for: the " +
-			"signature drifted, and TestStartSubscribesBeforeItAnnounces is " +
-			"pinning the fallback branch instead of the report")
-	}
-}
-
-// TestNothingPublishedBeforeStartIsLost is the guarantee that holds on a bus
-// which cannot report the moment its subscription is live: a consumer group
-// starts at the first offset, so a proposal already in the topic is applied
-// once the stub gets there (C-01).
+// TestNothingPublishedBeforeStartIsLost is what the stub relies on instead of
+// a readiness handshake: a new consumer group starts at the first offset, so a
+// proposal already in the topic is applied once the stub gets there (C-01
+// v1.2, ADR-022; the bus side is pinned by the contract case
+// ANewGroupStartsAtTheFirstOffset).
 func TestNothingPublishedBeforeStartIsLost(t *testing.T) {
 	fake, bus, _ := world(t)
 	ctx, cancel := context.WithCancel(context.Background())

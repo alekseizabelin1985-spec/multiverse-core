@@ -12,8 +12,8 @@
 // promised.
 //
 // The start protocol is part of that promise. FakeState.Start publishes
-// analytics.replay.completed in mode recovery once its subscription is live,
-// because the consumers of MVP-1 wait for that signal before they build their
+// analytics.replay.completed in mode recovery once it has started its
+// subscription, because the consumers of MVP-1 wait for that signal before they build their
 // projections (C-14, clarification v0.4; consolidation.md §14.1 TL2-6). A stub
 // that stayed silent would force every consumer to grow a branch for the stub,
 // which is exactly the coupling the stub exists to avoid.
@@ -230,37 +230,22 @@ func (s *FakeState) StateHash() string {
 	return entity.StateHash(s.snapshotOrder())
 }
 
-// Start subscribes to system_events and announces the end of recovery, in
-// that order.
+// Start launches the subscription to system_events in a goroutine and
+// publishes the end of recovery without waiting for that subscription to be
+// live: eventbus.Bus has no way to say when it is, since Subscribe blocks until
+// the subscription ends. The signal may therefore reach the bus before the
+// group of the stub has joined, and a consumer that proposes on seeing it may
+// publish before the stub reads anything.
 //
-// The order is what a consumer leans on: it starts proposing the moment it
-// sees the signal, and on a broker where a new consumer group starts at the
-// end of the journal a proposal published before the group is registered is
-// never delivered. So the signal goes out only once the subscription has
-// reported itself live.
-//
-// No broker of this platform is that broker, and the comment used to imply
-// one: both implementations of C-01 start a new group at the first offset —
-// the kafka adapter with StartOffset: kafka.FirstOffset (kafka.go), membus by
-// keeping a cursor that begins at zero — so nothing published around Start is
-// lost on either of them today (review #2 of T-017, Nit-5). The order is kept
-// for the broker that does not have that property, not against the two that
-// do.
-//
-// Who reports the moment is the bus. eventbus.Bus cannot: Subscribe blocks
-// until the subscription ends, so the moment its group is registered is inside
-// a call that has not returned (C-01). A bus that can name it implements
-// readySubscriber and the stub waits for it; neither membus nor the kafka
-// adapter does, and there the fallback runs on the first-offset guarantee
-// above. Closing the residual gap needs a change to C-01 itself, which is an
-// open question of T-017.
+// Nothing published before or around Start is lost for that. A new consumer
+// group reads its topic from the first offset, which C-01 guarantees on every
+// implementation of the bus and the contract test of the bus pins on both of
+// them (C-01 v1.2, ADR-022). That guarantee, not the order of the two calls,
+// is what the stub relies on.
 //
 // Start returns as soon as the signal is published; the subscription lives
-// until ctx is done, and Wait joins it. On a bus that reports readiness a
-// subscription failing before it is live fails Start instead of being
-// announced over; on a bus that does not, the fallback reports readiness
-// before it calls Subscribe, so such a failure reaches the caller through Wait
-// and the log, not through Start (review #2 of T-017, Minor-7).
+// until ctx is done, and Wait joins it. A subscription that fails reaches the
+// caller through Wait and the log, not through Start.
 func (s *FakeState) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if s.started {
@@ -271,55 +256,17 @@ func (s *FakeState) Start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	began := s.clock.Now()
-	ready := make(chan struct{})
-	stopped := make(chan struct{})
 	s.subscription.Add(1)
 	go func() {
 		defer s.subscription.Done()
-		defer close(stopped)
-		if err := s.subscribe(ctx, ready); err != nil {
+		if err := s.bus.Subscribe(ctx, eventbus.TopicSystemEvents, Group, s.Apply); err != nil {
 			s.mu.Lock()
 			s.subErr = err
 			s.mu.Unlock()
 			s.log.Error("subscription stopped", "err", err)
 		}
 	}()
-
-	select {
-	case <-ready:
-	case <-stopped:
-		s.mu.Lock()
-		err := s.subErr
-		s.mu.Unlock()
-		if err != nil {
-			return fmt.Errorf("testkit/state: subscribe %s: %w", eventbus.TopicSystemEvents, err)
-		}
-	}
 	return s.announceRecovery(ctx, began)
-}
-
-// readySubscriber is what a bus implements when it can say at which moment its
-// subscription is live: it closes ready once the consumer group is registered
-// and the topic is being read, and goes on serving the subscription like
-// Subscribe does.
-type readySubscriber interface {
-	SubscribeReady(ctx context.Context, topic, group string, h eventbus.Handler,
-		ready chan<- struct{}) error
-}
-
-// subscribe runs the subscription and reports through ready when it is live —
-// on the word of the bus if the bus gives one, otherwise at the last moment
-// before the call that blocks.
-//
-// The branch is chosen by a type assertion, which no compiler checks: the
-// assumption that no bus of this tree reports readiness is stated as a test
-// instead (TestTheBusOfTheTestsDoesNotReportReadiness, Nit-4).
-func (s *FakeState) subscribe(ctx context.Context, ready chan struct{}) error {
-	if bus, ok := s.bus.(readySubscriber); ok {
-		return bus.SubscribeReady(ctx, eventbus.TopicSystemEvents, Group, s.Apply, ready)
-	}
-	close(ready)
-	return s.bus.Subscribe(ctx, eventbus.TopicSystemEvents, Group, s.Apply)
 }
 
 // Wait blocks until the subscription started by Start has stopped and reports

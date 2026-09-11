@@ -12778,3 +12778,101 @@ Mi-1, Mi-2 (в объёме решения оркестратора) и N-1 за
   ревью #1. В рабочей композиции таких строк нет.
 - `secrets-scan` в ветке T-432 будет красным, пока ветку не синхронизируют с эпиком (`9455016`). К правкам
   задачи это не относится.
+
+## T-406 · ревью #1 · 2026-09-12 · code-reviewer#1
+
+### Границы ревью
+
+Незакоммиченные правки в `.worktrees/T-406`, ветка `task/T-406-drop-ready-subscriber` от эпика `48b88fd`; эпик с тех
+пор не сдвигался, так что diff задачи равен рабочей копии. Изменены `shared/testkit/state/state.go`, `state_test.go`,
+`shared/testkit/contract/contract.go`, карточка `tasks/T-406.md` и `dev-log.md` (только дописан раздел). Прочитаны
+раздел «### T-406» индекса (`tasks.md:469-473`), ADR-022, `contracts.md` C-01 «Старт подписки (v1.2)» (`:220`),
+`kafka.go:140-261` и `:402-418` (`Subscribe` с `FirstOffset`, `ReadRange` → `journalReader` → `SetOffset(from)`),
+`membus.go:271-423` и `:489-505`, обе цели набора (`membus_test.go`, `redpanda_integration_test.go`), помощники
+набора (`contract.go:1337-1585`), а также `kafka-go v0.4.51` `reader.go:1025-1051` и `:1382-1397`. Redpanda,
+контейнеры и LLM не запускались, `.env` не открывался. Метка `[contract-change]` — решение оркестратора, не
+замечание.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 3.
+
+`readySubscriber` удалён полностью. `Start` стал проще и не хуже прежнего по гонкам. Новый кейс детерминирован, от
+порядка кейсов не зависит и закрывает дыру, которую прежний набор не видел: мой повтор M3 валит только его.
+
+### Проверка по пунктам задания
+
+1. **Удаление.** `git grep` по дереву вне `Docs/dev-team` (и по `services/`) на `readySubscriber`, `SubscribeReady`,
+   `readyReporter`, `readyBus`, `racedTheGate`, `gateWindow`, `TestStartSubscribesBeforeItAnnounces` и
+   `TestTheBusOfTheTestsDoesNotReportReadiness` — пусто. Остались только упоминания в ADR-022, `contracts.md`,
+   индексе и карточке, то есть история.
+   `Start` (`state.go:248-269`): горутина регистрируется в `subscription` до `go`, выходит, когда `Subscribe`
+   возвращается по `ctx` (обе шины возвращают `nil`), а `Wait` её дожидается. Утечки нет. Если `announceRecovery`
+   падает, подписка живёт до отмены `ctx` — так было и раньше, и все вызывающие (`stand_test.go:99`,
+   `harness_test.go`, `fake_contexts_test.go`) отменяют `ctx` и зовут `Wait`. Ошибка подписки пишется в `subErr` под
+   `mu` и в лог, `Wait` её отдаёт — не теряется. Прежде в запасной ветке `ready` закрывался до `Subscribe`, так что
+   до `Start` ошибка доходила только как исход гонки в `select`. Поведение фактически прежнее, пропала лишь
+   случайность. На ошибку подписки из `Start` никто не опирался: `cmd/multiverse` использует `swarm.FakeContext`, а
+   не `FakeState.Start`.
+2. **Отклонение (удалён и `TestStartSubscribesBeforeItAnnounces`) — оправдано.** Тест держался на двойнике с
+   `SubscribeReady` и после удаления интерфейса был бы красным по построению. Переписать его на порядок вызовов
+   `Subscribe`/`Publish` без рукопожатия нельзя: `Subscribe` зовётся из горутины, порядок не гарантирован, и тест
+   стал бы нестабильным. ADR-022 п. 2 прямо снимает с порядка роль защиты. Гарантию «ничего опубликованное до
+   `Start` не теряется» держат две проверки. Со стороны заглушки — `TestNothingPublishedBeforeStartIsLost`:
+   мутант M2 исполнителя (группа с конца) его валит. Со стороны шины — новый кейс: его валят M1, M2 и M3.
+3. **Новый кейс `ANewGroupStartsAtTheFirstOffset` (`contract.go:456-521`).**
+   - *Детерминированность.* Тайминга нет — только `waitFor` по условию с общим `Timeout`. Группа и мир свои
+     (`runSeq`). `first` и `ours` защищены `mu`. Порядок `defer` верный: `mu.Unlock` раньше `sub.stop`, взаимной
+     блокировки при `Fatalf` нет.
+   - *Порядок кейсов.* Кейс не зависит от места в наборе, и это проверено в копии. Первым — зелёный (`first = begins
+     = 0`). Перед `Close`, то есть после всех `Append` с битыми телами, — тоже зелёный: `ReadRange` и новая группа
+     идут через один и тот же `Delivery` и одинаково пропускают непрочитанные тела, мимо обработчика.
+   - *kafka: `SetOffset(0)` против `FirstOffset`.* Риск исполнителя про retention снят кодом библиотеки. На
+     `OffsetOutOfRange` читатель с явным офсетом делает `offset < first → offset = first` (`kafka-go` `reader.go:1393-1397`).
+     Значит, `ReadRange` от 0 на урезанном топике отдаёт первый доступный офсет. Новая группа с `FirstOffset` (-2)
+     начинает с того же начала лога, так что `first == begins` держится и на брокере с удалённым началом.
+     Остаётся только гонка retention между двумя чтениями — на testcontainers её нет.
+   - *Объём и `Timeout` на Redpanda.* «Несколько сотен событий» — завышено. На свежем брокере testcontainers к
+     кейсу №10 в `player_events` 17 событий: 5+4+3+1+2+2, тот же набор, что даёт «began at offset 17» в M3 на membus.
+     Плюс 3 своих. Это 20 синхронных коммитов группы и одно вступление в группу (его и так платит каждый кейс с
+     подпиской) — далеко от 15 с. Смежность `base…base+2` требует, чтобы в топик никто не писал параллельно. Это то
+     же допущение, что у `JournalReadsByIncreasingOffset`, а кейсы идут последовательно. Ложного красного на Redpanda
+     не ожидаю. Прогон — с T-394.
+4. **Мутанты** — в копии рабочей папки в scratch (`mktemp -d`, `git ls-files -co --exclude-standard` без
+   `services/`, без `-overlay`). Прогон: `go test -short -count=1 ./shared/testkit/contract/ ./shared/testkit/state/`.
+   Файл восстанавливался после каждого мутанта, в конце — `cmp` с рабочей папкой. Копия удалена по сохранённому пути.
+
+   | # | Мутант (`membus.go`, если не сказано иное) | Результат |
+   |---|---|---|
+   | q9 | тождественный | оба пакета ok |
+   | q0 | контроль: `func broken( {` в конце файла | красный: сборка обоих пакетов |
+   | q3 | = M3: новая группа начинает за 3 записи до конца (флаг `started` в `group`, сдвиг курсора в `Subscribe`) | **красный только `ANewGroupStartsAtTheFirstOffset`** («began at offset 17, but player_events begins at 0»); остальные кейсы набора и `testkit/state` зелёные — M3 исполнителя подтверждён |
+   | q4 | то же, за 5 записей до конца | красный только новый кейс («began at offset 15») |
+   | o1 | `contract.go`: кейс первым в наборе | зелёный |
+   | o2 | `contract.go`: кейс перед `Close`, после всех `Append` | зелёный |
+
+5. **Прогоны** (go1.26.8 windows/amd64, golangci-lint 2.13.2). `go build ./... && go vet ./... && go vet -tags
+   integration ./shared/testkit/contract/ && go vet -tags e2e ./test/...` → 0. `gofmt -l shared cmd test` — пусто.
+   `go test -short -count=1 ./...` → 27 пакетов ok. `golangci-lint run ./...` → 0 issues, depguard чист: у `state` в
+   тесте ушли только `reflect` и `sync`, у `contract.go` импорты прежние. `-race` недоступен (нет cgo).
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| N-1 | Nit | `shared/testkit/state/state.go:233-234` | «Start subscribes to system_events and announces the end of recovery, in that order». `Subscribe` теперь зовётся из горутины, и сигнал вполне может уйти раньше, чем она дойдёт до шины. Слова «in that order» обещают порядок, которого код не даёт. Абзац ниже («a habit rather than a safeguard») это смягчает, но первая строка doc-комментария читается как гарантия | «Start starts the subscription to system_events and announces the end of recovery without waiting for the subscription to join its group» — и убрать «the order above» во втором абзаце |
+| N-2 | Nit | `shared/testkit/contract/contract.go:470` | `ReadRange` от 0 идёт под `t.Context()` без срока. Если брокер завис, кейс стоит весь `-timeout` прогона, а не `Timeout`, — ровно то, от чего `subscription.stop` защищён (ревью #3 T-014, Nit-1) и от чего `JournalStopsAtTheEndOfTheJournal` берёт `WithTimeout`. У `JournalReadsByIncreasingOffset` та же привычка, но новый кейс единственный читает весь топик | `ctx, cancel := context.WithTimeout(t.Context(), Timeout); defer cancel()` и передать `ctx` в `ReadRange` |
+| N-3 | Nit | `tasks/T-406.md:62`, `:66` | Бэклог п. 1: «несколько сотен событий прежних кейсов» — на свежем брокере их 17. Риски: «поведение `SetOffset(0)` … не проверялось» — оно определено `kafka-go` `reader.go:1393-1397`: чтение ниже начала лога перескакивает на первый офсет, и `first == begins` держится. Риск закрыт, а в карточке он записан открытым | Исполнителю при следующей правке карточки: «17 событий + 3 своих» и «`SetOffset(0)` ниже начала лога kafka-go переводит на первый офсет (`reader.go:1393-1397`); `first == begins` держится и после retention» |
+
+### Предложения в бэклог
+
+1. П. 2 бэклога карточки (ловить `auto.offset.reset` в линтере композиции, если такая настройка появится) —
+   поддерживаю как наблюдение. Сегодня условие пересмотра ADR-022 п. 4 держит только
+   `StartOffset: kafka.FirstOffset` в `kafka.go:154`, и держит его теперь новый кейс набора на Redpanda.
+
+### Риски и допущения
+
+- Половина набора на Redpanda с новым кейсом не прогонялась: только `go vet -tags integration`. Вывод «ложного
+  красного не будет» основан на чтении `kafka.go` и `kafka-go v0.4.51`, а не на прогоне. Подтверждение — T-394.
+- Вывод про retention опирается на ветку `readLoop` в `kafka-go v0.4.51`. При смене версии библиотеки его стоит
+  перепроверить, но кейс сам покраснеет, если поведение разойдётся.
