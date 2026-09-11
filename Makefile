@@ -5,8 +5,10 @@
 #   * `docker compose`, never `docker-compose` (v1);
 #   * no image tag is ever written into a recipe — every version comes from
 #     build/versions.env, which is included below (NFR-071);
-#   * GNU make 4.4 with bash: `winget install ezwinports.make` on Windows, or
-#     `wsl make <target>` without installing anything (§2.1);
+#   * GNU make 4.3+ with bash (CI: ubuntu-latest, 4.3 — the job `race` runs
+#     `make test-race`, T-401), so nothing newer than 4.3 goes into this file;
+#     `winget install ezwinports.make` on Windows, or `wsl make <target>`
+#     without installing anything (§2.1);
 #   * the LLM is a native process outside compose: `make up` never starts it and
 #     `make down` never stops it — `make llm-up` / `make llm-down` do
 #     (ADR-005 add. 2 p. 7).
@@ -156,13 +158,72 @@ test: ## Unit tests: short, no network; -race only where cgo is available (ОВ-
 	# with Permission denied on Linux while Git for Windows shows nothing.
 	bash scripts/coverage-gate.sh 60 internal/state internal/mechanics internal/swarm internal/llm internal/replay
 
+# The same flag and the same timeout as the CI job `integration` (T-401): the
+# contract set on the live broker, its Close case included, is reachable by the
+# race detector only here. 20m and not 15m for the reason the job gives — a
+# fully red set walks through every one of its 15-second waits.
 .PHONY: test-integration
-test-integration: minio-image ## testcontainers: Redpanda, MinIO, Qdrant, Neo4j
-	@go test -tags integration -count=1 -timeout 15m ./...
+test-integration: minio-image ## testcontainers: Redpanda, MinIO, Qdrant, Neo4j; -race only where cgo is available
+	@$(if $(RACE),echo "test-integration: with the race detector",echo "test-integration: WITHOUT the race detector (no cgo toolchain); the CI job integration runs it on Linux")
+	go test -tags integration $(RACE) -count=1 -timeout 20m ./...
 
 .PHONY: test-e2e
 test-e2e: ## End to end in one process, in-memory bus
 	@go test -tags e2e -count=1 -timeout 10m ./...
+
+# The CI job `race` (T-401) runs exactly this target, and so does an operator
+# with cgo: RACE_PKGS and RACE_COUNT below are the only copy of the package
+# list and of the repeat count (review #1 of T-401, Mi-1). The detector reports
+# only the races that happen during a run, so the packages where goroutines
+# meet run RACE_COUNT times; the e2e set runs once, and GOFLAGS carries -race
+# into the `go build` of cmd/multiverse it starts as a child.
+#
+# -timeout bounds one test binary, and with -count every pass of a package runs
+# inside the same binary: the 10m is for all the passes of one package
+# together. The slowest of them (testkit/gateway) takes seconds per pass
+# without the detector.
+#
+# Without cgo the target refuses: someone who asked for the detector must not
+# read a green run as a checked one, and on the runner that refusal is the loud
+# failure CI wants. Inside `make ci` it steps aside instead
+# (`ci: RACE_OPTIONAL := 1` below), so that ci stays usable on Windows; the
+# message says which of the two happened. RACE_OPTIONAL is assigned here, so a
+# value exported in the shell cannot soften a direct call; the command line
+# still overrides it. English only: the Windows console renders the UTF-8 of
+# this file as CP1251 (T-403).
+RACE_PKGS := ./shared/eventbus/... ./shared/testkit/... ./shared/runtime/... ./shared/clock/...
+RACE_COUNT ?= 3
+RACE_OPTIONAL :=
+
+.PHONY: test-race
+test-race: ## Race detector, repeated, over the concurrent packages and e2e (CI job race); needs cgo
+	@if [ -z "$(RACE)" ]; then
+		# Name only the half of the condition that failed. Without a compiler
+		# Go itself defaults CGO_ENABLED to 0, so the compiler is checked first.
+		cc=$$(go env CC)
+		if ! command -v "$$cc" >/dev/null 2>&1; then
+			reason="the C compiler CC=$$cc is not on PATH (without one Go defaults CGO_ENABLED to 0)"
+		else
+			reason="CGO_ENABLED=$$(go env CGO_ENABLED) although $$cc is on PATH (see the environment and go env -w)"
+		fi
+		if [ -n "$(RACE_OPTIONAL)" ]; then
+			echo "test-race: SKIPPED - $$reason; the CI job race runs it on Linux (decision OV-5)" >&2
+			exit 0
+		fi
+		echo "test-race: -race needs cgo and a C compiler: $$reason." >&2
+		echo "           The CI job race runs it on Linux; locally use WSL or a gcc on PATH (decision OV-5)." >&2
+		exit 1
+	fi
+	# The two commands are printed so that the log of the CI job shows the flag
+	# and the package list it actually ran with.
+	echo "test-race: go test -race -count=$(RACE_COUNT) -timeout 10m $(RACE_PKGS)"
+	go test -race -count=$(RACE_COUNT) -timeout 10m $(RACE_PKGS)
+	# One value for the log line and the run: the file exports
+	# GOFLAGS=-buildvcs=false, and the log must show what the child build of
+	# e2e really gets, not a shorthand of it (review #2 of T-401, N-7).
+	e2e_goflags="$$GOFLAGS -race"
+	echo "test-race: GOFLAGS='$$e2e_goflags' go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/..."
+	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...
 
 # `mvctl blueprint validate blueprints/` joins this target together with the
 # command itself, in EPIC-003: the name is reserved in cmd/mvctl/main.go and
@@ -206,7 +267,13 @@ compose-lint: ## The eight house rules of the compose files (§3.1.1), then the 
 	scripts/compose-lint.sh --fixtures
 
 .PHONY: ci
-ci: lint test contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
+ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
+
+# `make ci` is the owner's check on Windows, where -race cannot run: there
+# test-race prints SKIPPED and steps aside instead of failing the whole run
+# (T-401). A target-specific value reaches the prerequisites of ci, and deploy
+# through ci; `make ci RACE_OPTIONAL=` turns the skip back into a refusal.
+ci: RACE_OPTIONAL := 1
 
 .PHONY: ci-full
 ci-full: ci test-integration ## `make ci` plus the container tests
