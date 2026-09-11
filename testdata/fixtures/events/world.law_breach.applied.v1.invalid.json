@@ -1,0 +1,5 @@
+{
+  "breach": { "id": "breach-1" },
+  "laws": { "version_from": "v1", "version_to": "v2" },
+  "review": { "deadline_at": "2026-01-08" }
+}

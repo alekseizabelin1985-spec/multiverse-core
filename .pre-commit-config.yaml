@@ -10,13 +10,32 @@ repos:
     rev: v8.30.1
     hooks:
       - id: gitleaks              # entry: gitleaks git --pre-commit --redact --staged --verbose
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v2.13.2
+  # Локальные хуки, а не сборка второй копии линтера. Причина измерена
+  # 2026-09-11: хук из репозитория golangci-lint строит СВОЙ бинарник, и он
+  # обходил скрытые каталоги рядом с проектом — `.claude/worktrees` (132 файла
+  # чужого рабочего дерева) и `build/.legacy-src` (93 файла выгрузки
+  # замороженных сервисов), — переписывая их формат. Правки не отслеживаемых
+  # файлов срывали коммит на восстановлении укладки, и так пять раз подряд.
+  # Установленный `golangci-lint` той же версии (build/versions.env,
+  # GOLANGCI_LINT_VERSION) их не трогает: он уважает исключения `.golangci.yml`
+  # и не заходит в скрытые каталоги. Один инструмент, одна версия, одно
+  # поведение — то же правило, по которому сведён адрес LLM в T-404.
+  - repo: local
     hooks:
-      - id: golangci-lint-fmt     # gofmt/goimports через golangci-lint fmt
-        exclude: '^services/_archive/'
-      - id: golangci-lint         # только изменённые пакеты; полный прогон — make lint
-        exclude: '^services/_archive/'
+      - id: golangci-lint-fmt
+        name: golangci-lint fmt
+        entry: golangci-lint fmt
+        language: system
+        types: [go]
+        pass_filenames: false
+        require_serial: true
+      - id: golangci-lint
+        name: golangci-lint run
+        entry: golangci-lint run
+        language: system
+        types: [go]
+        pass_filenames: false
+        require_serial: true
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:

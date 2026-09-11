@@ -9,7 +9,8 @@
     "provider": {
       "type": "string",
       "minLength": 1,
-      "description": "The name from MV_LLM_PROVIDER and nothing else."
+      "pattern": "^[a-z][a-z0-9_]{0,31}$",
+      "description": "The name from MV_LLM_PROVIDER, never an address. The prose said \"and nothing else\" while the type accepted a URL (T-215)."
     },
     "external_players_ack": {
       "type": "boolean",

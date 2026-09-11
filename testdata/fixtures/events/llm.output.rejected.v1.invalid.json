@@ -1,0 +1,6 @@
+{
+  "reason": "budget",
+  "budget": { "kind": "background", "limit": 4, "window": "1m" },
+  "phase": "tick",
+  "attempt": 1
+}

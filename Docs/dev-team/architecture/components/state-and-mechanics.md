@@ -1,6 +1,7 @@
 # Компоненты блока «Состояние и механика» (EPIC-002)
 
-Версия 0.2 · 2026-09-09 · architect#1 (TEAM-1) · статус: **утверждён на G2 (2026-09-09)**; запросы §14 приняты системным архитектором (`consolidation.md` §2, S-1…S-6 — «П»); детализация инкрементов — `epics/EPIC-002-state-mechanics/design.md`.
+Версия 0.3 · 2026-09-11 · architect#1 (TEAM-1) · статус: **утверждён на G2 (2026-09-09)**; запросы §14 приняты системным архитектором (`consolidation.md` §2, S-1…S-6 — «П»); детализация инкрементов — `epics/EPIC-002-state-mechanics/design.md`.
+**v0.3 — сведение расхождений волны 0** (§17): §4.4 (что живёт только в указателе), §4.5 п. 1а (одна сущность — один набор изменений) и п. 9 (`details.batch_size` снят), §4.10 (объект снапшота в фикстурах), §5.1 (сигнатуры C-03 v1.2), §5.3 (предел 1000 — часть грамматики), §5.4 (`NPCTarget` и его ошибка). Действует правило приоритета `contracts.md` v0.5: где принятый код и документ расходились, побеждала форма с доказательством.
 **Дополнение после G2**: правки по `consolidation.md` §9 внесены точечно с пометкой «Дополнение после G2»; сводка — §16. Где старый текст противоречит дополнению — действует дополнение.
 Границы заданы `architecture/overview.md` §11–§19, ADR-001, ADR-003, ADR-004, ADR-007, ADR-010 и контрактами C-01, C-02, C-03, C-13, C-14 (`architecture/contracts.md`). Этот документ — уровень **компонентов** (C4 L3) внутри контейнера `core` для пакетов `internal/state`, `internal/mechanics`, `internal/replay`, `shared/entity` и файла `rules/dark-forest.yaml`. Решения уровня реализации — ADR-011 (хранение и снапшоты), ADR-012 (правила как данные), ADR-013 (версии и atomic-пакеты). Запросы на изменение контрактов — §14.
 
@@ -66,11 +67,11 @@ internal/mechanics/
   formula.go        мини-грамматика формул: DiceExpr, CheckExpr; парсер и вычислитель
   rng.go            Seed, NewRNG, roll (одна реализация детерминизма)
   resolve.go        Resolve(causeEventID, rollIndexStart, Action, actors) → Outcome, []Roll
-  target.go         NPCTarget
+  target.go         NPCTarget(npc, candidates) → (*Actor, error)   # канал ошибки — C-03 v1.2
   invariants.go     реестр инвариантов inv-01…inv-10 (реализации), Invariants(), StateView, Violation
-  actor.go          ActorFromEntity, ActorsFromEncounter
-  changes.go        ChangesFor(Action, Outcome, actors) → []ProposedChange (ops для entity.update.proposed)
-  dice_event.go     DiceRolledPayload(roll, cause, roller) — единственный конструктор payload dice.rolled
+  actor.go          ActorFromEntity(e, enc) → (*Actor, error) — enc = сущность встречи (nil вне боя)
+  changes.go        ChangesFor(Action, Outcome, attacker, target, factEventID) → ([]ProposedChange, error)
+  dice_event.go     DiceRolledPayload(roll, roller entity.Ref) — единственный конструктор payload dice.rolled
 internal/replay/
   cursor.go         Cursor map[topic]int64; Merge/Min; JSON
   eventclock.go     EventClock (реализует clock.Clock; Observe(ts) монотонно)
@@ -284,11 +285,16 @@ type Store interface {
 
 `state_hash` считается по `entities` (§3.3) и хранится в `snapshot.state_hash`; при чтении проверяется — несовпадение = повреждённый снапшот (UC-025 E1).
 
+**Что живёт только в указателе (сведение волны 0, T-016).** `size_bytes`, `entities_count`, `rules_version` и `reason` — поля **указателя**, а не объекта и не события. `size_bytes` объект не может назвать сам: записав в себя собственную длину, он её изменит; длину знает тот, кто объект уже записал, — писатель указателя. `snapshot.created` строится из указателя **снятием** `rules_version`, `entities_count` и `reason`, а схема `snapshot.created.v1.json` остаётся закрытой (`additionalProperties: false`): принцип fail-closed важнее удобства потребителя, схему под эти поля не расширять. Порядок чтения потребителем — указатель → объект по `snapshot.key` → сверка `state_hash`; ключ объекта **выводится** из `taken_at` и `seq` (§4.3), а не берётся литералом: иначе сдвиг `taken_at` при неизменном имени файла оставляет расхождение указателя и объекта незамеченным (мутация ревьюера T-016, Minor-1).
+
 ### 4.5. Обработка `entity.update.proposed` → `entity.updated | entity.update.rejected`
 
 Пошагово (`apply.go`), всё внутри worker'а мира:
 
 1. **Разбор** (`proposal.go`): валидность уже проверена библиотекой шины по схеме; извлекаются `proposal_id`, `changes[]`, `atomic`, `cause`, `meta.agent`. Ошибка формата ops (неизвестный `op`, пустой `path`) → `rejected reason=invalid_op` на всё предложение.
+
+   **п. 1а. Одна сущность — один набор изменений** (`apply.go`): если `changes[]` называет одну сущность (по `entity.id`) дважды — предложение отклоняется **целиком**, `rejected reason=invalid_op`, `entity` = повторённая сущность, независимо от `atomic`; в лог пишется, что делать вместо этого (слить операции сущности в один набор). *Почему отдельным шагом и почему до дедупа:* у такого пакета нет исхода, который разрешает C-02. Применённые по очереди, два набора дают два `entity.updated` на одну сущность под одной версией (зонд ревью #1 T-017: `inc hp -1` и `inc hp -2` по `player-A` → hp 8, версия 2, два факта, 10→9 и 10→8) — нарушены «версия строго +1 на сущность» (C-02) и «один факт на сущность» (п. 12). Применённые как один — молча теряют первый набор. Правило **не выражается схемой**: JSON Schema не умеет требовать уникальность по вложенному полю (`uniqueItems` сравнивает элементы целиком, а два набора по одной сущности различаются операциями), поэтому реестр такое предложение пропускает и отвергать его обязана каждая реализация State, а не только заглушка. Настоящая реализация (T-056) **не должна выводить это правило из журнала заглушки** — оно записано здесь и в C-02 v1.3.
+
 2. **Дедуп** (`dedup.go`): `proposal_id ∈ applied LRU` **или** у всех целевых сущностей `last_change.proposal_id == proposal_id` → предложение уже применено. Если факты для него ещё не подтверждены (`last_change.fact_event_id == ""`) — повторно опубликовать факты (§4.8) и выйти; иначе выйти молча (лог `debug`, `handled=true`).
 3. **Существование**: каждая `changes[i].entity` найдена в `WorldSet` → иначе `unknown_entity`.
 4. **Версия**: `expected_version` задан и `≠ entity.Version` → `version_conflict {expected_version, actual_version}`.
@@ -296,7 +302,7 @@ type Store interface {
 6. **Владение** (`ownership.go`): для каждой (сущность, op) проверка по `contracts.OwnershipRules` (§4.6) → `level_violation`.
 7. **Применение на копиях**: `entity.ApplyOps` на `Clone(e)` → `attrs, changed` или `invalid_op`.
 8. **Инварианты** (`invariants.go`): `overlayView` (WorldSet + копии) → `mechanics.Invariants()` с `touched = ids изменённых` → первое нарушение → `law_violation {invariant_id}`.
-9. **Решение по пакету**: `atomic=true` — любая ошибка на шагах 3–8 отклоняет **весь** пакет одним `entity.update.rejected` (в `entity` — первая проблемная сущность, `details.batch_size`). `atomic=false` — ошибки отклоняют только свои `changes[i]` (по одному `rejected` на сущность), остальные применяются; инварианты пересчитываются по оставшимся.
+9. **Решение по пакету**: `atomic=true` — любая ошибка на шагах 3–8 отклоняет **весь** пакет одним `entity.update.rejected` (в `entity` — первая проблемная сущность; **`details.batch_size` не публикуется**: схема `entity.update.rejected.v1.json` закрыта, `details` знает только `expected_version`, `actual_version`, `invariant_id`, и `api-contracts.md` §2.3.4 называет тот же набор. Размер пакета издателю и так известен — он его и составил, а применённый размер остаётся в `last_change.batch_size` сущности. Открывать закрытую схему ради поля, которое ничего не сообщает потребителю, — та же уступка, от которой отказались в §4.4). `atomic=false` — ошибки отклоняют только свои `changes[i]` (по одному `rejected` на сущность), остальные применяются; инварианты пересчитываются по оставшимся.
 10. **Фиксация**: для каждой применённой копии `Version++` (если `changed` не пуст), `UpdatedAt = proposal.Event.Timestamp`, `LastChange = {…, FactEventID: ""}`, `History` append (обрезка до 50).
 11. **Персист** (`Persist`): если применённых сущностей > 1 и `atomic=true` → `PutIntent` (ADR-013); затем `PutEntity` по каждой в порядке возрастания `id`; после всех PUT — `DeleteIntent`. Ошибка PUT → повтор ×3 (100/300/900 мс); неуспех → worker переводит мир в `state: persist_failed`, `/health fail`, обработка останавливается (§9).
 12. **Публикация** (`facts.go`): по одному `entity.updated` на сущность (`Derive(proposal.Event, …)`, `timestamp = proposal.Event.Timestamp`), общий `proposal_id`; порядок = порядок PUT; после `Publish` каждого факта — `LastChange.FactEventID = fact.ID`, `LastEventID = fact.ID` и **повторный PUT не делается** (поле `fact_event_id` дозаписывается при следующем изменении сущности или в снапшоте; при рестарте отсутствие `fact_event_id` при `version` ≥ восстановленной — сигнал сверки, §4.8). Затем `WorldSet` заменяет оригиналы копиями, `dedup.Add(proposal_id)`, счётчик снапшота `+len(applied)`.
@@ -333,6 +339,8 @@ type OwnershipRule struct {
 | `global` | `world` | `weather`, `time_of_day`, `day`, `season`, `epoch` (не `laws_version`) | `tick` | — |
 | `author` (`mvctl`) / `system` (bootstrap) | `*` | `*` | `init, author` | все |
 | `object`, `monitor` | — | — | — | — (зарезервировано C-13; спавн выключен) |
+
+`scope` в строке gateway — это **право**, а не обязанность: таблица разрешает менять `scope`, но по C-04 v1.2 gateway предлагает его только вместе с изменением членства в группе; при движении в предложении есть один `position`. Иначе State получал бы набор без изменений и публиковал факт с пустым `changed[]` и той же версией.
 
 Отдых (`rest`): предложение публикует **gateway** после валидации «не во встрече» с `ops: [{set hp = hp_max}]`, `cause=rest`; State дополнительно проверяет `encounter_id == ""` и `new hp == hp_max` (иначе `level_violation`). Это уточнение `data-model.md` §4 («HP кроме rest через механику»): у `rest` нет агента встречи, а держать ради него Phase 1 в персональном GM противоречит его правилу «ничего не меняет». Запрос на подтверждение — §14.
 
@@ -403,6 +411,9 @@ sequenceDiagram
 | `npc.json` | `wolf-alpha` (`type=npc`, `kind=wolf`, `position=dark-forest-01`) | статы из `rules.entities.wolf` (`hp, hp_max, atk, def, dmg`), `status=alive` |
 | `players.json` | `player-A`, `player-B`, `player-C` (`type=player`, `actor_kind=ci`, `position=outside:dark-forest-world`, `scope=solo:{id}`) | `hp, hp_max, atk, def, dmg, flee` из `rules.entities.player`, `status=alive`, `inventory: []` |
 | `snapshots/state/latest.json` | указатель на снапшот seq 0 (формат §4.4) — эталон для read-model потребителей | `entities_count: 6`, `cursor.system_events: 0`, `state_hash` пересчитывается тестом |
+| `snapshots/state/{ts}-000000.json` | **сам объект снапшота seq 0** (формат §4.4) — сверх исходного списка, подтверждено при приёмке T-016 | `entities[]` отсортированы по `(type, id)`, `applied_proposals: []`; `size_bytes` и `state_hash` указателя пересчитываются тестом по этому файлу |
+
+*Почему объект снапшота — часть фикстур, хотя первый список его не называл:* без него порядок чтения потребителя «указатель → объект по ключу → сверка `state_hash`» на фикстурах не проходит вовсе, а `size_bytes` нечем проверить (§4.4). Файл нормализован в `.gitattributes` (`testdata/fixtures/** text eol=lf`): без этого на Windows после обычного `git checkout` объект весил 4686 байт против обещанных указателем 4531, и потребитель read-model, не вызывающий нормализацию теста, получал не тот файл.
 
 Статы NPC/игроков в фикстурах **дублируют** `rules/dark-forest.yaml` намеренно (сущность — истина о состоянии, правила — истина о формулах); тест `bootstrap_test.go` проверяет, что фикстурные `hp_max/atk/def/dmg` равны `Rules.Stats(kind)` — расхождение = ошибка (тот же тест в EPIC-003 I1b проверяет `npc_table.stats_ref`).
 
@@ -436,10 +447,12 @@ type Actor struct {
     ID, Type string          // player | npc
     HP, HPMax, Atk, Def int
     Dmg, Flee string         // dice-выражения ("d6"); Flee "" — не бежит
-    Status string            // alive | dead
+    Status string            // alive | dead | abandoned | ascended_final (три терминальных — одинаково, C-02 v1.2)
     Participation string     // active | idle | out_of_combat (только player, из encounter.participants); "" = active
     LastDamager string       // только npc: encounter.npcs[].last_damager
 }
+func (a Actor) Alive() bool  // Status == alive
+func (a Actor) Attr(name string) (int, bool)   // atk|def|hp|hp_max|flee — то, что читают формулы §5.3
 type Action struct { Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int }
 type Outcome struct {
     Hit, Critical, Fumble, TargetDead bool
@@ -452,19 +465,24 @@ type Outcome struct {
 type Item struct { Kind, Name string }
 type Roll struct { Index int; Formula string; Seed uint64; Result, Natural int; Purpose string }
 
+type ProposedChange struct { Entity entity.Ref; ExpectedVersion *int64; Ops []entity.Op; Cause string }
+
 func (r *Rules) Resolve(causeEventID string, rollIndexStart int, a Action, actors map[string]*Actor) (Outcome, []Roll, error)
-func (r *Rules) NPCTarget(npc *Actor, candidates []*Actor) *Actor
+func (r *Rules) NPCTarget(npc *Actor, candidates []*Actor) (*Actor, error)   // C-03 v1.2: канал ошибки
 func (r *Rules) Roll(causeEventID string, rollIndex int, formula, purpose string) (Roll, error)   // для encounter_chance, фоновых таблиц
+func (r *Rules) RollCheck(causeEventID string, rollIndex int, c CheckExpr, purpose string, actor, target Actor, ctx map[string]int) (Roll, CheckResult, error)
 func Seed(eventID string, rollIndex int) uint64
 func NewRNG(seed uint64) *rand.Rand
 func (r *Rules) Invariants() []Invariant
 func (r *Rules) Stats(kind string) (Actor, bool)                 // базовые статы из entities{} (для создания сущностей)
-func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error)
-func ChangesFor(a Action, o Outcome, attacker, target *Actor, factEventID string) []ProposedChange   // ops для entity.update.proposed
+func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error)   // enc — сущность встречи; nil = вне боя
+func ChangesFor(a Action, o Outcome, attacker, target *Actor, factEventID string) ([]ProposedChange, error)   // ops для entity.update.proposed
 func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any                                  // payload dice.rolled (схема EPIC-002)
 ```
 
 Гарантии: без I/O, без часов, без глобального состояния; `Resolve` — чистая функция от `(rules, causeEventID, rollIndexStart, action, actors)`; `actors` не мутируются (результат — в `Outcome`).
+
+**Этот раздел и C-03 v1.2 совпадают дословно (сведение волны 0).** Четыре сигнатуры, по которым документы расходились, приведены к формам **этого** раздела — их и реализовал T-015: `Roll` и `ActorFromEntity` возвращают ошибку, `ActorFromEntity` принимает сущность встречи, `DiceRolledPayload` принимает `entity.Ref`. Две правки внесены **в оба** документа: `ChangesFor` возвращает `([]ProposedChange, error)` (канал ошибки нужен и после T-053: функция может получить исход, несовместимый с действием), а `NPCTarget` получает канал ошибки, потому что иначе `nil` неотличим от «целей нет» (UC-008 A2). Обоснование каждой формы — C-03 v1.2 и ADR-024; **`NPCTarget` — единственная правка, требующая изменения кода (T-053)**, остальные уже реализованы.
 
 ### 5.2. Формат `rules/dark-forest.yaml` (RulesDocument, data-model §6.3)
 
@@ -521,9 +539,13 @@ invariants: [inv-01, inv-02, inv-03, inv-04, inv-05, inv-06, inv-07, inv-08, inv
 check   := dice ( '+' term )* '>=' term ( '+' term )*
 dice    := [INT] 'd' INT [ ('+'|'-') INT ]        # d20, 2d6, d6+1
 term    := IDENT | INT
+
+предел  : 1 ≤ count ≤ 1000, 1 ≤ sides ≤ 1000, |modifier| ≤ 1000, |константа в term| ≤ 1000
 ```
 
 Идентификаторы слева резолвятся из атакующего (`atk`, `flee`), справа — из цели (`def`) и контекста (`living_enemies`, константы). Неизвестный идентификатор — ошибка `Load`. Никаких `==`, `in`, вложенных выражений: этого достаточно для v0.1 (приложение A), а общий движок (`shared/rules` as-is, `evaluateCondition` со строками) — источник недетерминизма и инъекций (ADR-012).
+
+**Предел 1000 — часть грамматики, а не константа реализации (сведение волны 0, T-015).** Он проверяется там же, где всё остальное — при `Load` и при разборе формулы, — и потому является **контрактом для авторов блупринтов EPIC-003**: формула приходит не только из `rules/*.yaml` под ревью, но и из блупринта региона через `Rules.Roll` (фоновые таблицы, `encounter_chance`), то есть от автора, которому нельзя доверить соблюдение неписаного ограничения. *Почему именно 1000:* `200000000d6` загружается без единого слова и тратит 466 мс внутри одного хода, 10^12 кубов — минуты, около 10^18 диапазон выражения перестаёт помещаться в `int`; тысяча каждого не задевает ни одной настоящей формулы, стоит микросекунды в худшем случае и держит результат любого выражения ниже 10^6 + 10^3, где арифметика хода не переполняется. Тот же предел на константу справа: без него `d20 >= 9223372036854775807 + def` загружался молча и играл как проверка, которая всегда проходит (сумма заворачивалась в отрицательный порог).
 
 ### 5.4. Resolve — таблица исходов
 
@@ -534,7 +556,7 @@ term    := IDENT | INT
 | `flee` | `flee` (d20) → idx | `success := natural + flee ≥ 10 + LivingEnemies`; `Threshold = 10 + LivingEnemies` | `Success`, `Natural`, `Threshold`; при провале вызывающий делает `free_attack` с `rollIndexStart = idx+1` |
 | `rest` | — | `allowed_in_encounter=false` — проверка на стороне gateway/State; `HPAfter = HPMax` | `HPBefore/After` |
 
-`NPCTarget`: фильтр `Status != dead ∧ Participation ∉ exclude` → если `npc.LastDamager` среди кандидатов — он; иначе минимальный `HP`; при равенстве — `ID` по возрастанию; пусто → `nil` (UC-008 A2).
+`NPCTarget`: фильтр `Status != dead ∧ Participation ∉ exclude` (терминальные `dead|abandoned|ascended_final` — одинаково, C-02 v1.2) → если `npc.LastDamager` среди кандидатов — он; иначе минимальный `HP`; при равенстве — `ID` по возрастанию; кандидатов не осталось → **`(nil, nil)`** — это законный ответ «некого кусать» (UC-008 A2), а не ошибка. Ошибка — это `npc == nil`, не-NPC в роли кусающего и прочие дефекты вызывающего; до реализации (T-053) заглушка возвращает `ErrNotImplemented`, и именно ради этого различия C-03 v1.2 добавил второй результат.
 
 ### 5.5. RNG и seed (ADR-003 п. 5, NFR-060)
 
@@ -720,10 +742,11 @@ sequenceDiagram
 | C-02 (выход) | `entity.created`, `entity.updated`, `entity.update.rejected` | `facts.go`; `entity.updated.changed[]` = `entity.Change` (для `append` — `old: null, new: <элемент>` по пути `inventory[<n>]`; для списка целиком — путь списка); `applied_at = timestamp предложения`; причины отказа: `version_conflict, unknown_entity, level_violation, law_violation, invalid_op, dead_entity, duplicate_entity` |
 | C-02 (read-model) | `snapshots-{world}/state/latest.json` (указатель) + объект | §4.4; чтение через `shared/objstore` только на старте потребителя |
 | C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops |
-| C-03 | Go-API §5.1; `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
+| C-03 v1.2 | Go-API §5.1 (совпадает с C-03 дословно); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
 | C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `MV_SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу; Дополнение после G2: префикс `MV_`) |
 | C-14 | формат `snapshot.created`, объекты снапшота, `latest.json`, порядок старта | §4.4, §4.8, §4.9; `component ∈ state|swarm|gateway` (значения C-14; `api-contracts.md` §2.3.12 использует старые имена — правка system-analyst) |
 | C-01 (потребление) | `Bus`, `Journal`, `contracts.Validate` | State публикует через `Bus.Publish` (валидация схем), читает через `Journal.ReadRange/Tail` со своим курсором (§14 — запрос на `Journal` и позицию в ctx) |
+| C-01 v1.2 (границы) | старт и остановка подписки | новая группа читает с первого офсета — рукопожатие готовности State не нужно; `Close` не обещает числа доставок и не отменяет контекст обработчика, поэтому запись в объектное хранилище доводится до конца (иначе рушится «факт после успешной записи», §4.5 п. 11–12); точка «прочитано ровно до сюда» берётся из `End`/`ReadRange`, ADR-022, ADR-023 |
 
 ---
 
@@ -856,3 +879,23 @@ sequenceDiagram
 | Раздел **«Мёртвые»** (терминальные статусы), §5.5 inv-01 | Терминальные статусы — **`status ∈ {dead, abandoned, ascended_final}`**. Покинутый персонаж (`abandoned`, следствие `/forget`) трактуется как `dead` во всех правилах: `dead_entity` при попытке изменения, inv-01 `dead_does_not_act`, `NPCTarget`, таблица видимости стража, исключение из scope, `expected[]`/`acted[]` и `participation=active`. Отличие от смерти: `narrative.output kind=death` **не** генерируется | З-2, C-02 v1.2, ADR-017 доп. 1 п. 5; задачи T-053, T-054, T-056 |
 | §4.4/§4.8 (`cause` в предложениях и фактах) | `cause` дополнена значением **`forget`**; переход `alive → abandoned` предлагает **только gateway** (`entity.update.proposed {atomic: true, cause: forget}`, `set status=abandoned`, `expected_version`, без `meta.agent`); предложение с `meta.agent` → `level_violation`; над `dead`/`ascended_final`/`abandoned` → `dead_entity`. Факт — `entity.updated {changed:[{path: status, old: alive, new: abandoned}], cause: forget}`. Схемы с `cause=forget` создаёт EPIC-001 F-4b (T-006) | З-2, C-02 v1.2; задача T-056 |
 | **§4.6** (`OwnershipRules`) | Добавляется строка **gateway**: `Character.status → abandoned` (только из `alive`) и `Group.leader_id` (включая `null`). Истина — `shared/agent/levels.go` (EPIC-003), `shared/contracts.OwnershipRules` — статичная копия; копия правится **тем же PR**, что и истина; State — только потребитель, узнаёт из отчёта PR | З-2, TL2-3, `contracts.md` §16 п. 6; задачи T-202 (EPIC-003), T-006 (EPIC-001) |
+
+
+---
+
+## 17. Сведение расхождений волны 0 (2026-09-11, architect#1)
+
+Раздел «Дополнение после сведения 3» выше сохраняется как история; решения ниже — действующие. Каждая строка разобрана по существу в `journal.md` (записи 2026-09-10…2026-09-11) с доказательством: тестом, мутацией или зондом.
+
+| Что | Решение | Где в этом документе | Правка кода |
+|---|---|---|---|
+| Четыре сигнатуры C-03, по которым расходились C-03 v1.1 и §5.1 | Прав §5.1: `Roll` и `ActorFromEntity` с ошибкой, `ActorFromEntity` со вторым аргументом-встречей, `DiceRolledPayload(roll, entity.Ref)`. `ChangesFor` правится в обоих документах → `([]ProposedChange, error)` | §2 (перечень файлов), §5.1 | не требуется — T-015 уже такой |
+| `NPCTarget` без канала ошибки | `(*Actor, error)`: `(nil, nil)` — «некого кусать», ошибка — дефект вызывающего | §5.1, §5.4 | **требуется: EPIC-002 T-053** |
+| Правило «одна сущность — один набор изменений в одном предложении» | Пакет с повтором сущности отвергается целиком, `invalid_op`; схемой не выразимо, обязательно для любой реализации State | §4.5 п. 1а, C-02 v1.3 | не требуется — заглушка делает; T-056 обязан повторить |
+| `details.batch_size` из §4.5 п. 9 | Поле снято из документа: схема закрыта, `api-contracts.md` §2.3.4 его не знает, размер пакета издателю известен, применённый — в `last_change.batch_size` | §4.5 п. 9 | нет |
+| `size_bytes` и закрытая схема `snapshot.created` | Живёт только в указателе; схема остаётся закрытой, событие строится снятием трёх полей | §4.4 | нет |
+| Объект снапшота сверх списка фикстур §4.10 | Подтверждён и внесён в таблицу: без него не проверяются ни порядок чтения, ни `size_bytes` | §4.10 | нет |
+| Предел 1000 на кубы, грани и модификатор | Часть грамматики формул и контракт для авторов блупринтов EPIC-003, а не константа пакета | §5.3 | нет |
+| Двойник механики | `shared/testkit/mechanics`, не `shared/testkit/state` (`contracts.md` §17 исправлен) | §2, §12 | нет |
+
+Открытым **намеренно** оставлено: чем заполнять `Outcome.Loot`, если трофей берётся по виду существа, а `mechanics.Actor` несёт только идентификатор и тип. Развилка — поле `Actor.Kind` (совместимое дополнение C-03) против отдельного аргумента `ChangesFor`; выбор делает T-053, когда увидит обе формы на настоящей реализации, а не сейчас по догадке. То же для константы пути трупа `loot_claimed_by` в `shared/entity/types.go` (три остальных есть) и формата идентификатора прогона в `analytics.replay.completed` — это задачи-исполнители, а не контракт.

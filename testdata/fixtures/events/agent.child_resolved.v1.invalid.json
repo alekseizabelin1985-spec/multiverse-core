@@ -1,0 +1,10 @@
+{
+  "agent": {
+    "id": "agent-encounter-1",
+    "level": "task",
+    "blueprint": "encounter-wolf",
+    "blueprint_version": "1.0"
+  },
+  "parent": { "id": "agent-domain-1" },
+  "reason": "encounter_over"
+}

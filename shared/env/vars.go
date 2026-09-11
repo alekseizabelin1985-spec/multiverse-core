@@ -37,12 +37,36 @@ var (
 	LogFormat = Declare("MV_LOG_FORMAT", "json",
 		"log encoding; the platform ships json, text is for a local run",
 		OneOf("json", "text"))
+	// Mode and Bus are the source of truth for the two choices cmd/multiverse
+	// makes at start; --mode and --bus take their DEFAULT from here and only
+	// override it when a developer passes them explicitly (T-408, the shape of
+	// T-404). Until T-408 both were declared here, shipped into every container
+	// by compose and read by NOBODY: the choice was made by flags compose never
+	// passed, so an operator who wrote replay in .env got live and was told
+	// nothing. The enums below are also the only dictionary of accepted values
+	// — serve.go builds its check out of Enum() instead of repeating the list,
+	// which is what stopped the two from drifting apart in the first place.
 	Mode = Declare("MV_MODE", "live",
-		"live drives the process from the bus, replay from a recorded journal",
+		"live drives the process from the bus, replay from a recorded journal; "+
+			"--mode overrides it for a run started by hand",
 		OneOf("live", "replay"))
-	Bus = Declare("MV_BUS", "redpanda",
-		"event bus transport; memory is for e2e and for debugging a single process",
-		OneOf("redpanda", "memory"))
+	// The value names the PROTOCOL, not the product implementing it. The
+	// manifest used to say redpanda while the flag said kafka, and the two sets
+	// did not intersect — whichever one an operator wrote, the other half of
+	// the platform had no name for it. kafka is the survivor, and not by taste:
+	// the brokers are already configured in MV_KAFKA_BROKERS, the client is a
+	// Kafka client (shared/eventbus/kafka.go), and Redpanda is one
+	// implementation of that API among several — moving to Kafka proper, MSK or
+	// Warpstream must not require renaming a value that describes something
+	// which did not change. The retired value is not accepted as a silent
+	// synonym: Validate refuses it here and serve.go refuses it with the
+	// sentence that names the replacement (T-408).
+	Bus = Declare("MV_BUS", "kafka",
+		"event bus transport: kafka is the Kafka API (Redpanda in compose, "+
+			"brokers in MV_KAFKA_BROKERS), memory is the in-process bus for "+
+			"e2e and for debugging a single process and needs --contexts=all; "+
+			"--bus overrides it for a run started by hand",
+		OneOf("kafka", "memory"))
 	BusValidateOnRead = Declare("MV_BUS_VALIDATE_ON_READ", "true",
 		"validate an event against its schema when reading it (ADR-007 add. 4); "+
 			"the process passes eventbus.Delivery.SkipValidateOnRead = !this", IsBool())
@@ -64,8 +88,8 @@ var (
 
 	// --- gateway ---------------------------------------------------------
 
-	GatewayAddr = Declare("MV_GATEWAY_ADDR", ":8088",
-		"listen address of the player API")
+	// There is no MV_GATEWAY_ADDR: one process serves one HTTP server, and its
+	// address is MV_CORE_ADDR whatever the --contexts set is (see below, T-408).
 	GatewayDataDir = Declare("MV_GATEWAY_DATA_DIR", "/data",
 		"directory holding links.db and gateway.db")
 	GatewayClientIDs = Declare("MV_GATEWAY_CLIENT_IDS", "telegram-bot,ci-harness,mvctl",
@@ -77,8 +101,23 @@ var (
 
 	// --- core -------------------------------------------------------------
 
+	// The single listen address of a process, whichever contexts it runs.
+	// serve.go creates ONE runtime.NewHTTP and hands its mux to every context
+	// of --contexts, so /health, /v1/admin/* and — in a process that runs the
+	// gateway context — the player API are all behind this one address; with
+	// --contexts=all they are behind it in one process. MV_GATEWAY_ADDR and
+	// MV_MEMORY_ADDR were two more names for that same one address, read by
+	// nobody, and compose had to copy their value into this variable for
+	// anything to happen at all. Worse, they looked adjustable and were not:
+	// the published port, the healthcheck and MV_CORE_URL of the gateway are
+	// literals, so changing the "listen address" alone only broke the stack
+	// (T-408). Both names are declared retired in init below.
 	CoreAddr = Declare("MV_CORE_ADDR", "127.0.0.1:8090",
-		"listen address of /health and /v1/admin/* of the process (D-7)")
+		"listen address of the HTTP server of THIS process — /health, "+
+			"/v1/admin/* (D-7) and the player API when the process runs the "+
+			"gateway context. Inside compose each service carries the address "+
+			"its published port and its healthcheck agree on; this value is "+
+			"what a process started by hand on the host listens on")
 	CoreAdminClients = Declare("MV_CORE_ADMIN_CLIENTS", "operator,mvctl,ci-harness",
 		"comma separated X-Client-Id admitted to /v1/admin/* (ADR-009 p. 9); "+
 			"the default is the short list the platform ships with, and mvctl "+
@@ -187,8 +226,8 @@ var (
 
 	// --- memory (compose profile memory) -----------------------------------
 
-	MemoryAddr = Declare("MV_MEMORY_ADDR", ":8082",
-		"listen address of the memory service")
+	// There is no MV_MEMORY_ADDR either: the memory process listens on
+	// MV_CORE_ADDR like every other one (T-408).
 	QdrantAddr = Declare("MV_QDRANT_ADDR", "127.0.0.1:6334",
 		"Qdrant gRPC address")
 	Neo4jURI = Declare("MV_NEO4J_URI", "neo4j://127.0.0.1:7687",
@@ -234,4 +273,18 @@ func init() {
 	DeclareDeprecated("MV_LLM_PORT",
 		"the port is part of MV_LLM_URL, which is the only source of the address (T-404); "+
 			"MV_LLM_HOST stays and means the interface the local server binds")
+
+	// One process serves one HTTP server (see MV_CORE_ADDR): these two were a
+	// second and a third name for its address, declared, shipped by compose and
+	// read by no code at all — the compose file copied their value into
+	// MV_CORE_ADDR, which is what a process really reads. They are retired
+	// rather than deleted quietly so that an operator whose .env still carries
+	// a line is told which variable took it over, instead of watching a setting
+	// disappear without a word (T-408, the rule of T-404).
+	DeclareDeprecated("MV_GATEWAY_ADDR",
+		"one process serves one HTTP server and its address is MV_CORE_ADDR (T-408); "+
+			"in compose the gateway carries MV_CORE_ADDR=:8088, the port it publishes")
+	DeclareDeprecated("MV_MEMORY_ADDR",
+		"one process serves one HTTP server and its address is MV_CORE_ADDR (T-408); "+
+			"in compose the memory service carries MV_CORE_ADDR=:8082, the port it publishes")
 }

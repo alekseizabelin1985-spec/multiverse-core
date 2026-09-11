@@ -14,12 +14,16 @@
     "maxAgentsPerRole": 2,
     "maxParallelAgents": 2
   },
+  "models": {
+    "profile": "balanced",
+    "overrides": {}
+  },
   "counters": {
     "feature": 0,
     "bug": 0,
     "epic": 13,
     "team": 3,
-    "adr": 21,
-    "task": 405
+    "adr": 24,
+    "task": 409
   }
 }

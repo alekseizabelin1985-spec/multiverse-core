@@ -1,0 +1,4 @@
+{
+  "entity": { "entity": { "id": "wolf-alpha", "type": "npc" }, "name": "Альфа-волк" },
+  "position": { "from": "dark-forest-01", "to": null }
+}

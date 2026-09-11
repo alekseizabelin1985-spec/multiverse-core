@@ -1,8 +1,29 @@
 # Контракты между блоками (эпиками)
 
-Версия 0.4 · 2026-09-09 · system-architect#1 · статус: утверждено на G2 (v0.2); v0.3 — уточнения сведения A4-2 (совместимые); **v0.4 — сведение 3 (замечания тимлидов TEAM-2/TEAM-3 при нарезке задач; все изменения совместимые, схемы v1 уточнены до начала их реализации)**, к сведению на G3.
-Основание: `analysis/api-contracts.md` v0.2 (поля событий и HTTP API — здесь не дублируются, даются ссылки), `analysis/data-model.md`, ADR-001…ADR-010 (с дополнениями 2026-09-09), ADR-017 (дополнение 1), ADR-021, `plan/epics.md`, `plan/ownership.md`; запросы на изменение из `components/*.md` §14, `threat-model.md` §8, `infrastructure.md` §11 — сведены в `architecture/consolidation.md` (§1–§9 — сведение 1, §10–§13 — сведение 2, **§14 — сведение 3**).
+Версия 0.5 · 2026-09-11 · architect#1 (TEAM-1) · статус: утверждено на G2 (v0.2); v0.3 — уточнения сведения A4-2 (совместимые); v0.4 — сведение 3 (замечания тимлидов TEAM-2/TEAM-3 при нарезке задач); **v0.5 — сведение расхождений волны 0: контракт приводится к коду, который уже написан, отревьюен и доказан тестами и мутациями (T-005, T-014, T-015, T-016, T-017, T-018)**.
+Основание: `analysis/api-contracts.md` v0.2 (поля событий и HTTP API — здесь не дублируются, даются ссылки), `analysis/data-model.md`, ADR-001…ADR-010 (с дополнениями 2026-09-09), ADR-017 (дополнение 1), ADR-021, **ADR-022, ADR-023, ADR-024**, `plan/epics.md`, `plan/ownership.md`; запросы на изменение из `components/*.md` §14, `threat-model.md` §8, `infrastructure.md` §11 — сведены в `architecture/consolidation.md` (§1–§9 — сведение 1, §10–§13 — сведение 2, **§14 — сведение 3**); расхождения волны 0 — `journal.md`, записи 2026-09-10…2026-09-11.
 Правило: **любое изменение контракта из этого файла — только через системного архитектора** (раздел «Запросы на изменение контракта» в `plan/ownership.md`) с оценкой влияния на все команды-потребители. Внутри эпика команда свободна.
+
+**Правило приоритета при расхождении контракта и принятого кода (v0.5).** Когда контракт и реализация, прошедшая ревью и приёмку, расходятся, спор решается по существу, а не по старшинству документа: побеждает та форма, у которой есть доказательство (тест, мутация, зонд на живом стенде). Если побеждает код — правится **этот файл**, и правка сопровождается объяснением «почему так, а не иначе», чтобы следующий исполнитель не восстановил прежнюю форму «по документу». Если побеждает контракт — заводится задача на код с меткой `contract-change`. Молча оставлять расхождение нельзя: тестовый набор не может закреплять поведение, о котором контракт молчит.
+
+## Изменения v0.5 (сводка; сведение расхождений волны 0)
+
+Источник каждой строки — разбор в `journal.md` с доказательством; «код» в колонке «Кто прав» означает, что правится контракт.
+
+| Контракт | Изменение | Кто прав | Совместимость | Источник |
+|---|---|---|---|---|
+| C-01 | v1.2: гарантия «**новая группа читает журнал с первого офсета**» признана частью контракта (её дают обе реализации); рукопожатие готовности подписки из контракта **не** вводится, опциональный интерфейс `readySubscriber` в `testkit/state` удаляется целиком | код | расширение гарантий (реализации уже соответствуют) | ADR-022; ревью #2 T-017 Nit-5, поправка ревьюера T-014 |
+| C-01 | v1.2: границы `Close` — число доставок после вызова `Close` **не специфицируется**; `Close` остаётся упорядоченной остановкой (все `Subscribe`/`Tail` возвращают `nil`); коммит обработчика, вернувшего `nil` под отменённым контекстом, **не гарантирован**; детерминированный якорь для тестов — журнальная половина (`End`/`ReadRange`), не `Close` | контракт молчал — решение принято здесь | уточнение семантики (обе реализации соответствуют) | ADR-023; решения по ОВ T-014 итерации 2 и ревью #2 |
+| C-01 | заявка «**контекст обработчика отменяется при `Close`**» — **отклонена** на MVP-1 (обоснование и условия пересмотра — ADR-023) | — | — | итог T-014, четыре ревью |
+| C-02 | пакет предложения, называющий одну сущность **дважды**, отвергается целиком (`reason=invalid_op`): иначе первый набор молча теряется, версия идёт не на единицу, а фактов выходит два. Схемой не выразимо — правило нормативное, детали §4.5 п. 1а | код (зонд ревью #1 T-017, Major-1) | ужесточение (сегодня такие пакеты никто не издаёт) | §4.5 п. 1а |
+| C-03 | v1.2: четыре сигнатуры приведены к формам детального дизайна §5.1 — `Roll` возвращает ошибку; `ActorFromEntity(e, enc)` принимает сущность встречи и возвращает ошибку; `DiceRolledPayload(roll, roller entity.Ref)`; `ChangesFor(a, o, attacker, target, factEventID) ([]ProposedChange, error)` — в обоих документах | код (§5.1) | несовместимо на бумаге, совместимо по факту: реализация уже такая, потребителей C-03 сегодня нет | ADR-024; ревью #1 T-015, решение оркестратора 2026-09-10 |
+| C-03 | v1.2: `NPCTarget` получает канал ошибки — `(*Actor, error)`. **Единственное место, где после правки контракта придётся тронуть код** (задача EPIC-002 T-053) | контракт | несовместимо для вызывающих (их сегодня нет, кроме заглушки) | ADR-024; ОВ T-015 |
+| C-03 | §17: двойник механики живёт в **`shared/testkit/mechanics`**, не в `shared/testkit/state` | код (дизайн, задача и карта владения) | опечатка документа | ОВ T-017 п. 3 |
+| C-04 | `scope` **не** предлагается вместе с `position`: у соло-игрока `scope` при входе в регион не меняется, у группы — тоже; предложение без изменений даёт факт с пустым `changed[]` и той же версией. `scope` меняется только вместе с членством в группе (inv-06) | код (`testkit/gateway`) | уточнение | ОВ T-018 №2 |
+| C-05 | `player.looked` порождает нарратив вида **`entry`**, не `turn`: осмотр не является ходом боя, а `turn` описывает исход схватки | дизайн §5 и задача (код это закрепил тестом) | исправление блока «Заглушка» | решение оркестратора 2026-09-11 |
+| §4.5 (компонент) | `details.batch_size` из п. 9 удалён: схема `entity.update.rejected.v1.json` закрыта и такого поля не знает, `api-contracts.md` §2.3.4 его тоже не называет | код и схема | документ приведён к схеме | ОВ T-017 п. 2 |
+| §4.4, §4.10 (компонент) | `size_bytes` есть **только** в указателе; объект снапшота внесён в состав фикстур сверх §4.10 | код (T-016), подтверждено оркестратором | дополнение | решения по ОВ T-016 пп. 2–3 |
+| §5.3 (компонент) | предел **1000** на число кубов, граней и модификатор — часть грамматики формул, а не константа пакета: формулы приходят из блупринтов EPIC-003 и могут быть невалидны | код (T-015) | перенос контракта в документ | заметка 2026-09-10 |
 
 ## Изменения v0.4 (сводка; сведение 3, `consolidation.md` §14)
 
@@ -64,7 +85,7 @@
 
 ## 1. C-01 · EPIC-001 → все: конверт события, реестр типов, библиотека шины и журнала
 
-Тип: общая модель + библиотека · Версия: 1 (v1.1 — дополнения 2026-09-09) · Владелец: EPIC-001 (после — system-architect)
+Тип: общая модель + библиотека · Версия: 1 (v1.1 — дополнения 2026-09-09; **v1.2 — границы старта и остановки, сведение волны 0**) · Владелец: EPIC-001 (после — system-architect)
 
 ### Интерфейс
 - `eventbus.Event{ID, Type, Timestamp, Source, World *WorldRef, Scope *ScopeRef, Meta Meta, Payload map[string]any, Relations []Relation}`; `Meta{SchemaVersion int, CorrelationID, CausationID, CausationType string, ActorKind string, Agent *AgentRef, Replay bool, Locale string, GMPath string}` (ADR-007 п. 1).
@@ -80,15 +101,24 @@
 ### Гарантии
 At-least-once; порядок внутри топика (одна партиция); публикация неизвестного/невалидного типа → ошибка (не публикуется); reader `MinBytes=1, MaxWait≤100ms`; дедуп по `Event.ID` — обязанность потребителя (`eventbus.Dedup`); `Journal.ReadRange` возвращает события строго по возрастанию офсета; `End` монотонен.
 
+**Старт подписки (v1.2).** Подписка **новой** consumer group начинает чтение с **первого офсета** топика, а не с конца. Это гарантия контракта, а не свойство одной реализации: kafka-адаптер задаёт `StartOffset: kafka.FirstOffset`, `membus` держит курсор группы, начинающийся с нуля, — обе половины C-01 ведут себя одинаково, и contract-тест шины это закрепляет. Следствие, ради которого гарантия и названа: потребителю **не нужно** рукопожатие «подписка готова» — событие, опубликованное между вызовом `Subscribe` и моментом регистрации группы, будет доставлено. Рукопожатие в контракт **не** вводится (канал готовности в `Subscribe` был бы самым дорогим из рассмотренных вариантов); подробности и условия пересмотра — ADR-022. *Почему так:* без этой гарантии каждый потребитель городил бы свой опциональный интерфейс готовности, который ни одна реализация шины не реализует, — ровно это и произошло в `testkit/state` и оттуда удаляется.
+
+**Остановка (`Close`, v1.2).** `Close` — упорядоченная остановка, а не аварийный обрыв: каждая подписка `Subscribe` и каждый `Tail`, идущие в этот момент, возвращают **`nil`**, а не ошибку. Три вещи контракт **сознательно не обещает**, и потребитель не имеет права на них опираться:
+1. **Сколько событий будет доставлено после вызова `Close`** — от нуля до размера буфера предвыборки реализации. Измерено на одном и том же сценарии (40 событий в хвосте, `Close` под работающим чтением): `membus` доставляет 3 из 40, брокер — 40 из 40 (kafka-go дочитывает очередь до `QueueCapacity`≈100). Обе реализации соответствуют контракту, обе возвращают `nil`. Тестовый набор **не должен** закреплять число: свойство, которое он вправе проверять, — «все подписки вернули `nil`» и «событие, опубликованное после возврата `Close`, не доставлено никому».
+2. **Коммит события, обработчик которого вернул `nil` при отменённом контексте.** `membus` коммитит всегда, kafka-адаптер в измерении дал 3 перевыдачи из 5 (гонка `select` в kafka-go). Это чистый at-least-once: «обработчик вернул `nil`» ≠ «офсет зафиксирован». Обработчик обязан быть идемпотентным (`eventbus.Dedup`) — на этом уже стоит вся платформа.
+3. **Отмена контекста обработчика при `Close`.** Контекст, переданный в `Handler`, при `Close` **не** отменяется по контракту (заявка отклонена на MVP-1 — ADR-023): обработчик посреди PUT в объектное хранилище должен доводить запись до конца, иначе C-02 «факт публикуется после успешной записи» перестаёт держаться.
+
+**Детерминированный якорь для тестов (v1.2).** Если тесту нужна точка «прочитано ровно до сюда», её даёт журнальная половина контракта, которую реализуют обе шины: `End` → `ReadRange(from, End)` (либо `Tail` с закреплённым офсетом), а не `Close` и не подсчёт доставок подписки. *Почему так:* `Subscribe` блокируется до конца подписки, момент регистрации группы находится внутри невернувшегося вызова, и выразить его через `Bus` нельзя вовсе; связка «закрепить офсет → просигналить → читать с него» окна потери не имеет и правки контракта не требует.
+
 ### Заглушка для потребителей
 `shared/testkit/membus` — in-memory шина **и журнал** с той же семантикой (порядок, офсеты, дубли по флагу `--chaos=duplicate`, `End`); `contracts` со схемами доступен с первой волны EPIC-001 — команды пишут свои схемы в `schemas/events/` (владелец типа) и регистрируют через PR в `shared/contracts/registry.go` (ревью system-architect). Contract-тест шины (F-5t) гоняется против `membus` и kafka-адаптера (testcontainers) до старта волны 1.
 
 ### История изменений
-v1 — 2026-09-09: создан (ADR-007). v1.1 — 2026-09-09: `Journal`, `Position`, `Dedup`, валидация при чтении и политики топиков, библиотека схем, `clock`/`runtime` (сведение A3 шаг 4).
+v1 — 2026-09-09: создан (ADR-007). v1.1 — 2026-09-09: `Journal`, `Position`, `Dedup`, валидация при чтении и политики топиков, библиотека схем, `clock`/`runtime` (сведение A3 шаг 4). **v1.2 — 2026-09-11 (сведение волны 0, architect#1): гарантия чтения новой группы с первого офсета; границы `Close` (число доставок, коммит под отменой, отсутствие отмены контекста обработчика); якорь детерминизма — журнал, не `Close`; ADR-022, ADR-023.**
 
 ## 2. C-02 · EPIC-002 → EPIC-003, EPIC-004: предложения и факты состояния
 
-Тип: события · Версия: 1 (v1.1 — уточнения семантики) · Владелец: EPIC-002
+Тип: события · Версия: 1 (v1.1 — уточнения семантики; v1.2 — `forget`/`abandoned`; **v1.3 — правило «одна сущность — один набор изменений»**) · Владелец: EPIC-002
 
 ### Интерфейс
 - Вход State: `entity.create.proposed`, `entity.update.proposed` — payload по `api-contracts.md` §2.3.4 (`proposal_id`, `changes[]{entity, expected_version?, ops[]{op: set|inc|append|remove, path, value}}`, `atomic`, `cause`); `meta.agent` обязателен от агентов; `meta.actor_kind` наследуется.
@@ -96,6 +126,7 @@ v1 — 2026-09-09: создан (ADR-007). v1.1 — 2026-09-09: `Journal`, `Posi
 - **Семантика (v1.1)**: `rest` предлагает gateway (`cause=rest`, `set hp = hp_max`), State отклоняет при активной встрече (`law_violation inv-…`); `atomic=false` — отказ по каждой сущности отдельно (по одному `rejected`), `atomic=true` — один `rejected` на пакет; `applied_at` и `timestamp` фактов = `timestamp` предложения (время из событий, ADR-003 п. 6); для `append` путь в `changed[]` — путь элемента (`inventory[n]`); `expected_version` обязателен для путей `hp`, `status`, `inventory`, `position` игрока/NPC в бою (ADR-013 п. 1).
 - Правило владения (кто что может предлагать) — `data-model.md` §4; проверка `level_violation` по `meta.agent.level` и `owned_entity_types`; **`contracts.OwnershipRules`** — единственный источник: таблица уровней экспортируется из `shared/agent/levels.go` (EPIC-003) в `shared/contracts` (EPIC-001) при сборке реестра; State читает только `contracts.OwnershipRules`. Процедура при расхождении копии и истины — §16 п. 6.
 - **Покинутый персонаж (v1.2, З-2, FR-061)**: `cause` дополнен значением `forget`. Переход `status: alive → abandoned` предлагает **только gateway** (`entity.update.proposed {changes: [{entity: player, expected_version, ops: [{op: set, path: status, value: abandoned}]}], atomic: true, cause: forget}`, без `meta.agent`, `meta.actor_kind` сессии) в каскаде `/forget` (C-04); строка gateway в `OwnershipRules` дополнена `Character.status → abandoned` и `Group.leader_id`. State: предложение от агента (`meta.agent` есть) → `level_violation`; над `dead`/`ascended_final` → `dead_entity` (терминальные не переходят в `abandoned`; `dead` уже исключён из scope и целей — FR-023); `abandoned` — терминальный статус: правило `dead_entity`, inv-01 (`dead_does_not_act`), `NPCTarget` и таблица видимости стража трактуют `status ∈ dead|abandoned|ascended_final` одинаково (C-03: `Actor.Status ≠ alive` исключается из целей). Факт — `entity.updated {changed: [{path: status, old: alive, new: abandoned}], cause: forget}`; потребители (swarm, gateway read-model, memory) обрабатывают его как `status=dead` в части scope/целей/раундов, но `narrative.output kind=death` **не** генерируется. Если персонаж в момент `/forget` в статусе `creating`, gateway публикует то же предложение при получении `entity.created` для `player_id` без связки.
+- **Одна сущность — один набор изменений в одном предложении (v1.3, сведение волны 0).** Пакет `changes[]`, называющий одну сущность (по `entity.id`) дважды, State отвергает **целиком** — `entity.update.rejected {reason: invalid_op, entity: <повторённая>}`, независимо от `atomic`. Издатель обязан слить операции этой сущности в один набор. *Почему так:* у такого пакета нет исхода, разрешённого C-02. Применить наборы по очереди — значит опубликовать два `entity.updated` на одну сущность, причём под одной версией (зонд ревью #1 T-017: два набора по `player-A` — `inc hp -1` и `inc hp -2` — дали hp 8, версию 2 и два факта, первый из которых сообщал 10→9, второй 10→8), что нарушает «версия строго +1 на сущность» и «один факт на сущность» (§4.5 п. 12). Применить как один — значит молча потерять то, о чём просил первый набор. Схемой правило не выразимо: JSON Schema не умеет требовать уникальность по вложенному полю (`uniqueItems` сравнивает элементы целиком, а два набора по одной сущности различаются операциями), поэтому реестр такой пакет принимает и отвергнуть его обязана **каждая** реализация State — заглушка это уже делает, T-056 встретит то же предложение. Детали шага — `state-and-mechanics.md` §4.5 п. 1а.
 - Read-model: потребители строят проекции из `entity.created/updated`; прямого HTTP к State нет. Начальная загрузка проекции — чтение указателя `snapshots-{world}/state/latest.json`, затем объекта снапшота через `shared/objstore` (только чтение; C-14).
 
 ### Гарантии
@@ -105,11 +136,11 @@ v1 — 2026-09-09: создан (ADR-007). v1.1 — 2026-09-09: `Journal`, `Posi
 `testkit/state.FakeState` — применяет предложения в память и публикует факты в `membus` без инвариантов (флаг `WithInvariants()` включает набор inv-01…inv-10).
 
 ### История изменений
-v1 — 2026-09-09: по `api-contracts.md` §2.3.4 (ADR-003). v1.1 — 2026-09-09: семантика `rest`/`atomic=false`/`applied_at`/`append`, `duplicate_entity`, источник `OwnershipRules`. v1.2 — 2026-09-09 (сведение 3): `cause=forget`, переход `alive → abandoned` от gateway, `abandoned` терминальный, строка gateway в `OwnershipRules`.
+v1 — 2026-09-09: по `api-contracts.md` §2.3.4 (ADR-003). v1.1 — 2026-09-09: семантика `rest`/`atomic=false`/`applied_at`/`append`, `duplicate_entity`, источник `OwnershipRules`. v1.2 — 2026-09-09 (сведение 3): `cause=forget`, переход `alive → abandoned` от gateway, `abandoned` терминальный, строка gateway в `OwnershipRules`. **v1.3 — 2026-09-11 (сведение волны 0, architect#1): пакет, называющий одну сущность дважды, отвергается целиком (`invalid_op`); правило нормативно для всех реализаций State, схемой не выражается.**
 
 ## 3. C-03 · EPIC-002 → EPIC-003: библиотека механики и RNG (Go-контракт)
 
-Тип: общая модель (Go API) · Версия: 1 (v1.1 — совместимые дополнения) · Владелец: EPIC-002
+Тип: общая модель (Go API) · Версия: 1 (v1.1 — совместимые дополнения; **v1.2 — сигнатуры приведены к реализованным формам `state-and-mechanics.md` §5.1, ADR-024**) · Владелец: EPIC-002
 
 ### Интерфейс
 ```go
@@ -117,40 +148,53 @@ package mechanics
 type Rules struct{ … }                                   // загружено из rules/dark-forest.yaml (RulesDocument, data-model §6.3)
 func Load(path string) (*Rules, error)
 func LoadBytes(b []byte) (*Rules, error)                                 // v1.1
-type Actor struct{ ID, Type string; HP, HPMax, Atk, Def int; Dmg, Flee string; Status string
-                   Participation string /* active|idle|out_of_combat */; LastDamager string }   // v1.1: Participation, LastDamager
-type Action struct{ Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string }
-type Outcome struct{ Hit, Critical, Fumble, TargetDead bool; Natural, Damage int; Success *bool; Threshold int; HPBefore, HPAfter int; Loot []Item }
+type Actor struct{ ID, Type string; HP, HPMax, Atk, Def int; Dmg, Flee string
+                   Status string /* alive|dead|abandoned|ascended_final */
+                   Participation string /* active|idle|out_of_combat; "" = active; только player */
+                   LastDamager string /* только npc */ }   // v1.1: Participation, LastDamager
+func (a Actor) Alive() bool                                              // Status == alive; три терминальных статуса отвечают одинаково (C-02 v1.2)
+type Action struct{ Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int }   // v1.2: LivingEnemies (порог побега)
+type Outcome struct{ Hit, Critical, Fumble, TargetDead bool; Natural, Damage, Threshold int; Success *bool; HPBefore, HPAfter int; Loot []Item; FreeAttack bool }   // v1.2: FreeAttack
 type Roll struct{ Index int; Formula string; Seed uint64; Result, Natural int; Purpose string }
+type ProposedChange struct{ Entity entity.Ref; ExpectedVersion *int64; Ops []entity.Op; Cause string }   // v1.2
+
 func (r *Rules) Resolve(causeEventID string, rollIndexStart int, a Action, actors map[string]*Actor) (Outcome, []Roll, error)
-func (r *Rules) NPCTarget(npc *Actor, candidates []*Actor) *Actor      // last_damager → min_hp → player_id asc; исключая idle/out_of_combat/dead
-func (r *Rules) Roll(causeEventID string, idx int, formula, purpose string) Roll   // v1.1: броски вне боя (шанс встречи, таблицы фона)
+func (r *Rules) NPCTarget(npc *Actor, candidates []*Actor) (*Actor, error)   // v1.2: канал ошибки; last_damager → min_hp → player_id asc; исключая idle/out_of_combat/dead|abandoned
+func (r *Rules) Roll(causeEventID string, rollIndex int, formula, purpose string) (Roll, error)   // v1.2: ошибка; броски вне боя (шанс встречи, таблицы фона)
 func (r *Rules) Stats(kind string) (Actor, bool)                        // v1.1: базовые статы NPC из rules
 func Seed(eventID string, rollIndex int) uint64                          // SHA-256(eventID+":"+idx)[:8] BigEndian
 func NewRNG(seed uint64) *rand.Rand                                      // math/rand/v2 PCG(seed, 0)
 func (r *Rules) Invariants() []Invariant                                 // NFR-020 inv-01…inv-10; Invariant{ID, Where []string, Check func(StateView, touched) []Violation}  // v1.1: Where, StateView, Violation
-func ActorFromEntity(e entity.Entity) (Actor, error)                     // v1.1
-func ChangesFor(o Outcome, a Action, actors map[string]*Actor, causeEventID string) []entity.Change   // v1.1: ops для entity.update.proposed
-func DiceRolledPayload(roll Roll, roller string) map[string]any          // v1.1: payload dice.rolled
+func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error)   // v1.2: сущность встречи вторым аргументом (nil — вне боя)
+func ChangesFor(a Action, o Outcome, attacker, target *Actor, factEventID string) ([]ProposedChange, error)   // v1.2: ops для entity.update.proposed
+func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any      // v1.2: ссылка на сущность вместо строки
 ```
 Вызывающий (агент встречи EPIC-003) публикует `dice.rolled` на каждый `Roll` (тип принадлежит EPIC-002, схема общая) через `Derive(cause, "dice.rolled", DiceRolledPayload(...))` **до** `combat.decided`, затем `combat.decided` (тип EPIC-003, §2.3.6) и `entity.update.proposed` из `ChangesFor` (рекомендация: один atomic-пакет на раунд; допускается по одному предложению на `combat.decided`).
 
+**Почему сигнатуры v1.2 именно такие** (разбор ревью #1 T-015, решение оркестратора 2026-09-10, ADR-024; в спорных местах прав детальный дизайн §5.1, а v1.1 местами противоречил сам себе):
+- `Roll` **возвращает ошибку**: формула и назначение приходят из блупринта региона (фоновые таблицы, `encounter_chance`), а не из кода под ревью, и могут быть невалидны. Функция без канала ошибки вынуждена была бы либо паниковать, либо возвращать «нулевой бросок», который вызывающий опубликует как настоящий.
+- `ActorFromEntity` **принимает сущность встречи и возвращает ошибку**: `Participation` и `LastDamager`, которые v1.1 сам же и добавил в `Actor`, — факты **встречи**, а не игрока; из одной сущности игрока их не прочитать (две встречи ответят про одного волка по-разному). Ошибка — потому что актор без `hp`/`def` не должен молча получить ноль: это превратило бы дефект создателя сущности в бой по другим правилам. `nil` вторым аргументом — законное «вне боя».
+- `DiceRolledPayload` **принимает `entity.Ref`, а не строку**: `dice.rolled.roller` по схеме — пара `{id, type}` (`EntityWithName`); из строки тип не выводится, и конструктор строил бы заведомо невалидный payload.
+- `ChangesFor` **возвращает предложения и ошибку — в ОБОИХ документах**. `[]entity.Change` из v1.1 — это `changed[]` факта `entity.updated`, то есть результат, а не запрошенные операции; предложению нужны `ops` + `expected_version` + `cause`, это `ProposedChange`. Канал ошибки нужен и после реализации (T-053): функция может получить исход, несовместимый с действием, — трофей при живой цели, урон без попадания.
+- `NPCTarget` **получает канал ошибки**: без него `nil` заглушки неотличим от «целей нет» (UC-008 A2), и вызывающий не может отличить «некого кусать» от «механика ещё не написана». **Это единственный пункт правки, требующий изменения кода** — задача EPIC-002 **T-053**.
+
 ### Гарантии
-Чистые функции, без I/O и часов; детерминизм по `(causeEventID, rollIndex)`; `rules_version` в `Rules`; изменение чисел правил — правка YAML, не кода; сигнатуры v1 не меняются.
+Чистые функции, без I/O и часов; детерминизм по `(causeEventID, rollIndex)`; `rules_version` в `Rules`; изменение чисел правил — правка YAML, не кода; сигнатуры **v1.2** (не v1) не меняются — форма, зафиксированная здесь, совпадает с реализацией `internal/mechanics` и с `state-and-mechanics.md` §5.1, и расхождение любого из трёх мест — дефект.
 
 ### Заглушка
-`rules/dark-forest.yaml` с числами приложения A PRD доступен с первой волны EPIC-002; до готовности `Resolve` EPIC-003 использует `testkit/state.FixedMechanics` (табличные исходы по seed).
+`rules/dark-forest.yaml` с числами приложения A PRD доступен с первой волны EPIC-002; до готовности `Resolve` EPIC-003 использует **`testkit/mechanics.FixedMechanics`** (табличные исходы по seed) — подпакет `shared/testkit/mechanics`, не `shared/testkit/state` (см. §17).
 
 ### История изменений
-v1 — 2026-09-09 (ADR-003). v1.1 — 2026-09-09: дополнения по ADR-012 (state §14 п. 3).
+v1 — 2026-09-09 (ADR-003). v1.1 — 2026-09-09: дополнения по ADR-012 (state §14 п. 3). **v1.2 — 2026-09-11 (сведение волны 0, architect#1): `Roll`, `ActorFromEntity`, `ChangesFor`, `DiceRolledPayload` приведены к формам §5.1 (реализованы в T-015); `NPCTarget` получил канал ошибки (правка кода — T-053); `ProposedChange` внесён в контракт; двойник механики — `shared/testkit/mechanics`. ADR-024.**
 
 ## 4. C-04 · EPIC-004 → EPIC-003, EPIC-002: действия игрока, группа, раунд
 
-Тип: события · Версия: 1 · Владелец: EPIC-004
+Тип: события · Версия: 1 (v1.1 — лидерство и каскад `/forget`; **v1.2 — `scope` не предлагается при движении**) · Владелец: EPIC-004
 
 ### Интерфейс
 `player.entered_region`, `player.left_region`, `player.looked`, `player.attacked`, `player.flee_attempted`, `player.rested`, `player.said`, `player.defended {cause: player|round_timeout}` — payload §2.3.1; `group.created/joined/left/leader_changed/disbanded`, `group.entered_region/left_region` — §2.3.2 (перемещение группы — **только** `group.entered_region`, ADR-007/overview §20 п. 7); `round.opened {scope, encounter, round{seq}, expected[], deadline_at}`, `round.closed {round{seq, close_reason}, acted[], auto_defended[], idle[], closed_at}` — §2.3.3. Все — `meta.correlation_id = id` (корень), `meta.actor_kind` сессии, scope игрока/группы.
 Сопутствующие предложения от gateway: `entity.create.proposed` (player, group), `entity.update.proposed` (position, scope, group_id, members, `members[].participation`) — по C-02; `rest` — `entity.update.proposed cause=rest` (C-02 v1.1).
+**`scope` не путешествует вместе с `position` (v1.2, сведение волны 0).** При движении (`player.entered_region`/`left_region`, `group.entered_region`) предлагается **только** `position`. *Почему так:* `scope` соло-игрока — это `{id: player-X, type: solo}`, и вход в регион его не меняет; `scope` участника группы — `{id: g-N, type: group}`, и перемещение группы его тоже не меняет. Предложить `scope` значило бы отправить набор изменений, который ничего не меняет: State опубликует факт с пустым `changed[]` и той же версией (C-02), потребители read-model получат «событие ни о чём», а версия перестанет быть признаком движения. `scope` меняется **вместе с членством в группе** — `group.created/joined/left/disbanded`, одним atomic-пакетом с `group_id` и `members[]`, где inv-06 (`scope ⇔ group_id ⇔ members`) как раз и требует согласованности. Заглушка `testkit/gateway.Harness` реализует это правило.
 **Семантика раунда (уточнение)**: открывающие действия — `attack | flee | defend | group.leave`; `say` в scope `group` **не** открывает раунд и не входит в `acted[]` (UC-016 E2; BA закрепляет в FR-025); `group.leader_changed {cause: death}` при смерти лидера — старейший `alive` по `joined_at` (предложение ADR-020 п. 8, BA — BR-13).
 **Лидерство и группа без лидера (v1.1, З-4, BR-13 v0.4)**: `cause` в `group.left`/`group.leader_changed` ∈ `leave | death | forget`; если после выхода/смерти/отвязки лидера живых (`alive`) участников нет — gateway предлагает `set leader_id = null` (`entity.update.proposed`, тот же atomic-пакет) и публикует `group.leader_changed {leader: null, cause}`; группа остаётся без лидера до `group.disbanded`; `enter`/`leave` группы (перемещение) при `leader_id = null` → `409 no_leader` (проверяется раньше `not_leader`); личный `group.leave` участника допустим. `dead`/`abandoned` участники остаются в `members[]` (история), но исключаются из `expected[]`/`acted[]`, целей NPC и `participation=active` (координатор — `OnParticipantsChanged` по `entity.updated status`).
 **Каскад `/forget` (v1.1, З-2, FR-061 п. 1–3; реализует `ForgetHooks`, порядок публикаций обязателен)**: (1) `outbox.DropForPlayer` (`pending → dropped`); (2) если персонаж `alive`: один `entity.update.proposed atomic=true cause=forget` — игрок `set status=abandoned` (+`expected_version`), а если он лидер группы — группа `set leader_id = <старейший alive | null>`; затем, если в группе, — `group.left {cause: forget}` и при смене лидера `group.leader_changed {cause: forget, leader: …|null}`; если участников-`alive` не осталось — по BR-13 (без лидера; `group.disbanded` — при выходе последнего участника); во встрече gateway ничего дополнительно не делает — агент встречи видит `entity.updated status=abandoned` и завершает встречу `players_out`, если игроков `alive` нет; (3) `session.End(forget)` → `analytics.session.ended {end_reason: forget}` (C-10); (4) физическое удаление связки (`links.db`). Персонаж `dead` — шаги (2) пропускаются (терминальный статус, FR-023); `creating` — см. C-02 v1.2.
@@ -162,25 +206,27 @@ v1 — 2026-09-09 (ADR-003). v1.1 — 2026-09-09: дополнения по ADR-
 `testkit/gateway.Harness` — Go-клиент HTTP API и генератор `player.*` в `membus` для тестов EPIC-003/002 до готовности gateway; фикстуры `player-A/B/C`.
 
 ### История изменений
-v1 — 2026-09-09. Уточнения 2026-09-09: `say` и раунд, лидерство при смерти (без изменения схем). v1.1 — 2026-09-09 (сведение 3): `cause=forget`, `leader: null`, `409 no_leader`, каскад `/forget` (расширение enum и nullable-поле до реализации схем в T-301).
+v1 — 2026-09-09. Уточнения 2026-09-09: `say` и раунд, лидерство при смерти (без изменения схем). v1.1 — 2026-09-09 (сведение 3): `cause=forget`, `leader: null`, `409 no_leader`, каскад `/forget` (расширение enum и nullable-поле до реализации схем в T-301). **v1.2 — 2026-09-11 (сведение волны 0, architect#1): `scope` не предлагается вместе с `position`; схемы без изменений, правило нормативно для T-301.**
 
 ## 5. C-05 · EPIC-003 → EPIC-004: нарратив и результаты механики для доставки
 
-Тип: события · Версия: 1 (v1.1 — опциональные поля) · Владелец: EPIC-003
+Тип: события · Версия: 1 (v1.1 — опциональные поля; **v1.2 — вид нарратива на `player.looked`**) · Владелец: EPIC-003
 
 ### Интерфейс
 `narrative.output` — §2.3.11 (`recipients[]`, `text`, `generated_by: llm|template`, `fallback_reason?`, `kind: turn|round|world_event|entry|death`, `round?`, `llm_output{event}`, `based_on[]`, `absence?`, `background_refs[]`, `filter{applied,status,filter_version}`, `locale`, `laws_version`, **`narrative_event_id?`** (= `id` события; дубль для удобства gateway, v1.1)); `meta.agent.level ∈ task` (personal-gm или group-narrator). `combat.decided` — §2.3.6 (gateway строит `Delivery kind=mechanics` из `outcome`/`hp`). `encounter.started/ended` — §2.3.7; **`encounter.started.round{timeout: "60s", idle_after_missed: 2}`** (опц., v1.1) — параметры раунда из блупринта `encounter-*` (`round` в `rules/dark-forest.yaml`); gateway использует их для таймера раунда, при отсутствии — `MV_GATEWAY_ROUND_TIMEOUT`/`MV_GATEWAY_ROUND_IDLE_AFTER_MISSED` как значения по умолчанию. Gateway обновляет read-model `encounter` и открывает первый раунд группы по `encounter.started`.
+
+**Вид нарратива на осмотр (v1.2, сведение волны 0): `player.looked` → `kind=entry`.** Так говорят дизайн EPIC-001 §5 и задача, так это сделано и закреплено тестом в `testkit/swarm.FakeNarrator`; прежняя строка блока «Заглушка» (`turn`) — ошибка документа. *Почему так:* `turn` в C-05 описывает **исход схватки** (нарратив по `combat.decided`), а осмотр ходом боя не является: он не открывает раунд, не входит в `acted[]` и не порождает `combat.decided`. Правило распространяется на настоящую реализацию EPIC-003 (C4), а не только на заглушку: замена `FakeNarrator` не должна переоткрывать этот вопрос. Виды `turn`/`death`/`world_event` и их издателей закрепляет EPIC-003 в T-220.
 
 ### Гарантии
 Один `narrative.output` на ход соло и один на раунд группы (`narrative_event_id` общий); `recipients[]` — только игроки scope (включая `idle`); текст прошёл фильтр (a) (`filter.status=pass`) или заменён шаблоном; p95 от `combat.decided` до `narrative.output` — порог после замера (NFR-002); при недоступности LLM — `generated_by=template` в пределах таймаута фазы; текст не содержит разметки, требующей `parse_mode` (бот отправляет как plain text, SEC-10).
 
 ### Заглушка
 Две заглушки в `shared/testkit/swarm` (владелец — EPIC-003; v0.3, сведение A4-2 запрос d):
-- **`FakeNarrator`** — `narrative.output generated_by=template` на `player.entered_region` (`entry`), `player.looked` (`turn`), `encounter.started` (`world_event`), последний `combat.decided` цикла (`turn`), `entity.updated(player) status=dead` (`death`), `round.closed` (`round`); шаблоны — `shared/testkit/swarm/template/ru.go` (переиспользуются ролями роя как шаблоны деградации). **v0 создаёт EPIC-001 F-10 — только нарратив, без боя** (`WithEncounterStub` не делается); реализацию заменяет EPIC-003 C4.
+- **`FakeNarrator`** — `narrative.output generated_by=template` на `player.entered_region` (`entry`), **`player.looked` (`entry`, а не `turn`)**, `encounter.started` (`world_event`), последний `combat.decided` цикла (`turn`), `entity.updated(player) status=dead` (`death`), `round.closed` (`round`); шаблоны — `shared/testkit/swarm/template/ru.go` (переиспользуются ролями роя как шаблоны деградации). **v0 создаёт EPIC-001 F-10 — только нарратив, без боя** (`WithEncounterStub` не делается); реализацию заменяет EPIC-003 C4.
 - **`FakeEncounter`** — заглушка Phase 1 для I1-α: на `player.entered_region` — `entity.create.proposed encounter` + `encounter.started{round{60s,2}}`; на `player.attacked/flee_attempted` — `mechanics.Rules.Resolve` (`FixedMechanics` до EPIC-002 I1) → `dice.rolled` ×k → `combat.decided` ×2 → один `entity.update.proposed atomic` с `expected_version` → `encounter.ended`. **Делает EPIC-003 как первую единицу I1a (C4)**; подпакет `shared/testkit/swarm` вливается в `integration/mvp-1` сразу после приёмки tech-lead#2 (ранний merge, до I1-α) — не дожидаясь остального I1a. В `core` монтируется хуком `MV_SWARM_FAKE=true` (ADR-001 доп. п. 8). Запасной вариант, если C4 не готов к 2-й неделе волны 1: tech-lead#1 эскалирует system-architect; допускается временный `encounterStub` **внутри тестов EPIC-002** (`internal/state/e2e_test.go`, не в `shared/testkit`), удаляемый при появлении `FakeEncounter`.
 
 ### История изменений
-v1 — 2026-09-09. v1.1 — 2026-09-09: `encounter.started.round{}`, `narrative_event_id`. v0.3 контрактов — 2026-09-09: заглушки `FakeNarrator`/`FakeEncounter` (схемы без изменений).
+v1 — 2026-09-09. v1.1 — 2026-09-09: `encounter.started.round{}`, `narrative_event_id`. v0.3 контрактов — 2026-09-09: заглушки `FakeNarrator`/`FakeEncounter` (схемы без изменений). **v1.2 — 2026-09-11 (сведение волны 0, architect#1): `player.looked` → `kind=entry` (исправление блока «Заглушка»; схемы без изменений).**
 
 ## 6. C-06 · EPIC-003 → EPIC-004, EPIC-005: жизненный цикл роя, тики, admin-HTTP процесса `core`
 
@@ -370,7 +416,7 @@ v1 — 2026-09-09 (ADR-005). v1.1 — 2026-09-09: `openai_compat` по умол�
 |---|---|---|---|
 | EPIC-002, 003, 004 | C-01 шина/журнал/реестр | `testkit/membus` (шина + `Journal`), реестр с первой волны EPIC-001 | `shared/testkit` |
 | EPIC-003 | C-02 факты State | `testkit/state.FakeState` — v0 (F-10/T-017) **публикует `analytics.replay.completed {mode: recovery}` при старте** (C-14 v0.4) и принимает `set status=abandoned cause=forget` от gateway (C-02 v1.2) | `shared/testkit/state` |
-| EPIC-003 | C-03 механика | `testkit/state.FixedMechanics` + `rules/dark-forest.yaml` | `shared/testkit/state`, `rules/` |
+| EPIC-003 | C-03 механика | **`testkit/mechanics.FixedMechanics`** + `rules/dark-forest.yaml` | **`shared/testkit/mechanics`**, `rules/` |
 | EPIC-003, 002 | C-04 действия игрока | `testkit/gateway.Harness` (генератор `player.*`) | `shared/testkit/gateway` |
 | EPIC-004, EPIC-002 | C-05 нарратив | `testkit/swarm.FakeNarrator` — v0 (только нарратив) из F-10, реализация — EPIC-003 C4 | `shared/testkit/swarm` |
 | EPIC-004, EPIC-002 (I1-α) | Phase 1 боя (`encounter.*`, `combat.decided`, `dice.rolled`, `entity.update.proposed`) до готовности роя | **`testkit/swarm.FakeEncounter`** — EPIC-003 C4, первая единица I1a, ранний merge подпакета в `integration/mvp-1`; монтируется в `core` хуком `MV_SWARM_FAKE=true` (`cmd/multiverse`, удаляется в I1) | `shared/testkit/swarm` |
@@ -379,3 +425,5 @@ v1 — 2026-09-09 (ADR-005). v1.1 — 2026-09-09: `openai_compat` по умол�
 | telegram-bot | C-08 gateway | `testkit/gateway.FakeGateway` | `shared/testkit/gateway` |
 | EPIC-005 | C-06/C-07/C-10 события | фикстуры `testdata/analytics`, `testdata/recordings` | `testdata/` |
 | все | часы/таймеры | `clock.Manual`, `ManualTimers` | `shared/clock` |
+
+Двойник механики живёт в **`shared/testkit/mechanics`**, а не в `shared/testkit/state`: так говорят `epics/EPIC-001-foundation/design.md`, задача T-017 и карта владения `plan/ownership.md`, так он и написан. Прежняя строка §17 была опиской. Подпакет — единственное место в `shared/**`, которому линтер разрешает импорт `internal/mechanics` (правило `shared-testkit-mechanics` в `.golangci.yml`): двойник обязан говорить типами C-03, иначе он и настоящие `Rules` не удовлетворяют одному интерфейсу и смысл подмены исчезает. Исключение узкое и проверено зондом — файл в `shared/objstore` с тем же импортом линтер по-прежнему отвергает.

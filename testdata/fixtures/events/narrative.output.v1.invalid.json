@@ -1,0 +1,12 @@
+{
+  "recipients": [],
+  "text": "Альфа-волк отступает в подлесок, зализывая рану. Тропа снова пуста, но кусты справа ещё дрожат.",
+  "generated_by": "llm",
+  "fallback_reason": null,
+  "kind": "round",
+  "round": { "seq": 3 },
+  "llm_output": { "event": { "id": "01JG0000000000000000000011", "type": "llm.output" } },
+  "filter": { "applied": true, "status": "pass", "filter_version": "a-2026-09" },
+  "locale": "ru",
+  "laws_version": "v1"
+}

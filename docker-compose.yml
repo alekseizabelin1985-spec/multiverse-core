@@ -80,12 +80,20 @@ x-platform: &platform
   logging: *platform-logging
 
 # The variables every platform process reads (shared/env manifest, T-007).
+#
+# MV_MODE and MV_BUS are read by the process itself (cmd/multiverse/serve.go):
+# they are the defaults of --mode and --bus, and no service below passes either
+# flag, so these two lines are what decides. Until T-408 they were shipped here
+# and read by nobody — the choice was made by flags compose never passed, and an
+# operator who wrote replay in .env got a live process without a word. The value
+# of MV_BUS is the name of the PROTOCOL: `redpanda` is retired and refused by
+# name, `kafka` is the same broker described by the API it speaks.
 x-platform-env: &platform-env
   MV_ENV: ${MV_ENV:-dev}
   MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
   MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
   MV_MODE: ${MV_MODE:-live}
-  MV_BUS: ${MV_BUS:-redpanda}
+  MV_BUS: ${MV_BUS:-kafka}
   MV_BUS_VALIDATE_ON_READ: ${MV_BUS_VALIDATE_ON_READ:-true}
   MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
   MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
@@ -215,11 +223,15 @@ services:
     command: ["--contexts=gateway"]
     environment:
       <<: *platform-env
-      # Wave 0: cmd/multiverse reads the address of the process HTTP server from
-      # MV_CORE_ADDR whatever the role (serve.go, D-7); EPIC-004 moves the
-      # gateway onto MV_GATEWAY_ADDR, and this line disappears with it.
-      MV_CORE_ADDR: ${MV_GATEWAY_ADDR:-:8088}
-      MV_GATEWAY_ADDR: ${MV_GATEWAY_ADDR:-:8088}
+      # One process serves one HTTP server and reads its address from
+      # MV_CORE_ADDR whatever the --contexts set is (serve.go, D-7). A literal
+      # and not an interpolation, and that is the point of T-408: this address,
+      # the port published below and the probe of the healthcheck are one and
+      # the same thing, so it is written once and the other two follow it. The
+      # pair of lines that used to stand here — MV_CORE_ADDR taken from
+      # MV_GATEWAY_ADDR, and MV_GATEWAY_ADDR itself, read by nobody — made the
+      # variable look adjustable while the port and the probe stayed fixed.
+      MV_CORE_ADDR: ":8088"
       MV_GATEWAY_DATA_DIR: ${MV_GATEWAY_DATA_DIR:-/data}
       MV_GATEWAY_CLIENT_IDS: ${MV_GATEWAY_CLIENT_IDS:-telegram-bot,mvctl}
       MV_GATEWAY_ACTOR_KIND_CLIENTS: ${MV_GATEWAY_ACTOR_KIND_CLIENTS:-mvctl}
@@ -232,7 +244,11 @@ services:
       - gateway-data:/data
     healthcheck:
       # The image has neither shell nor curl (§2.3): the binary probes itself.
-      test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:8088/health"]
+      # Without --url: `multiverse health` derives the endpoint from the very
+      # MV_CORE_ADDR the process listens on (health.go), so the probe cannot
+      # aim at an address the process does not hold. The literal that used to
+      # stand here was the second copy of the address in this same block.
+      test: ["CMD", "/multiverse", "health"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -248,7 +264,11 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       <<: *platform-env
-      MV_CORE_ADDR: ${MV_CORE_ADDR:-:8090}
+      # A literal, like the gateway above: inside compose the address, the
+      # exposed port and the probe are one fact written once (T-408). The
+      # variable in .env stays what it always really was — the address of a
+      # process the operator starts by hand on the host (go run, mvctl).
+      MV_CORE_ADDR: ":8090"
       MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS:-operator}
       # Empty value = memory is off, a documented degradation (FR-035); with the
       # `memory` profile set MV_MEMORY_URL=http://memory:8082 in .env.
@@ -279,7 +299,7 @@ services:
     expose:
       - "8090"
     healthcheck:
-      test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:8090/health"]
+      test: ["CMD", "/multiverse", "health"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -340,9 +360,9 @@ services:
     command: ["--contexts=memory"]
     environment:
       <<: *platform-env
-      # D-7 again: the process HTTP server address comes from MV_CORE_ADDR.
-      MV_CORE_ADDR: ${MV_MEMORY_ADDR:-:8082}
-      MV_MEMORY_ADDR: ${MV_MEMORY_ADDR:-:8082}
+      # D-7 again: the process HTTP server address comes from MV_CORE_ADDR,
+      # and the retired MV_MEMORY_ADDR is gone with the second copy of it.
+      MV_CORE_ADDR: ":8082"
       MV_QDRANT_ADDR: ${MV_QDRANT_ADDR:-qdrant:6334}
       MV_NEO4J_URI: ${MV_NEO4J_URI:-neo4j://neo4j:7687}
       MV_NEO4J_USER: ${MV_NEO4J_USER:-neo4j}
@@ -351,7 +371,7 @@ services:
     ports:
       - "127.0.0.1:8082:8082"
     healthcheck:
-      test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:8082/health"]
+      test: ["CMD", "/multiverse", "health"]
       interval: 10s
       timeout: 5s
       retries: 6

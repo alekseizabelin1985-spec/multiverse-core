@@ -189,7 +189,7 @@ erDiagram
 
 | Инициатор предложения | Может менять | Не может | Отказ |
 |---|---|---|---|
-| game-service / gateway (действие игрока, `actor_kind` сессии, без `meta.agent`) | `Character.position` (enter/leave), `scope`, `group_id`; **`Character.status: alive → abandoned` (только `cause=forget`, `/forget`; сведение 3)**; `Group.*` (включая `leader_id = null`); создание `player`, `group` | HP (кроме `rest` через механику), NPC, мир; `status` иных переходов | `dead_entity` при `abandoned` над `dead`/`ascended_final` |
+| game-service / gateway (действие игрока, `actor_kind` сессии, без `meta.agent`) | `Character.position` (enter/leave), `scope` и `group_id` (**только вместе с изменением членства в группе — при движении `scope` не предлагается, C-04 v1.2**); **`Character.status: alive → abandoned` (только `cause=forget`, `/forget`; сведение 3)**; `Group.*` (включая `leader_id = null`); создание `player`, `group` | HP (кроме `rest` через механику), NPC, мир; `status` иных переходов | `dead_entity` при `abandoned` над `dead`/`ascended_final` |
 | Механика (Rule Engine) по действию игрока или ответу NPC | `Character.hp/status/position(flee)/inventory(loot)`, `NPC.hp/status/died_at/killed_by`, `Encounter.participants/npcs` | атрибуты мира/региона | `level_violation` |
 | Глобальный GM (`global`) | `World.weather/time_of_day/day/season/epoch`; `laws_version` — только через пробой (E-B) | регион, NPC, игроки | `level_violation` |
 | GM региона (`domain`) | `Region.*` (кроме `description` — авторское), `NPC` региона (создание, позиция, статус при фоновой жизни — но не убитых игроком до `respawn_ttl`), создание `Encounter` | мир, игроки (HP/позиция/инвентарь/статус) | `level_violation` |

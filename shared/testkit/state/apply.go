@@ -362,10 +362,9 @@ func statusRefusal(changes []entity.Change, cause string, ref entity.Ref) *refus
 // fell in (§4.5 p. 5). Without them a trophy could never be handed out, since
 // the NPC it is taken from is dead by definition (inv-03).
 //
-// loot_claimed_by is written out because shared/entity has no constant for it
 // (T-011 defines the other three); see the open questions of T-017.
 var corpsePaths = []string{
-	entity.AttrDiedAt, entity.AttrKilledBy, "loot_claimed_by", entity.AttrEncounterID,
+	entity.AttrDiedAt, entity.AttrKilledBy, entity.AttrLootClaimedBy, entity.AttrEncounterID,
 }
 
 func onlyCorpsePaths(ops []entity.Op) bool {

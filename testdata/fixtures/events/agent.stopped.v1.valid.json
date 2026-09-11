@@ -1,0 +1,9 @@
+{
+  "agent": {
+    "id": "agent-encounter-1",
+    "level": "task",
+    "blueprint": "encounter-wolf",
+    "blueprint_version": "1.0"
+  },
+  "reason": "ttl"
+}

@@ -1,0 +1,9 @@
+{
+  "laws": { "version_from": "v1", "version_to": "v2", "status": "approved" },
+  "created_by": "breach_applied",
+  "diff": {
+    "added": ["law-fog-hides-tracks"],
+    "removed": ["law-wolves-never-leave-the-region"]
+  },
+  "effective_from": { "round_boundary": true }
+}

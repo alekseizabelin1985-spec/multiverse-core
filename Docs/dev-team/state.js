@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T15:30:00+03:00",
+  "updatedAt": "2026-09-12T01:30:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -77,7 +77,23 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T14:10:00+03:00",
           "finishedAt": "2026-09-09T15:20:00+03:00",
           "reviewIterations": 1,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 70,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 14:10",
+              "to": "09.09 14:50",
+              "duration": "40m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "09.09 14:50",
+              "to": "09.09 15:20",
+              "duration": "30m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-001.md"
         },
         {
           "id": "T-002",
@@ -87,7 +103,23 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T15:40:00+03:00",
           "finishedAt": "2026-09-09T17:00:00+03:00",
           "reviewIterations": 1,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 80,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 15:40",
+              "to": "09.09 16:30",
+              "duration": "50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "09.09 16:30",
+              "to": "09.09 17:00",
+              "duration": "30m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-002.md"
         },
         {
           "id": "T-003",
@@ -97,7 +129,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T17:15:00+03:00",
           "finishedAt": "2026-09-09T19:20:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 125,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 17:15",
+              "to": "09.09 18:00",
+              "duration": "45m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "09.09 18:00",
+              "to": "09.09 18:40",
+              "duration": "40m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "09.09 18:40",
+              "to": "09.09 19:20",
+              "duration": "40m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-003.md"
         },
         {
           "id": "T-005",
@@ -107,7 +161,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T19:40:00+03:00",
           "finishedAt": "2026-09-09T22:50:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 190,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 19:40",
+              "to": "09.09 21:00",
+              "duration": "1h 20m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "09.09 21:00",
+              "to": "09.09 22:10",
+              "duration": "1h 10m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "09.09 22:10",
+              "to": "09.09 22:50",
+              "duration": "40m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-005.md"
         },
         {
           "id": "T-004",
@@ -117,7 +193,23 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T19:40:00+03:00",
           "finishedAt": "2026-09-09T21:40:00+03:00",
           "reviewIterations": 1,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 120,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 19:40",
+              "to": "09.09 20:30",
+              "duration": "50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "09.09 20:30",
+              "to": "09.09 21:40",
+              "duration": "1h 10m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-004.md"
         },
         {
           "id": "T-006",
@@ -127,7 +219,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T23:10:00+03:00",
           "finishedAt": "2026-09-10T03:00:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 190,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 23:10",
+              "to": "10.09 00:20",
+              "duration": "1h 10m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 01:00",
+              "to": "10.09 01:50",
+              "duration": "50m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 01:50",
+              "to": "10.09 03:00",
+              "duration": "1h 10m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-006.md"
         },
         {
           "id": "T-007",
@@ -137,7 +251,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-09T23:10:00+03:00",
           "finishedAt": "2026-09-10T03:40:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 270,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "09.09 23:10",
+              "to": "10.09 01:00",
+              "duration": "1h 50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 01:00",
+              "to": "10.09 02:30",
+              "duration": "1h 30m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 02:30",
+              "to": "10.09 03:40",
+              "duration": "1h 10m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-007.md"
         },
         {
           "id": "T-008",
@@ -147,7 +283,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T04:10:00+03:00",
           "finishedAt": "2026-09-10T08:10:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 240,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 04:10",
+              "to": "10.09 06:00",
+              "duration": "1h 50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 06:00",
+              "to": "10.09 07:20",
+              "duration": "1h 20m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 07:20",
+              "to": "10.09 08:10",
+              "duration": "50m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-008.md"
         },
         {
           "id": "T-009",
@@ -157,7 +315,23 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T04:10:00+03:00",
           "finishedAt": "2026-09-10T06:40:00+03:00",
           "reviewIterations": 1,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 150,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 04:10",
+              "to": "10.09 05:00",
+              "duration": "50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 05:00",
+              "to": "10.09 06:40",
+              "duration": "1h 40m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-009.md"
         },
         {
           "id": "T-010",
@@ -167,7 +341,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T08:30:00+03:00",
           "finishedAt": "2026-09-10T12:20:00+03:00",
           "reviewIterations": 1,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 180,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 08:30",
+              "to": "10.09 09:30",
+              "duration": "1h 0m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 10:20",
+              "to": "10.09 11:00",
+              "duration": "40m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 11:00",
+              "to": "10.09 12:20",
+              "duration": "1h 20m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-010.md"
         },
         {
           "id": "T-011",
@@ -177,7 +373,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T08:30:00+03:00",
           "finishedAt": "2026-09-10T13:00:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 270,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 08:30",
+              "to": "10.09 10:20",
+              "duration": "1h 50m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 10:20",
+              "to": "10.09 11:40",
+              "duration": "1h 20m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 11:40",
+              "to": "10.09 13:00",
+              "duration": "1h 20m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-011.md"
         },
         {
           "id": "T-012",
@@ -187,7 +405,29 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T13:20:00+03:00",
           "finishedAt": "2026-09-10T17:10:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 230,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 13:20",
+              "to": "10.09 14:30",
+              "duration": "1h 10m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 14:30",
+              "to": "10.09 15:50",
+              "duration": "1h 20m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 15:50",
+              "to": "10.09 17:10",
+              "duration": "1h 20m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-012.md"
         },
         {
           "id": "T-013",
@@ -197,7 +437,17 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T13:20:00+03:00",
           "finishedAt": "2026-09-10T15:10:00+03:00",
           "reviewIterations": 0,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 110,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 13:20",
+              "to": "10.09 15:10",
+              "duration": "1h 50m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-013.md"
         },
         {
           "id": "T-014",
@@ -207,7 +457,59 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T15:10:00+03:00",
           "finishedAt": "2026-09-11T03:10:00+03:00",
           "reviewIterations": 4,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 720,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 15:10",
+              "to": "10.09 16:40",
+              "duration": "1h 30m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 16:40",
+              "to": "10.09 17:40",
+              "duration": "1h 0m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 17:40",
+              "to": "10.09 18:55",
+              "duration": "1h 15m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "10.09 18:55",
+              "to": "10.09 20:20",
+              "duration": "1h 25m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "10.09 20:20",
+              "to": "10.09 21:20",
+              "duration": "1h 0m"
+            },
+            {
+              "stage": "Ревью 3",
+              "from": "10.09 21:20",
+              "to": "10.09 23:00",
+              "duration": "1h 40m"
+            },
+            {
+              "stage": "Разработка 4",
+              "from": "10.09 23:00",
+              "to": "11.09 01:20",
+              "duration": "2h 20m"
+            },
+            {
+              "stage": "Ревью 4",
+              "from": "11.09 01:20",
+              "to": "11.09 03:10",
+              "duration": "1h 50m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-014.md"
         },
         {
           "id": "T-015",
@@ -217,7 +519,35 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-10T17:40:00+03:00",
           "finishedAt": "2026-09-10T20:50:00+03:00",
           "reviewIterations": 2,
-          "wave": 0
+          "wave": 0,
+          "spentMinutes": 190,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "10.09 17:40",
+              "to": "10.09 18:25",
+              "duration": "45m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "10.09 18:25",
+              "to": "10.09 19:15",
+              "duration": "50m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "10.09 19:15",
+              "to": "10.09 19:45",
+              "duration": "30m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "10.09 19:45",
+              "to": "10.09 20:50",
+              "duration": "1h 5m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-015.md"
         },
         {
           "id": "T-394",
@@ -227,7 +557,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-394.md"
         },
         {
           "id": "T-395",
@@ -237,7 +570,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-395.md"
         },
         {
           "id": "T-396",
@@ -247,7 +583,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-396.md"
         },
         {
           "id": "T-397",
@@ -257,7 +596,23 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-11T04:55:00+03:00",
           "finishedAt": "2026-09-11T07:40:00+03:00",
           "reviewIterations": 1,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 165,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 04:55",
+              "to": "11.09 06:05",
+              "duration": "1h 10m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 06:05",
+              "to": "11.09 07:40",
+              "duration": "1h 35m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-397.md"
         },
         {
           "id": "T-398",
@@ -267,7 +622,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-398.md"
         },
         {
           "id": "T-399",
@@ -277,17 +635,23 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-399.md"
         },
         {
           "id": "T-400",
           "title": "Harness v0: методы Attack и Flee, боевой шаг сценария",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
-          "wave": 1
+          "status": "review",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T19:20:00+03:00",
+          "finishedAt": "2026-09-12T01:30:00+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-400.md"
         },
         {
           "id": "T-401",
@@ -297,7 +661,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-401.md"
         },
         {
           "id": "T-402",
@@ -307,7 +674,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-402.md"
         },
         {
           "id": "T-403",
@@ -317,17 +687,48 @@ window.DEVTEAM_STATE =
           "startedAt": "2026-09-11T10:20:00+03:00",
           "finishedAt": "2026-09-11T11:10:00+03:00",
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-403.md"
         },
         {
           "id": "T-404",
           "title": "Эксплуатационная обвязка LLM не должна предполагать llama.cpp",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer",
           "startedAt": "2026-09-11T12:40:00+03:00",
-          "finishedAt": "2026-09-11T13:20:00+03:00",
+          "finishedAt": "2026-09-11T17:00:00+03:00",
           "reviewIterations": 2,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 350,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 12:40",
+              "to": "11.09 13:20",
+              "duration": "40m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 13:20",
+              "to": "11.09 13:55",
+              "duration": "35m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 13:55",
+              "to": "11.09 17:00",
+              "duration": "3h 5m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "11.09 15:30",
+              "to": "11.09 17:00",
+              "duration": "1h 30m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-404.md"
         },
         {
           "id": "T-405",
@@ -337,7 +738,10 @@ window.DEVTEAM_STATE =
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
-          "wave": 1
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-405.md"
         }
       ],
       "defects": []
@@ -401,7 +805,61 @@ window.DEVTEAM_STATE =
           "note": "без замечаний; 2-й developer на независимых задачах; T-254 снята; I1-α остаётся"
         }
       },
-      "tasks": [],
+      "tasks": [
+        {
+          "id": "T-214",
+          "title": "Схемы событий части 1: рой, тики, мир, регион, NPC, законы",
+          "status": "review",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-11T18:40:00+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 70,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 17:30",
+              "to": "11.09 18:40",
+              "duration": "1h 10m"
+            }
+          ],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-214.md"
+        },
+        {
+          "id": "T-215",
+          "title": "Схемы событий части 2: LLM и нарратив",
+          "status": "review",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-11T18:40:00+03:00",
+          "finishedAt": "2026-09-11T20:30:00+03:00",
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 40,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 18:40",
+              "to": "11.09 19:20",
+              "duration": "40m"
+            }
+          ],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-215.md"
+        },
+        {
+          "id": "T-219",
+          "title": "FakeEncounter — бой первой фазы без роя",
+          "status": "review",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-11T19:20:00+03:00",
+          "finishedAt": "2026-09-12T01:30:00+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-219.md"
+        }
+      ],
       "defects": []
     },
     {
@@ -1641,7 +2099,7 @@ window.DEVTEAM_STATE =
       "task": "T-404",
       "action": "итерация 2: общий модуль вывода адреса",
       "startedAt": "2026-09-11T13:55:00+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T17:00:00+03:00"
     },
     {
       "role": "devops-engineer",
@@ -1651,6 +2109,76 @@ window.DEVTEAM_STATE =
       "task": "T-404",
       "action": "итерация 3 по пяти существенным",
       "startedAt": "2026-09-11T15:30:00+03:00",
+      "finishedAt": "2026-09-11T17:00:00+03:00"
+    },
+    {
+      "role": "architect",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "contracts",
+      "action": "сведение расхождений контрактов",
+      "startedAt": "2026-09-11T17:30:00+03:00",
+      "finishedAt": "2026-09-11T18:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 3,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-214",
+      "action": "схемы событий части 1",
+      "startedAt": "2026-09-11T17:30:00+03:00",
+      "finishedAt": "2026-09-11T18:40:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 3,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-215",
+      "action": "сверка схем и фикстуры",
+      "startedAt": "2026-09-11T18:40:00+03:00",
+      "finishedAt": "2026-09-11T19:20:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-400",
+      "action": "методы атаки и бегства",
+      "startedAt": "2026-09-11T19:20:00+03:00",
+      "finishedAt": "2026-09-11T20:30:00+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 3,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-219",
+      "action": "заглушка встречи",
+      "startedAt": "2026-09-11T19:20:00+03:00",
+      "finishedAt": "2026-09-11T20:30:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-219",
+      "action": "ревью боевого пути T-219 и T-400",
+      "startedAt": "2026-09-11T20:30:00+03:00",
+      "finishedAt": "2026-09-11T22:10:00+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-219",
+      "action": "повторное ревью пары",
+      "startedAt": "2026-09-12T01:30:00+03:00",
       "finishedAt": null
     }
   ],
@@ -3142,6 +3670,114 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "devops-engineer",
       "text": "T-404 итерация 3: доверие к номеру процесса, сравнение строк, мёртвая диагностика, ключ, обязательный адрес"
+    },
+    {
+      "at": "2026-09-11T17:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-404 итерация 3: 70 входов, ноль расхождений; опознание процесса по пути и времени старта"
+    },
+    {
+      "at": "2026-09-11T17:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Третий источник истины в compose закрыт; разбор пометки обязательности читает весь блок комментария"
+    },
+    {
+      "at": "2026-09-11T17:00:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит 1493b3d: 19 файлов, дерево после коммита зелёное"
+    },
+    {
+      "at": "2026-09-11T17:30:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "ВОЛНА 1 НАЧАТА: заявки архитектору и схемы событий роя параллельно"
+    },
+    {
+      "at": "2026-09-11T17:30:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "architect",
+      "text": "Сведение расхождений контрактов C-01, C-03, C-05, §17 — предусловие задач моста"
+    },
+    {
+      "at": "2026-09-11T17:30:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-214: схемы событий части 1 — рой, тики, мир, регион, NPC, законы"
+    },
+    {
+      "at": "2026-09-11T17:45:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Лимит Fable исчерпан: сведение контрактов перезапущено на Opus, потерь нет"
+    },
+    {
+      "at": "2026-09-11T18:40:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "architect",
+      "text": "Контракты сведены: C-01…C-05 обновлены, три новых ADR, правило приоритета в шапке"
+    },
+    {
+      "at": "2026-09-11T18:40:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-214: схемы уже были с волны 0, недоставало фикстур — сделано 44 и тест с мутациями"
+    },
+    {
+      "at": "2026-09-11T18:40:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Постановки бридж-блока описывают сделанное: T-215 пересобрана в сверку и фикстуры"
+    },
+    {
+      "at": "2026-09-11T19:20:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-215: найдено расхождение схемы с контрактом — блоку разбора не хватало поля, событие отвергалось бы при публикации"
+    },
+    {
+      "at": "2026-09-11T19:20:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Имя провайдера сужено шаблоном: адрес с ключом в событие больше не протащить"
+    },
+    {
+      "at": "2026-09-11T19:20:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "Запущены T-400 и T-219 параллельно: методы харнесса и заглушка встречи"
+    },
+    {
+      "at": "2026-09-11T20:30:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "Ревью боевого пути: харнесс, заглушка встречи и их стык"
+    },
+    {
+      "at": "2026-09-11T22:10:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "Ревью боевого пути: обе задачи вернуть, тест охранял дефект"
+    },
+    {
+      "at": "2026-09-11T22:10:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-219 итерация 2: промах теперь расходует ход, владение сверено по реестру, 12 мутаций убиты"
+    },
+    {
+      "at": "2026-09-12T01:30:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "Пара харнесс и заглушка: ноль красных из 60 против семи, гонка переживается повтором"
+    },
+    {
+      "at": "2026-09-12T01:30:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "Повторное ревью боевого пути после итераций обеих половин"
     }
   ],
   "blockers": [],
@@ -3217,5 +3853,6 @@ window.DEVTEAM_STATE =
       "status": "открыт"
     }
   ],
-  "releases": []
+  "releases": [],
+  "stage": "Волна 1 · бридж-блок"
 }

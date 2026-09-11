@@ -1,0 +1,10 @@
+{
+  "blueprint": "encounter-wolf",
+  "scope": { "id": "solo:player-A", "type": "solo" },
+  "reason": "max_instances",
+  "agent": {
+    "id": "agent-encounter-1",
+    "level": "task",
+    "blueprint": "encounter-wolf"
+  }
+}

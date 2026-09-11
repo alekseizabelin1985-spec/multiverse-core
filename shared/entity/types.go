@@ -118,12 +118,16 @@ const (
 	AttrEncounterID = "encounter_id"
 
 	// NPC.
-	AttrKind      = "kind"
-	AttrRegionID  = "region_id"
-	AttrDiedAt    = "died_at"
-	AttrKilledBy  = "killed_by"
-	AttrLoot      = "loot"
-	AttrSpawnedBy = "spawned_by"
+	AttrKind     = "kind"
+	AttrRegionID = "region_id"
+	AttrDiedAt   = "died_at"
+	AttrKilledBy = "killed_by"
+	// AttrLootClaimedBy is the fourth path of a corpse, and it was the only one
+	// written as a literal — in two doubles independently, which is how a typo
+	// becomes a silent divergence between them (T-017, T-219).
+	AttrLootClaimedBy = "loot_claimed_by"
+	AttrLoot          = "loot"
+	AttrSpawnedBy     = "spawned_by"
 
 	// World.
 	AttrLawsVersion = "laws_version"

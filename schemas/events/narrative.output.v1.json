@@ -15,7 +15,7 @@
     "generated_by": { "type": "string", "enum": ["llm", "template"] },
     "fallback_reason": {
       "type": ["string", "null"],
-      "description": "Why the template replaced the model: timeout, unavailable, invalid_after_retries, budget, filter_error, language."
+      "description": "Why the template replaced the model: unavailable, timeout, invalid_after_retries, budget, filter_blocked, filter_error, language, restart (swarm-llm-laws.md 8.3). Left a free string until EPIC-003 fixes the dictionary in code (T-220): narrowing it later is a compatible change, widening a wrong enum is not."
     },
     "kind": { "type": "string", "enum": ["turn", "round", "world_event", "entry", "death"] },
     "round": {

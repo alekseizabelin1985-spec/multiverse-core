@@ -1,0 +1,19 @@
+{
+  "breach": { "id": "breach-1" },
+  "initiator": {
+    "kind": "agent",
+    "agent": {
+      "id": "agent-domain-1",
+      "level": "domain",
+      "blueprint": "domain-dark-forest",
+      "blueprint_version": "1.1"
+    }
+  },
+  "cause_event_ids": ["01JG0000000000000000000020"],
+  "strain": -0.42,
+  "laws_removed": ["law-wolves-never-leave-the-region"],
+  "laws_added": ["law-the-pack-follows-the-fog"],
+  "canon_invalidated": ["fact-wolf-bound-to-forest"],
+  "narrative_hook": "Стая уходит за туманом на юг, и лес впервые остаётся пустым.",
+  "laws_version_base": "v1"
+}

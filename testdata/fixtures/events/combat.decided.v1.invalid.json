@@ -1,0 +1,21 @@
+{
+  "encounter": { "entity": { "id": "enc-1", "type": "encounter" }, "name": "Волк на тропе" },
+  "round": { "seq": 3 },
+  "action": "rest",
+  "attacker": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "outcome": {
+    "hit": false,
+    "natural": 0,
+    "damage": 0,
+    "critical": false,
+    "fumble": false,
+    "target_dead": false,
+    "success": null
+  },
+  "hp": { "defender_before": 7, "defender_after": 10, "defender_max": 10 },
+  "rolls": [],
+  "rules_version": "0.1",
+  "phase1_mode": "rules",
+  "lod": "rule-only",
+  "free_attack": false
+}

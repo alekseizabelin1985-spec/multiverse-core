@@ -7,7 +7,7 @@
   "properties": {
     "phase": { "type": "string", "enum": ["decision", "narrative", "tick", "other"] },
     "attempt": { "type": "integer", "minimum": 1 },
-    "provider": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "minLength": 1, "pattern": "^[a-z][a-z0-9_]{0,31}$", "description": "The name from MV_LLM_PROVIDER, never an address. The pattern is the whole point: the field said 'a name and nothing else' in prose while accepting a URL, and this event lives in llm_records for the whole retention of the topic (T-215)." },
     "model": { "type": "string", "minLength": 1 },
     "params": {
       "type": "object",
@@ -78,7 +78,12 @@
           "type": "string",
           "enum": ["direct", "strip_think", "strip_fence", "balanced_object", "trailing_commas"]
         },
-        "recovered": { "type": "boolean" }
+        "recovered": { "type": "boolean" },
+        "reasoning_len": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Length of the reasoning_content the gateway threw away (Response.ReasoningLen, C-15 v1.1). The length and nothing else: the reasoning text itself is never recorded (ADR-005 add. 2 p. 1)."
+        }
       },
       "required": ["strategy", "recovered"],
       "additionalProperties": false

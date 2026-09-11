@@ -42,6 +42,7 @@ linters:
           files:
             - "**/shared/**"
             - "!**/shared/testkit/mechanics/**"
+            - "!**/shared/testkit/swarm/**"
           deny:
             - pkg: multiverse-core.io/internal
               desc: "shared/* must not import internal/*; a context depends on shared, never the other way round (ADR-001 p. 3)"
@@ -77,6 +78,23 @@ linters:
           deny:
             - pkg: multiverse-core.io/shared/testkit
               desc: "shared/testkit is for tests: production code must not import a double (ADR-001 p. 3; ownership.md §1 names cmd/multiverse/fake_contexts.go as the single exception)"
+
+        # The combat double, for the same reason and on the same terms as the
+        # mechanics double above: FakeEncounter resolves a fight, so it has to
+        # speak Action, Actor, Outcome and Roll of C-03 — otherwise it and the
+        # real *mechanics.Rules stop satisfying one interface and the double
+        # stops being a double. Named rule rather than //nolint on the import:
+        # a directive lives out of sight of this file and gets copied by the
+        # next author who does not know why it was there (T-219).
+        shared-testkit-swarm:
+          list-mode: lax
+          files:
+            - "**/shared/testkit/swarm/**"
+          allow:
+            - multiverse-core.io/internal/mechanics
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "the combat double may see internal/mechanics and no other context (ADR-001 p. 3)"
 
         # The trap for contexts that have no rule of their own yet: without it a
         # new internal/<ctx> would inherit no boundary at all and could import
@@ -273,3 +291,11 @@ formatters:
     paths:
       - services/_archive
       - services/
+      # Не исходники проекта, а рабочие копии рядом с ним: `.claude/worktrees`
+      # держит старое дерево на 135 файлов, `build/.legacy-src` — выгрузку
+      # замороженных сервисов из закреплённого коммита (цель legacy-src). Обе
+      # попадают под обход `./...`, обе форматировались хуком — и его правки
+      # срывали коммит, потому что файлы не отслеживаются. Формат чужой копии
+      # менять нельзя: у неё своя история (2026-09-11).
+      - .claude/
+      - build/.legacy-src

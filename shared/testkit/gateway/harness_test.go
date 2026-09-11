@@ -343,37 +343,66 @@ func TestAChangeTheHarnessNeverHeardOfIsRefused(t *testing.T) {
 
 // --- what the harness refuses to do ---
 
+// TestAnActionNeedsACharacterTheFixturesKnow is what the harness refuses
+// before it publishes anything.
+//
+// Each case says why it is refused and not only that it is, for the reason the
+// combat half of this set already gives (TestAFightNeedsSomebodyToFight): an
+// action nobody answers ends in an error too, so a test asking for nothing
+// more than an error would stay green with every one of these checks taken
+// out — it would just be waiting for the timeout instead.
 func TestAnActionNeedsACharacterTheFixturesKnow(t *testing.T) {
 	h, _, _ := running(t, seedWithoutPlayers)
 	ctx := t.Context()
 
-	cases := map[string]func() error{
-		"create someone who is not in the fixtures": func() error {
-			return h.CreatePlayer(ctx, "player-Z")
+	cases := map[string]struct {
+		act     func() error
+		because string
+	}{
+		"create someone who is not in the fixtures": {
+			func() error { return h.CreatePlayer(ctx, "player-Z") }, "not in the fixtures",
 		},
-		"create a region as if it were a character": func() error {
-			return h.CreatePlayer(ctx, regionID)
+		"create a region as if it were a character": {
+			func() error { return h.CreatePlayer(ctx, regionID) }, "is a region, not a player",
 		},
-		"look with someone who is not a character": func() error { return h.Look(ctx, worldID) },
-		"enter a region that is not one": func() error {
-			return h.Enter(ctx, playerA, "nowhere")
+		"look with someone who is not a character": {
+			func() error { return h.Look(ctx, worldID) }, "is a world, not a player",
 		},
-		"enter the world itself": func() error { return h.Enter(ctx, playerA, worldID) },
-		"say nothing":            func() error { return h.Say(ctx, playerA, "") },
-		"leave from outside a region": func() error {
-			create(t, h, playerA)
-			return h.Leave(ctx, playerA)
+		"enter a region that is not one": {
+			func() error { return h.Enter(ctx, playerA, "nowhere") },
+			"not a region of the fixtures",
 		},
-		"act before the character exists": func() error { return h.Enter(ctx, "player-B", regionID) },
-		"run a scenario nobody wrote":     func() error { return h.Scenario(ctx, "solo-30") },
-		"step nobody wrote": func() error {
-			return h.Step(ctx, gateway.Step{Action: "fight", Player: playerA})
+		"enter the world itself": {
+			func() error { return h.Enter(ctx, playerA, worldID) }, "is a world, not a region",
+		},
+		"say nothing": {func() error { return h.Say(ctx, playerA, "") }, "empty text"},
+		"leave from outside a region": {
+			func() error {
+				create(t, h, playerA)
+				return h.Leave(ctx, playerA)
+			},
+			"not a region of the fixtures",
+		},
+		"act before the character exists": {
+			func() error { return h.Enter(ctx, "player-B", regionID) },
+			"create it before it acts",
+		},
+		"run a scenario nobody wrote": {
+			func() error { return h.Scenario(ctx, "solo-30") }, "no scenario",
+		},
+		"step nobody wrote": {
+			func() error { return h.Step(ctx, gateway.Step{Action: "fight", Player: playerA}) },
+			"unknown action",
 		},
 	}
-	for name, act := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			if err := act(); err == nil {
+			err := tc.act()
+			if err == nil {
 				t.Fatal("the harness did something it has no way to do")
+			}
+			if !strings.Contains(err.Error(), tc.because) {
+				t.Errorf("the error is %q, want it to say %q", err, tc.because)
 			}
 		})
 	}
@@ -409,8 +438,15 @@ func TestAnActionGivesUpWhenNobodyAnswers(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 
-	if err := h.CreatePlayer(t.Context(), playerA); err == nil {
+	err = h.CreatePlayer(t.Context(), playerA)
+	if err == nil {
 		t.Fatal("the harness reported a creation nobody answered as success")
+	}
+	// The proposal is named, and so is the wait that ran out: without both, a
+	// character refused by the fixtures would read the same as a State that
+	// never came up, and the two are looked for in different places.
+	if !strings.Contains(err.Error(), "no answer to proposal gw-create-"+playerA) {
+		t.Errorf("the error is %q; it should name the proposal nobody answered", err)
 	}
 }
 
@@ -482,8 +518,21 @@ func TestTheScriptsAreDataATestCanRead(t *testing.T) {
 		t.Error("Script hands out the table itself")
 	}
 
-	if names := gateway.Scenarios(); !slices.IsSorted(names) || len(names) != 2 {
-		t.Errorf("Scenarios() is %v, want the two scenarios of v0 in order", names)
+	// Every scenario the harness offers is runnable: a name in the table with
+	// no script behind it would be found here rather than in the epic that
+	// tried to run it.
+	names := gateway.Scenarios()
+	if !slices.IsSorted(names) {
+		t.Errorf("Scenarios() is %v, want them in order", names)
+	}
+	for _, name := range names {
+		steps, err := gateway.Script(name)
+		if err != nil || len(steps) == 0 {
+			t.Errorf("scenario %q: %d steps, %v", name, len(steps), err)
+		}
+	}
+	if _, err := gateway.Script("solo-30"); err == nil {
+		t.Error("the harness claims a scenario nobody wrote")
 	}
 }
 
@@ -498,8 +547,14 @@ func TestWhatAStepIsWorth(t *testing.T) {
 		{gateway.ActionRest, gateway.TypeRested, gateway.TypeUpdateProposed, gateway.TypeUpdated},
 		{gateway.ActionLook, gateway.TypeLooked, "", ""},
 		{gateway.ActionSay, gateway.TypeSaid, "", ""},
-		{"fight", "", "", ""},
+		// The two combat steps: the harness publishes the action and somebody
+		// else proposes what it changed, so Proposes and Fact stay empty and
+		// Resolves is what says the step is answered at all (T-400).
+		{gateway.ActionAttack, gateway.TypeAttacked, "", ""},
+		{gateway.ActionFlee, gateway.TypeFleeAttempted, "", ""},
+		{"parry", "", "", ""},
 	}
+	resolved := map[string]bool{gateway.ActionAttack: true, gateway.ActionFlee: true}
 	for _, tc := range cases {
 		step := gateway.Step{Action: tc.action}
 		if got := step.PlayerEvent(); got != tc.playerEvent {
@@ -510,6 +565,9 @@ func TestWhatAStepIsWorth(t *testing.T) {
 		}
 		if got := step.Fact(); got != tc.fact {
 			t.Errorf("%s is answered with %q, want %q", tc.action, got, tc.fact)
+		}
+		if got := step.Resolves(); got != resolved[tc.action] {
+			t.Errorf("%s is resolved by the fight: %t, want %t", tc.action, got, resolved[tc.action])
 		}
 	}
 }
@@ -609,8 +667,18 @@ func seedEverything(t *testing.T, fake *state.FakeState, fixtures []*entity.Enti
 	}
 }
 
-// running is a started harness with a started State behind it on one bus.
+// running is a started harness with a started State behind it on one bus. Its
+// timeout is the one no test here should ever reach.
 func running(t *testing.T, seed seeding) (*gateway.Harness, *state.FakeState, *membus.Bus) {
+	t.Helper()
+	return runningWithin(t, seed, 3*time.Second)
+}
+
+// runningWithin is the same for a case that means to run the timeout out: what
+// costs three seconds per action is worth shortening when waiting to the end is
+// the point of the case, and it is a setting, so it is made before Start.
+func runningWithin(t *testing.T, seed seeding,
+	timeout time.Duration) (*gateway.Harness, *state.FakeState, *membus.Bus) {
 	t.Helper()
 	bus := newBus(t)
 	fixtures := loadFixtures(t)
@@ -628,7 +696,7 @@ func running(t *testing.T, seed seeding) (*gateway.Harness, *state.FakeState, *m
 	if err != nil {
 		t.Fatalf("harness: %v", err)
 	}
-	h.WithTimeout(3 * time.Second).WithLog(nil)
+	h.WithTimeout(timeout).WithLog(nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); _ = fake.Wait(); _ = h.Wait() })
