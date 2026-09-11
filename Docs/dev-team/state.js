@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T00:33:45+03:00",
+  "updatedAt": "2026-09-12T00:38:07+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -891,17 +891,68 @@ window.DEVTEAM_STATE =
         {
           "id": "T-402",
           "title": "Стендовый замер LLM и заполнение baseline.md",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T23:24:51+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-12T00:37:17+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 59,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 23:24",
+              "to": "11.09 23:36",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 23:53",
+              "to": "11.09 23:59",
+              "duration": "6m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 23:59",
+              "to": "12.09 00:11",
+              "duration": "11m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "12.09 00:02",
+              "to": "12.09 00:06",
+              "duration": "3m"
+            },
+            {
+              "stage": "Разработка 4",
+              "from": "12.09 00:11",
+              "to": "12.09 00:18",
+              "duration": "7m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "12.09 00:18",
+              "to": "12.09 00:23",
+              "duration": "4m"
+            },
+            {
+              "stage": "Разработка 5",
+              "from": "12.09 00:23",
+              "to": "12.09 00:29",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "12.09 00:29",
+              "to": "12.09 00:37",
+              "duration": "7m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-402.md",
           "branch": "task/T-402-llm-bench-baseline",
-          "worktree": ".worktrees/T-402"
+          "worktree": null,
+          "mergeCommit": "9e5b9de2c1048296a44b1533a71bec1077b94d28",
+          "mergedAt": "2026-09-12T00:38:07+03:00"
         },
         {
           "id": "T-403",
@@ -1795,15 +1846,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-435",
           "title": "U-2: решение по базовой конфигурации LLM по трём зачётным прогонам E; включать ли Qwen3.6-35B-A3B в матрицу",
-          "status": "todo",
+          "status": "in-progress",
           "assignee": "architect#1",
-          "startedAt": null,
+          "startedAt": "2026-09-12T00:38:07+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-435-llm-baseline-decision",
+          "worktree": ".worktrees/T-435"
         }
       ],
       "defects": [],
@@ -5382,7 +5435,7 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "приёмка замера LLM",
       "startedAt": "2026-09-12T00:29:51+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T00:37:17+03:00"
     },
     {
       "instance": "developer#1",
@@ -5392,6 +5445,16 @@ window.DEVTEAM_STATE =
       "task": "T-395",
       "action": "кейс контракта «Close под падающим обработчиком»",
       "startedAt": "2026-09-12T00:33:45+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-435",
+      "action": "U-2: базовая конфигурация LLM; Qwen3.6 в матрице",
+      "startedAt": "2026-09-12T00:38:07+03:00",
       "finishedAt": null
     }
   ],
@@ -7939,6 +8002,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-406 закоммичена 376d92d [contract-change], слита в эпик (869b833). T-395 начата (developer#1, .worktrees/T-395)"
+    },
+    {
+      "at": "2026-09-12T00:38:07+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-402 закоммичена 0ecd9ea (secrets-scan зелёный), конфликт tasks.md разрешён через sync, слита в эпик (9e5b9de). T-435 начата (architect#1)"
     }
   ],
   "blockers": [],
