@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,15 +50,32 @@ const standTimeout = 2 * time.Second
 func TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus(t *testing.T) {
 	for i := range standFights {
 		t.Run(fmt.Sprintf("fight-%02d", i), func(t *testing.T) {
-			standFight(t, fmt.Sprintf("st%02d", i))
+			standFight(t, fmt.Sprintf("st%02d", i), false)
+		})
+	}
+}
+
+// TestTheStandWhenTheHarnessHearsOfTheFightLast is the same stand with
+// world_events held back from the harness (lateWorld): the order C-01 allows
+// and a busy machine produces one run in many, made the order of every run.
+//
+// It is how the flake of T-433 was reproduced, and it stays because it is the
+// only place the two ends of that order are checked on the real encounter —
+// that the stand does not ask the harness for a start it has not been handed
+// yet, and that a flight into a fight the harness has not heard open, and has
+// already heard close, does not wait out the timeout.
+func TestTheStandWhenTheHarnessHearsOfTheFightLast(t *testing.T) {
+	for i := range standFights {
+		t.Run(fmt.Sprintf("fight-%02d", i), func(t *testing.T) {
+			standFight(t, fmt.Sprintf("lt%02d", i), true)
 		})
 	}
 }
 
 // standFight runs the whole skirmish once against the real encounter stub and
 // checks what only this stand can check: that the world came to rest where the
-// harness thinks it did.
-func standFight(t *testing.T, prefix string) {
+// harness thinks it did. late holds world_events back from the harness.
+func standFight(t *testing.T, prefix string, late bool) {
 	t.Helper()
 	bus := busWith(t, prefix)
 	fixtures := loadFixtures(t)
@@ -65,7 +83,13 @@ func standFight(t *testing.T, prefix string) {
 	seedWithoutPlayers(t, fake, fixtures)
 	enc := encounterOver(t, bus, fixtures)
 
-	h, err := gateway.NewHarness(bus, fixtures)
+	var seen eventbus.Bus = bus
+	release := func() {}
+	if late {
+		held := &lateWorld{Bus: bus, gate: make(chan struct{})}
+		seen, release = held, held.release
+	}
+	h, err := gateway.NewHarness(seen, fixtures)
 	if err != nil {
 		t.Fatalf("harness: %v", err)
 	}
@@ -86,6 +110,7 @@ func standFight(t *testing.T, prefix string) {
 		t.Fatalf("script: %v", err)
 	}
 	taken, err := h.Run(ctx, script)
+	release()
 	if err != nil {
 		t.Fatalf("the skirmish against the encounter of the swarm: %v", err)
 	}
@@ -96,7 +121,7 @@ func standFight(t *testing.T, prefix string) {
 	if blows := turns(taken, gateway.ActionAttack); blows == 0 {
 		t.Error("the run struck no blow: nothing here was a fight")
 	}
-	if _, _, known := h.Fight(playerA); !known {
+	if !heardOfTheFight(h, playerA) {
 		t.Errorf("the harness never heard that %s was in an encounter", playerA)
 	}
 	if started := ofType(read(t, bus, eventbus.TopicWorldEvents),
@@ -177,6 +202,75 @@ func standRefusals(t *testing.T, facts []eventbus.Event) {
 				"gave up instead of offering it again", proposal)
 		}
 	}
+}
+
+// heardOfTheFight waits, no longer than standTimeout, until the harness has
+// heard that the character was in an encounter.
+//
+// The wait is the contract and not patience for a slow machine. Run returns on
+// the answers of system_events, encounter.started travels on world_events, and
+// C-01 orders no two topics against each other: the start can still be on its
+// way to the harness when the last step of the script is answered — false from
+// Fight is "not heard of", never "there is none". The encounter has published
+// it by then (the journal is read for it right below); only the reading is
+// late. A start that never comes still fails, at the same deadline as a step.
+func heardOfTheFight(h *gateway.Harness, playerID string) bool {
+	deadline := testkit.After(standTimeout)
+	for {
+		if _, _, known := h.Fight(playerID); known {
+			return true
+		}
+		select {
+		case <-deadline:
+			_, _, known := h.Fight(playerID)
+			return known
+		case <-clock.RealTimers{}.After(time.Millisecond).C():
+		}
+	}
+}
+
+// lateWorld is the bus as a harness sees it when world_events reaches it last:
+// nothing of that topic is handed to the harness until the first flight it
+// publishes or the end of the run, whichever comes first.
+//
+// The flight is where the gate opens because it is the latest the start can
+// arrive with the harness still in a wait. A fight that ended with the wolf is
+// heard to end from the fact on system_events, but the fact names no character,
+// so a harness that has not heard the start lets the flight go out into a fight
+// that is over and waits for an answer nobody gives. The start arriving during
+// that wait is what has to end it. Held until the end of the run, it would end
+// nothing: the run would already have failed at the deadline.
+//
+// Only the harness is handed this view; State and the encounter read the bus
+// itself.
+type lateWorld struct {
+	*membus.Bus
+	gate chan struct{}
+	once sync.Once
+}
+
+func (b *lateWorld) release() { b.once.Do(func() { close(b.gate) }) }
+
+func (b *lateWorld) Publish(ctx context.Context, ev eventbus.Event) error {
+	err := b.Bus.Publish(ctx, ev)
+	if ev.Type == gateway.TypeFleeAttempted {
+		b.release()
+	}
+	return err
+}
+
+func (b *lateWorld) Subscribe(ctx context.Context, topic, group string, h eventbus.Handler) error {
+	if topic != eventbus.TopicWorldEvents {
+		return b.Bus.Subscribe(ctx, topic, group, h)
+	}
+	return b.Bus.Subscribe(ctx, topic, group, func(ctx context.Context, ev eventbus.Event) error {
+		select {
+		case <-b.gate:
+		case <-ctx.Done():
+			return nil
+		}
+		return h(ctx, ev)
+	})
 }
 
 // busWith is a bus whose identifiers start from a prefix of their own, which

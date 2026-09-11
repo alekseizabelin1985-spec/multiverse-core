@@ -504,6 +504,15 @@ func resolutionIn(ev eventbus.Event) (string, bool) {
 // opened folds encounter.started: from here on the harness knows the
 // characters it names are in a fight, and which one — unless the fight has
 // already been heard to end.
+//
+// A start heard after its end is also the first moment the harness learns
+// whose fight that end closed: the fact of the encounter entity names the
+// encounter, not its characters. An action a character took in between went
+// out into a fight the harness did not know about, and nobody is left to answer
+// it, so its wait ends here the way end ends it (T-433). The action whose
+// package closed the fight is never among them: an end heard before its start
+// was heard from that fact, and the proposal behind the fact came before it on
+// the same topic, so that action already knows what it waits for.
 func (h *Harness) opened(ev eventbus.Event) {
 	pa := ev.Path()
 	id, _ := pa.GetString("encounter.entity.id")
@@ -513,14 +522,22 @@ func (h *Harness) opened(ev eventbus.Event) {
 	participants, _ := pa.GetSlice("participants")
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	ended := h.endings[id]
+	late := make(map[string]struct{}, len(participants))
 	for i := range participants {
 		who, ok := pa.GetString(fmt.Sprintf("participants[%d].entity.id", i))
 		if !ok || who == "" {
 			continue
 		}
-		h.fights[who] = &fight{id: id, ended: h.endings[id]}
+		h.fights[who] = &fight{id: id, ended: ended}
+		if ended != "" {
+			late[who] = struct{}{}
+		}
 		h.log.Info("a character of the harness is in a fight",
 			"encounter_id", id, "player_id", who)
+	}
+	if len(late) > 0 {
+		h.stopWaits(late, ended, "")
 	}
 }
 
@@ -567,9 +584,16 @@ func (h *Harness) end(id, reason, correlation string) {
 		return
 	}
 	h.log.Info("the fight of the harness is over", "encounter_id", id, "reason", reason)
+	h.stopWaits(closed, reason, correlation)
+}
+
+// stopWaits ends every wait of these characters that nothing was proposed for:
+// their fight is over, and no answer is coming. correlation is the action whose
+// package closed the fight, which is still answered. The caller holds the lock.
+func (h *Harness) stopWaits(players map[string]struct{}, reason, correlation string) {
 	woke := false
 	for waiting, r := range h.awaited {
-		if _, fighting := closed[r.player]; !fighting {
+		if _, fighting := players[r.player]; !fighting {
 			continue
 		}
 		if waiting == correlation || r.named != nil {
@@ -997,10 +1021,22 @@ func (h *Harness) Flee(ctx context.Context, playerID string) error {
 // The waiting slot is opened before the action is published: an encounter that
 // answered faster than this goroutine got back to the lock would otherwise
 // have nobody to answer to.
+//
+// The fight is checked again under the lock the slot is opened under, although
+// stillFighting has just checked it: the lock was let go in between, and a
+// start or an end heard in that moment ends the waits it finds — which does not
+// yet include this one. Under one lock the two are ordered: either the end came
+// first and is seen here, or the slot came first and the end finds it (T-433).
+// stillFighting stays for what it says before anything is built.
 func (h *Harness) resolved(ctx context.Context, action eventbus.Event,
 	playerID, what string) error {
 	correlation := action.CorrelationID()
 	h.mu.Lock()
+	if f := h.fights[playerID]; f != nil && f.ended != "" {
+		h.mu.Unlock()
+		return fmt.Errorf("testkit/gateway: %s: the encounter %s ended (%s), and an action "+
+			"outside an encounter is answered by nobody (C-05): %w", what, f.id, f.ended, ErrFightOver)
+	}
 	h.awaited[correlation] = &reaction{player: playerID}
 	h.mu.Unlock()
 	defer h.forget(correlation)

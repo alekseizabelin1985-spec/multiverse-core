@@ -670,7 +670,7 @@
 - **Порядок**: ветка от эпика после слияния T-429. Там уже новая compose-lint (`docker compose config --no-interpolate`), и правило 8 правится поверх неё. Трогает `scripts/compose-lint.sh` (правило 8) и `testdata/compose-lint/`.
 - **Исполнитель**: devops-engineer. Ветка `task/T-432-ollama-literal`. Низкий приоритет, бэклог волны 1.
 
-### T-433: Флак fight-NN в TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus · Размер: S · Статус: todo · Волна 1 (бэклог)
+### T-433: Флак fight-NN в TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus · Размер: S · Статус: done · Волна 1 (бэклог)
 - **Причина (исполнитель T-401; ревью #1 T-401, п. 5)**:
   - `fight-09` → «the harness never heard that player-A was in an encounter» (`shared/testkit/gateway/stand_test.go:100`, утверждение `h.Fight(playerA)` на `:99`). Падение — 1 из 4 серий `go test -count=5 ./shared/eventbus/... ./shared/testkit/... ./shared/runtime/... ./shared/clock/...` без детектора. Это пакеты задания `race`, и в серии они конкурируют за CPU. Отдельно тест не падает: 0 из 20 одиночных запусков, `-count=20` теста и `-count=20` пакета зелёные.
   - Ревьюер: у стенда `standTimeout = 2 * time.Second` (`stand_test.go:47`). Задание `race` гоняет пакет трижды под детектором на двух ядрах раннера, так что падать там будет чаще, чем в `unit`.
@@ -685,3 +685,4 @@
   - закрыть до того, как `race` станет required check (рекомендация T-401 владельцу).
 - **Владение**: `shared/testkit/gateway` по карте принадлежит EPIC-004 (TEAM-3), но стенд создан T-400 бридж-блока EPIC-001. Путь открывается через tech-lead#1, как для T-400, и принимает tech-lead#1. Если исправление затронет `shared/testkit/swarm` (`FakeEncounter`, EPIC-003) — **подтверждает tech-lead#2**. Близнец стенда с нарратором `shared/testkit/swarm/fake_narrator_stand_test.go` (T-220) проверить на то же утверждение без ожидания (грэп `.Fight(` по тестам сегодня его там не находит).
 - **Исполнитель**: developer. Ветка `task/T-433-stand-fight-flake`. Можно вести параллельно с T-430 и T-432: файлы не пересекаются. Трогает `shared/testkit/gateway/stand_test.go`, возможно `harness.go`. Низкий приоритет, бэклог волны 1, но до required check `race`.
+- **Бэклог из карточки T-433 (отдельные задачи, не блокируют)**: 1) исход боя стенда не закреплён за номером `fight-NN`: общий источник id тянут горутины State, двойника и харнесса, поэтому пути боя стенд покрывает статистически. Воспроизводимость по номеру требует источника id на публикатора в `testkit`. 2) ожидание харнесса не помнит, в какой бой ушло действие: поздний старт старого боя даст ложный `ErrFightOver` действию в новом бою, как и `end` сегодня. В MVP-1 это недостижимо: один персонаж — один бой.
