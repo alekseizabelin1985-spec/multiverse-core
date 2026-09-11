@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T21:14:56+03:00",
+  "updatedAt": "2026-09-11T22:10:51+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1456,21 +1456,88 @@ window.DEVTEAM_STATE =
         {
           "id": "T-429",
           "title": "compose-lint: значения из docker compose config --no-interpolate вместо разбора строк YAML",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T20:45:50+03:00",
+          "finishedAt": "2026-09-11T22:09:36+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 83,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 20:45",
+              "to": "11.09 21:26",
+              "duration": "40m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 21:26",
+              "to": "11.09 21:43",
+              "duration": "17m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 21:43",
+              "to": "11.09 21:51",
+              "duration": "7m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 21:51",
+              "to": "11.09 21:57",
+              "duration": "6m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "11.09 21:57",
+              "to": "11.09 22:01",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 22:01",
+              "to": "11.09 22:09",
+              "duration": "8m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-429.md",
+          "branch": "task/T-429-compose-lint-config",
+          "worktree": null,
+          "mergeCommit": "9fc6c7c89513fe83bd3129521cf24a0d2e7d7709",
+          "mergedAt": "2026-09-11T22:10:51+03:00"
+        },
+        {
+          "id": "T-430",
+          "title": "recover в StopAll; вопрос system-architect: %w только для ErrHandlerPanic",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-429.md",
-          "branch": "task/T-429-compose-lint-config",
-          "worktree": ".worktrees/T-429"
+          "card": "epics/EPIC-001-foundation/tasks.md"
         },
         {
-          "id": "T-430",
-          "title": "recover в StopAll; вопрос system-architect: %w только для ErrHandlerPanic",
+          "id": "T-431",
+          "title": "Ревизия контрактов 3: ADR-028 и design §14 EPIC-003, очередь вопросов system-architect",
+          "status": "in-progress",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-11T21:40:24+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-431-contracts-revision-3",
+          "worktree": ".worktrees/T-431"
+        },
+        {
+          "id": "T-432",
+          "title": "compose-lint: литерал OLLAMA_* без подстановки отвергается (§16 п. 5, вариант (б))",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -4578,7 +4645,7 @@ window.DEVTEAM_STATE =
       "task": "T-429",
       "action": "compose-lint на docker compose config --no-interpolate",
       "startedAt": "2026-09-11T20:45:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T21:26:09+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -4618,6 +4685,86 @@ window.DEVTEAM_STATE =
       "task": "EPIC-003-Q",
       "action": "решения: T-427 и §10 п. 14 индекса EPIC-003",
       "startedAt": "2026-09-11T21:14:56+03:00",
+      "finishedAt": "2026-09-11T21:40:24+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "ревью #1 compose-lint на config",
+      "startedAt": "2026-09-11T21:26:09+03:00",
+      "finishedAt": "2026-09-11T21:43:44+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-431",
+      "action": "ревизия контрактов 3",
+      "startedAt": "2026-09-11T21:40:24+03:00",
+      "finishedAt": "2026-09-11T21:57:08+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "итерация 2 по ревью #1 (Mi-1, N-1…N-5)",
+      "startedAt": "2026-09-11T21:43:44+03:00",
+      "finishedAt": "2026-09-11T21:51:43+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-11T21:51:43+03:00",
+      "finishedAt": "2026-09-11T21:57:43+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-431",
+      "action": "ревью ревизии контрактов 3",
+      "startedAt": "2026-09-11T21:57:08+03:00",
+      "finishedAt": "2026-09-11T22:08:08+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "итерация 3: два Nit ревью #2 (фикстуры)",
+      "startedAt": "2026-09-11T21:57:43+03:00",
+      "finishedAt": "2026-09-11T22:01:23+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "приёмка compose-lint на config",
+      "startedAt": "2026-09-11T22:01:23+03:00",
+      "finishedAt": "2026-09-11T22:09:36+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-431",
+      "action": "итерация 2 по ревью #1 (Mi-1…Mi-10, Nit, T-432)",
+      "startedAt": "2026-09-11T22:08:08+03:00",
       "finishedAt": null
     }
   ],
@@ -7057,6 +7204,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-415 закоммичена 14384f6 (тесты на дереве коммита и хуки зелёные), finish слил её в эпик (1a2c2d8); рабочая папка и ветка задачи удалены"
+    },
+    {
+      "at": "2026-09-11T21:40:24+03:00",
+      "initiative": "EPIC-003",
+      "role": "architect",
+      "text": "architect#2: §10 п. 14 — агент встречи на Has/Add (design §14.1); T-427 — агента поднимает GM региона до предложения (ADR-028). Закоммичено в эпик; ревизия контрактов 3 — T-431"
+    },
+    {
+      "at": "2026-09-11T21:44:15+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-429 ревью #1: принять (1 Minor, 5 Nit) — итерация 2 до коммита"
+    },
+    {
+      "at": "2026-09-11T21:58:11+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-429 ревью #2: принять (2 Nit по фикстурам) — итерация 3 до приёмки. Заведена T-432 (литерал OLLAMA_*)"
+    },
+    {
+      "at": "2026-09-11T22:10:51+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-429 закоммичена 76cd082 (make compose-lint и env check на дереве коммита, хуки зелёные); конфликт в tasks.md разрешён через sync, finish слил её в эпик (9fc6c7c)"
     }
   ],
   "blockers": [],
