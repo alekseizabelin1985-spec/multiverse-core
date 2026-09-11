@@ -1,0 +1,10 @@
+# A clean file for rule 8 (T-413 review #1 Mi-1): `${COMPOSE_PROJECT_NAME}` with
+# no modifier is legitimate. Compose sets the variable itself — it is the name of
+# the project and is never empty — and no process of the platform reads it. The
+# manifest declares a default for it in infra.go, but the contract holds compose
+# to the manifest's third-party defaults for OLLAMA_* only.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      STACK_NAME: ${COMPOSE_PROJECT_NAME}

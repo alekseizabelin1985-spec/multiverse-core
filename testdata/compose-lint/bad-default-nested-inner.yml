@@ -1,0 +1,13 @@
+# Rule 8, the other half of N-1 (review #1 T-411): the inner default of a
+# nested interpolation is a default like any other. The outer variable here is
+# an as-is name the manifest knows nothing about, so only the inner one can be
+# wrong — and it is: `admin` against the manifest's `neo4j`. The linter used to
+# stop at the outer `}` and never see it.
+#
+# expect-rule: 8
+# expect-text: MV_NEO4J_USER defaults to 'admin' here and to 'neo4j'
+services:
+  semantic-memory:
+    image: multiverse-core-legacy:semantic-memory-${MV_IMAGE_TAG:-dev}
+    environment:
+      NEO4J_USER: ${LEGACY_NEO4J_USER:-${MV_NEO4J_USER:-admin}}

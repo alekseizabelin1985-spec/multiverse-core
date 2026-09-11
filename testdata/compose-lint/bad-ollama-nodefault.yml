@@ -1,0 +1,14 @@
+# Rule 8: an OLLAMA_* variable interpolated with no modifier. With .env silent
+# the container gets an EMPTY OLLAMA_NUM_PARALLEL instead of the 1 of infra.go.
+# The refusal speaks of the container — the allow-list text of the platform
+# variables does not apply to a variable no platform process reads (T-413
+# review #1 Mi-1).
+#
+# expect-rule: 8
+# expect-text: the container gets an EMPTY OLLAMA_NUM_PARALLEL instead of the default of shared/env/infra.go ('1')
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL}

@@ -1,0 +1,15 @@
+# Rule 7, the marker half. The compose file requires MV_LLM_URL with `:?`
+# (T-404), and its paired example file, bad-required-unmarked.env, does not mark
+# it `[required]`. The example ships a value, so the file interpolates on the
+# clean machine and the first half of rule 7 is satisfied — yet an operator who
+# follows the README ("fill the marked variables") never looks at the line and
+# keeps an address that is not theirs (T-412 acceptance, T-413).
+#
+# expect-rule: 7
+# expect-text: MV_LLM_URL is required here (`:?`) but
+# expect-text: does not mark it [required]
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: "${MV_LLM_URL:?MV_LLM_URL is required (T-404)}"

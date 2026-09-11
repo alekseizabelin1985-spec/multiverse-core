@@ -1,0 +1,16 @@
+# Rule 8: MV_CORE_ADDR is the listen address of the process itself, not the
+# address of a service, and contracts.md §16 p. 5 keeps it out of the set of
+# network addresses by name. `core:8090` has the shape of an address and names
+# a service of this file, which is exactly why the old guess ("the manifest
+# default looks like an address") accepted it (review #2 T-411, N-4). Inside
+# compose the service carries the literal its published port and healthcheck
+# agree on (T-408).
+#
+# expect-rule: 8
+# expect-text: MV_CORE_ADDR defaults to 'core:8090' here
+# expect-text: a listen address of the process itself
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_CORE_ADDR: ${MV_CORE_ADDR:-core:8090}

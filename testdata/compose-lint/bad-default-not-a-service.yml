@@ -1,0 +1,13 @@
+# Rule 8, the exception and its limit: an address may differ from the manifest
+# only when it names a service of this compose network — the manifest says so
+# itself. `redpanda:9092` would pass; `kafka.example` is not a service here, so
+# the list below is a second, invented source of the brokers (T-411). Every
+# item of a comma separated default must name a service, not just the first.
+#
+# expect-rule: 8
+# expect-text: 'kafka.example:9092' is not a service of this compose network
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-core:9092,kafka.example:9092}

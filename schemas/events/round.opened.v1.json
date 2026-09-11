@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/round.opened.v1.json",
+  "title": "round.opened payload",
+  "description": "The gateway opened a round of an encounter (api-contracts.md 2.3.3, ADR-020). The scope lives in the envelope and is not duplicated here (api-contracts.md 2.1).",
+  "type": "object",
+  "properties": {
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "round": {
+      "type": "object",
+      "properties": { "seq": { "type": "integer", "minimum": 1 } },
+      "required": ["seq"],
+      "additionalProperties": false
+    },
+    "expected": {
+      "type": "array",
+      "description": "members intersected with alive, participation=active and not out_of_combat.",
+      "items": { "$ref": "_common.json#/$defs/EntityWithName" }
+    },
+    "deadline_at": { "$ref": "_common.json#/$defs/Timestamp" }
+  },
+  "required": ["encounter", "round", "expected", "deadline_at"],
+  "additionalProperties": false
+}

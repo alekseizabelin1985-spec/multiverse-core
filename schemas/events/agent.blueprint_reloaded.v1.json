@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/agent.blueprint_reloaded.v1.json",
+  "title": "agent.blueprint_reloaded payload",
+  "description": "A blueprint was reloaded from disk (api-contracts.md 2.3.9, contracts.md C-11). content_hash is what tells an edit apart from a version bump.",
+  "type": "object",
+  "properties": {
+    "blueprint": { "type": "string", "minLength": 1 },
+    "version_from": { "type": "string", "minLength": 1 },
+    "version_to": { "type": "string", "minLength": 1 },
+    "content_hash": {
+      "type": "string",
+      "minLength": 1,
+      "description": "SHA-256 of the normalised blueprint (ADR-015 p. 1), carried as a string and never as a number, for the reason spelled out in agent.spawned.v1.json: a JSON number is read back as a float64 and a hash does not survive it."
+    }
+  },
+  "required": ["blueprint", "version_from", "version_to", "content_hash"],
+  "additionalProperties": false
+}

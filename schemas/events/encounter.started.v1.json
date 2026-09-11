@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/encounter.started.v1.json",
+  "title": "encounter.started payload",
+  "description": "The region GM opened an encounter (api-contracts.md 2.3.7, contracts.md C-05 v1.1). round{} carries the round parameters of the encounter-* blueprint; without it the gateway falls back to MV_GATEWAY_ROUND_TIMEOUT and MV_GATEWAY_ROUND_IDLE_AFTER_MISSED.",
+  "type": "object",
+  "properties": {
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "region": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "participants": {
+      "type": "array",
+      "items": { "$ref": "_common.json#/$defs/EntityWithName" }
+    },
+    "npcs": {
+      "type": "array",
+      "items": { "$ref": "_common.json#/$defs/EntityWithName" }
+    },
+    "round": {
+      "type": "object",
+      "description": "Optional (C-05 v1.1): the round timer of a group encounter, read from the blueprint.",
+      "properties": {
+        "timeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "description": "Go duration of the round, e.g. 60s."
+        },
+        "idle_after_missed": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["timeout", "idle_after_missed"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["encounter", "region", "participants", "npcs"],
+  "additionalProperties": false
+}

@@ -1,0 +1,18 @@
+# Rule 8, whom the address exception serves: only a variable whose manifest
+# default is itself an address. MV_GATEWAY_CLIENT_IDS is an allow-list of
+# client ids, so no value earns the exception here — not even one shaped like
+# `service:port` for a service this file declares (`telegram-bot` is both a
+# service and a client id). The port is there on purpose: it makes this the
+# fixture of the address GATE alone (T-411 review #1 Mi-1). The review's bare
+# `telegram-bot` is caught twice — by this gate and by the port-or-scheme check
+# of bad-default-address-without-port.yml.
+#
+# expect-rule: 8
+# expect-text: MV_GATEWAY_CLIENT_IDS is not in the explicit set of network addresses
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_CLIENT_IDS: ${MV_GATEWAY_CLIENT_IDS:-telegram-bot:8089}
+  telegram-bot:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}

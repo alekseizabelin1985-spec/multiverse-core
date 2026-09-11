@@ -1,0 +1,15 @@
+# A clean file with the colons aligned (T-413 review #1 Ma-1): reading
+# `KEY : value` as a key must not turn the correct forms into refusals — the
+# required credentials keep their ${VAR:?}, an allow-list is passed through with
+# no value, and a platform default repeats the manifest's.
+services:
+  minio:
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+    environment:
+      MINIO_ROOT_USER     : ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD : ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_CORE_ADMIN_CLIENTS :
+      MV_WORLD_ID           : ${MV_WORLD_ID:-dark-forest-world}

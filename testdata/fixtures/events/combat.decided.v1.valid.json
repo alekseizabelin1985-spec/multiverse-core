@@ -1,0 +1,25 @@
+{
+  "encounter": { "entity": { "id": "enc-1", "type": "encounter" }, "name": "Волк на тропе" },
+  "round": { "seq": 3 },
+  "action": "attack",
+  "attacker": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "defender": { "entity": { "id": "wolf-alpha", "type": "npc" }, "name": "Альфа-волк" },
+  "outcome": {
+    "hit": true,
+    "natural": 15,
+    "damage": 3,
+    "critical": false,
+    "fumble": false,
+    "target_dead": false,
+    "success": null
+  },
+  "hp": { "defender_before": 10, "defender_after": 7, "defender_max": 10 },
+  "rolls": [
+    { "event": { "id": "01JG0000000000000000000001", "type": "dice.rolled" }, "index": 0 },
+    { "event": { "id": "01JG0000000000000000000002", "type": "dice.rolled" }, "index": 1 }
+  ],
+  "rules_version": "0.1",
+  "phase1_mode": "rules",
+  "lod": "rule-only",
+  "free_attack": false
+}

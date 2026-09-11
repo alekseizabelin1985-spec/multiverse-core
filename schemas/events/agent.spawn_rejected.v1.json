@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/agent.spawn_rejected.v1.json",
+  "title": "agent.spawn_rejected payload",
+  "description": "The router refused to spawn an agent (api-contracts.md 2.3.9): max_instances is the guard of one agent per scope, validation the verdict of the blueprint validator. No agent exists yet, so the blueprint is named rather than referenced.",
+  "type": "object",
+  "properties": {
+    "blueprint": { "type": "string", "minLength": 1 },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "reason": { "type": "string", "enum": ["max_instances", "validation"] }
+  },
+  "required": ["blueprint", "reason"],
+  "additionalProperties": false
+}

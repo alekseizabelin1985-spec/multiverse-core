@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/tick.fired.v1.json",
+  "title": "tick.fired payload",
+  "description": "The swarm scheduler fired a tick, before the tick runs (api-contracts.md 2.3.9, contracts.md C-06, ADR-014 p. 4). A root event: meta.correlation_id is its own id and meta.actor_kind is system, or ci for an immediate tick asked over the admin API.",
+  "type": "object",
+  "properties": {
+    "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "tick": {
+      "type": "object",
+      "properties": {
+        "seq": { "type": "integer", "minimum": 0, "description": "Monotonic per agent." },
+        "mode": { "type": "string", "enum": ["background", "active"] },
+        "scheduled_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "fired_at": { "$ref": "_common.json#/$defs/Timestamp" },
+        "lod_allowed": {
+          "type": "string",
+          "enum": ["disabled", "rule-only", "basic", "full"],
+          "description": "Mandatory (C-06, ADR-014 p. 6): the scheduler computes the level of detail the budget allows and the agent does not recompute it."
+        }
+      },
+      "required": ["seq", "mode", "scheduled_at", "fired_at", "lod_allowed"],
+      "additionalProperties": false
+    },
+    "budget": {
+      "type": "object",
+      "description": "The background window of the world at the moment of firing (ADR-014 p. 6).",
+      "properties": {
+        "window_calls": { "type": "integer", "minimum": 0 },
+        "cap": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["window_calls", "cap"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["tick", "budget"],
+  "additionalProperties": false
+}

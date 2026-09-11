@@ -1,0 +1,13 @@
+# Rule 7, the marker half, with the requirement nested in a default (T-413
+# review #1 Mi-2, probe q2): when FOO_UNSET is silent compose evaluates the
+# inner `${MV_WORLD_ID:?}` and refuses to start without it, so MV_WORLD_ID is
+# required as much as a top-level `:?` makes it. The paired
+# bad-required-nested.env ships it without `[required]`.
+#
+# expect-rule: 7
+# expect-text: MV_WORLD_ID is required here (`:?`) but
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      FOO: ${FOO_UNSET:-${MV_WORLD_ID:?need it}}

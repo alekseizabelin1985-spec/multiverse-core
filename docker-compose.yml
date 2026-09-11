@@ -1,354 +1,486 @@
-version: '3.8'
+# =============================================================================
+# docker-compose.yml — MVP-1 topology (EPIC-001; core F-6a/T-004, profiles and
+# init containers F-6b/T-008)
+# =============================================================================
+# Source of truth: Docs/dev-team/architecture/infrastructure.md v0.3 §1.2–§1.4,
+# §3.1.1, §5.1, §5.2, §5.3, §6.1; ADR-001 add. 4/6, ADR-005 add. 2, ADR-021.
+#
+# How to run it (infrastructure.md §1.1, §9.1) — through make only:
+#   make llm-up      native llama-server, outside compose
+#   make up          docker compose up -d --wait, then make health
+# Version pins never live in this file — only ${...} out of build/versions.env.
+#
+# Why make only (T-412): compose sees build/versions.env through
+# COMPOSE_ENV_FILES, and it takes that variable from the environment of its own
+# process only. The variable names the env files, so it cannot come from one of
+# them: the line in .env is inert, and a bare `docker compose config` stops on
+# the first image variable it meets, REDPANDA_IMAGE or another *_IMAGE
+# (checked on compose v5.2). The Makefile exports it. A manual
+# command (exec, logs, restart) needs the same value in the shell first:
+#   bash        export COMPOSE_ENV_FILES=.env,build/versions.env
+#   PowerShell  $env:COMPOSE_ENV_FILES = ".env,build/versions.env"
+#
+# Profiles (§1.3; `make up PROFILES=memory,bot` or COMPOSE_PROFILES in .env):
+#   (none)   redpanda, redpanda-init, minio, minio-init, gateway, core
+#   memory   qdrant, neo4j, memory
+#   gpu      ollama — only with MV_LLM_PROVIDER=ollama and only in a container
+#   dev      redpanda-console
+#   bot      telegram-bot                    -> docker-compose.bot.yml
+#   legacy   narrative-orchestrator, semantic-memory, chromadb (+ neo4j here)
+#                                            -> docker-compose.legacy.yml
+#
+# Two profiles live in their own file (T-397; dev-log Ma-1). `docker compose`
+# interpolates the whole file BEFORE it filters by profile, so a `${VAR:?}` that
+# belongs to a service outside the default set breaks every command for every
+# operator — that is how `MV_TELEGRAM_BOT_TOKEN` (a secret nobody but the bot's
+# owner has) and `CHROMA_IMAGE` (deliberately unpinned, D-3) used to stop
+# `make up` on a clean machine before a single container was created. The two
+# services therefore sit in docker-compose.bot.yml and docker-compose.legacy.yml,
+# which the Makefile adds with `-f` exactly when their profile is active, and the
+# loud refusal survives untouched — for the operator who asked for the profile.
+# Rule 7 below keeps this file free of the same trap.
+#
+# House rules enforced by scripts/compose-lint.sh (§3.1.1):
+#   1. every image carries an explicit tag out of build/versions.env, no latest;
+#   2. every published port is bound to 127.0.0.1 (SEC-13); the init containers,
+#      chromadb and narrative-orchestrator publish nothing; consoles only in
+#      profile `dev` (SEC-33);
+#   3. no default passwords: secrets appear as ${VAR:?} and nowhere else — a
+#      quoted key counts as a key, and $${VAR} is compose's escape, a literal;
+#   4. MV_TELEGRAM_BOT_TOKEN reaches the telegram-bot service only (D-10);
+#   5. NEO4J_PLUGINS is absent (T-17), OLLAMA_ORIGINS is not a wildcard and
+#      OLLAMA_HOST is not 0.0.0.0 (SEC-15);
+#   6. there is no `llama-server` service — the LLM runs natively on the host at
+#      127.0.0.1:1234 and containers reach it through host.docker.internal
+#      (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
+#      host.docker.internal, a compose service or an RFC1918 host, never at a
+#      public one;
+#   7. this file — the one compose always loads — interpolates cleanly on a
+#      clean machine: every ${VAR:?} in it resolves from build/versions.env or
+#      from a variable the README tells the operator to fill ([required] in
+#      .env.example), and every such variable carries that marker (T-413).
+#      Anything else belongs in a per-profile file (T-397);
+#   8. a variable has one default, the manifest's (shared/env/vars.go, and
+#      shared/env/infra.go for OLLAMA_*): a ${X:-d} in these files repeats it.
+#      The six network addresses of contracts.md §16 p. 5 — MV_KAFKA_BROKERS,
+#      MV_MINIO_ENDPOINT, MV_CORE_URL, MV_QDRANT_ADDR, MV_NEO4J_URI,
+#      MV_TELEGRAM_GATEWAY_URL — may name a service of this network instead,
+#      in the shape of the manifest's default (redpanda:9092, http://core:8090).
+#      ${MV_X}, $MV_X, ${MV_X:+x} and a default that is another interpolation
+#      are refused; a platform variable is otherwise passed through as a key
+#      with no value (T-411, T-413).
+#
+# Known limitation of a single compose file (T-008; dev-log ОВ-40): a port
+# publication cannot be made conditional on a profile. Where §1.4 asks for a
+# console "only in profile dev" but the console shares its service with a
+# non-console port (MinIO 9001, Neo4j 7474), this file takes the stricter
+# reading of SEC-33 and does not publish it at all; `docker compose port` (with
+# COMPOSE_ENV_FILES in the shell, see the top of this file) or a local,
+# git-ignored docker-compose.override.yml gives the operator access.
+# =============================================================================
+
+# Log rotation of the platform: 50m x 5 (ADR-006 add. 5).
+x-logging: &platform-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+# Every process is the same image with a different --contexts set (ADR-001,
+# NFR-075); build/Dockerfile carries no HEALTHCHECK because the port depends on
+# the role, so each service declares its own probe against its own binary.
+x-platform: &platform
+  image: multiverse-core:${MV_IMAGE_TAG:-dev}
+  build:
+    context: .
+    dockerfile: build/Dockerfile
+    args:
+      GO_VERSION: ${GO_VERSION}
+      VERSION: ${MV_IMAGE_TAG:-dev}
+  restart: unless-stopped
+  logging: *platform-logging
+
+# The variables every platform process reads (shared/env manifest, T-007).
+#
+# MV_MODE and MV_BUS are read by the process itself (cmd/multiverse/serve.go):
+# they are the defaults of --mode and --bus, and no service below passes either
+# flag, so these two lines are what decides. Until T-408 they were shipped here
+# and read by nobody — the choice was made by flags compose never passed, and an
+# operator who wrote replay in .env got a live process without a word. The value
+# of MV_BUS is the name of the PROTOCOL: `redpanda` is retired and refused by
+# name, `kafka` is the same broker described by the API it speaks.
+x-platform-env: &platform-env
+  MV_ENV: ${MV_ENV:-dev}
+  MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+  MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+  MV_MODE: ${MV_MODE:-live}
+  MV_BUS: ${MV_BUS:-kafka}
+  MV_BUS_VALIDATE_ON_READ: ${MV_BUS_VALIDATE_ON_READ:-true}
+  MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+  MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+  MV_MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+  MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+  MV_MINIO_USE_SSL: ${MV_MINIO_USE_SSL:-false}
+  MV_WORLD_ID: ${MV_WORLD_ID:-dark-forest-world}
+
+# The platform starts only after the bus and the object store are not merely
+# healthy but initialised: topics with their retention (§5.1) and the
+# ops-artifacts bucket with the service user (§5.2). Replaces the pair of
+# `service_healthy` conditions the core carried in T-004.
+x-depends-on-init: &depends-on-init
+  redpanda-init:
+    condition: service_completed_successfully
+  minio-init:
+    condition: service_completed_successfully
 
 services:
-  # ========== Событийная шина ==========
+  # ========================= event bus (always on) ===========================
   redpanda:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
-    ports:
-      - "9092:9092"   # Kafka API
-      - "8081:8081"   # Schema Registry
-      - "9644:9644"   # Admin API
+    image: ${REDPANDA_IMAGE:?set REDPANDA_IMAGE in build/versions.env}
+    # Two listeners (§1.4): `internal` serves the containers, `external` serves
+    # `go run` on the host and mvctl, which publishes to the bus directly.
     command:
       - redpanda
       - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
       - --overprovisioned
-      - --smp 1
-      - --memory 1G
-      - --reserve-memory 0M
-      - --node-id 0
-      - --check=false
-      - --kafka-addr PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr PLAINTEXT://redpanda:9092 # ← говорить клиентам: "подключайтесь сюда"
-
-  redpanda-console:
-    image: docker.redpanda.com/redpandadata/console:latest
-    env_file:
-      - .env
+      - --node-id=0
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
     ports:
-      - "8092:8080"   # Kafka API  
-    depends_on:
-      - redpanda
-    
+      - "127.0.0.1:19092:19092"
+      - "127.0.0.1:9644:9644"
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    # Replaces the as-is `sleep 10` of redpanda-init (§5.1).
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+    logging: *platform-logging
+
+  # The 8 topics with their retention and a daily segment (§5.1, ADR-007, D-9,
+  # U-3). Idempotent: creates what is missing, converges the config of what is
+  # already there, so it runs on every `make up`. Publishes nothing.
   redpanda-init:
-    image: docker.redpanda.com/redpandadata/redpanda:v24.2.5
+    image: ${REDPANDA_IMAGE:?set REDPANDA_IMAGE in build/versions.env}
+    entrypoint: ["/bin/bash", "/redpanda-init.sh"]
+    environment:
+      RPK_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+    volumes:
+      - ./build/redpanda-init.sh:/redpanda-init.sh:ro
     depends_on:
-      - redpanda
-    command: >
-      sh -c "
-        sleep 10 &&
-        rpk topic create
-          player_events
-          world_events
-          game_events
-          system_events
-          scope_management
-          narrative_output
-          --brokers redpanda:9092
-      "
+      redpanda:
+        condition: service_healthy
+    restart: "no"
+    logging: *platform-logging
 
-  # ========== Хранение снапшотов ==========
+  # ===================== object store (always on, ADR-021) ===================
   minio:
-    image: minio/minio
-    ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console
+    # Built from source, not pulled: see build/minio.Dockerfile. `make
+    # minio-image` builds the same image outside compose.
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+    build:
+      context: .
+      dockerfile: build/minio.Dockerfile
+      args:
+        MINIO_BUILDER_IMAGE: ${MINIO_BUILDER_IMAGE}
+        MINIO_TAG: ${MINIO_TAG}
+        MINIO_REPO: ${MINIO_REPO}
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-
-  # ========== Векторная БД (Semantic Memory) ==========
-  chromadb:
-    image: chromadb/chroma:latest
+      # No defaults on purpose (§3.1.1 rule 3): an unset credential must stop
+      # the stack, not silently recreate the well known as-is account.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env (>= 16 chars)}
     ports:
-      - "8000:8000"
-    environment:
-      IS_PERSISTENT: "true"
-      ANONYMIZED_TELEMETRY: "false"
+      # The console (9001) is not published — see the header note on profiles.
+      - "127.0.0.1:9000:9000"
     volumes:
-      - chroma_data:/chroma/chroma
+      - minio-data:/data
+    # The image ships the same probe; repeated here so that `depends_on` reads
+    # in one place and does not depend on the image being rebuilt.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    restart: unless-stopped
+    logging: *platform-logging
 
-  # ========== Граф знаний ==========
+  # ops-artifacts, the service user and the versioning/ILM safety net (§5.2).
+  # The per-world buckets are created by the platform (objstore.EnsureBucket,
+  # `mvctl world init`); this container only converges the ones that already
+  # exist, with the very same rule id and body — see build/minio-init.sh.
+  minio-init:
+    image: ${MC_IMAGE:?set MC_IMAGE in build/versions.env}
+    # bash, not sh: the mc image ships bash + coreutils and no sed/grep/awk,
+    # and the script parses `mc ls` with bash builtins only.
+    entrypoint: ["/bin/bash", "/minio-init.sh"]
+    environment:
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env (>= 16 chars)}
+      MV_MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+    volumes:
+      - ./build/minio-init.sh:/minio-init.sh:ro
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    logging: *platform-logging
+
+  # ========================= platform (always on) ============================
+  gateway:
+    <<: *platform
+    command: ["--contexts=gateway"]
+    environment:
+      <<: *platform-env
+      # One process serves one HTTP server and reads its address from
+      # MV_CORE_ADDR whatever the --contexts set is (serve.go, D-7). A literal
+      # and not an interpolation, and that is the point of T-408: this address,
+      # the port published below and the probe of the healthcheck are one and
+      # the same thing, so it is written once and the other two follow it. The
+      # pair of lines that used to stand here — MV_CORE_ADDR taken from
+      # MV_GATEWAY_ADDR, and MV_GATEWAY_ADDR itself, read by nobody — made the
+      # variable look adjustable while the port and the probe stayed fixed.
+      MV_CORE_ADDR: ":8088"
+      MV_GATEWAY_DATA_DIR: ${MV_GATEWAY_DATA_DIR:-/data}
+      # The two allow-lists are passed through with no value and no default of
+      # their own (T-411, rule 8). When .env carries the line, it decides — an
+      # empty value included, which for an allow-list means nobody. When .env
+      # is silent, compose leaves the variable out of the container and the
+      # manifest's default applies, the same one a process started by hand
+      # gets. `${VAR}` or `${VAR:-}` would NOT do that: both hand the process
+      # an empty list. The defaults that stood here were a second, narrower
+      # list: the CI harness was admitted outside a container, refused inside.
+      MV_GATEWAY_CLIENT_IDS:
+      MV_GATEWAY_ACTOR_KIND_CLIENTS:
+      MV_CORE_URL: ${MV_CORE_URL:-http://core:8090}
+    ports:
+      - "127.0.0.1:8088:8088"
+    volumes:
+      # Named volume, never a bind mount: links.db holds player identifiers
+      # (ADR-004 add. 4, T-8).
+      - gateway-data:/data
+    healthcheck:
+      # The image has neither shell nor curl (§2.3): the binary probes itself.
+      # Without --url: `multiverse health` derives the endpoint from the very
+      # MV_CORE_ADDR the process listens on (health.go), so the probe cannot
+      # aim at an address the process does not hold. The literal that used to
+      # stand here was the second copy of the address in this same block.
+      test: ["CMD", "/multiverse", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on: *depends-on-init
+
+  core:
+    <<: *platform
+    command: ["--contexts=state,mechanics,laws,llm,swarm"]
+    # The LLM is a native process on the host, outside compose (ADR-005 add. 2
+    # p. 7): this is the only way containers reach 127.0.0.1:1234.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      <<: *platform-env
+      # A literal, like the gateway above: inside compose the address, the
+      # exposed port and the probe are one fact written once (T-408). The
+      # variable in .env stays what it always really was — the address of a
+      # process the operator starts by hand on the host (go run, mvctl).
+      MV_CORE_ADDR: ":8090"
+      # Passed through like the allow-lists of the gateway (T-411): .env or the
+      # manifest, never a third list written here. The `operator` that stood
+      # here kept mvctl and the CI harness out of /v1/admin/* in a container
+      # while a process started by hand let them in.
+      MV_CORE_ADMIN_CLIENTS:
+      # Empty value = memory is off, a documented degradation (FR-035); with the
+      # `memory` profile set MV_MEMORY_URL=http://memory:8082 in .env.
+      MV_MEMORY_URL: ${MV_MEMORY_URL:-}
+      MV_SNAPSHOT_EVERY_FACTS: ${MV_SNAPSHOT_EVERY_FACTS:-200}
+      MV_GM_PATH: ${MV_GM_PATH:-agent}
+      MV_LAWS_BREACH_PHASE: ${MV_LAWS_BREACH_PHASE:-false}
+      MV_LLM_PROVIDER: ${MV_LLM_PROVIDER:-openai_compat}
+      # No default here, and the reason is the defect this task exists for: a
+      # default made compose a third source of truth for one address. The
+      # platform and the tooling now agree that an absent MV_LLM_URL means "no
+      # address configured"; a default of :1234 would hand containers an address
+      # nobody else believes in, and the stack would look configured while the
+      # LLM was never reachable (T-404). The variable is marked [required] in
+      # .env.example, so a clean machine fills it before the first `make up`.
+      # Quoted: the message carries a colon, and an unquoted scalar would make
+      # YAML read it as a nested mapping.
+      MV_LLM_URL: "${MV_LLM_URL:?MV_LLM_URL is required (T-404) - put the address of your LLM in .env}"
+      MV_LLM_API_KEY: ${MV_LLM_API_KEY:-}
+      MV_LLM_NUM_CTX: ${MV_LLM_NUM_CTX:-8192}
+      MV_LLM_STORE_PROMPTS: ${MV_LLM_STORE_PROMPTS:-false}
+      MV_LLM_CLOUD_ENABLED: ${MV_LLM_CLOUD_ENABLED:-false}
+      MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS: ${MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS:-false}
+      MV_LLM_CLOUD_BUDGET_USD_PER_DAY: ${MV_LLM_CLOUD_BUDGET_USD_PER_DAY:-0}
+    # No published port on purpose: the admin API of `core` is reached through
+    # the gateway proxy (ADR-009 p. 9, threat-model T-14). Compose's internal
+    # network is enough for gateway -> core; publish it only for local debugging.
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "/multiverse", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on: *depends-on-init
+
+  # ======================== memory (profile memory) ==========================
+  # Should-level capability (EPIC-005): without it `core` degrades (FR-035).
+  qdrant:
+    profiles: ["memory"]
+    image: ${QDRANT_IMAGE:?set QDRANT_IMAGE in build/versions.env}
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant-storage:/qdrant/storage
+    # No API key on purpose: the ports are loopback only (§5.3, SEC-31).
+    # The image ships neither curl nor wget, but it does ship bash. CMD-SHELL is
+    # /bin/sh -c and /bin/sh here is dash, which has no /dev/tcp, so bash is
+    # invoked explicitly (§5.3).
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    logging: *platform-logging
+
   neo4j:
-    image: neo4j:5.18
-    ports:
-      - "7474:7474"   # HTTP
-      - "7687:7687"   # Bolt
+    # Also raised by `legacy`: the as-is semantic-memory writes its graph here
+    # (§1.3, D-3), so the two profiles share one server.
+    profiles: ["memory", "legacy"]
+    image: ${NEO4J_IMAGE:?set NEO4J_IMAGE in build/versions.env}
     environment:
-      NEO4J_AUTH: neo4j/password
-      NEO4J_PLUGINS: '["apoc"]'
-    volumes:
-      - neo4j_data:/data
-
-  # ========== Метрики (TimescaleDB) ==========
-  timescaledb:
-    image: timescale/timescaledb:latest-pg16
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache_size: 512M
+      # NEO4J_PLUGINS is absent on purpose (T-17, SEC-32): APOC is not used by
+      # any code we run, and apoc.load.*/apoc.import.* reach the file system.
     ports:
-      - "5433:5432"
+      # 7474 (Browser) is not published — see the header note on profiles.
+      - "127.0.0.1:7687:7687"
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7474 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    logging: *platform-logging
+
+  memory:
+    <<: *platform
+    profiles: ["memory"]
+    command: ["--contexts=memory"]
     environment:
-      POSTGRES_DB: metrics
-      POSTGRES_USER: metrics
-      POSTGRES_PASSWORD: metrics
-    volumes:
-      - timescale_data:/var/lib/postgresql/data
+      <<: *platform-env
+      # D-7 again: the process HTTP server address comes from MV_CORE_ADDR,
+      # and the retired MV_MEMORY_ADDR is gone with the second copy of it.
+      MV_CORE_ADDR: ":8082"
+      MV_QDRANT_ADDR: ${MV_QDRANT_ADDR:-qdrant:6334}
+      MV_NEO4J_URI: ${MV_NEO4J_URI:-neo4j://neo4j:7687}
+      MV_NEO4J_USER: ${MV_NEO4J_USER:-neo4j}
+      MV_NEO4J_PASSWORD: ${MV_NEO4J_PASSWORD:?set MV_NEO4J_PASSWORD in .env}
+      MV_EMBED_MODEL: ${MV_EMBED_MODEL:-nomic-embed-text}
+    ports:
+      - "127.0.0.1:8082:8082"
+    healthcheck:
+      test: ["CMD", "/multiverse", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      <<: *depends-on-init
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
 
-  # ========== Сборка и запуск вашего сервиса ==========
-  entity-manager:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=entity-manager    
-    command: ./entity-manager
-    depends_on:
-      - redpanda
-      - minio
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - MINIO_ENDPOINT=minio:9000
-    #  - MINIO_ACCESS_KEY=minioadmin
-    #  - MINIO_SECRET_KEY=minioadmin
-    env_file:
-      - .env
-    # Раскомментируйте для отладки:
-    # stdin_open: true
-    # tty: true
-  narrative-orchestrator:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=narrative-orchestrator
-    command: ./narrative-orchestrator
-    depends_on:
-      - redpanda
-      - semantic-memory
-      #- qwen3-service
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - SEMANTIC_MEMORY_URL=http://semantic-memory:8080
-    #  - ORACLE_URL=http://qwen3-service:11434/v1/chat/completions
-    #  - ORACLE_URL=http://192.168.3.12:1234/v1/chat/completions
-  semantic-memory:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=semantic-memory
-        - GO_BUILD_TAGS=chroma_v2_enabled
-        - BUILD_CGO=1  # ← включаем CGO только здесь
-    command: ./semantic-memory
-    depends_on:
-      - redpanda
-      - minio
-      - chromadb
+  # ===================== optional LLM runtime (profile gpu) ==================
+  # Only needed when MV_LLM_PROVIDER=ollama or for embeddings (ADR-005 add. 2
+  # p. 8, §6.5). The default runtime, llama-server, is native and has no service
+  # here on purpose.
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      # OLLAMA_HOST is deliberately left alone: the image already binds to the
+      # container interface, and pinning it to 0.0.0.0 here would be the very
+      # thing SEC-15 forbids. The port below is loopback only.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-f16}
+      # Never a wildcard (SEC-15): only the loopback origins the operator uses.
+      OLLAMA_ORIGINS: ${OLLAMA_ORIGINS:-http://127.0.0.1,http://localhost}
     ports:
-      - "8082:8082"
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - CHROMA_URL=http://chromadb:8000
-    #  - NEO4J_URI=neo4j://neo4j:7687
-    #  - NEO4J_USER=neo4j
-    #  - NEO4J_PASSWORD=password
-    #  - PORT=8080
-  ontological-archivist:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=ontological-archivist
-    command: ./ontological-archivist
-    depends_on:
-      - redpanda
-      - chromadb
-      - neo4j
-    ports:
-      - "8083:8083"
-    env_file:
-      - .env  
-    #environment:
-    #  - KAFKA_BROKERS=redpanda:9092
-    #  - CHROMA_URL=http://chromadb:8000
-    #  - NEO4J_URI=neo4j://neo4j:7687
-    #  - NEO4J_USER=neo4j
-    #  - NEO4J_PASSWORD=password
-    #  - PORT=8080
-  plan-manager:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=plan-manager
-    command: ./plan-manager
-    depends_on:
-      - redpanda
-    env_file:
-      - .env  
-  world-generator:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=world-generator
-    command: ./world-generator
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env 
-  universe-genesis-oracle:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=universe-genesis-oracle
-    command: ./universe-genesis-oracle
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env       
-  cultivation-module:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=cultivation-module
-    command: ./cultivation-module
-    depends_on:
-      - redpanda
-      - ontological-archivist
-    env_file:
-      - .env  
-  # ========== ИИ: Qwen3 через Ollama ==========
-#  qwen3-pull:
-#    image: ollama/ollama:latest
-#    volumes:
-#      - ollama_data:/root/.ollama
-#    command: [ "pull", "qwen3"]
-#    profiles: ["init"]  # ← запускается только при необходимости
-  qwen3-service:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama-data:/root/.ollama
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]  
-    #depends_on:
-    #  - qwen3-pull
-    # Загружаем модель при старте
-    
-    # Для GPU (опционально):
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-      
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_storage:/qdrant/storage
-    environment:
-      - QDRANT__SERVICE__PORT=6333
-      - QDRANT__GRPC__PORT=6334
-    restart: unless-stopped
+              capabilities: [gpu]
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--timeout=5", "http://localhost:6333/health", "-O", "/dev/null" ]
-      interval: 30s
+      test: ["CMD-SHELL", "ollama ps >/dev/null 2>&1 || exit 1"]
+      interval: 15s
       timeout: 10s
-      retries: 3
-  # ========== Game Service ==========
-  game-service:
-    build:
-      context: .
-      dockerfile: ./build/Dockerfile
-      args:
-        - SERVICE=game-service
-    command: ./game-service
-    depends_on:
-      - redpanda
-      - entity-manager
-    ports:
-      - "8088:8088"
-    env_file:
-      - .env
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    logging: *platform-logging
+
+  # ========================= developer tools (dev) ===========================
+  # The only console this file publishes, and only here (SEC-33, T-32). Its
+  # environment is the broker address and nothing else: the as-is service read
+  # the whole .env and showed it in the UI.
+  redpanda-console:
+    profiles: ["dev"]
+    image: ${REDPANDA_CONSOLE_IMAGE:?set REDPANDA_CONSOLE_IMAGE in build/versions.env}
     environment:
-      - HTTP_ADDR=:8088
-      - CACHE_TTL=5m
-
-  # ========== Entity Actor Service ==========
-  entity-actor:
-    build:
-      context: .
-      dockerfile: ./services/entity-actor/Dockerfile
-      args:
-        - SERVICE=entity-actor
-    command: ./entity-actor
+      KAFKA_BROKERS: redpanda:9092
+      SERVER_LISTENPORT: "8080"
+    ports:
+      - "127.0.0.1:8092:8080"
     depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Evolution Watcher Service ==========
-  evolution-watcher:
-    build:
-      context: .
-      dockerfile: ./services/evolution-watcher/Dockerfile
-      args:
-        - SERVICE=evolution-watcher
-    command: ./evolution-watcher
-    depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Rule Engine Service ==========
-  rule-engine:
-    build:
-      context: .
-      dockerfile: ./services/rule-engine/Dockerfile
-      args:
-        - SERVICE=rule-engine
-    command: ./rule-engine
-    depends_on:
-      - redpanda
-      - minio
-    env_file:
-      - .env
-
-  # ========== Утилита для работы с Kafka ==========
-  kafkacat:
-    image: confluentinc/cp-kafkacat:latest
-    depends_on:
-      - redpanda
-    entrypoint: /bin/sh
-    command: -c "echo 'Waiting for Redpanda to be ready...' && while ! nc -z redpanda 9092; do sleep 1; done && echo 'Redpanda is ready!' && tail -f /dev/null"
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *platform-logging
 
 volumes:
-  minio_data:
-  chroma_data:
-  neo4j_data:
-  timescale_data:
-  ollama_data:  # ← для кэша моделей Ollama
-  qdrant_storage:
+  # Target volumes are named apart from the as-is ones (`redpanda_data`,
+  # `minio_data`, `ollama_data`): with the same COMPOSE_PROJECT_NAME the old
+  # data — including the as-is MinIO root credentials — would otherwise be
+  # mounted silently on the first `up` (§5.5, D-8; review T-004, Mi-2).
+  # `make archive-legacy` copies the as-is volumes before they are removed.
+  redpanda-data:
+  minio-data:
+  gateway-data:
+  ollama-data:
+  qdrant-storage:
+  neo4j-data:

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/agent.stopped.v1.json",
+  "title": "agent.stopped payload",
+  "description": "An agent stopped (api-contracts.md 2.3.9). reason=error is the one an operator watches: the others are the normal end of a life cycle.",
+  "type": "object",
+  "properties": {
+    "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+    "reason": { "type": "string", "enum": ["ttl", "shutdown", "error"] }
+  },
+  "required": ["agent", "reason"],
+  "additionalProperties": false
+}

@@ -1,326 +1,217 @@
 # Multiverse-Core
 
-A sophisticated distributed system designed for managing complex virtual worlds and narratives. This platform combines event-driven architecture, vector databases, graph databases, and AI-powered orchestration to create dynamic, evolving virtual environments. The system implements a philosophy where worlds are not programmed but born, evolving organically through player actions while maintaining internal consistency and narrative depth.
+Событийная платформа «живых миров» на Go: единый модуль (`multiverse-core.io`), один
+бинарник `cmd/multiverse` (набор поднятых контекстов задаётся флагом `--contexts`,
+а не сборкой) и оператор-CLI `cmd/mvctl`. Шина — Redpanda (Kafka API); объектное
+хранилище состояния — MinIO, собранный из исходников; опционально — Qdrant + Neo4j
+(векторная и графовая память) и локальный LLM (`llama-server`/Ollama) для нарратива.
 
-## 🚀 Features
+> Статус: репозиторий проходит переход на новую раскладку (`EPIC-001 «Фундамент»`,
+> `Docs/dev-team/epics/EPIC-001-foundation/`). На этом этапе платформа поднимается
+> целиком (единый модуль, инфраструктура, `/health` у каждого процесса), но игровая
+> логика (`internal/state`, `internal/swarm`, `internal/gateway` и т. д.) ещё не
+> реализована — контексты `state`, `mechanics`, `swarm`, `llm`, `laws`, `gateway`,
+> `memory` отвечают заглушками. Список сервисов до раскладки, их статус (архив /
+> заморожен / источник переписывания) — в [`services/_archive/README.md`](services/_archive/README.md)
+> и в разделе «Статус кода вне единого модуля» ниже.
 
-- **Event-Driven Architecture**: Built on Redpanda (Kafka-compatible) for scalable event streaming
-- **Vector Storage**: ChromaDB for semantic memory and similarity search
-- **Graph Knowledge Base**: Neo4j for relationship mapping and ontological structures
-- **Object Storage**: MinIO for storing world snapshots and assets
-- **AI Integration**: Qwen3 integration for narrative generation and decision-making
-- **Modular Services**: Microservices architecture for scalability and maintainability
-- **Time Series Metrics**: TimescaleDB for performance monitoring
-- **Hierarchical Worlds**: Organized from unique base worlds → fusion zones → abstract planes → Source
-- **Living Narratives**: Dynamic storylines that evolve naturally from player actions
-- **Entity-Based Memory**: History stored within objects themselves rather than in separate systems
+## Требования
 
-## 🏗️ Architecture
+- Windows 11 (основная среда разработки) или Linux/WSL.
+- Docker Desktop (`docker compose` — плагин Docker CLI, а не отдельный бинарник
+  `docker-compose` v1; версия плагина на стенде владельца — v5.2.0).
+- Go **1.26** (см. точный патч в [`build/versions.env`](build/versions.env), `GO_VERSION`).
+- Git, GNU make, PowerShell 7 (для LLM-скриптов на Windows).
+- Инструменты разработчика для `make ci` (цель — `lint test contracts secrets-scan
+  privacy-scan vuln compose-lint test-e2e`, см. «Участие в разработке»): `golangci-lint`
+  (пин `GOLANGCI_LINT_VERSION=v2.13.2` в [`build/versions.env`](build/versions.env), тем же
+  пином пользуется `golangci-lint-action` в CI), `govulncheck`, `gitleaks`
+  (пин `GITLEAKS_VERSION=v8.30.1`) и `python3` — без него `compose-lint` завершается ошибкой
+  «python3 is required to read the compose model» (`scripts/compose-lint.sh`). Без них
+  `make ci` локально не пройдёт целиком; в CI автоматически ставятся только `golangci-lint`,
+  `gitleaks` и `govulncheck` (`.github/workflows/go.yml`), `python3` есть на раннере
+  `ubuntu-latest` по умолчанию. `pre-commit` (хук из T-001, `.pre-commit-config.yaml`) в
+  `make ci` не участвует — он нужен только для локального хука перед коммитом.
+- Пакеты через `winget` (Windows):
+  ```powershell
+  winget install ezwinports.make      # GNU make для Git Bash / PowerShell
+  winget install jqlang.jq            # используется scripts/llm-bench.sh
+  winget install FiloSottile.age      # шифрование бэкапа links.db; сегодня не вызывается ни
+                                       # одной целью Makefile, понадобится с EPIC-004 (links.db)
+  winget install Gitleaks.Gitleaks    # локальный pre-commit-хук и make secrets-scan без go install
+  ```
+  Без `make` тот же результат даёт `wsl make <цель>`.
 
-The system consists of multiple interconnected services that follow key architectural principles:
+## Запуск за 5 команд
 
-### Core Principles
-- **Event-Driven Architecture (EDA)**: All interactions occur through events in a unified bus (Redpanda)
-- **Weak Coupling**: Services only know about events, not each other
-- **Stateful Services with Recovery**: Each service maintains its state and recovers through snapshot + replay
-- **Generativity over Scripting**: Qwen3 creates unique outcomes instead of choosing from presets
-- **Ontological Awareness**: Knowledge about the world affects logic through ontological profiles
-
-### 🔀 Hierarchical Event Architecture (NEW)
-
-> 📦 **Universal Data Access via `shared/jsonpath`**
-
-All events now support **hierarchical data structures** with dot-notation paths for robust, LLM-friendly data access:
-
-```json
-// ✅ NEW: Hierarchical format (preferred)
-{
-  "entity": { "id": "player-123", "type": "player", "name": "Вася" },
-  "world": { "id": "world-abc" },
-  "scope": { "id": "city-xyz", "type": "city" },
-  "target": { "entity": { "id": "npc-456", "type": "npc" } },
-  "payload": { "action": "talk", "dialogue": "Hello!" }
-}
-
-// ✅ OLD: Flat format (still supported for backward compatibility)
-{
-  "entity_id": "player-123",
-  "entity_type": "player",
-  "world_id": "world-abc",
-  "scope_id": "city-xyz"
-}
-```
-
-**Key Benefits**:
-- 🧠 **LLM-Friendly**: Clear semantic structure improves AI context understanding
-- 🔍 **Universal Access**: `jsonpath.Accessor` works with ANY nested data, not just events
-- ♻️ **Backward Compatible**: Old flat-key events continue to work seamlessly
-- 🛡️ **Type-Safe**: Builder pattern prevents malformed events
-
-**Read More**:
-- [📦 `shared/jsonpath` Package](shared/jsonpath/README.md) — Universal dot-path access
-- [🔀 Event Migration Guide](Docs/EVENTS-MIGRATION.md) — Full migration patterns
-- [🎭 Narrative Prompts](services/narrative-orchestrator/narrativeorchestrator/prompt_builder.go) — Updated LLM schemas
-
-### Core Services
-
-#### Entity Manager
-- **Purpose**: Manages hierarchical entities with history and references
-- **Features**: 
-  - Stateful: caches hot entities
-  - Recoverable: snapshots in MinIO + replay from Redpanda
-  - Shardable: by world_id
-- **Events**: Subscribes to entity.create, entity.update, entity.link; publishes entity.created, entity.updated, entity.history.appended
-- **Storage**: MinIO buckets: entities-{world_id}, snapshots: snapshots/em-{world_id}-v{N}.json
-
-#### Narrative Orchestrator (GM)
-- **Purpose**: Generates living, context-dependent narrative based on events in a given scope
-- **Features**:
-  - Stateful: stores semantic state of the area (fatigue, mood, etc.)
-  - Dynamic: created/deleted based on scope events
-  - Recoverable: aggregates state from Event Log
-- **Scope Types**: solo, group, city, region, quest
-- **Events**: Subscribes to entire world_events topic; publishes narrative.description, npc.action.*, weather.change.*
-
-#### World Generator
-- **Purpose**: Generates new worlds, regions, and ontologies based on seed or AI
-- **Features**: Stateless, initiated manually or by event
-- **Output**: World entity, ontological profile (in MinIO), world.generated event
-- **Integrations**: Publishes to EntityManager, BanOfWorld, CityGovernor; uses Ascension Oracle for entity schema generation; saves schemas via HTTP to OntologicalArchivist
-
-#### Ban Of World (Запрет Мира)
-- **Purpose**: Serves as guardian of reality integrity, detecting and neutralizing threats that violate world ontology
-- **Features**: Stateful, stores world health metrics; recoverable; parameterizable (one code, different ontologies)
-- **Metrics**: spatial_integrity, karma_entropy, core_resonance
-- **AI Integration**: Calls AscensionOracle as Oracle during anomalies; generates mythological consequences instead of penalties
-
-#### City Governor
-- **Purpose**: Manages urban life: economy, NPCs, quests, mood
-- **Features**: Stateful (reputation, crime_rate, active_quests), recoverable
-- **Events**: Subscribes to player.enter.city, trade.*, crime.*; publishes quest.issued, market.price_changed, festival.started
-- **Features**: Reacts to group composition (rich/poor), can generate unique quests through AI
-
-#### Cultivation Module
-- **Purpose**: Implements cultivation system: skills, dao, ascension
-- **Features**: Stateful (stores player profiles), hierarchical (modules at each plane level)
-- **Events**: Subscribes to player.skill_use, ascension.triggered; publishes dao.portrait.updated, ascension.trial.started
-- **Ascension**: Generates "Dao Portrait" from player history → passes to AscensionOracle
-
-#### Reality Monitor
-- **Purpose**: Aggregates metrics from all worlds and publishes anomalies
-- **Features**: Stateful (aggregated metrics), real-time monitoring
-- **Events**: Subscribes to world.metrics.*; publishes reality.anomaly.detected
-- **Interaction**: Trigger for BanOfWorld and AscensionOracle
-
-#### Plan Manager
-- **Purpose**: Manages transitions between planes, fusion zones, availability of ascension
-- **Features**: Stateful (plane graph as DAG), stores connections: who can go where
-- **Events**: Subscribes to ascension.completed, planar.violation; publishes planar.transition.granted
-
-#### Ascension Oracle
-- **Purpose**: Generative AI oracle based on Qwen3. Creates unique ascension outcomes, trials, interventions
-- **Features**: Stateless (HTTP client), RAG: context from SemanticMemory
-- **Input**: Dao Portrait, world state, player history
-- **Output**: JSON with narrative and new_events; can propose new mechanics, zones, laws
-
-#### Semantic Memory Builder
-- **Purpose**: Builds context for AI from events: vectors + knowledge graph
-- **Features**: Stateless, indexes events in real-time, stores all system events for context and replay
-- **Storage**: ChromaDB/Qdrant: event embeddings; Neo4j: relationships between entities and events
-- **Interaction**: Used by AscensionOracle and GM through RAG
-
-#### Ontological Archivist
-- **Purpose**: Stores and evolves world ontological schemas
-- **Features**: Stateful (versioned schemas), storage: MinIO (ontologies/{world_id}/v{N}.json)
-- **Events**: Subscribes to world.generated, ontology.evolved; publishes ontology.published
-- **Validation**: Provides schemas for validating events and entities
-
-#### Universe Genesis Oracle
-- **Purpose**: Generates fundamental plane hierarchy of the universe and basic ontological profiles for each level
-- **Features**: Stateless/one-time, generates only the fundamental foundation of the Universe (Core, Laws)
-- **Events**: Publishes universe.genesis.completed, entity.created (for Universe Core entity)
-- **Interactions**: Uses Ascension Oracle for law and profile generation; saves profile to OntologicalArchivist via HTTP; publishes event for PlanManager and CosmicBan
-
-### Infrastructure Components
-- **Redpanda**: Event streaming platform
-- **MinIO**: Object storage for snapshots and assets
-- **ChromaDB**: Vector database for semantic memory
-- **Neo4j**: Graph database for knowledge representation
-- **TimescaleDB**: Time-series database for metrics
-- **Qwen3**: AI model for narrative generation (via Ollama)
-
-## 🌌 Philosophy
-
-The system implements:
-- Hierarchy of worlds leading to the unreachable Source (Plan Ω)
-- Cultivation as a path from unique form to universal essence
-- Narration as a natural, continuous process, not scripted reactions
-- Integrity through the Ban of World, not through rules
-
-**Goal**: Create a world that evolves through player actions while maintaining internal integrity and narrative depth.
-
-## 🛠️ Prerequisites
-
-- Docker and Docker Compose
-- Go 1.24.0
-- Git
-
-## 📦 Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/your-repo/multiverse-core.git
-cd multiverse-core
-```
-
-2. Copy the environment template and configure your settings:
-```bash
-cp .env.example .env
-# Edit .env with your specific configurations
-```
-
-3. Start the infrastructure services:
-```bash
-docker-compose up -d
-```
-
-4. Build and run individual services:
-```bash
-# Build a specific service
-go build -o bin/service-name ./cmd/service-name
-
-# Or use the Dockerfile directly
-docker build --build-arg SERVICE=service-name -t multiverse-core:service-name .
-```
-
-## 🐳 Docker Compose Services
-
-The project includes a comprehensive `docker-compose.yml` that sets up:
-
-- **Redpanda**: Distributed streaming platform
-- **MinIO**: S3-compatible object storage
-- **ChromaDB**: Vector database for embeddings
-- **Neo4j**: Graph database with APOC plugin
-- **TimescaleDB**: Time-series database
-- **Ollama + Qwen3**: AI model serving
-- Multiple microservices with proper dependency ordering
-
-## 🔧 Configuration
-
-Configuration is handled through:
-- Environment variables (`.env` file)
-- Service-specific configuration files
-- Docker environment variables
-
-Key configuration points:
-- Kafka brokers endpoint
-- MinIO credentials and endpoints
-- Database connection strings
-- AI model endpoints
-- Service-specific settings
-
-## 🧪 Development
-
-### Building Services
-
-Each service in the `cmd/` directory can be built independently:
+> **Эти пять команд ещё никто не прогонял.** GNU make не установлен ни на одной
+> машине, где шла разработка T-001…T-398 — ни один участник ни разу не выполнил
+> ни одной цели `make` по-настоящему (правки `Makefile` проверялись построчной
+> эмуляцией оболочки), и CI цели `make` тоже не вызывает. Подробности и что
+> сделать первым, кто прогоняет это на чистой машине — [`Docs/ops/runbook.md`](Docs/ops/runbook.md),
+> врезка «Порядок ниже не прогнан целиком».
 
 ```bash
-# Build entity manager
-go build -o bin/entity-manager ./cmd/entity-manager
-
-# Build narrative orchestrator
-go build -o bin/narrative-orchestrator ./cmd/narrative-orchestrator
+cp .env.example .env                # заполнить переменные, отмеченные `[required]` в комментарии над
+                                     # ними — обязательный минимум для активного набора профилей
+                                     # (COMPOSE_PROFILES=memory в примере); пустую переменную в .env
+                                     # комментировать ТОЛЬКО строкой выше, не после `=` (T-397, см. ниже)
+make llm-up                         # старт нативного llama-server (127.0.0.1:1234); можно пропустить —
+                                     # платформа стартует и без LLM (деградация нарратива, FR-080)
+make minio-image                    # сборка своего образа MinIO из исходников (~5 мин первый раз)
+make up                             # docker compose up -d --wait + make health (не строго по LLM)
+make health                         # таблица статусов gateway/core/memory/LLM + возраст бэкапа
 ```
 
-### Running Tests
+`make up` поднимает набор сервисов по умолчанию (`redpanda`, `minio`, `gateway`, `core`,
+плюс одноразовые init-контейнеры `redpanda-init`/`minio-init`, которые создают топики и
+бакеты и завершаются) плюс профили из `COMPOSE_PROFILES` в `.env` (`memory`, `gpu`, `dev`
+— см. `Makefile`, переменная `PROFILES` переопределяет их разово:
+`make up PROFILES=memory`).
+LLM (`llama-server`) — нативный процесс вне compose: `make up`/`make down` его не
+трогают, им управляют `make llm-up` / `make llm-down` / `make llm-health`.
+
+> **Стек — только через `make`.** Версии образов лежат в `build/versions.env`, и
+> compose видит этот файл только через `COMPOSE_ENV_FILES` в окружении своего
+> процесса. Строку `COMPOSE_ENV_FILES` в `.env` compose не читает: переменная
+> называет env-файлы и поэтому не может прийти из одного из них (проверено на
+> compose v5.2, T-412). Makefile её экспортирует, а голый `docker compose config`
+> или `up` без `make` падает на первой переменной образа (`REDPANDA_IMAGE` или
+> другой `*_IMAGE`). Для ручной команды compose
+> (`exec`, `logs`, `restart`) задайте переменную в оболочке один раз:
+> `export COMPOSE_ENV_FILES=.env,build/versions.env`
+> (PowerShell: `$env:COMPOSE_ENV_FILES = ".env,build/versions.env"`).
+
+> **Профили `bot` и `legacy` — только через `make`.** Оба описаны в собственных
+> compose-файлах (`docker-compose.bot.yml`, `docker-compose.legacy.yml`) и
+> подключаются Makefile'ом, только когда профиль реально запрошен:
+> `make up PROFILES=bot`, `make up PROFILES=memory,legacy` или
+> `COMPOSE_PROFILES=...` в `.env`. Причина — `docker compose` интерполирует
+> файл целиком ДО отбора по профилям, и обязательные переменные этих сервисов
+> (токен бота, образ Chroma) раньше валили `make up` всем подряд, в том числе
+> тем, кто эти профили не поднимает (T-397). **Голый `docker compose --profile
+> bot up` без Makefile официально не поддерживается:** без `COMPOSE_ENV_FILES`
+> в оболочке он не поднимет ничего и откажет на первой переменной образа
+> (`*_IMAGE`, врезка выше), а с переменной, но без `-f docker-compose.bot.yml`,
+> не увидит файл бота и поднимет стек без бота. Это осознанное решение, а не пробел.
+> Профиль `bot` сегодня всё равно не стартует: бинарник `cmd/telegram-bot`
+> появится в EPIC-004. `make up PROFILES=legacy` сам сначала выполняет
+> `legacy-src` (цель `up` объявляет её своей предпосылкой) — тот делает
+> `rm -rf build/.legacy-src` и `git archive` из `LEGACY_SRC_REF`, поэтому
+> первый запуск профиля дольше обычного; отдельно вызывать `make legacy-src`
+> не нужно.
+
+Полный порядок первого запуска, диагностика, профили и типовые инциденты — в
+[`Docs/ops/runbook.md`](Docs/ops/runbook.md).
+
+## Архитектура: карта пакетов
+
+Модуль один (`go.mod` в корне, `module multiverse-core.io`, `go.work` больше нет).
+Контексты платформы — пакеты, а не отдельные сборки; какие из них запущены в
+конкретном процессе, решает флаг `--contexts` бинарника `cmd/multiverse`.
+
+```
+multiverse-core/
+├── cmd/
+│   ├── multiverse/        # единственный бинарник платформы: serve/health/db/version,
+│   │                       # флаги serve --contexts/--mode/--bus/--recording
+│   │                       # (serve можно опустить: `multiverse --contexts=...`)
+│   └── mvctl/              # CLI оператора: contracts, env, storage, privacy, version;
+│                            # world/blueprint/laws/record/golden/llm/memory/report/trace
+│                            # зарезервированы под будущие эпики (см. cmd/mvctl/main.go)
+├── internal/
+│   └── mechanics/          # типы механики, Load(rules/*.yaml), формулы, RNG
+│                            # (internal/state, internal/swarm, internal/llm,
+│                            #  internal/laws, internal/gateway, internal/memory —
+│                            #  появятся по мере реализации своих эпиков)
+├── shared/
+│   ├── eventbus/           # конверт события, Bus/Journal, DLQ, kafka-реализация, membus/ (в памяти)
+│   ├── jsonpath/           # универсальный доступ по dot-path к любым map[string]any
+│   ├── contracts/          # реестр типов событий, JSON Schema 2020-12, OwnershipRules
+│   ├── entity/             # модель сущности v2 (Op/ApplyOps/StateHash/History)
+│   ├── objstore/           # интерфейс объектного хранилища (MinIO + in-memory)
+│   ├── env/                # реестр переменных окружения (префикс MV_)
+│   ├── logging/            # slog с обязательными полями и редакцией секретов
+│   ├── runtime/            # HTTP-сервер процесса, Context{Start/Stop/Health}
+│   ├── clock/              # Clock/Timers (реальные и управляемые для тестов)
+│   ├── agent/               # каркас роя агентов GM (типы, парсер блупринтов; целевой
+│   │                         # рантайм — internal/swarm, EPIC-003)
+│   └── testkit/             # contract-тест шины, фейки (FakeState,
+│                             # FixedMechanics, Harness, FakeNarrator) для тестов
+│                             # и e2e других команд
+├── schemas/events/          # JSON-схемы событий (source of truth для shared/contracts)
+├── rules/                   # rules/dark-forest.yaml — детерминированная механика
+├── testdata/fixtures/       # фикстуры мира для mvctl world init / e2e
+├── build/                   # Dockerfile платформы, legacy.Dockerfile, minio.Dockerfile,
+│                             # minio-init.sh, redpanda-init.sh, versions.env
+├── docker-compose.yml       # профили: memory / gpu / dev; bot и legacy — в docker-compose.bot.yml /
+│                             # docker-compose.legacy.yml (Makefile подключает их по `PROFILES=...`)
+├── Makefile                 # единая точка входа оператора (см. `make help`)
+└── services/                # код вне единого модуля — см. таблицу ниже
+    └── _archive/            # архив выведенного из сборки кода (git mv, не удаление)
+```
+
+Подробное обоснование раскладки — `Docs/dev-team/architecture/overview.md`
+(разделы «Целевое состояние», карта контекстов); правила именования событий и
+пример доступа к ним из кода — `shared/jsonpath/README.md`, `shared/eventbus/README.md`.
+
+## Статус кода вне единого модуля
+
+`services/*` — не часть корневого модуля: каждый каталог ниже имеет собственный
+`go.mod`, поэтому `go build ./...` из корня их не видит. Полный список с причиной,
+коммитом архивации и путём возврата — [`services/_archive/README.md`](services/_archive/README.md).
+
+| Статус | Каталоги | Что это значит |
+|---|---|---|
+| **Источник переписывания** (в дереве, вне сборки, не архив) | `services/entity-manager`, `services/rule-engine`, `services/game-service` | код читают как референс при переписывании на `internal/state`, `internal/mechanics`, `internal/gateway`; после переноса — в `services/_archive/` |
+| **Legacy** (профиль compose `legacy`, свои as-is переменные) | `services/narrative-orchestrator`, `services/semantic-memory` | работают как есть, пока `MV_GM_PATH=legacy`; нужны для сравнения нарратива до замены роем GM; после миграции (EPIC-003 I2) — в архив |
+| **Заморожен** (`FROZEN.md` в каталоге, вне сборки и compose) | `services/world-generator`, `services/universe-genesis-oracle`, `services/ontological-archivist`, `services/cultivation-module`, `services/plan-manager`, `services/city-governor`, `services/entity-actor`, `services/evolution-watcher` | код игровых расширений вне MVP-1 (генерация миров, культивация, города, эволюция NPC); возврат — эпики EPIC-006…EPIC-010 |
+| **Архив** (`services/_archive/**`, перенесено `git mv`, есть `ARCHIVED.md`) | `services/ban-of-world`, `services/reality-monitor`, `shared/{schema,redis,config,minio,oracle,rules,intent,tinyml,spatial}`, `configs/gm_*.yaml` (6 файлов), `shared/agent/tools/*` (кроме `registry.go`) и `filter.go`, `fake_deps/`, `test_minio.go`, старые `Dockerfile` и др. | функциональность заменена (законы мира, `internal/mechanics`, `shared/objstore`, `shared/env` и т. д.) или не входит в стек MVP-1; **ничего не удалено**, история читается `git log --follow` |
+
+## Сборка и тесты
 
 ```bash
-# Run all tests
-go test ./...
-# Run tests with coverage
-go test -cover ./...
+make build              # go build -o bin/ ./cmd/...  (сейчас: multiverse, mvctl; cmd/telegram-bot появится в EPIC-004)
+make lint               # golangci-lint run
+make test               # go test -short -race ./... + порог покрытия ключевых internal/*
+make test-integration   # testcontainers: Redpanda, MinIO (наш образ), Qdrant, Neo4j
+make test-e2e           # e2e в одном процессе, шина в памяти (--bus=memory)
+make contracts          # mvctl contracts check / env check + валидность JSON-схем
+make ci                 # всё из CI, что не требует Docker; make ci-full добавляет test-integration
 ```
 
-### Local Development
+Полный список целей — `make help`. Каждая версия/образ фиксируется один раз в
+[`build/versions.env`](build/versions.env) — Makefile, `docker-compose.yml` и тесты
+(`shared/testkit.Versions()`) читают его, а не хранят версии по отдельности.
 
-For local development, you can run services individually while keeping infrastructure in Docker:
+## Конфигурация
 
-```bash
-# Start infrastructure
-docker-compose up redpanda minio chromadb neo4j
+Все переменные платформы — с префиксом `MV_` и объявлены в реестре `shared/env`;
+переменные сторонних образов (`MINIO_*`, `NEO4J_*`, `OLLAMA_*`) префикса не имеют.
+Полный и единственный источник значений — [`.env.example`](.env.example)
+(копируется в `.env`, секреты там всегда пусты). Проверка соответствия кода и
+примера: `go run ./cmd/mvctl env check`.
 
-# Run a service locally
-KAFKA_BROKERS=localhost:9092 MINIO_ENDPOINT=localhost:9000 go run cmd/entity-manager/main.go
-```
+## Документация
 
-## 📊 Monitoring
+- [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) — соглашения для агентов и
+  разработчиков (карта пакетов, паттерны событий, доступ к данным).
+- [`Docs/ops/runbook.md`](Docs/ops/runbook.md) — эксплуатация: запуск с нуля,
+  остановка/перезапуск, LLM (`llama-server`), восстановление, ротация токена бота,
+  карточки процессов.
+- [`services/_archive/README.md`](services/_archive/README.md) — индекс архива.
+- [`Docs/dev-team/`](Docs/dev-team/) — артефакты команды: требования, архитектура,
+  ADR, эпики и задачи (ведёт оркестратор процесса разработки, не редактировать вручную).
 
-The system includes:
-- Event stream monitoring through Redpanda Console
-- Database health checks
-- Service logs aggregation
-- Performance metrics in TimescaleDB
+## Участие в разработке
 
-## 🤝 Contributing
+1. Форк/ветка от `integration/mvp-1` (`epic/EPIC-00N-<slug>` для командной работы).
+2. `make ci` зелёный локально перед PR.
+3. Секреты — `gitleaks git --redact` = 0 (`.gitleaks.toml`, allowlist только `*.example`).
+4. Изменения в `shared/{eventbus,contracts,entity}` и `schemas/events/_common.json` —
+   только с пометкой `contract-change` (см. `Docs/dev-team/plan/ownership.md`).
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Лицензия
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🆘 Support
-
-For support, please open an issue in the GitHub repository or contact the maintainers.
-
----
-
-## 📚 Quick Reference: Hierarchical Events
-
-### Reading Event Data
-```go
-pa := event.Path()
-entityID, _ := pa.GetString("entity.id")           // Fallback: entity_id
-worldID := eventbus.GetWorldIDFromEvent(event)     // Fallback: world_id  
-scope := eventbus.GetScopeFromEvent(event)         // Fallback: scope_id
-level, _ := pa.GetInt("entity.stats.level")
-active, _ := pa.GetBool("entity.active")
-if pa.Has("quest.objectives") { /* ... */ }
-```
-
-### Creating Events
-```go
-payload := eventbus.NewEventPayload().
-    WithEntity(id, entityType, name).
-    WithScope(scopeID, scopeType).  // solo/group/city/region/quest
-    WithWorld(worldID)
-eventbus.SetNested(payload.GetCustom(), "custom.field", value)
-event := eventbus.NewStructuredEvent(type, source, worldID, payload)
-```
-
-### JSON Structure
-```json
-{
-  "entity": {"id": "x", "type": "player", "name": "Вася"},
-  "world": {"id": "w"},
-  "scope": {"id": "s", "type": "city"},
-  "payload": {"action": "talk"}
-}
-```
-
-### Documentation
-- 📦 [`shared/jsonpath/README.md`](shared/jsonpath/README.md) — Universal accessor API
-- 🔀 [`Docs/EVENTS-MIGRATION.md`](Docs/EVENTS-MIGRATION.md) — Full migration guide
-- 🎭 [`shared/eventbus/README.md`](shared/eventbus/README.md) — Event patterns
-
-## 🙏 Acknowledgments
-
-- Redpanda team for the excellent streaming platform
-- ChromaDB for vector database capabilities
-- Neo4j for graph database technology
-- Ollama and Qwen teams for AI model serving
+Файл `LICENSE` в репозитории отсутствует — условия использования не определены;
+уточнить у владельца перед публикацией или переиспользованием кода.

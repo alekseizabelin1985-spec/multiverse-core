@@ -1,0 +1,13 @@
+# Rule 8 inside a command: `${MV_WORLD_ID}` has no modifier, so with .env
+# silent the flag becomes `--world=` instead of the manifest's world. The
+# refusal is right; the advice it used to give — "pass it through as a key with
+# no value" — is not available inside a command or a longer string, and the
+# message must say what is (review #2 T-411, N-5).
+#
+# expect-rule: 8
+# expect-text: ${MV_WORLD_ID} has neither a default nor
+# expect-text: it is part of a larger string here
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    command: ["--contexts=state", "--world=${MV_WORLD_ID}"]

@@ -1,0 +1,16 @@
+# A clean file for rule 8 and the third-party defaults (contracts.md §16 p. 5,
+# T-413): every OLLAMA_* default here equals the default of shared/env/infra.go
+# — the settings of §6.4 and the loopback origins of SEC-15. It is the block of
+# docker-compose.yml on its own, so a change of one side without the other is
+# seen here as well as there.
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:--1}
+      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-2}
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_FLASH_ATTENTION: ${OLLAMA_FLASH_ATTENTION:-1}
+      OLLAMA_KV_CACHE_TYPE: ${OLLAMA_KV_CACHE_TYPE:-f16}
+      OLLAMA_ORIGINS: ${OLLAMA_ORIGINS:-http://127.0.0.1,http://localhost}

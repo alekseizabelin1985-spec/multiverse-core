@@ -1,0 +1,6 @@
+{
+  "encounter": { "entity": { "id": "enc-1", "type": "encounter" }, "name": "Волк на тропе" },
+  "reason": "npc_dead",
+  "killer": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "rounds": -1
+}

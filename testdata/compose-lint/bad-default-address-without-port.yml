@@ -1,0 +1,12 @@
+# Rule 8: an address variable may name a service of this network, but as an
+# address — with a port or a scheme. `core` alone is a word that happens to be
+# a service name; before T-411 review #1 (Mi-1) the exception accepted it, and
+# with it a bare `telegram-bot` as the "address" of a client allow-list.
+#
+# expect-rule: 8
+# expect-text: does not have the same shape as the manifest's default
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-core}

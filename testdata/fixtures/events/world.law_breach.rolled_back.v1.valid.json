@@ -1,0 +1,5 @@
+{
+  "breach": { "id": "breach-1" },
+  "laws": { "version_from": "v2", "version_to": "v1" },
+  "retconned_fact_ids": ["fact-pack-left-the-forest", "fact-empty-forest-night"]
+}

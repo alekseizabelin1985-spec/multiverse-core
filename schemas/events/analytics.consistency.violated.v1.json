@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/analytics.consistency.violated.v1.json",
+  "title": "analytics.consistency.violated payload",
+  "description": "A check found the world inconsistent (metrics.md 4.2, contracts.md C-10 v0.3). In MVP-1 the publishers are mvctl session-report --audit and the golden harness of EPIC-005; the guardian of the world is the target one. expected and actual are numbers or identifiers, never narrative text.",
+  "type": "object",
+  "properties": {
+    "world": { "$ref": "_common.json#/$defs/WorldRef" },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "session": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "violation": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["hp_out_of_range", "dead_entity_acts", "duplicate_entity", "missing_entity",
+                   "position_mismatch", "inventory_mismatch", "state_divergence",
+                   "narrative_contradiction", "player_agency", "log_gap", "invariant"]
+        },
+        "layer": { "type": "string", "enum": ["law", "canon", "state", "momentary"] },
+        "severity": { "type": "string", "enum": ["break", "warn"] },
+        "detected_by": { "type": "string", "enum": ["invariant_check", "snapshot_diff", "llm_judge", "human"] },
+        "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+        "expected": { "type": ["string", "number", "boolean", "null"] },
+        "actual": { "type": ["string", "number", "boolean", "null"] }
+      },
+      "required": ["code", "layer", "severity", "detected_by"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["violation"],
+  "additionalProperties": false
+}

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/npc.moved.v1.json",
+  "title": "npc.moved payload",
+  "description": "The domain GM moved an NPC (api-contracts.md 2.3.8). The position of the entity is changed by the accompanying entity.update.proposed, not by this event.",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "position": {
+      "type": "object",
+      "properties": {
+        "from": { "type": ["string", "null"] },
+        "to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["from", "to"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity", "position"],
+  "additionalProperties": false
+}

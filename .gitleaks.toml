@@ -1,0 +1,12 @@
+# .gitleaks.toml — allowlist ТОЛЬКО шаблоны; README, testdata/, Docs/ не исключаются.
+# Источник: Docs/dev-team/architecture/infrastructure.md v0.3 §4.5 п. 1 (F-1, T-16, ADR-009 доп. п. 10).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "example files contain only empty values and placeholders"
+paths = ['''^\.env\.example$''', '''^\.mcp\.env\.example$''']
+
+[[allowlists]]
+description = "obvious placeholders"
+regexes = ['''sk-x{8,}''', '''<your-key>''', '''123456789:AA[x]{33}''']

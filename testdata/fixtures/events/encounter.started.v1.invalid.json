@@ -1,0 +1,12 @@
+{
+  "encounter": { "entity": { "id": "enc-1", "type": "encounter" }, "name": "Волк на тропе" },
+  "region": { "entity": { "id": "dark-forest-01", "type": "region" }, "name": "Тёмный лес" },
+  "participants": [
+    { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+    { "entity": { "id": "player-B", "type": "player" }, "name": "Лена" }
+  ],
+  "npcs": [
+    { "entity": { "id": "wolf-alpha", "type": "npc" }, "name": "Альфа-волк" }
+  ],
+  "round": { "timeout": "60", "idle_after_missed": 2 }
+}

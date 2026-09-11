@@ -1,0 +1,14 @@
+# Rule 8 and the single quotes of strip_comment (T-413 review #2 N-2): the
+# twin of bad-comment-in-quotes.yml. A `#` inside single quotes is text, not a
+# YAML comment, and compose interpolates what follows it. A comment-stripper
+# that knows only double quotes would cut the line at the `#` and see nothing.
+# A separate file, because the double-quoted line gives the same refusal and
+# would keep the fixture red for a stripper blind to single quotes.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: 'x #${MV_CORE_ADMIN_CLIENTS}'

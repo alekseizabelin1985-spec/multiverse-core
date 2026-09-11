@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/tick.aborted.v1.json",
+  "title": "tick.aborted payload",
+  "description": "A fired tick did not run to the end (api-contracts.md 2.3.9). The reason is free text of the runtime rather than an enum: the contract does not fix the vocabulary yet.",
+  "type": "object",
+  "properties": {
+    "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+    "scope": { "$ref": "_common.json#/$defs/ScopeRef" },
+    "tick": {
+      "type": "object",
+      "properties": { "seq": { "type": "integer", "minimum": 0 } },
+      "required": ["seq"],
+      "additionalProperties": false
+    },
+    "reason": { "type": "string", "minLength": 1 }
+  },
+  "required": ["tick", "reason"],
+  "additionalProperties": false
+}

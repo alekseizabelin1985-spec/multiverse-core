@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/agent.child_resolved.v1.json",
+  "title": "agent.child_resolved payload",
+  "description": "A child agent finished the task it was spawned for and its parent took the scope back (api-contracts.md 2.3.9).",
+  "type": "object",
+  "properties": {
+    "agent": { "$ref": "_common.json#/$defs/AgentRef" },
+    "parent": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "reason": { "type": "string", "enum": ["npc_dead", "players_out", "ttl", "abandoned"] }
+  },
+  "required": ["agent", "parent", "reason"],
+  "additionalProperties": false
+}

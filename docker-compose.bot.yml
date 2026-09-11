@@ -1,0 +1,80 @@
+# =============================================================================
+# docker-compose.bot.yml — profile `bot` (EPIC-001; T-397)
+# =============================================================================
+# Why this service does not live in docker-compose.yml (T-397, dev-log Ma-1):
+# `docker compose` interpolates the WHOLE file before it filters by profile, so
+# a `${VAR:?}` belonging to a service outside the default set breaks every
+# command — `config`, `up`, `ps` — on a machine that has no reason to set that
+# variable. `MV_TELEGRAM_BOT_TOKEN` is exactly such a variable: it is empty in
+# .env.example by design (a secret is never shipped) and only an operator who
+# actually runs the bot has one.
+#
+# Moving the service into its own file keeps the loud refusal where the token is
+# genuinely needed, and only there:
+#   make up PROFILES=bot          -> this file is loaded, an empty token stops
+#                                    the stack with the message below;
+#   make up                       -> this file is not loaded, nothing to
+#                                    interpolate, the stack starts.
+# The Makefile adds `-f docker-compose.bot.yml` whenever `bot` is in the active
+# profile set (PROFILES=... or COMPOSE_PROFILES of .env), so the operator never
+# passes it by hand. A bare `docker compose` is not supported: without
+# COMPOSE_ENV_FILES in the shell it stops on the first *_IMAGE (T-412), and with
+# it but without `-f docker-compose.bot.yml` it starts the stack with no bot.
+#
+# `profiles: ["bot"]` is kept on the service as well: the file may be loaded
+# together with the others (scripts/compose-lint.sh does exactly that), and the
+# profile must still be what decides whether the bot runs.
+#
+# The service moves out of compose entirely in EPIC-004, when cmd/telegram-bot
+# and its own deployment arrive.
+# =============================================================================
+
+# The bot writes far less than the platform and its lines carry a redacted
+# token: 10m x 3 (ADR-006 add. 5). The anchor lives here because it has exactly
+# one user, and it moves out of docker-compose.yml together with it.
+x-bot-logging: &bot-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # The token lives here and nowhere else (D-10, compose-lint rule 4); no
+  # env_file, because .env carries the token to whoever reads it.
+  telegram-bot:
+    profiles: ["bot"]
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+      args:
+        GO_VERSION: ${GO_VERSION}
+        VERSION: ${MV_IMAGE_TAG:-dev}
+    # The binary lands in EPIC-004; build/Dockerfile already copies everything
+    # under ./cmd, so this line starts working the moment cmd/telegram-bot
+    # exists — no change to this file.
+    entrypoint: ["/telegram-bot"]
+    environment:
+      MV_ENV: ${MV_ENV:-dev}
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+      # No default on purpose (§3.1.1 rule 3): a bot without a token would poll
+      # nothing and look healthy. This is the reason the file exists.
+      MV_TELEGRAM_BOT_TOKEN: ${MV_TELEGRAM_BOT_TOKEN:?set MV_TELEGRAM_BOT_TOKEN in .env — the profile `bot` cannot run without it (D-10)}
+      MV_TELEGRAM_ALLOWED_USER_IDS: ${MV_TELEGRAM_ALLOWED_USER_IDS:-}
+      MV_TELEGRAM_GATEWAY_URL: ${MV_TELEGRAM_GATEWAY_URL:-http://gateway:8088}
+      MV_TELEGRAM_POLL_TIMEOUT_S: ${MV_TELEGRAM_POLL_TIMEOUT_S:-25}
+      MV_TELEGRAM_HEALTH_ADDR: ${MV_TELEGRAM_HEALTH_ADDR:-:8089}
+    ports:
+      - "127.0.0.1:8089:8089"
+    healthcheck:
+      test: ["CMD", "/telegram-bot", "health", "--url", "http://127.0.0.1:8089/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *bot-logging

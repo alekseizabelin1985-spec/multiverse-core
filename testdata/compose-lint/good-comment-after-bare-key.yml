@@ -1,0 +1,11 @@
+# A clean file for rules 3 and 8 (review #2 T-411, N-5): a YAML comment after a
+# key with no value is a comment, not the value. MV_LLM_API_KEY may legitimately
+# be passed through empty (the local case), and the comment after
+# MV_CORE_ADMIN_CLIENTS quotes the very form rule 8 forbids — compose never
+# interpolates a comment, so neither may the linter read one.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_API_KEY:   # passed through; empty is the local llama-server
+      MV_CORE_ADMIN_CLIENTS:   # not ${MV_CORE_ADMIN_CLIENTS}, which hands the process an empty list

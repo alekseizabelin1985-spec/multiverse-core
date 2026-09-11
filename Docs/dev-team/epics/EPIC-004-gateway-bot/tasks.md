@@ -1,0 +1,686 @@
+# Задачи EPIC-004 «Вход игрока: gateway и Telegram-бот» (волны)
+
+Версия 0.1.1 · 2026-09-09 · tech-lead#3 (TEAM-3) · этап A4 «Планирование», шаг 3 · к объединённому G3.
+**Правки сведения 3 внесены tech-lead#1 от имени tech-lead#3** (одна команда по решению пользователя; основание — `architecture/consolidation.md` §14, `contracts.md` v0.4): T-301 (схемы `group.*`/`session.ended`, OpenAPI), T-302 (CHECK `end_reason`), T-314 и T-355 (каскад `/forget`), T-352 (`no_leader`, `leader_id: null`), T-320 (`blocked` → `planned`); §8 З-1…З-6 — «решено», §9 риски 4–5 сняты. Структура подволн и состав задач не менялись.
+**Правки ревизии контрактов T-416 внесены tech-lead#1 (2026-09-11; один проход по всем эпикам по решению оркестратора)** — основание `contracts.md` v0.6–v0.7 (C-04 v1.3, C-05 v1.4, C-08 v1.3, Env), ADR-026: T-303 (`MV_CORE_ADDR`, списки `MV_GATEWAY_CLIENT_IDS`/`MV_GATEWAY_ACTOR_KIND_CLIENTS`), T-304 (конец встречи), T-307 (порядок `narrative_output`), T-350/T-351 (конец при открытом раунде), T-356, T-357, T-392 (имена переменных и подкоманды отчёта). Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
+Команда: TEAM-3 (tech-lead#3, architect#3, developer#1–#2, code-reviewer#3, qa-engineer#3, tester#3).
+Ветка эпика: `epic/EPIC-004-gateway` от `integration/mvp-1` (одна на весь MVP-1; создаётся tech-lead#3 при старте волны 1; коммиты — `commits=ask`, один запрос на подволну).
+Диапазон номеров команды: **T-300…T-399** (TEAM-1 — T-001…T-199, TEAM-2 — T-200…T-299). Занято этим документом: T-301…T-320, T-350…T-357, T-390…T-393.
+
+Основание: `epics/EPIC-004-gateway-bot/design.md` v0.1 (§3.1 состав I1 — 9 пунктов, §3.2 состав I2 — 7 пунктов, §3.3 заглушки, §3.4 порядок T-a…T-l), `architecture/components/gateway-and-bot.md` v0.2 (§3 структура, §4 данные, §5 API, §6 интерфейсы, §7 потоки, §8 outbox, §9 раунды, §10 бот, §11 безопасность/конфигурация, §15 тесты, §17 журнал изменений), ADR-018/019/020 (с дополнениями), ADR-006/009/010, `architecture/contracts.md` v0.2 (поставляем C-04, C-08, C-10; потребляем C-01, C-02, C-05, C-06, C-14; §17 заглушки), `architecture/threat-model.md` (SEC-03, 06, 07, 08, 10, 11, 12, 26 — обязательны в MVP-1), `analysis/api-contracts.md` v0.2 §1, `requirements/{prd,nfr,user-stories}.md` v0.4, `plan/{epics,teams,ownership,decomposition-review}.md`.
+
+---
+
+## 0. Как читать и общий DoD [ ] **(оркестратор по T-416, 2026-09-11; C-05 п. 1д)** срок ожидания ответа на действие — не конец встречи: при варианте «не предлагать повтор» потребитель получает только срок, события отказа нет; шлюз сообщает игроку «ответа нет» и не закрывает встречу, конец — только по факту `resolved` или `encounter.ended` (тест).
+
+**Формат задачи:** `T-NNN: название · инкремент · подволна · исполнитель · размер · зависимости · ссылки · описание · DoD`.
+Размер: **S** ≤ полдня, **M** ≤ день-полтора (дифф ≤ ~600 строк с тестами). Задач размера L в эпике нет — это правило нарезки (design §3.4).
+
+**DoD-common — входит в каждую задачу разработки, отдельно не повторяется:**
+
+- [ ] Unit-тесты на новый код написаны и зелёные: `go test -short ./internal/gateway/... ./cmd/telegram-bot/...` (затронутые пакеты).
+- [ ] `golangci-lint run` чист; `depguard` не нарушен: `internal/gateway/*` не импортирует другие `internal/*`; `cmd/telegram-bot` импортирует из платформенного кода только `internal/gateway/{client,api}` (component §3).
+- [ ] `go build ./...` и `go vet ./...` зелёные; `go work sync` не ломается.
+- [ ] Изменены только пути владения EPIC-004 (`ownership.md` §1). Правка `shared/*`, чужих схем, `go.mod`-версий общих зависимостей — **не делать**, оформить запросом к system-architect через tech-lead#3 и описать в отчёте.
+- [ ] Новая зависимость в `go.mod` — с явной пометкой в отчёте (правило `ownership.md`).
+- [ ] `Docs/dev-team/epics/EPIC-004-gateway-bot/dev-log.md` дополнен: экземпляр (`developer#K`), решения, отклонения от дизайна, что не сделано.
+- [ ] Поведение соответствует критериям приёмки перечисленных в задаче US.
+- [ ] Ни одно новое поле/лог/событие не содержит внешнего ID (Telegram user id, username, chat id) — проверка глазами + тест, где указано (SEC-01/02/03).
+- [ ] Секретов в коде и тестовых данных нет; `.env.example` синхронизирован с манифестом `shared/env.Declare`, если задача добавляла переменные (NFR-074).
+
+**Правило заглушек (design §3.3).** Заглушки `FakeState`, `FixedMechanics`, `FakeNarrator`, фикстура `testdata/snapshots/state/latest.json`, `membus` c `Journal.End()` — чужие (EPIC-001/002/003). TEAM-3 их **не правит**: дефект → запрос владельцу через tech-lead#3, задача уходит в эпик-владелец.
+
+**Ранний merge.** Задачи с пометкой «**ранний merge**» после приёмки tech-lead#3 сливаются в `integration/mvp-1` **до** интеграции эпика (правило `decomposition-review.md` §3.3 п. 2) — их результат нужен TEAM-1/TEAM-2 раньше. Решение по раннему merge подтверждает tech-lead#1 на G3.
+
+---
+
+## 1. Инкремент I1 «соло» (developer#1 — gateway, developer#2 — бот c подволны 1.4)
+
+### T-301: Схемы событий C-04/C-10, скелет OpenAPI, DTO и каркас Go-клиента · I1 · подволна 1.1 · developer#1 · M · **ранний merge**
+
+**Зависит от:** EPIC-001 F-4a/F-4b (реестр `shared/contracts` с `Spec.Publishers`, `schemas/events/_common.json`), F-5t (`membus`). Внешних блокеров больше нет.
+**Ссылки:** **`contracts.md` v0.4 — C-04 v1.1, C-08 v1.2, C-10 v1.1**; `api-contracts.md` §1, §1.3, §1.6, §1.7, §2.3.1–2.3.4, §2.3.14, §2.3.16; `consolidation.md` §14.1 (З-1…З-4); design §3.3, §3.4 (T-a); component §5.3, §5.6; US-008, US-038; FR-061, FR-084…FR-086; BR-13 v0.4; ADR-007.
+
+**Дополнение (сведение 3, внесено tech-lead#1 от имени tech-lead#3; замечания З-1, З-2, З-4 решены — §8):**
+- `group.left` и `group.leader_changed` получают поле **`cause` ∈ `leave | death | forget`**; `group.leader_changed.leader` — **nullable** (`ref | null`: живых участников не осталось). Схема v1 уточняется **до** её реализации, обратная совместимость не нарушается.
+- `analytics.session.ended.session.end_reason` — **`leave | idle | death | error | forget`** (`forget` — закрытие активной сессии каскадом `/forget`, не ошибка).
+- OpenAPI: `worlds[].llm{cloud_enabled: boolean}` в ответе `GET /v1/worlds` (без провайдера, URL и ключей — SEC-21); `GroupView.leader_id: string | null`; новый код ответа **`409 no_leader`** в `components.responses` (проверяется раньше `not_leader`) для `enter`/`leave` группы при `leader_id = null`; `409 character_dead` документируется и для `status = abandoned`.
+
+**Описание.** Контракты, которые видны другим командам раньше кода.
+1. `schemas/events/`: `player.entered_region|left_region|looked|attacked|flee_attempted|rested|said|defended`, `group.created|joined|left|leader_changed|disbanded|entered_region|left_region`, `round.opened|closed`, `analytics.session.started|ended`, `analytics.turn.completed` — по `api-contracts.md` §2.3.1–2.3.3 и §2.3.14, конверт из `_common.json`.
+2. Регистрация типов — PR в `shared/contracts/registry.go` (ревью system-architect; только добавление своих типов, ownership §1).
+3. `api/gateway.openapi.yaml` — скелет по component §5.6: `openapi 3.1.0`, `info.version 1.0.0`, `securitySchemes.ClientId`, параметр `X-Actor-Kind`, все `components.schemas` из §5.6, `components.responses` с кодами §1.6 + C-08 v1.1, 14 маршрутов с `operationId` и пустыми/минимальными телами ответов.
+4. `internal/gateway/api/dto.go` — DTO из component §5.3 (ручной `encoding/json`, теги `snake_case`).
+5. `internal/gateway/client/client.go` + `longpoll.go` — сигнатуры методов C-08 (component §6), `APIError{Status, Code, Message, Details}`, повторы 3× на сетевые/`503` c тем же `action_key`; реализация против скелета (тесты — на `httptest`).
+
+**DoD** (+ DoD-common):
+- [ ] Все схемы валидны (JSON Schema draft из `_common.json`), проходят `mvctl contracts check` / тест реестра EPIC-001; каждый тип **зарегистрирован** в `shared/contracts/registry.go` с топиком из `api-contracts.md` §2.2.
+- [ ] **(сведение 3, З-1)** `analytics.session.ended.session.end_reason` — enum ровно `leave|idle|death|error|forget`; негативный тест на значение вне enum.
+- [ ] **(сведение 3, З-2/З-4)** `group.left`/`group.leader_changed` содержат `cause` (`leave|death|forget`); `group.leader_changed.leader` допускает `null` — позитивный тест документа с `leader: null`.
+- [ ] **(сведение 3, З-3/З-4)** в OpenAPI присутствуют `worlds[].llm.cloud_enabled`, `GroupView.leader_id` nullable и ответ `409 no_leader`; тест `openapi_test.go` проверяет наличие всех `code` включая `no_leader`.
+- [ ] `openapi_test.go` существует и зелёный: множество `(method, path)` YAML == зарегистрированным в `router.go` (на этом шаге — пустой роутер-заглушка, тест сверяет только парсинг и наличие всех `code` из `errors.go`).
+- [ ] Unit клиента на `httptest`: успешный вызов, `4xx` → `APIError` с `code`, `503` → 3 повтора с тем же `action_key`, `4xx` → без повтора.
+- [ ] `api/gateway.openapi.yaml` содержит раздел `admin` как «зарезервировано» (совладение с EPIC-003, `journal.md` — запрос architect#2).
+- [ ] Отчёт содержит явный список поставленного другим командам (C-04 типы, C-10 типы, C-08 DTO) — tech-lead#3 передаёт tech-lead#1 для раннего merge.
+
+### T-302: Хранилище и миграции обеих БД + integration-тесты миграций и физического `/forget` · I1 · подволна 1.2 · developer#1 · M
+
+**Зависит от:** T-301 (не жёстко — только общий каркас модуля).
+**Ссылки:** ADR-019 (+ доп. п. 1, 2), SEC-03, SEC-04/05; component §4.1, §4.2, §3 (`store/`, `migrations/`); design §3.1 п. 1; US-009; NFR-042.
+
+**Описание.** `internal/gateway/store/open.go` (`OpenLinks`, `OpenGateway`; PRAGMA по component §4.1/§4.2; `SetMaxOpenConns(1)`), `store/migrate.go` (goose Provider из `embed.FS`), `migrations/links/0001_init.sql`, `migrations/gateway/0001_init.sql` — **полная схема I1+I2 сразу** (включая `rounds`, `group_participation`), чтобы I2 не добавлял миграций. Права файла `0600`, каталога `0700`. Sweeper-заготовка retention (component §4.2) — интерфейс без запуска.
+
+**DoD** (+ DoD-common):
+- [ ] Integration-тест (`//go:build integration`): миграции обеих БД на временном файле с нуля; повторный `up` — no-op; `down` не требуется (MVP-1).
+- [ ] Тест схемы (unit, SEC-03): список колонок `gateway.db` сверяется с allowlist; колонка с подстрокой `external` допустима **только** в `links.db`; `link_id` в `gateway.db` отсутствует.
+- [ ] Integration-тест физического удаления (SEC-04/05, NFR-042): вставка строки с известным тестовым ID → `DELETE` + `wal_checkpoint(TRUNCATE)` + `incremental_vacuum` в одном вызове → `strings`-скан **файла и WAL** = 0 вхождений.
+- [ ] Тест PRAGMA: `links.db` — `secure_delete=ON`, `auto_vacuum=INCREMENTAL`, `journal_mode=WAL`, `synchronous=FULL`; `gateway.db` — `WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `busy_timeout=5000`.
+- [ ] **(сведение 3, З-1)** в `migrations/gateway/0001_init.sql` — `CHECK (end_reason IN ('leave','idle','death','error','forget'))` для `sessions.end_reason`; integration-тест: вставка каждого из пяти значений проходит, шестое (`forget_all`) отклоняется CHECK'ом. `players`-статус `abandoned` в gateway **не хранится** (это факт State) — зафиксировано в комментарии миграции.
+- [ ] Права `0600`/`0700` проверены тестом (skip на Windows-раннере с пометкой).
+- [ ] `MV_GATEWAY_DATA_DIR` объявлен через `shared/env.Declare`; `.env.example` дополнен.
+
+### T-303: `links` (resolve/consent/forget/`link_id`/`RouteFor`) и каркас HTTP-слоя · I1 · подволна 1.3 · developer#1 · M · **точка подключения developer#2**
+
+**Зависит от:** T-302, T-301 (DTO/OpenAPI).
+**Ссылки:** C-08 v1.1; SEC-03, SEC-08 (частично), SEC-11, SEC-12, SEC-26; component §4.1, §5.1, §5.2 (`links`-маршруты), §6, §7.1, §7.5, §11.1; design §3.1 п. 2; US-001, US-009; FR-060, FR-061; NFR-041/042/045; ADR-009 (+ доп. п. 2, 7).
+
+**Описание.**
+1. `links/store.go` — интерфейс и SQLite-реализация `Store` (component §6): `Resolve` (нет строки → INSERT `pending_consent` + новый `link_id` ULID, обновляет `last_seen_at`), `Consent`, `AttachPlayer`, `ByPlayer`, `RouteFor`, `Forget`, `ForgetByPlayer`, `CharacterRequest`/`SaveCharacterRequest` (ключ `(link_id, action_key)`, TTL 24 ч), `Compact`.
+2. `links/pseudonym.go` — `NewPlayerID`, `NewLinkID`; `Link.LogValue() → "redacted"`.
+3. `links/forget.go` — `Forget` + `ForgetHooks` (в I1 подключены `outbox.DropForPlayer`, `session.End` — регистрируются позже; интерфейс и вызов уже здесь), checkpoint+vacuum в том же вызове.
+4. `api/`: `server.go` (таймауты component §5.1, адрес прослушивания — **`MV_CORE_ADDR`**, graceful shutdown), `router.go`, `middleware.go` (порядок 1–8: recover, request_id, client/actor_kind/client_mismatch, body_limit 64 КиБ, `nolog`, ratelimit-заглушка, `pollguard`, timeout), `errors.go` (таблица `api-contracts.md` §1.6 + коды C-08 v1.1), `handlers_links.go`, `handlers_health.go` (минимальный `/health`). *(T-416, 2026-09-11: заменено `MV_GATEWAY_LISTEN` — такой переменной нет. Адрес HTTP любого процесса задаёт только `MV_CORE_ADDR`, решение T-408, `contracts.md` v0.6 «Env». HTTP-сервер процесса даёт `shared/runtime`, gateway монтирует маршруты на `Deps.Mux`, C-01 v1.3.)*
+5. `config.go` — переменные gateway (component §11.3) читаются через объявления манифеста `shared/env`. Два списка: **`MV_GATEWAY_CLIENT_IDS`** — допущенные `X-Client-Id`; **`MV_GATEWAY_ACTOR_KIND_CLIENTS`** — клиенты с правом на `X-Actor-Kind: ci|sim` (C-08 v1.3). Платформа клиента для SEC-12 в MVP-1 — **фиксированное соответствие в коде** (`client_id → platform`). Отдельная переменная появится со вторым ботом (решение оркестратора по T-409, `journal.md` 2026-09-11). *(Заменено (T-416): «`MV_GATEWAY_CLIENTS` парсер `client_id:platform:actor_kinds`».)*
+
+**DoD** (+ DoD-common):
+- [ ] Unit `links`: `resolve` без строки → `pending_consent` + непустой `link_id`; повторный `resolve` — тот же `link_id`, обновлён `last_seen_at`; неполное согласие → остаётся `pending_consent`; `consented` ⇒ три timestamp не NULL; `AttachPlayer` при `dead` → новый `player_id`, `link_id` не изменился; уникальность `player_id`.
+- [ ] Unit `Forget`: каскад `character_requests`, вызов `ForgetHooks`, возврат `{deleted, player_id_detached}`; повтор — идемпотентно `{deleted:false}` без ошибки; `/forget` от аккаунта без персонажа → «нечего удалять» (US-009).
+- [ ] Unit `Link.LogValue()`: `slog` с атрибутом `Link` не печатает внешний ID и `link_id`.
+- [ ] Unit `api` (SEC-11/12): `403 client_unknown` при `X-Client-Id` вне `MV_GATEWAY_CLIENT_IDS`; `403 actor_kind_forbidden` при `X-Actor-Kind: ci|sim` от клиента вне `MV_GATEWAY_ACTOR_KIND_CLIENTS` *(T-416: заменено `MV_GATEWAY_CLIENTS`, C-08 v1.3)*; `403 client_mismatch` для `/v1/clients/{id}/*`; `413 payload_too_large` на 65 КиБ; `409 poll_in_progress` на второй параллельный long-poll; `X-Request-Id` в ответе.
+- [ ] Unit `nolog` (SEC-01/02): при `400/500` на `POST /v1/links/*` и `POST /v1/characters` в логе есть только `request_id` и `code`, тела и внешнего ID нет.
+- [ ] `openapi_test.go` зелёный: маршруты `links`, `/health` из `router.go` есть в `api/gateway.openapi.yaml`; **OpenAPI обновлён** телами ответов этих маршрутов.
+- [ ] Семантика `/forget` (что удаляется, что остаётся) отражена в `description` соответствующих операций OpenAPI (SEC-26).
+- [ ] Переменные `MV_*` из component §11.3, относящиеся к API и данным, объявлены и есть в `.env.example`.
+
+### T-304: `readmodel` (проекция, bootstrap, waiters) и `consumer` (диспетчер, `entity.*`, `encounter.*`) · I1 · подволна 1.4 · developer#1 · M
+
+**Зависит от:** T-302, T-303. **Внешнее:** `testkit/state.FakeState` v0 и фикстура `testdata/snapshots/state/latest.json` (F-10, EPIC-001/002), `shared/entity` v2 (F-10), `membus` с `Journal` (F-5t).
+**Ссылки:** C-02 v1.1, C-14 v1.1, C-01 v1.1; component §3 (`readmodel/`, `consumer/`), §5.2, §11.2, §16 п. 2; design §3.1 п. 3 (часть), §3.3; US-011; NFR-010/011, NFR-013.
+
+**Описание.** `readmodel/model.go|apply.go|bootstrap.go|waiters.go`: типизированные проекции (World, Region, NPC, CharacterState, Group, Encounter) поверх `entity.Ref`/геттеров `shared/entity` v2; `Apply(entity.created|updated|update.rejected)`, `ApplyEncounter(started|ended)`; `LoadFromStateSnapshot` из `snapshots-{world}/state/latest.json` (нет объекта → пустая проекция, `/health.projection=missing`); `AwaitFact(correlationID, ≤ 2 с)`; `Hash()`, `Cursor()`.
+`consumer/dispatcher.go` — подписка на `system_events`, `game_events`, `world_events`, `narrative_output`; дедуп `processed_events`; два курсора («проекция» и «эффекты») в одной транзакции с эффектами; `handle_entity.go`, `handle_encounter.go` (в этой задаче — только проекция и `waiters`, без outbox).
+
+**DoD** (+ DoD-common):
+- [ ] Unit: `Apply` строит `CharacterState` из `entity.created`+`entity.updated` (HP, позиция, scope, инвентарь, статус); `entity.update.rejected` с известным `proposal_id` снимает ожидание.
+- [ ] Unit `AwaitFact`: факт ≤ 2 с → возврат события; таймаут → `context.DeadlineExceeded`; параллельные ожидания разных `correlation_id` не мешают друг другу.
+- [ ] Unit `bootstrap`: загрузка из фикстуры `testdata/snapshots/state/latest.json`; отсутствие объекта → пустая проекция и `projection=missing` (US-011 «не поднимается с пустым состоянием молча» — отражено в `/health` и логе).
+- [ ] Unit `consumer`: дубль события по `event.id` не применяется дважды (NFR-013); курсоры продвигаются в одной транзакции с эффектом; события с `offset ≤ cursor(эффекты)` применяются только к проекции.
+- [ ] `readmodel` использует **только** типизированные геттеры `shared/entity` v2 — прямых обращений к `map[string]any` нет (риск design §8).
+- [ ] `/health.projection` возвращает `ok|missing|stale`.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, C-05 v1.4 п. 3–5, ADR-026 п. 4)** Read-model считает встречу законченной по **первому** из двух событий: факт сущности встречи со `state=resolved` (`entity.updated`, `system_events`) или `encounter.ended` (`world_events`). Второе событие пары состояние не меняет и повторного эффекта не даёт (ожидания, доставки). В журнале факт всегда раньше события, но между топиками порядок не гарантирован (C-01). Встреча, объявленная `encounter.started` раньше `entity.created`, держится как «объявлена, сущности ещё нет», и состояние это временное. Unit: оба порядка прихода «факт / `encounter.ended`» дают одно и то же закрытое состояние; оба порядка «`encounter.started` / `entity.created`» дают одну и ту же открытую встречу; действие после конца, пришедшего любым из двух путей, отвергается предусловием (`not_in_encounter`, T-305).
+
+### T-305: `actions` — валидация, идемпотентность, лимит, `InputFilter`, публикация `player.*` · I1 · подволна 1.5 · developer#1 · M
+
+**Зависит от:** T-303, T-304.
+**Ссылки:** C-04, C-02 v1.1, C-08 v1.1; SEC-11, SEC-12; component §5.4, §5.5, §7.2, §11.3; design §3.1 п. 3, §3.4 (T-e); US-016 (FR-056), US-019 (FR-014); FR-002, FR-006, FR-023, FR-025 (соло-часть); NFR-003, NFR-013.
+
+**Описание.** `actions/validate.go` (таблица `map[ActionType]Rule` — прямая кодировка `api-contracts.md` §1.4, фиксированный порядок проверок component §5.4 п. 1–4; правила группы — заглушки, включаются в I2), `actions/publish.go` (`BuildPlayerEvent`, `BuildPositionProposal`; `enter/leave/rest` → `entity.update.proposed`; `action.key_hash = SHA-256(action_key)`), `actions/idempotency.go`, `actions/ratelimit.go` (token bucket 30/мин burst 5 на `player_id`, уборка раз в 10 мин, в `replay` выключен), `actions/inputfilter.go` (`InputFilter` + `NoopFilter` с записью журнала `input_filter{applied, status, filter, text_len}` без текста; выбор по `MV_GATEWAY_INPUT_FILTER`, иное значение → ошибка старта), `api/handlers_players.go` (`POST /v1/players/{id}/actions`), `MV_GM_PATH=legacy` → дополнительная публикация `gm.created` (один `if`).
+
+**DoD** (+ DoD-common):
+- [ ] Табличный unit `Validate` по **всем** строкам `api-contracts.md` §1.4 и кодам §1.6: `player_not_found`, `character_dead`, `unknown_action`, `invalid_request`, `text_invalid`, `unknown_target`, `in_encounter`, `not_in_encounter`, `target_dead`, `not_in_region`, `encounter_unavailable`; порядок проверок соблюдён (тест на первое несоответствие).
+- [ ] Unit идемпотентности (C-08): повтор `action_key` → тот же `correlation_id` и тот же ответ, включая сохранённый `4xx`; `503 bus_unavailable` при ошибке `Publish` — ключ **не** записан, `Turn` не сохранён.
+- [ ] Unit rate limit (SEC-11, NFR-049): 31-е действие за минуту → `429 rate_limited` с `Retry-After`; на 61-й секунде снова принимается; в `--mode=replay` лимита нет.
+- [ ] Unit `InputFilter` (US-016, FR-056): тестовая реализация «заменить слово» → в `player.said.text` уходит `FilterResult.Text`, исходный текст в шину не попадает; ошибка фильтра → `422 filter_error` (fail-closed); имя персонажа проходит тот же фильтр; `MV_GATEWAY_INPUT_FILTER=other` → ошибка старта.
+- [ ] Unit `MV_GM_PATH` (US-019, FR-014): `legacy` → публикуется `gm.created`; `agent` → не публикуется. В коде помечено `// удаляется в EPIC-003 I2 (S5)`.
+- [ ] Unit `say`: `TrimSpace`, 1–500 рун, управляющие символы отклоняются (`text_invalid`, NFR-043).
+- [ ] Публикуемые события валидируются против схем из T-301 в тесте (contract-тест реестра).
+- [ ] `202` возвращается до ожидания чего-либо, кроме подтверждения брокера; unit с таймером ≤ 100 мс на `membus` (вклад в NFR-003).
+- [ ] **OpenAPI обновлён**: `postAction` с `ActionRequest`/`ActionAccepted` и всеми кодами; `openapi_test` зелёный.
+
+### T-306: `characters`, `GET /v1/worlds`, `GET /v1/players/{id}`, `session` + `turns` + аналитика C-10 · I1 · подволна 1.6 · developer#1 · M
+
+**Зависит от:** T-303, T-304, T-305.
+**Ссылки:** C-02, C-08 v1.1, C-10; SEC-03; component §5.2, §7.1, §7.6, §4.2 (`sessions`, `turns`, `pending_characters`); design §3.1 п. 2–3, п. 9; US-001, US-038; FR-001, FR-006, FR-023, FR-060, FR-085…FR-088, BR-17; NFR-036, NFR-045.
+
+**Описание.** `api/handlers_characters.go` (`POST /v1/characters`: `consented` обязателен → иначе `consent_required`; `character_requests` по `(link_id, action_key)`; `pending_characters`; `entity.create.proposed` → `AwaitFact ≤ MV_GATEWAY_CHARACTER_WAIT` → `201`/`200`/`202 creating`; дедлайн `MV_GATEWAY_CHARACTER_DEADLINE`), `handlers_players.go` (`GET /v1/players/{id}`, `character_status ∈ none|creating|alive|dead`), `handlers_health.go` (`GET /v1/worlds`), `session/manager.go` + `session/analytics.go` (`Touch`, `Open`, `End`, `UpdateParticipants`, `Current`, `Active`, sweeper простоя 30 мин), `turns/tracker.go` + `turns/store.go` (`Register`, `OnMechanics`, `OnNarrative`, `OnDelivered`, `Sweep`), публикация `analytics.session.started|ended`, `analytics.turn.completed`, фикстура `testdata/analytics/solo-30.jsonl` (для EPIC-005 005-ops).
+
+**DoD** (+ DoD-common):
+- [ ] Unit US-001: мир не найден → `world_not_found`, сущность не предлагается; без согласия → `consent_required`; повтор при `alive` → тот же `player_id`, второй персонаж не создаётся (A-7); при `dead` — новый `player_id`, связка обновлена; регистрация без имени → `name_required`; имя 2–32, регулярка совпадает с ботовой (FR-060).
+- [ ] Unit идемпотентности `characters` (SEC-03): ключ — `link_id + action_key`; повтор возвращает сохранённый ответ; `gateway.db` при этом не получил ни `external_id`, ни `link_id`.
+- [ ] Unit `202 creating`: факт не пришёл за 2 с → `202 {player_id, status:"creating"}`; последующий `GET /v1/players/{id}` → `creating` → `alive`; не пришёл за 60 с или `entity.update.rejected` → `pending_characters` очищен, статус согласован.
+- [ ] Unit `session` (BR-17, US-038): первое действие в scope без сессии → `analytics.session.started` без внешних ID; простой ≥ 30 мин → `ended end_reason=idle` + новая сессия; sweeper закрывает без следующего действия; парность `started/ended` (NFR-036); `actor_kind` сессии = `X-Actor-Kind` первого действия; в `--mode=replay` sweeper выключен и `analytics.*` не публикуются.
+- [ ] Unit `turns` (US-038): `turn.completed` публикуется на **каждый** принятый и **каждый** отклонённый ход (`status=rejected` с `timings{received_at, acked_at}`); `status=degraded` при `generated_by=template`; `timeout` по дедлайну 60 с; `completed` — после ack последнего адресата.
+- [ ] `testdata/analytics/solo-30.jsonl` — фикстура сформирована из зелёного прогона и валидна против схем C-10; отчёт содержит уведомление EPIC-005 (005-ops) о готовности фикстуры.
+- [ ] События `analytics.*` — в топике `analytics_events`, не читаются в replay (C-10).
+- [ ] **OpenAPI обновлён**: `createCharacter`, `getPlayer`, `listWorlds`; `openapi_test` зелёный.
+
+### T-307: `outbox` (store/lease/ack/render/sweeper), long-poll `deliveries`, `consumer` для `combat.decided`/`narrative.output` · I1 · подволна 1.7 · developer#1 · M
+
+**Зависит от:** T-304, T-306. **Внешнее:** `testkit/swarm.FakeNarrator` v0 (C-05, F-10) — только для тестов.
+**Ссылки:** ADR-006 (+ доп.), C-05 v1.1, C-08 v1.1; SEC-11, SEC-12; component §8.1–8.4, §5.2, §3 (`outbox/`, `consumer/`); design §3.1 п. 4, §3.4 (T-f); US-002/US-004 (вклад), US-008; FR-003, FR-013; NFR-001, NFR-005, NFR-013.
+
+**Описание.** `outbox/types.go|store.go|longpoll.go|render.go|sweeper.go`: `Enqueue` идемпотентно по `(event_id, player_id)`; `Lease` «голова очереди на игрока» (SQL component §8.2); `Ack`; `ReleaseExpiredLeases`; `Expire`; `DropForPlayer`; `Notifier`; `render.Mechanics` (ru-тексты component §7.2, `generated_by=rules`). `consumer/handle_combat.go`, `handle_narrative.go` (адресаты по `payload.recipients[]`, `data{narrative_event_id, kind, absence?, filter}`), постановка доставок для `entity.updated cause ∈ {move, rest, loot}`, `player.status=dead`, `encounter.started`. `api/handlers_deliveries.go`: `GET /v1/clients/{id}/deliveries` (long-poll, `wait_ms ≤ 25000`, `limit ≤ 100`), `POST …/ack`, `GET …/stream` → `501`. Подстановка `route.external_id` через `links.RouteFor` **только в ответ**; нет маршрута → `dropped`.
+
+**DoD** (+ DoD-common):
+- [ ] Unit `Lease`: строгий порядок `seq` на игрока; одна доставка в лизинге на игрока; повторная выдача после истечения 30 с; доставка без маршрута → `dropped` и в ответ не попадает.
+- [ ] Unit `Enqueue` идемпотентности (NFR-013): повторная доставка того же события шиной не создаёт вторую строку.
+- [ ] Unit `Ack`: чужие/неизвестные id → `unknown[]` без ошибки; ack чужого клиента не подтверждает доставку; `turns.OnDelivered` вызван для `kind=narrative`.
+- [ ] Unit SEC-12: `route.external_id` не выдаётся клиенту платформы, отличной от платформы связки; `403 client_mismatch` для чужого `{client_id}`.
+- [ ] Unit SEC-11: второй параллельный long-poll → `409 poll_in_progress`; `wait_ms`/`limit` ограничиваются сверху.
+- [ ] Golden-тест `render.Mechanics`: попадание/промах/крит, `npc_attack`, `flee success/fail`, смерть, `rest`, `move` — тексты в `testdata/golden/`, файлы с `merge=binary` (ownership).
+- [ ] Unit long-poll: `Serve` не держит соединение БД во время ожидания; `Notify` после `Enqueue` будит ждущего ≤ 50 мс; периодическое пробуждение раз в 1 с работает при потере сигнала.
+- [ ] Sweeper: `ReleaseExpiredLeases`, `Expire` (TTL 24 ч → `dropped`), retention `processed_events`/`idempotency_keys` — по component §4.2; в `--mode=replay` выключен.
+- [ ] **(T-416, 2026-09-11; C-05 v1.4 п. 8 и «Гарантии»)** Шлюз **не переупорядочивает** `narrative_output`: доставки `narrative.output` встают в очередь игрока в порядке топика. Порядок «смерть после текста хода» обеспечивает издатель нарратива (T-233), по `based_on[]`, `kind` и времени шлюз ничего не переставляет. Unit: `kind=death` пришёл раньше `kind=turn` той же `correlation_id` → доставки выданы в порядке прихода, без задержки и перестановки.
+- [ ] **OpenAPI обновлён**: `pollDeliveries`, `ackDeliveries`, `streamDeliveries (501)`; `openapi_test` зелёный.
+
+### T-308: `shared/testkit/gateway` — `FakeGateway` и `Harness` (замена v0 из F-10) · I1 · подволна 1.8 · developer#1 · M · **ранний merge**
+
+**Зависит от:** T-303…T-307. **Внешнее:** сигнатуры `Harness` v0 из F-10 (EPIC-001).
+**Ссылки:** C-04 «Заглушка», C-08 «Заглушка», `contracts.md` §17; component §15; design §3.1 п. 6, §3.3; ADR-010; NFR-092.
+
+**Описание.** `shared/testkit/gateway/`: `FakeGateway` — in-process HTTP-сервер поверх реального `internal/gateway` на `membus` (для бота и e2e); `Harness` — Go-клиент `internal/gateway/client` + фикстуры `player-A/B/C` платформы `ci` + `RegisterAndEnter`, `Act`, `AwaitDelivery(kind, timeout)`, `CloseRound` (в I1 — заглушка `501`/`no_open_round`), режим генератора `player.*` прямо в `membus` без HTTP (для EPIC-002/003). `--id-source=sequence`, `clock.Manual`.
+
+**DoD** (+ DoD-common):
+- [ ] **Сигнатуры v0 сохранены**: код EPIC-002/EPIC-003, использовавший `Harness` v0, компилируется без правок (проверка — сборка `./...` на ветке эпика после подтягивания `integration/mvp-1`); отличия, если они неизбежны, согласованы с tech-lead#1 и перечислены в отчёте.
+- [ ] `FakeGateway` поднимается и гасится в тесте за ≤ 1 с, без внешних зависимостей (`-short`), детерминированные ULID и часы.
+- [ ] Unit самой обвязки: `RegisterAndEnter` доводит фикстуру до `alive` в регионе; `Act` возвращает `correlation_id`; `AwaitDelivery` не залипает при отсутствии доставки (таймаут → понятная ошибка).
+- [ ] `Harness` использует **тот же** `internal/gateway/client`, что и бот (NFR-092) — проверка compile-time.
+- [ ] `shared/testkit/gateway` не импортируется из продакшн-кода (тест на импорты / `depguard`).
+- [ ] Отчёт содержит уведомление TEAM-1/TEAM-2 о замене v0 и инструкцию перехода (2–3 строки для `dev-log`/`journal`).
+
+### T-309: `snapshot` gateway, режимы `live|replay`, `Journal.End()`, полный `/health` · I1 · подволна 1.10 · developer#1 · M
+
+**Зависит от:** T-304, T-306, T-307. **Внешнее:** `Journal.End()` из C-01 v1.1 (F-5t), `objstore` (F-4c).
+**Ссылки:** C-14 v1.1, C-01 v1.1, ADR-003 п. 8; component §11.2, §11.4, §16 п. 7; design §3.1 п. 5; US-011; FR-031…FR-033; NFR-010/011, NFR-014, NFR-016.
+
+**Описание.** `snapshot/writer.go` — объект `snapshots-{world}/gateway/{ts}-{seq}.json` = `{cursors, projection_hash, active_sessions[], open_rounds[], laws_version}` + событие `snapshot.created component=gateway`, по `SIGTERM` и по каждому `analytics.session.ended`, хранить последние 5, указатель `latest.json` (C-14 v1.1). Режимы: `--mode=replay` — таймеры/sweeper/лизинг выключены, `round.*`/`analytics.*` читаются, а не публикуются; чтение `Journal.ReadRange` от курсоров до `End()` по каждому из 4 топиков, переключение в `live` при достижении конца. Полный `/health` по component §11.4. Восстановление сессий/ходов при старте (component §7.6).
+
+**DoD** (+ DoD-common):
+- [ ] Unit: снапшот пишется по `SIGTERM` и по `session.ended`; хранится 5 последних, старые удаляются; `latest.json` указывает на последний; `snapshot.created` валиден по схеме C-14.
+- [ ] Unit `replay`: таймеры не создаются, sweeper не запускается, `analytics.*`/`round.*` не публикуются; `Publish` действий харнесса разрешён.
+- [ ] Unit перехода `replay → live` по `Journal.End()`; «хвост» событий после `End` не применяется повторно (дедуп `processed_events`, component §16 п. 7).
+- [ ] Unit восстановления: активные сессии с `last_action_at` старше 30 мин → `ended idle`; открытые `turns` с истёкшим дедлайном → `timeout`.
+- [ ] `/health` отдаёт все поля component §11.4; `fail` при недоступности любой БД; `degraded` при `projection=missing/stale` или `core_admin unavailable`; проверка не чаще раза в 10 с (NFR-016).
+- [ ] Повреждённый/отсутствующий снапшот → сообщение в `/health` и лог, сервис не поднимается «молча с пустым состоянием» (US-011).
+
+### T-310: Бот — `config`, `access.Gate`, `updates`, `sender`, `commands`, `privacy` · I1 · подволна 1.4 · developer#2 · M
+
+**Зависит от:** T-301 (DTO/клиент), T-303 (коды ошибок и контракт `links/*`). Работает на `httptest`-моке клиента, `FakeGateway` не нужен.
+**Ссылки:** ADR-018 (+ доп. п. 1–4), ADR-006 доп. п. 1–5; SEC-06, SEC-07, SEC-08, SEC-10, SEC-11; component §10.1–10.4, §11.1, §11.3; design §3.1 п. 7; US-008; FR-002, FR-130, FR-131; NFR-044, NFR-049.
+
+**Описание.** `cmd/telegram-bot/internal/config` (манифест `MV_*`, обязательный `MV_TELEGRAM_BOT_TOKEN`, `MV_TELEGRAM_ALLOWED_USER_IDS`), `internal/access` (`Gate`: игнор не-`message`, отказ на групповой чат, allowlist по `from.id` (пустой = всем отказ), token bucket 20/мин; выполняется **до** любого вызова gateway), `internal/updates` (`UpdateSource` + `go-telegram/bot` v1.25 + `fake.go`), `internal/sender` (`Sender` без параметра `parse_mode` + retry `429`/`5xx` + `fake.go`), `internal/commands` (`Parse` по словарю FR-002, синонимы без «/», длины), `internal/privacy` (`slog.Handler` с запретом атрибутов `external_id`/`chat_id`/`username`/`text`; `Redact` токена `bot<digits>:<token>` → `bot<redacted>`; `ErrorLog`; запрет `WithDebug`).
+
+**DoD** (+ DoD-common):
+- [ ] Unit SEC-06: `from.id` вне allowlist → один отказ «доступ по приглашению», `links/resolve` **не вызван** (мок клиента фиксирует ноль вызовов), id не в логе, счётчик `bot_denied_total` увеличен.
+- [ ] Unit SEC-06 fail-closed: пустой allowlist → отказ всем.
+- [ ] Unit SEC-07: `message.chat.type != "private"` → одно сообщение «пишите в личные», gateway не вызван; связка строится по `from.id`, `chat.id` отдельно не хранится.
+- [ ] Unit SEC-11/NFR-049: 21-я команда за минуту → «слишком часто, подождите N с» без вызова gateway; на 61-й секунде принимается.
+- [ ] Unit SEC-08: строка ошибки HTTP-клиента Telegram с `bot123456:ABC…` после `Redact` не содержит токен; `409 Conflict` редактируется; `WithDebug` не используется (тест на конфигурацию); выход с кодом 3 при `409 getUpdates`.
+- [ ] Unit SEC-10: `Sender.Send` доставляет `[x](http://…)`, `<a href=…>`, `*текст*` **буквально**; сигнатура `Send` не содержит параметра разметки.
+- [ ] Unit `commands.Parse`: весь словарь FR-002 (`enter/leave/look/attack/flee/say/rest/status/defend/group */start//help//forget`), синонимы без «/», неизвестная команда → `unknown`, длина `say` ≤ 500 с подсказкой.
+- [ ] Unit `privacy.Handler`: атрибуты `external_id`, `chat_id`, `username`, `text` отбрасываются на всех уровнях, включая `debug`.
+- [ ] `action_key = hex(HMAC-SHA256(MV_BOT_ACTION_KEY_SALT, update_id))[:32]` — стабилен при повторной обработке того же `update_id`, необратим; соль по умолчанию — производная от токена, в лог не попадает.
+- [ ] Все `MV_BOT_*`/`MV_TELEGRAM_*` объявлены через манифест и есть в `.env.example`.
+
+### T-311: Бот — `flow` (онбординг, `/forget`) и `render` (тексты, клавиатуры, ошибки) · I1 · подволна 1.5 · developer#2 · M
+
+**Зависит от:** T-310, T-318 (текст уведомления; до его готовности — заглушка из US-008, design допущение 2).
+**Ссылки:** ADR-018, SEC-26; component §10.3, §10.5; design §3.1 п. 7; US-001, US-008, US-009; FR-009, FR-052, FR-060, BR-09; NFR-045.
+
+**Описание.** `internal/flow` — FSM на чат (`idle → awaiting_consent → awaiting_name → awaiting_name_confirm → awaiting_world → ready`, TTL 15 мин; `/forget` → `/forget confirm`; кэш `chat_id → player_id` TTL 1 ч; `Reset` после forget). `internal/render` — `notice.go` (единственный файл с текстом FR-009), `help.go`, ошибки по `code` (component §10.5), рендер `Delivery` (пометки «текст создан ИИ» / «упрощённый режим (шаблон): {fallback_reason}»), клавиатуры (согласие, базовая, боевая, цели, регионы), нарезка сообщений > 4096 по абзацам.
+
+**DoD** (+ DoD-common):
+- [ ] Unit онбординга на `FakeUpdateSource`/`FakeSender`: `/start` → уведомление + клавиатура; «Отказаться»/произвольный текст → повтор уведомления, персонаж не создаётся (US-001, UC-001 E1); подтверждение → `links/consent` с `notice_shown/consent/age_confirmed/shown_at`.
+- [ ] Unit имени: 2–32, буквы/цифры/пробел/дефис, без управляющих (та же регулярка, что на сервере); совпадение с `username`/`first_name` без учёта регистра → `awaiting_name_confirm` с предупреждением; значение `username` сравнивается и **отбрасывается**, не логируется и не сохраняется (US-009).
+- [ ] Unit TTL: состояние диалога протухает через 15 мин; повторный `/start` восстанавливает по `resolve`.
+- [ ] Unit `/forget`: без `confirm` — только вопрос, вызова gateway нет; `/forget confirm` → `DELETE /v1/links`, затем `flow.Reset` и текст «Связка удалена. /start — начать заново»; ответ «нечего удалять» при отсутствии связки.
+- [ ] Golden-тест `render`: тексты уведомления, `/help`, ошибок по кодам `in_encounter`, `not_in_encounter`, `not_leader`, `already_acted`, `character_dead`, `consent_required`, `rate_limited`, `bus_unavailable`; неизвестный код → `message` сервера.
+- [ ] Текст FR-009 живёт **только** в `render/notice.go` (проверка grep-тестом: обязательные пункты присутствуют — ИИ, 18+, обработка текста, `/forget` и что он удаляет, retention/бэкап, облако).
+- [ ] Пометка `generated_by` присутствует у 100 % нарративных доставок (NFR-045).
+- [ ] Клавиатуры не содержат разметки; все сообщения уходят через `Sender` без `parse_mode` (SEC-10).
+
+### T-312: Бот — `deliver` (long-poll → send → ack) и `main` wiring · I1 · подволна 1.6 · developer#2 · M
+
+**Зависит от:** T-310, T-311.
+**Ссылки:** ADR-006, C-08; component §10.4, §11.1 (retention логов); design §3.1 п. 7; US-008; FR-003, FR-004; NFR-003, NFR-092.
+
+**Описание.** `internal/deliver/loop.go` — цикл `Deliveries(wait=25s)` → последовательный `Send(chatID = route.external_id, render.Delivery(d))` → пакетный ack; обработка `429` (`retry_after`), сети/`5xx` (3 попытки, затем **без ack**), `403 bot was blocked`/`400 chat not found` (ack, лог без ID). `cmd/telegram-bot/main.go` — конфигурация, сборка зависимостей, graceful shutdown, код выхода 3 при `409 getUpdates`.
+
+**DoD** (+ DoD-common):
+- [ ] Unit: порядок сообщений на `chat_id` сохраняется, бот ничего не переупорядочивает; ack пакетом после обработки всех доставок ответа.
+- [ ] Unit `429`: пауза `retry_after`, затем повтор; unit `5xx`: 3 попытки, ack не отправляется, доставка повторно выдаётся gateway через 30 с.
+- [ ] Unit `403 blocked`/`400 chat not found`: доставка подтверждается (ack), в логе нет внешнего ID.
+- [ ] Unit: механика и нарратив приходят игроку **разными** сообщениями (US-008, FR-003).
+- [ ] Курсор доставок между рестартами не хранится (component §16 п. 5) — поведение подтверждено тестом (после рестарта неподтверждённые выдаются снова).
+- [ ] `main` стартует с пустым `MV_TELEGRAM_BOT_TOKEN` → понятная ошибка и выход, токена в сообщении нет (SEC-08).
+- [ ] `docker-compose` профиль `bot` не правится (владелец — devops); необходимые переменные переданы devops через отчёт.
+
+### T-313: e2e соло — `solo-30`, `death`, `flee-fail` · I1 · подволна 1.9 · developer#1 · M
+
+**Зависит от:** T-308. **Внешнее:** `FakeState` (C-02), `FakeNarrator` (C-05), `FixedMechanics` — заглушки F-10/EPIC-002/003.
+**Ссылки:** ADR-010; component §15; design §3.1 п. 8, §7; US-001, US-007 (соло), US-008; UC-001…005, 007, 009, 012; NFR-013.
+
+**Описание.** `//go:build e2e`, один процесс `--contexts=all --mode=replay --bus=memory --id-source=sequence`, часы `clock.Manual`. Сценарии: `solo-30` (регистрация → согласие → персонаж → `enter` → встреча → 30 ходов боя/`look`/`say`/`rest` → выход), `death` (персонаж гибнет → дальнейшие действия `character_dead`, предложение `/start`), `flee-fail` (неудачное бегство → удар вслед).
+
+**DoD** (+ DoD-common):
+- [ ] Три сценария зелёные и детерминированные (два прогона подряд дают одинаковый журнал событий).
+- [ ] `solo-30` проходит 30 ходов без ошибок; на каждый ход есть `analytics.turn.completed`; сессия открыта и закрыта парно.
+- [ ] Прогон с `--chaos=duplicate` зелёный (NFR-013): дубли событий не порождают вторых доставок и вторых применений.
+- [ ] Таймер в тесте подтверждает `202` ≤ 100 мс на `membus` (вклад в NFR-003; абсолютный замер — стенд T-392).
+- [ ] Прогон формирует/обновляет фикстуру `testdata/analytics/solo-30.jsonl` (для EPIC-005).
+- [ ] Тест помечен `e2e`, в `-short` не запускается, в CI — в job, где заглушки доступны.
+
+### T-314: e2e приватности и восстановления — `forget`, `privacy-scan`, `recovery` · I1 · подволна 1.11 · developer#1 · M
+
+**Зависит от:** T-309, T-313.
+**Ссылки:** SEC-03, SEC-04/05, SEC-08, SEC-26; **`contracts.md` v0.4 C-02 v1.2, C-04 v1.1 (каскад `/forget`), C-08 v1.2, C-10 v1.1**; `consolidation.md` §14.1 (З-1, З-2); component §15, §11.2; design §3.1 п. 8, §7; US-009, US-011; FR-023, FR-061; NFR-010/011, NFR-041/042.
+
+**Описание.** `forget` (регистрация → игра → `/forget confirm` → доставки не выдаются, повторный `/start` даёт новый `player_id`), `privacy-scan` (регистрация с известным тестовым внешним ID → grep по `gateway.db` + WAL, по событиям `membus` (включая `analytics.*`), по логам обоих процессов, в т. ч. на фрагмент токена → 0), `recovery` (10 ходов → рестарт контекста gateway in-process → сессии, раунды, outbox, курсоры сохранены, `identical=true`).
+
+**DoD** (+ DoD-common):
+- [ ] `privacy-scan` зелёный при `MV_LOG_LEVEL=debug`: 0 вхождений тестового внешнего ID и 0 вхождений фрагмента токена во всех перечисленных источниках (NFR-041, SEC-03, SEC-08).
+- [ ] `forget`: `strings` по `links.db` и WAL сразу после вызова = 0 (SEC-04/05); недоставленные сообщения → `dropped`; сессия закрыта с **`end_reason = forget`** (З-1); повторный `/start` → новая связка и новый `player_id` (US-009).
+- [ ] **(сведение 3, З-2; C-04 v1.1)** каскад `/forget` проверяется **в обязательном порядке публикаций**, `t.Skip` больше не допускается: (1) `outbox.DropForPlayer` (`pending → dropped`); (2) при `status=alive` — один `entity.update.proposed {atomic: true, cause: forget}` (`set status=abandoned` + `expected_version`; при лидерстве — в том же пакете `set leader_id = <старейший alive | null>`); (3) `group.left {cause: forget}` и, при смене лидера, `group.leader_changed {cause: forget, leader: …|null}`; (4) `session.End(forget)` → `analytics.session.ended {end_reason: forget}`; (5) физическое удаление связки. Тест сверяет и состав, и **порядок** событий.
+- [ ] **(сведение 3, З-2)** ветка `status=dead`: шаг (2) пропускается (`dead` терминален, FR-023) — предложение не публикуется, остальные шаги выполняются; ветка `status=creating`: предложение публикуется при получении `entity.created` для `player_id` без связки. Во встрече gateway ничего дополнительно не публикует (встречу закрывает агент по `entity.updated status=abandoned`).
+- [ ] `recovery`: после рестарта совпадают `cursors`, `projection_hash`, состав активных сессий, содержимое outbox; повторного применения событий нет (US-011).
+- [ ] Скан включён в job `security` CI (сканирование `testdata/` — по чек-листу security-review п. 2).
+
+### T-315: e2e бота на `FakeUpdateSource`/`FakeSender`/`FakeGateway` · I1 · подволна 1.9 · developer#2 · M
+
+**Зависит от:** T-308, T-312.
+**Ссылки:** ADR-010, ADR-018; component §15; design §3.1 п. 7–8, §7; US-008, US-001, US-009; SEC-06, SEC-07, SEC-10.
+
+**Описание.** Детерминированный сценарий: `/start` → согласие → имя (в т. ч. совпадение с username) → выбор мира → `/enter` → `/attack` → доставка механики и нарратива → `/say` → `/forget confirm`. `FakeUpdateSource` подаёт обновления, `FakeSender` записывает исходящие, gateway — `FakeGateway` in-process.
+
+**DoD** (+ DoD-common):
+- [ ] Проверены: тексты (golden), клавиатуры, порядок сообщений, ack каждой доставки, стабильность `action_key` при повторной подаче того же `update_id`.
+- [ ] Отдельные ветки: сообщение из группового чата → бот не вызвал gateway (SEC-07); `from.id` вне allowlist → один отказ, gateway не вызван (SEC-06).
+- [ ] Ветка `parse_mode`: доставка нарратива с `[x](http://…)` и `<a>` приходит буквально (SEC-10).
+- [ ] Ветка ошибок: `429 rate_limited` и `503 bus_unavailable` от gateway → корректная подсказка игроку, команда не теряется (повтор с тем же `action_key`).
+- [ ] Сценарий стабилен: 3 прогона подряд дают одинаковую запись `FakeSender`.
+
+### T-316: Integration-тесты `consumer` на testcontainers Redpanda · I1 · подволна 1.10 · developer#2 · S
+
+**Зависит от:** T-304, T-307. **Внешнее:** `testkit.Versions()` (F-4a), kafka-адаптер `eventbus` (EPIC-001).
+**Ссылки:** C-01 v1.1, ADR-010; component §15; design §7 (строка integration); NFR-013.
+
+**Описание.** `//go:build integration` в `internal/gateway/consumer`: дедуп дублей, продвижение курсоров, DLQ (`dead_letters`), `Journal.End()` на реальном брокере; версии образов — только из `testkit.Versions()`.
+
+**DoD** (+ DoD-common):
+- [ ] Тест зелёный локально и в CI-job `integration`; время прогона ≤ 3 мин.
+- [ ] Дубль события не даёт второй доставки; курсор восстанавливается после переподключения; необработанное событие уходит в `dead_letters` с причиной.
+- [ ] `Journal.End()` на kafka-адаптере даёт ту же семантику, что на `membus` (сверка с contract-тестом F-5t).
+- [ ] Версии образов не захардкожены (`testkit.Versions()`).
+
+### T-317: Документация блока — README gateway и бота, runbook «ротация токена», сверка `.env.example` · I1 · подволна 1.7 · developer#2 (в паре с tech-writer) · S
+
+**Зависит от:** T-303, T-310.
+**Ссылки:** SEC-08, SEC-13; component §11.1, §11.3; NFR-074; ownership §1 (`README.md`/`AGENTS.md` — tech-writer).
+
+**Описание.** `internal/gateway/README.md` (назначение, пакеты, как поднять локально, режимы `live|replay`, переменные, `/health`), `cmd/telegram-bot/README.md` (как получить токен, allowlist, профиль `bot`, коды выхода, что делать при `409`), `Docs/runbooks/telegram-token-rotation.md` (runbook ротации токена бота: признаки компрометации, отзыв у BotFather, замена в `env_file`, перезапуск профиля `bot`, проверка отсутствия токена в логах, чек-лист). Сверка `.env.example` с манифестами обоих процессов.
+
+**DoD** (+ DoD-common, кроме unit — здесь применимо частично):
+- [ ] Оба README содержат актуальные списки переменных, совпадающие с манифестом `shared/env.Declare` (проверяется CI-сверкой `.env.example`, NFR-074).
+- [ ] Runbook проверен «сухим прогоном» (шаги выполнимы без доступа к прод-токену), содержит явный пункт «токен нигде не логируется» и ссылку на SEC-08.
+- [ ] Документы согласованы с tech-writer; правки в `CLAUDE.md`/`AGENTS.md` — **не** в этой задаче (владелец — tech-writer, EPIC-001 F-9), запрос передан в отчёте.
+- [ ] Публикация портов только на `127.0.0.1` описана и помечена как проверка `compose-lint` (SEC-13).
+
+### T-318: Текст уведомления FR-009 (`/start`) и его размещение в `render/notice.go` · I1 · подволна 1.5 (не занимает слот разработчика) · business-analyst + tech-writer, приёмка security-engineer и tech-lead#3 · S
+
+**Зависит от:** —. **Блокирует:** T-311 (до готовности — заглушка из US-008).
+**Ссылки:** FR-009, SEC-26, BR-09; US-008, US-009; `prd.md` v0.4 (открытая формулировка, приложение «Формулировка»); NFR-045, NFR-046.
+
+**Описание.** Финальный русский текст первого сообщения `/start` простыми словами, обязательные пункты: (1) контент создаётся ИИ; (2) игра 18+ — подтвердите возраст; (3) введённый текст (имя персонажа, `say`) обрабатывается для генерации и может уходить облачному провайдеру, если оператор его включил; (4) что именно удаляет `/forget` и что остаётся; (5) сроки хранения (30/90/180 дней) и бэкап связки ≤ 30 дней. Плюс текст подтверждающей кнопки и текст отказа. Результат кладётся разработчиком в `render/notice.go` одной константой.
+
+**DoD:**
+- [ ] Текст покрывает все 5 пунктов и проверен по чек-листу security-review («Уведомление FR-009: ИИ, 18+, обработка текста, облако, `/forget` и сроки»).
+- [ ] Формулировки согласованы BA и tech-writer, отревьюены security-engineer (SEC-26).
+- [ ] Текст помещён в `render/notice.go` одной константой (логика правкой текста не затрагивается); grep-тест на обязательные пункты добавлен в T-311.
+- [ ] `prd.md` §«Формулировка» обновлён BA: вопрос закрыт (правку делает BA, не TEAM-3).
+
+### T-319: Перенос `services/game-service` → `services/_archive/game-service/` · I1 (хвост, после стенда) · подволна после T-392 · developer#2 · S
+
+**Зависит от:** T-392 (стенд S9 пройден). **Ссылки:** U-1/OQ-A-17; component §13; ownership §1; design §1.
+
+**Описание.** Перенести каталог как есть, добавить `ARCHIVED.md` (причина, коммит, эпик возможного возврата), исключить из `go.work`/`go.mod`/`docker-compose.yml`/`Makefile`/линтера. Код не переписывать и не удалять.
+
+**DoD** (+ DoD-common):
+- [ ] `go work sync`, `go build ./...`, `make ci`-эквивалент зелёные без `services/game-service`.
+- [ ] `ARCHIVED.md` заполнен по шаблону других архивов (EPIC-001 F-1/F-3).
+- [ ] Ни одна строка кода не удалена; `git mv`-семантика (история файлов сохранена).
+- [ ] Изменения в `docker-compose.yml`/`Makefile`/`go.work` согласованы с tech-lead#1 и devops (владельцы по ownership) — согласование приложено к отчёту.
+
+### T-320: Уведомление об облачном провайдере в боте (US-008) · I1 (хвост) · подволна 1.11 · developer#2 · S · Статус: **planned** (разблокирована сведением 3, З-3)
+
+**Зависит от:** T-307, T-311; EPIC-003 T-215/T-212 (схема и публикация `config.cloud_enabled`). **Внешних блокеров нет** — З-3 решено (§8).
+**Ссылки:** US-008 (критерий про `config.cloud_enabled`), **`contracts.md` v0.4 C-06 v1.1, C-08 v1.2**, C-01; `api-contracts.md` §1.3, §2.3.16; `consolidation.md` §14.1 (З-3); ADR-005 п. 6, ADR-009 п. 12; SEC-21; NFR-046.
+
+**Описание (уточнено сведением 3, внесено tech-lead#1 от имени tech-lead#3).** gateway читает `config.cloud_enabled` из `system_events` (топик уже в подписке, component §2), держит проекцию последнего значения (по умолчанию `false`, попадает в снапшот `gateway/`) и отдаёт флаг **единственным местом** — `GET /v1/worlds → worlds[].llm{cloud_enabled: boolean}` (**не** в `GET /v1/players/{id}` и **не** через `Delivery kind=system`). Провайдер, URL и ключи клиенту не передаются (SEC-21). Бот кэширует флаг с TTL **`MV_TELEGRAM_CLOUD_FLAG_TTL` (по умолчанию `60s`)**, обновляет на `/start`, `/help` и по истечении TTL, показывает уведомление **один раз за сессию диалога**; текст — без имени провайдера. Контекст `llm` публикует `config.cloud_enabled` при каждом старте `core` (C-06 v1.1), поэтому проекция детерминирована после рестарта.
+
+**DoD** (+ DoD-common):
+- [ ] Поле `worlds[].llm.cloud_enabled` есть в OpenAPI (схема из T-301) как совместимое дополнение C-08 v1.2; `openapi_test` зелёный.
+- [ ] Unit gateway: `config.cloud_enabled {enabled:true}` → `true` в ответе; `{enabled:false}` → `false`; до первого события — `false`; проекция переживает рестарт (значение из снапшота `gateway/`); в ответе нет ключей, URL и имени провайдера (SEC-21).
+- [ ] Unit бота: уведомление показывается **один раз за сессию диалога**; кэш обновляется на `/start`, `/help` и по TTL (`MV_TELEGRAM_CLOUD_FLAG_TTL=60s`, тест с укороченным TTL); при выключенном облаке уведомления нет.
+- [ ] `MV_TELEGRAM_CLOUD_FLAG_TTL` объявлен через `shared/env.Declare`; `.env.example` дополнен (запрос devops).
+
+---
+
+## 2. Инкремент I2 «группа и раунды» (developer#1 + developer#2)
+
+Старт — по приёмке I1 tech-lead#3 (`epics.md` §2). Слияние — после зелёного интеграционного прогона I1 **и** после слияния EPIC-002 I2 и EPIC-003 I2 (порядок 002 → 003 → **004** → 005).
+
+### T-350: Координатор раундов — ядро (`coordinator`, `state`, `store`) · I2 · подволна 2.1 · developer#1 · M
+
+**Зависит от:** T-305, T-307, T-309. **Внешнее:** `encounter.started.round{}` от EPIC-003 I2 (C-05 v1.1) — до готовности берутся env-значения.
+**Ссылки:** ADR-020 (+ доп. п. 1), C-04, C-05 v1.1; component §9, §4.2 (`rounds`); design §3.2 п. 2; US-007; FR-025, BR-13; NFR-005, NFR-012.
+
+**Описание.** `rounds/coordinator.go|state.go|store.go`: открытие раунда 1 по `encounter.started` для scope `group`, раунда N+1 — первым раундовым действием (`attack|flee|defend|group.leave`); `say` **не** открывает раунд и не входит в `acted[]`; `Accept` (`ErrAlreadyActed` → `409 already_acted`, `ErrNotRoundAction`); закрытие `all_acted|timeout|explicit`; порядок публикации `player.defended cause=round_timeout` для `expected − acted` → затем `round.closed`; мьютекс на scope, состояние `closing`, идемпотентность по `(scope, seq)`; параметры из `encounter.started.round{}`, иначе `MV_GATEWAY_ROUND_TIMEOUT`/`MV_GATEWAY_ROUND_IDLE_AFTER_MISSED`.
+
+**DoD** (+ DoD-common):
+- [ ] Unit с `FakeClock` — полный набор component §15: `all_acted`, `timeout`, `explicit`, второе действие участника → `already_acted`, `say` не влияет на раунд, порядок `player.defended` → `round.closed`, `closed_at = Clock.Now()`.
+- [ ] Unit: `round.opened` публикуется **до** `202` на открывающее действие (гарантия C-04).
+- [ ] Unit: `round.closed` содержит `acted[]` в порядке времени приёма, `auto_defended[]`, `idle[]`, `close_reason`; является корневым событием (`meta.cid = id`).
+- [ ] Unit гонки «действие vs таймер»: одновременный `Accept` и срабатывание таймера не дают двух `round.closed` и не теряют действие.
+- [ ] В `solo` `round.*` не публикуются (C-04) — тест.
+- [ ] Публикуемые события валидны по схемам из T-301.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, ADR-026)** Конец встречи при открытом раунде — первое из «факт сущности встречи `state=resolved`» и `encounter.ended` (read-model T-304) — координатор обрабатывает **тем же путём**, что смертельный удар первым действием раунда. Путь один и для конца без действия группы (существо убито вне встречи, C-05 v1.4 п. 6). Новых значений `close_reason` не вводится. Unit: конец по факту и конец по `encounter.ended` при открытом раунде дают одинаковый итог раунда — один раз, без второго `round.closed`; то же для конца без единого действия группы в раунде.
+
+### T-351: Раунды — `Restore`, `replay`, `idle`/`missed_rounds`, `OnParticipantsChanged` · I2 · подволна 2.2 · developer#1 · M
+
+**Зависит от:** T-350, T-352 (для `group_participation` и состава).
+**Ссылки:** ADR-020, C-02, C-04; component §9, §4.2 (`group_participation`), §11.2; design §3.2 п. 3; US-007, US-011; BR-13; NFR-014.
+
+**Описание.** `Restore` при старте (открытые `open` — таймер на `deadline_at`, просроченный — немедленное закрытие `timeout`; `closing` без `closed_event_id` — довести идемпотентно); ветка `replay` (таймеров нет, `round.opened/closed` читаются из журнала, `Accept` — только учёт); `group_participation` — счётчик `missed_rounds`, переход `active → idle` после `idle_after_missed`, обратно при первом действии; `OnParticipantsChanged` (смерть, бегство, выход, `/forget` → пересчёт `expected`); предложение `entity.update.proposed members[].participation` (`cause=group`).
+
+**DoD** (+ DoD-common):
+- [ ] Unit `Restore`: три случая (открытый с будущим дедлайном, открытый с прошедшим, `closing` без события) — поведение по ADR-020.
+- [ ] Unit `replay`: таймеры не создаются, `round.*` не публикуются, состояние `rounds` восстанавливается из журнала (NFR-014).
+- [ ] Unit `idle`: 2 пропуска → `participation=idle` + предложение по группе; участник исключён из `expected` и попал в `round.closed.idle[]`; первое действие → `active`, `missed_rounds=0`.
+- [ ] Unit `OnParticipantsChanged`: смерть/выход единственного `active` участника закрывает раунд корректно (US-009, критерий про `/forget` в открытом раунде).
+- [ ] `gateway` — единственный, кто предлагает `participation` (component §16 п. 3); тест на отсутствие расхождения `group_participation` и предложения.
+- [ ] **(T-416, 2026-09-11; C-04 v1.3, ADR-026)** `Restore` и `OnParticipantsChanged` ведут конец встречи при открытом раунде тем же путём, что T-350 (как смертельный удар первым действием раунда), без нового `close_reason`. Unit `Restore`: открытый раунд встречи, конец которой (факт `state=resolved` или `encounter.ended`) пришёл, пока шлюз лежал, закрывается этим путём один раз.
+
+### T-352: `groups` — create/join/leave, лидер, `group.entered_region`, `GET /v1/groups/{id}`, предусловия группы · I2 · подволна 2.1 · developer#2 · M
+
+**Зависит от:** T-305, T-306. **Внешнее:** atomic-группы `entity.*.proposed` из EPIC-002 I2 (C-02 v1.1).
+**Ссылки:** **`contracts.md` v0.4 C-02 v1.2, C-04 v1.1, C-08 v1.2**; `consolidation.md` §14.1 (З-4); component §7.4, §5.2, §5.4 (правила группы); design §3.2 п. 1; US-006; FR-003, FR-005, FR-025, BR-06, **BR-13 v0.4**; NFR-020.
+
+**Дополнение (сведение 3, З-4; внесено tech-lead#1 от имени tech-lead#3).** Группа **без лидера** — легальное состояние: `Group.leader_id: ref | null`. Если после выхода/смерти/отвязки лидера участников со `status=alive` не осталось, gateway предлагает `set leader_id = null` (в том же atomic-пакете) и публикует `group.leader_changed {leader: null, cause}`; группа живёт без лидера до `group.disbanded` (при выходе последнего участника). Перемещение группы (`enter`/`leave`) при `leader_id = null` → **`409 no_leader`**, проверяется **раньше** `not_leader`; личный `group.leave` участника при этом допустим. `GroupView.leader_id` — `string | null`. `dead`/`abandoned` участники остаются в `members[]` (история), но исключаются из `expected[]`/`acted[]` и `participation=active`.
+
+**Описание.** `groups/service.go`: `Create` (`entity.create.proposed group` → `AwaitFact` → `entity.update.proposed player.scope` → `group.created` → `session.Open(group)` + `session.End(solo, leave)`), `Join` (одно atomic-предложение), `Leave` (вне встречи — атомарное предложение; во встрече — как `flee`), передача лидерства старейшему `alive` по `joined_at` (`cause=leave`; `cause=death` — по BR-13), `group.disbanded`, `group.entered_region/left_region` при `enter/leave` лидера (за участников `player.entered_region` **не** публикуется), `202 pending` при таймауте `MV_GATEWAY_FACT_WAIT`; `api/handlers_groups.go` (`GET /v1/groups/{id}`); включение правил группы в `actions.Validate` (`not_leader`, `already_in_group`, `not_in_group`, `group_full`, `group_in_encounter`, `in_encounter`).
+
+**DoD** (+ DoD-common):
+- [ ] Unit US-006: три участника → scope `group`, лидер — создатель, состав и лидер в подтверждении; `enter` от не-лидера → `not_leader` с подсказкой, позиция группы не меняется; `enter` лидера → одно `group.entered_region {cause: group_move, by}`.
+- [ ] Unit выхода: не-лидер → `solo` в той же позиции, сессия остальных не прерывается; лидер → `group.leader_changed cause=leave` старейшему по `joined_at`; последний → `group.disbanded` + `session.End`.
+- [ ] Unit BR-13 при смерти лидера: `group.leader_changed cause=death`; если живых нет — `set leader_id = null` в том же atomic-пакете и `group.leader_changed {leader: null, cause: death}`; группа без лидера до `disbanded` (З-4 решено).
+- [ ] **(сведение 3, З-4)** Unit `no_leader`: `enter`/`leave` группы при `leader_id = null` → `409 no_leader` (а не `not_leader`), позиция группы не меняется; личный `group.leave` участника при `leader_id = null` проходит; `GroupView.leader_id` сериализуется как `null`.
+- [ ] Unit `202 pending`: факт не пришёл за 2 с → `{status:"pending", group_id, correlation_id}`; последующий `GET /v1/groups/{id}` отдаёт состав (C-08 v1.1).
+- [ ] Unit валидации: `group_full` (> 6), `already_in_group`, `group.join` во встрече → `group_in_encounter` (FR-005).
+- [ ] Предложения группы — `atomic=true` (NFR-020); проверка, что gateway не пишет сущности напрямую (только `*.proposed`, C-02).
+- [ ] **OpenAPI обновлён**: `getGroup`, `202 pending` у `postAction`, **`409 no_leader` и `GroupView.leader_id: nullable`** (схема из T-301); `openapi_test` зелёный.
+
+### T-353: Групповая доставка outbox и команды `/group` в боте · I2 · подволна 2.2 · developer#2 · M
+
+**Зависит от:** T-307, T-352.
+**Ссылки:** ADR-006, C-05 v1.1, C-08; component §8.1, §10.3; design §3.2 п. 5; US-006, US-008; FR-003, FR-013.
+
+**Описание.** Адресаты по scope (component §8.1): `combat.decided` — всем `alive` участникам; `narrative.output` — по `recipients[]`; `group.*`/`round.opened` — участникам; `player.said` в scope `group` — всем, кроме автора; `entity.updated cause=group_move` — всем участникам. Бот: `/group create|join <id>|leave`, показ `group_id` для передачи друзьям, боевая клавиатура для группы, тексты состава и раунда.
+
+**DoD** (+ DoD-common):
+- [ ] Unit адресности: одна `narrative.output` с тремя `recipients` → три доставки с одним `narrative_event_id`; автор `say` своей реплики не получает; `dead` участник не получает `combat.decided`.
+- [ ] Unit порядка: на каждого игрока порядок `seq` сохраняется независимо от других (одна в лизинге на игрока).
+- [ ] Golden-тексты состава группы, `group.joined/left/leader_changed/disbanded`, «Раунд N. Ждём действий …».
+- [ ] Unit бота: `/group join <id>` без id → подсказка; `202 pending` → бот опрашивает `GET /v1/groups/{id}` и показывает состав.
+- [ ] Клавиатура боя в группе не содержит целей, недоступных участнику.
+
+### T-354: `POST /v1/scopes/{scope_id}/rounds/close` (только `ci`) и `Harness.CloseRound` · I2 · подволна 2.3 · developer#1 · S
+
+**Зависит от:** T-350, T-308.
+**Ссылки:** C-08 v1.1 (`409 no_open_round`), SEC-12; component §5.2, §9; design §3.2 п. 4; US-007; ADR-020.
+
+**Описание.** `api/handlers_admin.go` — служебный маршрут закрытия раунда, доступный только клиентам с `actor_kind=ci`; `Harness.CloseRound(scopeID)` в `shared/testkit/gateway` (замена заглушки из T-308).
+
+**DoD** (+ DoD-common):
+- [ ] Unit: `200 {round{seq, close_reason:"explicit"}}`; повтор при закрытом раунде → `409 no_open_round`; клиент без `ci` → `403 actor_kind_forbidden` (SEC-12).
+- [ ] `Harness.CloseRound` работает в e2e и в `--mode=replay`.
+- [ ] **OpenAPI обновлён**: `closeRound` с `x-actor-kind: [ci]`; `openapi_test` зелёный.
+
+### T-355: `/forget`-каскад для группы (`ForgetHooks`) · I2 · подволна 2.3 · developer#2 · M
+
+**Зависит от:** T-352, T-351, T-303.
+**Ссылки:** FR-023, FR-061, **BR-13 v0.4**, SEC-26; **`contracts.md` v0.4 C-02 v1.2, C-04 v1.1 (каскад `/forget`), C-08 v1.2, C-10 v1.1**; `consolidation.md` §14.1 (З-1, З-2, З-4); component §7.5, §6 (`ForgetHooks`); design §3.2 п. 6; US-009; NFR-042.
+
+**Описание.** Расширение `ForgetHooks.OnForget` — **строго в порядке C-04 v1.1** (сведение 3, З-2; внесено tech-lead#1 от имени tech-lead#3):
+1. `outbox.DropForPlayer` (`pending → dropped`);
+2. если персонаж `alive` — **один** `entity.update.proposed {atomic: true, cause: forget}`: игрок `set status=abandoned` (+`expected_version`), и, если он лидер группы, в том же пакете `set leader_id = <старейший alive | null>`; персонаж `dead` — шаг пропускается (терминальный статус, FR-023), `creating` — предложение публикуется при получении `entity.created`;
+3. если игрок в группе — `group.left {cause: forget}` и, при смене лидера, `group.leader_changed {cause: forget, leader: …|null}`; последний участник → `group.disbanded`;
+4. `session.End(forget)` → `analytics.session.ended {end_reason: forget}`;
+5. физическое удаление связки (`links.db`).
+Сопутствующее: `session.UpdateParticipants`, пересчёт `expected` открытого раунда (`OnParticipantsChanged`). Во встрече gateway `flee` **не** исполняет и ничего дополнительно не публикует — агент встречи видит `entity.updated status=abandoned` и завершает встречу `players_out`, если игроков `alive` не осталось.
+
+**DoD** (+ DoD-common):
+- [ ] Unit US-009: `/forget` лидера группы из трёх → `group.left`, `group.leader_changed`, состав из двух, сессия остальных продолжается.
+- [ ] Unit: `/forget` единственного `active` участника с открытым раундом → раунд закрывается, игрок не считается ни `acted`, ни `auto_defended`.
+- [ ] Unit: `/forget` последнего участника → `group.disbanded` + `session.End`.
+- [ ] **(сведение 3, З-2)** Unit порядка каскада: публикации идут ровно в последовательности (1)…(5) — предложение `abandoned` **до** `group.left`, `group.left` **до** `session.ended`, удаление связки — последним; `group.left.cause = forget`, `group.leader_changed.cause = forget`, `end_reason = forget`.
+- [ ] **(сведение 3, З-2)** Unit ветки статусов: `alive` → предложение публикуется; `dead` → шаг (2) пропускается, остальные выполняются; повторный `/forget` по уже `abandoned` игроку не публикует второго предложения.
+- [ ] **(сведение 3, З-4)** Unit: `/forget` лидера, когда других `alive` нет → в том же atomic-пакете `set leader_id = null` и `group.leader_changed {leader: null, cause: forget}`; группа не распускается, пока есть участники.
+- [ ] Физическое удаление связки (checkpoint+vacuum) выполняется **после** хуков и не откатывается при их ошибке — ошибка хука логируется, удаление всё равно происходит (приоритет NFR-042); поведение зафиксировано тестом.
+
+### T-356: Прокси `/v1/admin/*` к `MV_CORE_URL`, `actor_kind` `ci/sim`, раздел `admin` в OpenAPI · I2 · подволна 2.4 · developer#2 · M
+
+**Зависит от:** T-303. **Внешнее:** admin-порт `core` (C-06, EPIC-003 I1b) — для unit достаточно `httptest.Server`.
+**Ссылки:** C-06, C-08 v1.1, SEC-12, SEC-13; component §5.1, §5.2, §11.3; design §3.2 п. 7; `journal.md` (совладение раздела `admin` с EPIC-003).
+
+**Описание.** `httputil.ReverseProxy` на `POST /v1/admin/agents/{id}/tick`, `GET /v1/admin/agents`, `GET /v1/admin/llm/usage` (таймаут 30 с); `GET /v1/admin/sessions` — из `session.Active()` (без внешних ID); `DELETE /v1/admin/links/{player_id}`; допуск `ci`/`operator`; право клиента на `X-Actor-Kind: ci|sim` — по `MV_GATEWAY_ACTOR_KIND_CLIENTS` *(T-416: заменено `MV_GATEWAY_CLIENTS`, C-08 v1.3)*; раздел `admin` в `api/gateway.openapi.yaml` согласован с architect#2 (совладение).
+
+**DoD** (+ DoD-common):
+- [ ] Unit на `httptest.Server`: заголовки клиента пробрасываются, тело и статус возвращаются как есть, таймаут 30 с; `core` недоступен → `/health.core_admin=unavailable`, `degraded`.
+- [ ] Unit SEC-12: клиент без `ci`/`operator` → `403`; `GET /v1/admin/sessions` не содержит внешних ID.
+- [ ] Ревью prod-`.env`: `ci-harness` отсутствует во всех трёх списках клиентов — `MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS` (SEC-12; умолчания только в манифесте, T-411) — пункт вынесен в чек-лист T-392 и зафиксирован в README. *(T-416: заменено `MV_GATEWAY_CLIENTS`.)*
+- [ ] Раздел `admin` в OpenAPI не конфликтует с описанием EPIC-003 (согласование в отчёте); `openapi_test` зелёный.
+- [ ] Может быть выполнена в конце I1, если EPIC-003 I1b выставил admin-порт (design §3.2 п. 7) — решение принимает tech-lead#3 на подволне 1.11.
+
+### T-357: e2e группы — `group-3x30` и `forget` в группе · I2 · подволна 2.4 · developer#1 · M
+
+**Зависит от:** T-350…T-355.
+**Ссылки:** ADR-010, ADR-020; component §15; design §3.2, §7; US-006, US-007, US-009; UC-014…017, 020; NFR-005.
+
+**Описание.** e2e тремя клиентами `ci-harness` (три `external_id` платформы `ci`): 30 раундов группы из трёх (≥ 60 действий) с явным `rounds/close`, ветки `timeout` и `idle`, смерть участника, выход участника; отдельный сценарий `forget` в группе.
+
+**DoD** (+ DoD-common):
+- [ ] `group-3x30` зелёный и детерминированный; 30 раундов, у каждого — `round.opened` и `round.closed` с корректными `acted/auto_defended/idle`.
+- [ ] Нарратив раунда — один на scope, доставлен всем троим (FR-013, US-006).
+- [ ] Ветка `timeout`: молчащий участник получает `player.defended cause=round_timeout` до `round.closed`; после 2 пропусков — `idle`.
+- [ ] `forget` в группе: критерии US-009 (лидерство, состав, закрытие раунда) выполнены.
+- [ ] Прогон с `--chaos=duplicate` зелёный.
+- [ ] Фикстура прогона пригодна для `mvctl report` (EPIC-005) — отмечено в отчёте. *(T-416: было `mvctl session-report`.)*
+
+---
+
+## 3. Стендовые задачи (`stand`) — человек + tester#3, слот разработчика не занимают
+
+Стенд — машина пользователя, живой Telegram, вне CI. Результат каждой задачи — заполненный чек-лист и список замечаний; замечания превращаются в задачи EPIC-002/003/004 по карте владения.
+
+### T-390: Подготовка стенда — токен бота, allowlist, том данных · I1 · до подволны 1.9 · пользователь + tester#3 · S
+
+**Ссылки:** SEC-06, SEC-08, SEC-13; U-7; FR-130; component §11.1, §11.3.
+
+- [ ] Токен бота получен у BotFather и помещён **только** в `env_file` сервиса `telegram-bot` (профиль `bot`); в git не попадает (проверка `gitleaks`).
+- [ ] `MV_TELEGRAM_ALLOWED_USER_IDS` заполнен владельцем: собственный Telegram user id + id известных тестеров; посторонних нет.
+- [ ] Том `MV_GATEWAY_DATA_DIR` создан именованным, права `0700`; бэкап `links.db` настроен devops (шифрование, срок ≤ 30 дней).
+- [ ] Все порты публикуются только на `127.0.0.1` (`compose-lint` зелёный, SEC-13).
+- [ ] Бот не публикуется в каталогах Telegram (риск design §8).
+
+### T-391: Живой прогон I1-α «соло на шаблонах через Telegram» · I1-α · после подволны 1.9 · пользователь + tester#3 · M
+
+**Ссылки:** `epics.md` §2 (точка I1-α, тег `mvp-1/i1-alpha`); US-001, US-008; design §3.1.
+
+- [ ] Сквозной путь через живой Telegram: `/start` → уведомление → согласие → имя → `/enter dark-forest-01` → встреча → `/attack` → механика и нарратив **разными** сообщениями (`generated_by=template`) → `/look`, `/say`, `/rest` → `/status`.
+- [ ] Ошибочные пути проверены вживую: чужой аккаунт → отказ; сообщение в групповом чате → отказ; неизвестная команда → список команд.
+- [ ] Субъективная оценка текстов и клавиатур зафиксирована; замечания оформлены задачами (EPIC-002 — механика, EPIC-004 — тексты/UX бота).
+- [ ] Логи обоих процессов просмотрены: внешних ID и фрагментов токена нет (беглая проверка, полная — T-392).
+- [ ] Отчёт передан tech-lead#1 для тега `mvp-1/i1-alpha`.
+
+### T-392: Чек-лист I1 на стенде — S9, замер `ack_latency_p95_ms`, учения `/forget`, privacy-скан · I1 · после подволны 1.11 · пользователь + tester#3 + security-engineer · M
+
+**Ссылки:** NFR-003, NFR-041/042; SEC-03…SEC-13; threat-model «чек-лист security-review»; US-009, US-011; `epics.md` (готовность I1).
+
+- [ ] S9 «сквозной соло-ход через бота» пройден на интеграции I1 (с роем EPIC-003), результат зафиксирован.
+- [ ] Замер `ack_latency_p95_ms` от сообщения боту до ответа «принято» — значение записано; NFR-003 (≤ 300 мс p95) выполнен либо зафиксировано отклонение с причиной.
+- [ ] Учения `/forget`: реальная связка удаляется; `strings` по `links.db` и WAL = 0; повторный `/start` даёт новый `player_id`; недоставленные сообщения не приходят.
+- [ ] Privacy-скан на стенде при `MV_LOG_LEVEL=debug`: 0 внешних ID в логах обоих процессов, топиках, MinIO, `gateway.db`, `testdata/`; 0 фрагментов токена.
+- [ ] Ревью prod-`.env`: `ci-harness` отсутствует во всех трёх списках клиентов — `MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS` (T-411); порты только на `127.0.0.1`. *(T-416: заменено `MV_GATEWAY_CLIENTS`.)*
+- [ ] S3 (восстановление после рестарта) проверен на стенде: снапшот gateway восстанавливается, игрок продолжает с того же места (US-011).
+- [ ] Чек-лист security-review по пунктам SEC-03, 06, 07, 08, 10, 11, 12, 26 отмечен целиком; незакрытые пункты — задачами.
+
+### T-393: Живой прогон I2 — группа из трёх Telegram-аккаунтов · I2 · после подволны 2.4 · пользователь + tester#3 · M
+
+**Ссылки:** US-006, US-007; `epics.md` (готовность I2, S2); BR-13, FR-025.
+
+- [ ] Три живых аккаунта из allowlist (владелец + два тестера) создают группу, входят в регион, проходят встречу с раундами.
+- [ ] Проверены: подтверждение состава и лидера, `enter` от не-лидера → отказ, один нарратив раунда всем троим, таймаут раунда, `idle` после 2 пропусков, передача лидерства при выходе лидера.
+- [ ] `/forget` одного участника в группе отработал по FR-061.
+- [ ] Замечания оформлены задачами; отчёт передан tech-lead#1 для тега `mvp-1/i2`.
+
+---
+
+## 4. Волны и параллельность
+
+Слоты TEAM-3 по `teams.md` §4: волна 1 — developer#1, с подволны 1.4 добавляется developer#2 (1 → 2); волна 2 — developer#1 + developer#2. Стендовые задачи и T-318 слот разработчика не занимают. Ревью — `code-reviewer#3` отдельным запуском после каждой подволны, приёмка — tech-lead#3.
+
+| Подволна | Задачи | Параллельность | Выход (что появляется) |
+|---|---|---|---|
+| 1.1 | T-301 | 1 dev (#1) | Схемы C-04/C-10 в реестре, скелет OpenAPI, DTO, клиент → **ранний merge** для TEAM-1/TEAM-2 |
+| 1.2 | T-302 | 1 dev (#1) | Обе БД, миграции, физическое удаление проверено (SEC-03/04/05) |
+| 1.3 | T-303 | 1 dev (#1) | `links` + HTTP-каркас + `/health`; **контракт клиента виден → подключается developer#2** |
+| 1.4 | T-304 ∥ T-310 | 2 dev (#1 gateway, #2 бот) | Проекция State и consumer; ядро бота с SEC-06/07/08/10/11 |
+| 1.5 | T-305 ∥ T-311 (+ T-318 вне слотов) | 2 dev | Соло-ход публикуется; онбординг и тексты бота |
+| 1.6 | T-306 ∥ T-312 | 2 dev | Персонаж, сессии, ходы, аналитика C-10; бот доставляет и подтверждает |
+| 1.7 | T-307 ∥ T-317 | 2 dev | Outbox и long-poll — сквозной путь механики и нарратива; документация |
+| 1.8 | T-308 | 1 dev (#1); слот #2 свободен → резерв TEAM-2 | `FakeGateway` + `Harness` (замена v0) → **ранний merge** |
+| 1.9 | T-313 ∥ T-315 | 2 dev | e2e соло и e2e бота → **готовность к I1-α** (стенд T-391) |
+| 1.10 | T-309 ∥ T-316 | 2 dev | Снапшот, `replay`, полный `/health`; integration на testcontainers |
+| 1.11 | T-314 ∥ T-320 (**З-3 решено — идёт в подволне**) / T-356 (если admin-порт готов) | 2 dev | e2e `forget`/`privacy-scan`/`recovery` → **готовность I1** |
+| стенд I1 | T-390 (до 1.9), T-391 (после 1.9), T-392 (после 1.11), затем T-319 | человек + tester#3 | Теги `mvp-1/i1-alpha`, `mvp-1/i1`; архивация `game-service` |
+| 2.1 | T-350 ∥ T-352 | 2 dev | Ядро раундов; группа create/join/leave |
+| 2.2 | T-351 ∥ T-353 | 2 dev | Restore/replay/idle; групповая доставка и `/group` в боте |
+| 2.3 | T-354 ∥ T-355 | 2 dev | `rounds/close` для CI; `/forget`-каскад группы |
+| 2.4 | T-357 ∥ T-356 | 2 dev | e2e `group-3x30` и `forget` в группе; admin-прокси → **готовность I2** |
+| стенд I2 | T-393 | человек + tester#3 | Тег `mvp-1/i2` |
+
+**Независимые пары (можно параллелить безопасно):** (T-304, T-310), (T-305, T-311), (T-306, T-312), (T-307, T-317), (T-313, T-315), (T-309, T-316), (T-314, T-320), (T-350, T-352), (T-351, T-353), (T-354, T-355), (T-356, T-357). Пересечений по файлам внутри пары нет: developer#1 работает в `internal/gateway/**`, developer#2 — в `cmd/telegram-bot/**` (в I2 — в `internal/gateway/{groups,outbox}` при неактивном developer#1 в этих пакетах; конфликт `outbox` в 2.2 снимается тем, что T-351 не трогает `outbox/`).
+
+---
+
+## 5. Критерии готовности как чек-листы задач
+
+### I1-α «соло на шаблонах через бота» (тег `mvp-1/i1-alpha`)
+
+- [ ] T-301, T-302, T-303, T-304, T-305, T-306, T-307 приняты (пункты 1–5 состава I1, design §3.1).
+- [ ] T-310, T-311, T-312 приняты (пункт 7 — бот).
+- [ ] T-308 принят и слит ранним merge (нужен для e2e и для TEAM-1/TEAM-2).
+- [ ] T-313 (`solo-30`) зелёный на `FakeNarrator` (`generated_by=template`) и `FakeState`.
+- [ ] T-315 (e2e бота) зелёный.
+- [ ] T-318 — финальный текст FR-009 в `render/notice.go` (иначе — явная отметка о заглушке).
+- [ ] T-390 выполнен, T-391 пройден человеком на живом Telegram; замечания оформлены задачами.
+- [ ] Ветка эпика слита в `integration/mvp-1` в порядке 002 → **004** (`teams.md` §3.3).
+
+### I1 (тег `mvp-1/i1`)
+
+- [ ] Все пункты I1-α выполнены.
+- [ ] T-309 (снапшот, `replay`, `/health`), T-314 (`forget`, `privacy-scan`, `recovery`), T-316 (integration consumer) приняты.
+- [ ] T-317 (документация и runbook) принят.
+- [ ] Unit-блок безопасности зелёный целиком: SEC-03 (T-302), SEC-06/07 (T-310), SEC-08 (T-310), SEC-10 (T-310), SEC-11 (T-303, T-305, T-307, T-310), SEC-12 (T-303, T-307), SEC-26 (T-303, T-318).
+- [ ] Покрытие ≥ 60 % по `internal/gateway/{actions,rounds,outbox,links,turns,session}` (component §15).
+- [ ] `openapi_test` зелёный; `api/gateway.openapi.yaml` покрывает все реализованные маршруты.
+- [ ] T-392 (S9, замер NFR-003, учения `/forget`, privacy-скан, ревью prod-`.env`) пройден; S3 подтверждён.
+- [ ] T-319 (архивация `game-service`) выполнен.
+- [ ] T-320 закрыт (З-3 решено сведением 3; перенос допустим только по решению tech-lead#1 с отметкой недопокрытия критерия US-008).
+
+### I2 (тег `mvp-1/i2`)
+
+- [ ] T-350…T-355 приняты; T-356, T-357 приняты.
+- [ ] Unit `rounds` — полный набор component §15 (all_acted, timeout, explicit, idle, смерть, restore, replay).
+- [ ] e2e `group-3x30` и `forget` в группе зелёные (S2 на интеграции — с харнессом из трёх клиентов).
+- [ ] Слияние выполнено **после** EPIC-002 I2 и EPIC-003 I2 (порядок 002 → 003 → **004** → 005).
+- [ ] T-393 (группа из трёх живых аккаунтов) пройден.
+- [ ] Профиль `legacy`/`MV_GM_PATH` в gateway удалён задачей EPIC-003 I2 после зелёного S2 (проверить, что `if` в `actions.publish` снят).
+
+---
+
+## 6. Сводка и оценка
+
+| Показатель | Значение |
+|---|---|
+| Задач разработки I1 | **20** (T-301…T-320): 12 — gateway (developer#1), 4 — бот (developer#2), 1 — integration, 1 — документация, 1 — текст FR-009 (BA/tech-writer), 1 — облачное уведомление (условная) |
+| Задач разработки I2 | **8** (T-350…T-357): 4 — developer#1, 4 — developer#2 |
+| Стендовых задач | **4** (T-390…T-393), слот разработчика не занимают |
+| Всего | **32** задачи; из них 6 — e2e/integration, 2 — документация |
+| Размеры | 25 × M, 7 × S; задач L нет |
+| Подволн | I1 — 11, I2 — 4 |
+
+**Реестр статусов** (ведёт tech-lead#3; на старте все — `todo`; допустимые значения: `todo / in-progress / review / done / blocked`):
+
+| Задача | Разм. | Исп. | Статус | Задача | Разм. | Исп. | Статус |
+|---|---|---|---|---|---|---|---|
+| T-301 | M | dev#1 | todo | T-313 | M | dev#1 | todo |
+| T-302 | M | dev#1 | todo | T-314 | M | dev#1 | todo |
+| T-303 | M | dev#1 | todo | T-315 | M | dev#2 | todo |
+| T-304 | M | dev#1 | todo | T-316 | S | dev#2 | todo |
+| T-305 | M | dev#1 | todo | T-317 | S | dev#2 | todo |
+| T-306 | M | dev#1 | todo | T-318 | S | BA/TW | todo |
+| T-307 | M | dev#1 | todo | T-319 | S | dev#2 | todo |
+| T-308 | M | dev#1 | todo | T-320 | S | dev#2 | **planned** (З-3 решено, сведение 3) |
+| T-309 | M | dev#1 | todo | T-350 | M | dev#1 | todo |
+| T-310 | M | dev#2 | todo | T-351 | M | dev#1 | todo |
+| T-311 | M | dev#2 | todo | T-352 | M | dev#2 | todo |
+| T-312 | M | dev#2 | todo | T-353 | M | dev#2 | todo |
+| T-354 | S | dev#1 | todo | T-355 | M | dev#2 | todo |
+| T-356 | M | dev#2 | todo | T-357 | M | dev#1 | todo |
+| T-390 | S | stand | todo | T-391 | M | stand | todo |
+| T-392 | M | stand | todo | T-393 | M | stand | todo |
+
+**Оценка в неделях** (один разработчик-человек, M ≈ 1–1,5 дня с ревью и приёмкой; две параллельные дорожки с подволны 1.4):
+- I1: критическая дорожка gateway — 12 задач ≈ 14–16 рабочих дней ≈ **3–3,2 недели**; дорожка бота (4 задачи) укладывается внутрь. Точка I1-α достигается к концу подволны 1.9 ≈ **на 3-й неделе** — совпадает с `epics.md` §2.
+- Волна 1 по `epics.md` §4 длится 4–5 недель (ограничена EPIC-003). **Запас ≈ 1,5 недели** — совпадает с `decomposition-review.md` §2. Запас идёт на: замечания живого прогона I1-α, дефекты стыков с EPIC-002 (`shared/entity` v2, `FakeState`), досрочный старт T-356.
+- I2: 8 задач на двух дорожках ≈ 5–6 дней на дорожку ≈ **1,5–2 недели** при 3–4 неделях волны 2. Запас ≈ 1,5–2 недели — на интеграционные дефекты и S2.
+
+**Критический путь I1:** T-301 → **T-302 → T-303 → T-305 → T-307** → T-308 → T-313 → T-314 (в скобках выделено ядро, названное в design §3.4 как T-b → T-c → T-e → T-f). T-304 лежит на том же пути (T-305 и T-307 без проекции не работают) и в отчёте о ходе волны должен трактоваться как часть ядра.
+**Критический путь I2:** T-350 → T-351 → T-357 (дорожка developer#1); дорожка группы (T-352 → T-353 → T-355) короче и в путь не входит.
+
+**Риски нарезки (сверх design §8):**
+1. `shared/entity` v2 и `FakeState` v0 меняются в волне 1 → T-304 переделывается. Реакция: `readmodel` только на типизированных геттерах; расхождения — запрос в EPIC-002, не правка заглушки. Буфер — запас 1,5 нед.
+2. Один разработчик до подволны 1.4 → три первые подволны строго последовательны; сокращение невозможно. Реакция: T-301 и T-302 максимально независимы, T-303 открывает бота как можно раньше.
+3. T-308 (`Harness`) — единственная задача, блокирующая сразу e2e соло, e2e бота и чужие команды. При задержке I1-α сдвигается целиком. Реакция: ранний merge, приоритет ревью, сигнатуры v0 зафиксированы заранее.
+4. ~~T-320 зависит от решения вне команды (З-3)~~ — **снят (сведение 3)**: З-3 решено (`GET /v1/worlds → worlds[].llm.cloud_enabled`), T-320 в статусе `planned`; остаточная зависимость — публикация `config.cloud_enabled` контекстом `llm` (EPIC-003 T-212), которая по C-06 v1.1 идёт при каждом старте `core`.
+5. ~~Разошедшиеся требования по `/forget` (З-1, З-2)~~ — **снят (сведение 3)**: `end_reason` + `forget` (CHECK в T-302), `abandoned` публикует gateway, порядок каскада зафиксирован C-04 v1.1 (T-355). Миграция пишется сразу с полным CHECK — правило «I2 не добавляет миграций» соблюдается.
+
+---
+
+## 7. Правила приёмки задач тимлидом (tech-lead#3)
+
+1. Сверка с DoD задачи и с дизайном (design §3.1/§3.2, component §-ссылки задачи) — по пунктам, не «в целом».
+2. Прогон: `go test -short ./...` затронутых пакетов, `golangci-lint run`, `openapi_test`, где применимо — `-tags integration` / `-tags e2e`.
+3. Проверка `dev-log.md`: подпись экземпляра, отклонения от дизайна, что не сделано.
+4. Проверка карты владения: `git diff --name-only` не содержит путей чужих эпиков и `shared/*` вне `shared/testkit/gateway`.
+5. Несоответствие → возврат разработчику **конкретным списком пунктов DoD**, без переписывания кода тимлидом.
+6. Статусы ведутся в этом файле (поле «Статус» добавляется при старте разработки) и дублируются в `state.js` оркестратором.
+7. Эскалация: разработчик и `code-reviewer#3` не сошлись за 3 итерации → техническое решение принимает tech-lead#3; если вопрос про контракт или требование — вопрос пользователю через оркестратора.
+
+---
+
+## 8. Замечания к дизайну, контрактам и требованиям (переданы в отчёте tech-lead#3)
+
+| # | Кому | Суть | Влияние на задачи |
+|---|---|---|---|
+| **З-1** | BA + system-analyst + architect#3 | `end_reason` при `/forget`: FR-061 v0.4 требует `end_reason=forget`, а `data-model.md` §5, `api-contracts.md` §2.3.14 и CHECK в `migrations/gateway/0001_init.sql` (component §4.2) допускают только `leave|idle|death|error` — вставка упадёт на CHECK | **РЕШЕНО (сведение 3, C-10 v1.1)**: `end_reason ∈ leave\|idle\|death\|error\|forget`, `forget` — не ошибка. Внесено: T-301 (схема), T-302 (CHECK), T-314, T-355. Подволна 1.2 разблокирована |
+| **З-2** | BA + architect#3 | Статус `abandoned` при `/forget`: FR-061 п. 2 требует, чтобы персонаж переходил в `abandoned`; component §7.5 и §6 (`ForgetHooks`) этого не предусматривают — не указано, кто публикует `entity.update.proposed status=abandoned cause=forget` и как это соотносится с `group.left {cause: forget}` (FR-061 п. 3) против `cause=leave` в component §7.5 | **РЕШЕНО (сведение 3, C-02 v1.2 / C-04 v1.1)**: публикует **gateway** одним atomic `entity.update.proposed cause=forget`; State валидирует **только** `alive → abandoned` (`dead` остаётся `dead`); `abandoned` терминален и равен `dead` для inv-01/`NPCTarget`/стража; `group.left {cause: forget}`. Внесено: T-301, T-314, T-355 (`t.Skip` снят) |
+| **З-3** | system-architect + architect#3 | US-008 (Must) содержит критерий «оператор включил облачный провайдер → бот показывает отдельное уведомление», но `config.cloud_enabled` — событие `system_events` (EPIC-003), а бот шину не читает и C-08 не имеет поля для этого флага. Нужно совместимое дополнение C-08 (поле в `GET /v1/worlds` или `GET /v1/players/{id}`) | **РЕШЕНО (сведение 3, C-08 v1.2 / C-06 v1.1)**: `GET /v1/worlds → worlds[].llm{cloud_enabled}` — единственное место; кэш бота `MV_TELEGRAM_CLOUD_FLAG_TTL=60s`, уведомление раз за сессию диалога; контекст `llm` публикует событие при каждом старте `core`. **T-320 разблокирована** |
+| **З-4** | system-analyst + architect#1 | Группа без действующего лидера (все `alive` кончились, component §7.4): не определено представление `leader_id: null` в сущности `group` и в `GroupView` C-08; BA отметила это ещё при v0.4 | **РЕШЕНО (сведение 3, C-04 v1.1 / C-08 v1.2)**: `Group.leader_id: ref \| null`, `GroupView.leader_id: string \| null`, `group.leader_changed {leader: null, cause}`, `409 no_leader` (раньше `not_leader`). Внесено: T-301, T-352, T-355 |
+| **З-5** | BA + security-engineer | Имя переменной allowlist расходится: `MV_TELEGRAM_ALLOWED_USER_IDS` (prd FR-130, threat-model SEC-06, US-008) против `MV_TELEGRAM_ALLOWED_USER_IDS` (component §11.3, design). Взято имя компонентного документа | **РЕШЕНО (сведение 3, З-5)**: единое имя — **`MV_TELEGRAM_ALLOWED_USER_IDS`** (по компонентному документу и `.env.example`); правки в prd/threat-model — за BA и security. Задачи T-310, T-390 без изменений |
+| **З-6** | BA + architect#3 | FR-130 требует «правится оператором без перезапуска — Should»; ни component §10.2, ни design перезагрузку allowlist не описывают. В MVP-1 предлагаю принять как невыполненный Should и не расширять объём | **РЕШЕНО (сведение 3, З-6)**: в MVP-1 — невыполненный Should, объём не расширяем; кандидат в EPIC-013 (E-H: инвайт-коды/аутентификация заменят allowlist); пометку в FR-130 вносит BA. Задач не добавляется |
+| **З-7** | architect#3 | `components/gateway-and-bot.md` §13 ссылается на ветку `epic/EPIC-004-gateway-bot`; канон — `epic/EPIC-004-gateway` (`teams.md` §1). В `design.md` исправлено tech-lead#3; компонентный документ — владение architect#3 | косметика, без влияния на задачи |
+| **З-8** | architect#3 | design §2 «Трассировка» ссылается на SEC-03…12, но не упоминает SEC-26 (семантика `/forget` в OpenAPI и в уведомлении), хотя это обязательная мера MVP-1. Учтено в DoD T-303 и T-318 | учтено |
+| **З-9** | tech-lead#1 | `.dev-team.json` → `counters.task` = 0 и обновляется тремя тимлидами параллельно (риск повторить инцидент с `open-questions.md`). TEAM-3 файл **не правила**; занятый диапазон — T-301…T-320, T-350…T-357, T-390…T-393. Предлагаю: счётчик сводит tech-lead#1 (или оркестратор) один раз после G3 | процесс |
+
+**Статус после сведения 3 (2026-09-09, внесено tech-lead#1 от имени tech-lead#3):** З-1…З-6 — **решено**, блокировок DoD не осталось; З-7, З-8 — косметика/учтено; З-9 — счётчик `counters.task` сведён tech-lead#1 после G3 (`.dev-team.json`, `task = 393`). Основание: `architecture/consolidation.md` §14.1, `contracts.md` v0.4, ADR-017 «Дополнение 1».

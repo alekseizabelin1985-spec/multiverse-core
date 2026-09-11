@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/player.defended.v1.json",
+  "title": "player.defended payload",
+  "description": "A player defended, either by their own action or because the round timed out and the gateway acted for them (api-contracts.md 2.3.1).",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "cause": { "type": "string", "enum": ["player", "round_timeout"] },
+    "action": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "key_hash": { "type": "string" }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "round": {
+      "type": "object",
+      "properties": { "seq": { "type": "integer", "minimum": 1 } },
+      "required": ["seq"],
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "properties": { "id": { "type": "string", "minLength": 1 } },
+      "required": ["id"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["entity", "cause"],
+  "additionalProperties": false
+}

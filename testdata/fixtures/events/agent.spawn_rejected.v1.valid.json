@@ -1,0 +1,5 @@
+{
+  "blueprint": "encounter-wolf",
+  "scope": { "id": "solo:player-A", "type": "solo" },
+  "reason": "max_instances"
+}

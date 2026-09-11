@@ -1,0 +1,22 @@
+{
+  "recipients": [
+    { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+    { "entity": { "id": "player-B", "type": "player" }, "name": "Лена" }
+  ],
+  "text": "Альфа-волк отступает в подлесок, зализывая рану. Тропа снова пуста, но кусты справа ещё дрожат.",
+  "generated_by": "llm",
+  "fallback_reason": null,
+  "kind": "round",
+  "round": { "seq": 3 },
+  "llm_output": { "event": { "id": "01JG0000000000000000000011", "type": "llm.output" } },
+  "based_on": [
+    { "event": { "id": "01JG0000000000000000000013", "type": "combat.decided" } }
+  ],
+  "background_refs": [
+    { "event": { "id": "01JG0000000000000000000014", "type": "world.weather_changed" } }
+  ],
+  "filter": { "applied": true, "status": "pass", "filter_version": "a-2026-09" },
+  "locale": "ru",
+  "laws_version": "v1",
+  "narrative_event_id": "01JG0000000000000000000015"
+}

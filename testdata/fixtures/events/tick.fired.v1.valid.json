@@ -1,0 +1,17 @@
+{
+  "agent": {
+    "id": "agent-global-1",
+    "level": "global",
+    "blueprint": "global-dark-forest-world",
+    "blueprint_version": "1.0"
+  },
+  "scope": { "id": "dark-forest-world", "type": "world" },
+  "tick": {
+    "seq": 42,
+    "mode": "background",
+    "scheduled_at": "2026-01-01T00:05:00Z",
+    "fired_at": "2026-01-01T00:05:00Z",
+    "lod_allowed": "basic"
+  },
+  "budget": { "window_calls": 3, "cap": 4 }
+}

@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/group.entered_region.v1.json",
+  "title": "group.entered_region payload",
+  "description": "A group entered a region. This is the only wire format of a group movement: player.entered_region is not published for its members (api-contracts.md 2.3.2, contracts.md C-04).",
+  "type": "object",
+  "properties": {
+    "group": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "target": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "position": {
+      "type": "object",
+      "properties": {
+        "from": { "type": ["string", "null"] },
+        "to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["to"],
+      "additionalProperties": false
+    },
+    "by": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "members": {
+      "type": "array",
+      "description": "The membership at the moment of the move.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": { "$ref": "_common.json#/$defs/EntityRef" },
+          "name": { "type": "string" },
+          "participation": { "type": "string", "enum": ["active", "idle"] }
+        },
+        "required": ["entity"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["group", "target", "position", "by", "members"],
+  "additionalProperties": false
+}

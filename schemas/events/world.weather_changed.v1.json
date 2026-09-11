@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.weather_changed.v1.json",
+  "title": "world.weather_changed payload",
+  "description": "The global GM changed the weather of the world (api-contracts.md 2.3.8). Published on a background tick, so meta.actor_kind is system and meta.agent.level is global.",
+  "type": "object",
+  "properties": {
+    "weather": {
+      "type": "object",
+      "properties": {
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 }
+      },
+      "required": ["from", "to"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["weather"],
+  "additionalProperties": false
+}

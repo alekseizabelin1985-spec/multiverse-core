@@ -1,0 +1,14 @@
+{
+  "entity": { "entity": { "id": "wolf-beta", "type": "npc" }, "name": "Бета-волк" },
+  "kind": "wolf",
+  "position": "dark-forest-01",
+  "spawned_by": {
+    "agent": {
+      "id": "agent-domain-1",
+      "level": "domain",
+      "blueprint": "domain-dark-forest",
+      "blueprint_version": "1.1"
+    },
+    "tick": { "event": { "id": "01JG0000000000000000000010", "type": "tick.fired" } }
+  }
+}

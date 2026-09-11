@@ -85,41 +85,6 @@ func TestValidateRelations_Standalone(t *testing.T) {
 	}
 }
 
-func TestWithRelations_Builder(t *testing.T) {
-	ev := NewEvent("player.found_item", "oracle", "w1", map[string]any{
-		"entity": map[string]any{"id": "player:p1", "type": "player"},
-	})
-
-	wrapper := WithRelations(ev, []Relation{
-		{From: "player:p1", To: "item:sword_1", Type: RelFound, Directed: true,
-			Metadata: map[string]any{"action": "pick_up"}},
-	})
-
-	if wrapper.Event.ID != ev.ID {
-		t.Error("EventWithRelations should preserve original event")
-	}
-	if len(wrapper.Relations) != 1 {
-		t.Fatalf("expected 1 relation, got %d", len(wrapper.Relations))
-	}
-	if wrapper.Relations[0].Type != RelFound {
-		t.Errorf("expected relation type %s, got %s", RelFound, wrapper.Relations[0].Type)
-	}
-	if wrapper.Relations[0].Metadata["action"] != "pick_up" {
-		t.Errorf("expected metadata action 'pick_up', got %v", wrapper.Relations[0].Metadata["action"])
-	}
-}
-
-func TestAddRelation_Chain(t *testing.T) {
-	ev := NewEvent("test", "src", "w1", nil)
-	wrapper := WithRelations(ev, nil).
-		AddRelation(Relation{From: "p1", To: "i1", Type: RelFound, Directed: true}).
-		AddRelation(Relation{From: "p1", To: "r1", Type: RelLocatedIn, Directed: true})
-
-	if len(wrapper.Relations) != 2 {
-		t.Fatalf("expected 2 relations after chaining, got %d", len(wrapper.Relations))
-	}
-}
-
 func TestEvent_RelationsJSONSerialization(t *testing.T) {
 	ev := NewEvent("player.action", "oracle", "w1", map[string]any{
 		"action": "pick_up",

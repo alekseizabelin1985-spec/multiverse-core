@@ -1,0 +1,13 @@
+# Rule 8: `$$$MV_X` is compose's escape `$$` (a literal dollar) followed by a
+# real `$MV_X` — an interpolation with no modifier, and with .env silent the
+# gateway gets `$` and nothing else instead of the manifest's list. The linter
+# took the third dollar for part of the escape and said nothing (review #2
+# T-411, N-6).
+#
+# expect-rule: 8
+# expect-text: $MV_GATEWAY_CLIENT_IDS has neither a default nor
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_GATEWAY_CLIENT_IDS: $$$MV_GATEWAY_CLIENT_IDS

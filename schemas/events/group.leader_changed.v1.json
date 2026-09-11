@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/group.leader_changed.v1.json",
+  "title": "group.leader_changed payload",
+  "description": "The leader of a group changed: the new leader is the oldest living member by joined_at, or null when no living member is left (BR-13 v0.4, contracts.md C-04 v1.1).",
+  "type": "object",
+  "properties": {
+    "group": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "leader": {
+      "oneOf": [{ "$ref": "_common.json#/$defs/EntityWithName" }, { "type": "null" }]
+    },
+    "cause": { "type": "string", "enum": ["leave", "death", "forget"] }
+  },
+  "required": ["group", "leader", "cause"],
+  "additionalProperties": false
+}

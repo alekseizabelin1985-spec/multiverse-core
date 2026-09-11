@@ -1,0 +1,13 @@
+# Rule 3: environment as a YAML list. A literal credential in this layout is
+# just as much a default credential as one in a mapping (SEC-14).
+#
+# expect-rule: 3
+# expect-text: MINIO_ROOT_USER carries the literal
+services:
+  minio:
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+    environment:
+      - MINIO_ROOT_USER=fixture-only-not-a-secret
+      - MINIO_ROOT_PASSWORD=fixture-only-not-a-secret-0000
+    ports:
+      - "127.0.0.1:9000:9000"

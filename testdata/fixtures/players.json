@@ -1,0 +1,71 @@
+[
+  {
+    "schema_version": 1,
+    "id": "player-A",
+    "type": "player",
+    "world_id": "dark-forest-world",
+    "name": "Вася",
+    "version": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "attributes": {
+      "hp": 10,
+      "hp_max": 10,
+      "atk": 2,
+      "def": 12,
+      "dmg": "d6",
+      "flee": "2",
+      "status": "alive",
+      "position": "outside:dark-forest-world",
+      "scope": { "id": "player-A", "type": "solo" },
+      "actor_kind": "ci",
+      "inventory": []
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "player-B",
+    "type": "player",
+    "world_id": "dark-forest-world",
+    "name": "Лена",
+    "version": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "attributes": {
+      "hp": 10,
+      "hp_max": 10,
+      "atk": 2,
+      "def": 12,
+      "dmg": "d6",
+      "flee": "2",
+      "status": "alive",
+      "position": "outside:dark-forest-world",
+      "scope": { "id": "player-B", "type": "solo" },
+      "actor_kind": "ci",
+      "inventory": []
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "player-C",
+    "type": "player",
+    "world_id": "dark-forest-world",
+    "name": "Олег",
+    "version": 1,
+    "created_at": "2026-01-01T00:00:00Z",
+    "updated_at": "2026-01-01T00:00:00Z",
+    "attributes": {
+      "hp": 10,
+      "hp_max": 10,
+      "atk": 2,
+      "def": 12,
+      "dmg": "d6",
+      "flee": "2",
+      "status": "alive",
+      "position": "outside:dark-forest-world",
+      "scope": { "id": "player-C", "type": "solo" },
+      "actor_kind": "ci",
+      "inventory": []
+    }
+  }
+]

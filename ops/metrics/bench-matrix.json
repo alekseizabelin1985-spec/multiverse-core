@@ -1,0 +1,135 @@
+{
+  "_file": "ops/metrics/bench-matrix.json — configurations and thresholds of the first LLM measurement (F-8 / T-013).",
+  "_source": [
+    "Docs/dev-team/architecture/infrastructure.md v0.3 §6.4 (the matrix as a script)",
+    "Docs/dev-team/architecture/overview.md §18.1 (variants E/E+/A/B/C/D)",
+    "Docs/dev-team/architecture/adr/ADR-005-llm-gateway-providers-models.md addendum 2 p. 5",
+    "Docs/dev-team/requirements/nfr.md v0.5 NFR-002, NFR-022, NFR-076, NFR-090",
+    "Docs/dev-team/project/metrics.md §7 (protocol B1-B8)"
+  ],
+  "_contract": "The architect edits this file; scripts/llm-bench.{sh,ps1} read it and never change. A key added here is inert until a script reads it, so it is safe to record intent in advance.",
+  "version": "0.1",
+  "updated": "2026-09-10",
+  "n_per_cell": 10,
+  "_n_per_cell": "Deviation from infrastructure.md §6.4 (20), decided in T-013: testdata/bench/prompts.jsonl holds 10 situations per phase, and repeating a prompt inside one run would be answered from the prompt cache of llama.cpp (usage.prompt_tokens_details.cached_tokens) — a repeated request measures the cache, not the model, and would pull p95 down. The sample size the decision rests on comes from runs_required instead: 3 runs x 10 = 30 measurements per cell.",
+  "runs_required": 3,
+  "_runs_required": "Three runs at different moments (different days, or after a restart of llama-server), each a separate invocation of the script; verdict=pass in all three is what accepts a configuration (§6.4 rule 2).",
+  "num_ctx": [8192, 16384],
+  "kv_cache": ["f16", "q8_0"],
+  "_cells": "A configuration is measured in the cells of num_ctx x kv_cache. The server is started with those parameters before the run (make llm-up with MV_LLM_NUM_CTX; --ctx-size = MV_LLM_NUM_CTX x slots) — the script does not restart the server, it only records the values it was told (§6.4 rule 1).",
+  "configs": {
+    "E": {
+      "provider": "openai_compat",
+      "url_env": "MV_LLM_URL",
+      "tick": "Qwen3.8-27B-UD-Q3_K_XL",
+      "narrative": "Qwen3.8-27B-UD-Q3_K_XL",
+      "server_mode": "single",
+      "kv_cache": ["f16", "q8_0"],
+      "num_ctx": [8192, 16384],
+      "primary": true,
+      "expected_vram_mb": [16384, 19456],
+      "_note": "One dense 27B for both the tick and the narrative. 13.1 GB of weights + KV 256 KiB/token f16 (64 layers x 4 KV heads x head_dim 256) ~ 2 GB @8k, ~ 4 GB @16k. The open question is speed, not fit: a dense 27B generates slower per token than a 3B-active MoE."
+    },
+    "E+": {
+      "provider": "openai_compat",
+      "url_env": "MV_LLM_URL",
+      "tick": "qwen3-8b",
+      "narrative": "Qwen3.8-27B-UD-Q3_K_XL",
+      "server_mode": "router",
+      "kv_cache": ["f16"],
+      "num_ctx": [8192],
+      "material": true,
+      "expected_vram_mb": [20480, 22528],
+      "_note": "Material only (ADR-005 add. 2 p. 5): measured when E passes the narrative but the tick costs too much. Needs llama-server in router mode — make llm-up ROUTER=1 (--models-dir, no -m)."
+    },
+    "C": {
+      "provider": "ollama",
+      "url_env": "MV_OLLAMA_URL",
+      "tick": "qwen3:30b-a3b",
+      "narrative": "qwen3:30b-a3b",
+      "server_mode": "single",
+      "kv_cache": ["f16"],
+      "num_ctx": [8192],
+      "fallback": 1,
+      "expected_vram_mb": [21504, 23552],
+      "_note": "First fallback. May equally be run as GGUF on llama-server — then set provider to openai_compat and url_env to MV_LLM_URL; the metrics are the same, only the base URL differs. With Ollama the script uses its OpenAI-compatible endpoint (MV_OLLAMA_URL=http://127.0.0.1:11434/v1 in .env; see ops/metrics/README.md)."
+    },
+    "A": {
+      "provider": "ollama",
+      "url_env": "MV_OLLAMA_URL",
+      "tick": "qwen3:8b",
+      "narrative": "qwen3:14b",
+      "server_mode": "router",
+      "kv_cache": ["f16"],
+      "num_ctx": [8192],
+      "fallback": 2,
+      "expected_vram_mb": [17408, 19456],
+      "_note": "Second fallback: two models resident at once (OLLAMA_MAX_LOADED_MODELS=2, or llama-server in router mode). The tick model and the narrative model differ — the script picks the one that belongs to the phase."
+    }
+  },
+  "decision_order": ["E", "C", "A"],
+  "_decision_order": "E first (overview §18.1, ADR-005 add. 2 p. 5). Passed -> it is the base configuration and C/A are never run. Failed -> C, then A. The order is a rule for the operator, not for the script: the script measures exactly the configurations it is given in --configs.",
+  "request": {
+    "stream": false,
+    "response_format": "json_schema",
+    "strict": true,
+    "chat_template_kwargs": { "enable_thinking": false },
+    "_enable_thinking": "Mandatory, not a preference: with thinking on, llama.cpp does not apply the json_schema grammar (ggml-org/llama.cpp#20345, open since 2026-03) and the answer may arrive wrapped in markdown or with foreign fields. Turning it off is what makes valid_json_ratio a measurement of the model rather than of the defect.",
+    "sampling_non_thinking": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": 0,
+      "presence_penalty": 1.5
+    },
+    "_sampling": "The Unsloth non-thinking profile for Qwen3 (ADR-005 add. 2). The server is started with the thinking profile (--temp 1 ...); the gateway overrides it per request, so the bench overrides it too — otherwise the measurement would not describe the path the platform actually takes.",
+    "timeout_s": { "tick": 120, "phase2": 120, "phase2-group3": 180 }
+  },
+  "thresholds": {
+    "NFR-002": {
+      "phase": "phase2",
+      "p95_ms_max": 5000,
+      "_note": "p95 from combat.decided to delivery, one active scope. The bench measures only the LLM call, which is the dominant term; the bus and the gateway add tens of milliseconds and are measured separately in B1."
+    },
+    "NFR-002-group3": {
+      "phase": "phase2-group3",
+      "p95_ms_max": 5000,
+      "advisory": true,
+      "_note": "The group threshold is fixed after the measurement (nfr.md NFR-002, metrics.md §7 B1; the reference point from the product analyst is no worse than twice the solo figure). Until then the verdict of this phase is advisory and never blocks a configuration."
+    },
+    "NFR-090": {
+      "cjk_ratio_max": 0.0,
+      "latin_ratio_max": 0.10,
+      "pass_ratio_min": 0.98,
+      "_note": "Russian narrative: not a single CJK character, Latin letters at most 10 % of all letters (entity identifiers inside the JSON are counted too — that is deliberate, the gateway measures the text the player sees, and the bench keeps the same rule for comparability)."
+    },
+    "B3": {
+      "valid_json_ratio_min": 0.98,
+      "_note": "metrics.md §7 B3 / NFR-022. With grammar sampling on a working build this ratio is expected to be 1.0; anything lower is a signal about the build or the schema, not about the model."
+    },
+    "NFR-076": {
+      "vram_used_mb_max": 20480,
+      "advisory": true,
+      "_note": "Everything resident in the 24 GB of the RTX 4090. The number is an expectation, not a wall: exceeding it means part of the layers or of the KV cache went to RAM, which the operator marks by hand in baseline.md (§6.4 rule 4). nvidia-smi reports the whole GPU, so a browser or a compositor inflates it — read it together with the model size."
+    },
+    "throughput": {
+      "tps_min": 70,
+      "advisory": true,
+      "_note": "Derived, not required by an NFR: a phase2 answer is capped at 320 tokens, so fitting a 5 s budget with room for prompt processing needs roughly 70 generated tokens per second. Useful as an early signal — a configuration far below it will not pass NFR-002 whatever the prompt is."
+    }
+  },
+  "results": {
+    "_shape": "Filled in after a run on the stand, from the JSON reports the script writes (ops/metrics/bench-<config>-<date>.json). One entry per configuration: an array of runs, each {date, num_ctx, kv_cache, llamacpp_build, verdict, phase2_p95_ms, group3_p95_ms, tps, vram_used_mb, note}. The decision itself lives in ops/metrics/baseline.md — this field is the machine-readable trail behind it.",
+    "E": [],
+    "E+": [],
+    "C": [],
+    "A": []
+  },
+  "decision": {
+    "chosen": null,
+    "decided_at": null,
+    "decided_by": null,
+    "baseline_doc": "ops/metrics/baseline.md",
+    "_note": "null until the stand has run the matrix. Blueprints of MVP-1 state E until this field says otherwise (ADR-005 add. 2 p. 5)."
+  }
+}

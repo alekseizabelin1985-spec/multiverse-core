@@ -1,0 +1,407 @@
+# =============================================================================
+# .github/workflows/go.yml — the CI of the platform (F-7, T-012)
+# Source: Docs/dev-team/architecture/infrastructure.md v0.3 §3.1, §3.1.1, §3.2;
+# ADR-010 (+ additions 1, 3, 5); threat-model T-15, T-35, T-36 / SEC-25.
+# =============================================================================
+# Six blocking jobs — unit, integration, e2e, contracts, security, compose-lint
+# — plus `image`, which builds and does not push. They are the required checks
+# of `main` and `integration/mvp-1`, so a job is renamed only together with the
+# branch protection rules of the repository.
+#
+# House rules of this file:
+#   * every `uses:` is pinned by commit SHA with the version in a comment —
+#     a tag is mutable, and an AI agent with write access already runs in this
+#     repository (T-35, SEC-25); Dependabot bumps the pins;
+#   * `permissions: {contents: read}` for the whole workflow; only `security`
+#     asks for more, and only for the read of the pull request its scanner
+#     needs;
+#   * no version literal in a step: the pins come from build/versions.env
+#     through $GITHUB_ENV (NFR-071);
+#   * the runner is `ubuntu-latest` everywhere — the only target platform is a
+#     Linux container, and Windows is covered by the owner running `make ci`.
+#
+# The Actions budget of a private repository on Free is 2 000 min/month (U-9),
+# hence `concurrency` with cancellation and the path filter below.
+# =============================================================================
+name: go
+
+on:
+  push:
+    # Only the trunk and the integration branches: a branch of an epic reaches
+    # CI through its pull request, and a push trigger on it would spend the
+    # budget twice on the same commit — the concurrency group of a push
+    # (refs/heads/...) and the one of a pull request (refs/pull/N/merge) are
+    # different by construction, so neither run cancels the other.
+    branches:
+      - main
+      - 'integration/**'
+    # `paths` with negations rather than `paths-ignore`: documentation must not
+    # spend the budget, but blueprints/**/*.md are data the `contracts` job
+    # validates, and GitHub refuses `paths` and `paths-ignore` in one filter.
+    # The order matters — a later pattern wins.
+    paths:
+      - '**'
+      - '!Docs/**'
+      - '!**/*.md'
+      - 'blueprints/**/*.md'
+  # A pull request is deliberately left unfiltered. A workflow skipped by a path
+  # filter never reports its checks, and a required check that never reports
+  # blocks the pull request forever — the documentation-only pull request would
+  # be the one that cannot be merged (§3.2, branch protection).
+  pull_request:
+    branches:
+      - main
+      - 'integration/**'
+      - 'epic/**'
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # unit — build, vet, lint, the short tests with -race and the coverage floor.
+  # `-race` lives here and not in `make test` on Windows: ADR-012 decision ОВ-5.
+  # ---------------------------------------------------------------------------
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: |
+          # Only KEY=VALUE lines: $GITHUB_ENV rejects the comments and the blank
+          # lines of build/versions.env.
+          grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: The toolchain of go.mod is the pinned one
+        # Decision ОВ-9: two files carry the version of Go — go.mod, which the
+        # compiler and setup-go read, and build/versions.env, which the images
+        # and the Makefile read. They drift silently, and the drift shows up as
+        # an image that builds with a different compiler than CI.
+        run: |
+          declared=$(awk '/^toolchain /{print $2}' go.mod)
+          expected="go${GO_VERSION}"
+          if [ "$declared" != "$expected" ]; then
+            echo "go.mod says toolchain $declared, build/versions.env says GO_VERSION=$GO_VERSION" >&2
+            exit 1
+          fi
+          go version
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: go mod tidy -diff
+        # -diff rather than `tidy`: CI reports that the module files are stale,
+        # it does not rewrite dependencies of its own accord (T-35).
+        run: go mod tidy -diff
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+      - name: go test -short -race
+        run: go test -short -race -count=1 -coverprofile=coverage.out ./...
+
+      - name: Coverage floor of the core packages
+        # A package that does not exist yet is a warning: the contexts arrive in
+        # waves 1 and 2 (ADR-010 p. 5).
+        # Through bash and not as a program: the executable bit lives in the
+        # tree, and a script that loses it fails the job with Permission denied
+        # on a Linux runner while Git for Windows shows nothing.
+        run: bash scripts/coverage-gate.sh 60 internal/state internal/mechanics internal/swarm internal/llm internal/replay
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: warn
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # integration — the adapters against real servers in containers (ADR-010 p. 2).
+  # The MinIO image is built from source (ADR-021 variant B), which is why this
+  # job carries a buildx cache: without it every run pays five minutes.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build the MinIO image testcontainers starts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: build/minio.Dockerfile
+          build-args: |
+            MINIO_TAG=${{ env.MINIO_TAG }}
+            MINIO_REPO=${{ env.MINIO_REPO }}
+            MINIO_BUILDER_IMAGE=${{ env.MINIO_BUILDER_IMAGE }}
+            MINIO_COMMIT=${{ env.MINIO_COMMIT }}
+          tags: ${{ env.MINIO_IMAGE }}
+          load: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: go test -tags integration
+        env:
+          # Ryuk reaps the containers of a cancelled run; a workflow that
+          # cancels itself on a new push is exactly the case it exists for.
+          TESTCONTAINERS_RYUK_DISABLED: 'false'
+        # 20m, not 15m: a fully red contract set costs about 14.5 minutes.
+        # Every case holds up to three independent 15-second waits, and stop()
+        # reports through t.Errorf rather than aborting the case, so a broken
+        # run walks through all of them. At 15m the run would die on the test
+        # timeout and report a runtime panic instead of the failed assertion —
+        # the defect would still be loud, but unreadable (T-014 review #4).
+        run: go test -tags integration -count=1 -timeout 20m ./...
+
+  # ---------------------------------------------------------------------------
+  # e2e — one process, the in-memory bus, recorded LLM output; no Docker
+  # (ADR-010 p. 2). The scenarios arrive with T-018 and the epics after it.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go test -tags e2e
+        run: go test -tags e2e -count=1 -timeout 10m ./...
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: sessions
+          path: ops/metrics/sessions/*.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # contracts — the schemas, the topic registry and the environment manifest
+  # agree with the code (F-4b, F-4c, F-5).
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: mvctl contracts check
+        run: go run ./cmd/mvctl contracts check
+
+      - name: mvctl env check
+        run: go run ./cmd/mvctl env check
+
+      - name: The schemas are valid JSON Schema 2020-12
+        run: go test ./shared/contracts/... -run TestSchemasValid -count=1
+
+      # `mvctl blueprint validate blueprints/` joins this job together with the
+      # command, in EPIC-003 (decision ОВ-48): the name is reserved today and
+      # exits with the usage code, which would fail the job for a command
+      # nobody has written yet. `api/*.openapi.yaml` is checked here once
+      # EPIC-004 writes it (§3.1).
+
+  # ---------------------------------------------------------------------------
+  # security — secrets, vulnerable dependencies and personal data (SEC-25,
+  # SEC-01, NFR-041). This is the only job that reads more than the contents
+  # of the repository, and only the pull request its scanner walks.
+  # ---------------------------------------------------------------------------
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      # gitleaks-action reads the commits of the pull request before it scans
+      # (GET /repos/{owner}/{repo}/pulls/{pull_number}/commits), and declaring
+      # this block zeroes every permission that is not listed: without
+      # pull-requests the step is a 403 on every pull request. No SARIF leaves
+      # this job — the action writes it into a workflow artefact, which is
+      # switched off below — so security-events is not asked for.
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # gitleaks reads history: the whole of it on a branch, the range of
+          # the pull request on a pull request.
+          fetch-depth: 0
+
+      - name: Read the pinned versions
+        run: |
+          grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+          # gitleaks-action wants the version without the leading v.
+          echo "GITLEAKS_VERSION_PLAIN=$(grep -E '^GITLEAKS_VERSION=' build/versions.env | cut -d= -f2 | sed 's/^v//')" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gitleaks over the history
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_VERSION: ${{ env.GITLEAKS_VERSION_PLAIN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+          # Review comments would need pull-requests: write in the one job that
+          # handles secrets, and with a single human owner they say nothing the
+          # failed check does not (§3.2).
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          # GITLEAKS_LICENSE is deliberately absent: the licence is required of
+          # organisations, and this repository is private on a personal account
+          # (U-9, §3.2).
+
+      - name: gitleaks over the work tree
+        # The history scan sees the commits of the range; this one sees every
+        # tracked file of the checkout, which is the content of the index —
+        # the same subject `make secrets-scan` scans locally. The image tag is
+        # the pin of build/versions.env (NFR-071).
+        run: |
+          # The paths stay relative on purpose: a fingerprint of
+          # .gitleaksignore is <path>:<rule>:<line>, and an absolute /repo/...
+          # prefix makes every committed exception miss (§4.5 p. 1).
+          docker run --rm -v "$PWD:/repo:ro" -w /repo \
+            "zricethezav/gitleaks:${GITLEAKS_VERSION}" \
+            dir --no-banner --redact --config=.gitleaks.toml .
+
+      - name: privacy-scan
+        # External identifiers in the artefacts that are committed (SEC-01,
+        # SEC-23, NFR-041; ADR-010 add. 1). The minimal implementation of the
+        # command belongs to this task; EPIC-005 (T-139) replaces it.
+        run: go run ./cmd/mvctl privacy scan testdata/
+
+      - name: govulncheck
+        # Blocking: go.mod is on Go 1.26 since F-2, which is the condition
+        # ADR-010 add. 5 attached to the block.
+        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+        with:
+          go-version-file: go.mod
+          repo-checkout: false
+
+  # ---------------------------------------------------------------------------
+  # compose-lint — the house rules of docker-compose.yml (§3.1.1) and the two
+  # Dockerfiles. No Go, no containers started: under a minute.
+  # ---------------------------------------------------------------------------
+  compose-lint:
+    name: compose-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - name: docker compose config
+        # .github/ci.env carries the fake values of the ${VAR:?} variables, so
+        # that interpolation resolves without a .env and without a secret.
+        run: docker compose --env-file build/versions.env --env-file .github/ci.env config -q
+
+      - name: The house rules
+        run: scripts/compose-lint.sh
+
+      - name: The fixtures of the linter
+        # A rule that quietly stopped firing looks exactly like a clean file,
+        # and a fixture rejected by another rule proves nothing about its own:
+        # every bad-*.yml must be rejected by the rule of its `# expect-rule:`
+        # line, every good-*.yml must pass (T-413). Same call as make.
+        run: scripts/compose-lint.sh --fixtures
+
+      - name: hadolint build/Dockerfile
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: build/Dockerfile
+          # `error` and not the default `info`: the pinned base images of
+          # build/minio.Dockerfile raise style advice that ADR-021 answered on
+          # purpose (a build from archived sources), and a job that fails on
+          # advice teaches its operator to skip the job.
+          failure-threshold: error
+
+      - name: hadolint build/minio.Dockerfile
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: build/minio.Dockerfile
+          failure-threshold: error
+
+  # ---------------------------------------------------------------------------
+  # image — the platform image builds. It does not push: the images of a
+  # deployment are built on the owner's machine (`make image`), and publishing
+  # to GHCR is a separate decision (§3.1). Not a required check.
+  # ---------------------------------------------------------------------------
+  image:
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/integration/mvp-1')
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Build the platform image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: build/Dockerfile
+          build-args: |
+            GO_VERSION=${{ env.GO_VERSION }}
+            VERSION=${{ github.sha }}
+          tags: multiverse-core:${{ github.sha }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

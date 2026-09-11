@@ -1,0 +1,34 @@
+# A clean file for rule 8 (contracts.md §16 p. 5, T-413). Each of the six
+# variables of the explicit set names a service of this network in the shape of
+# its manifest default: host:port for the brokers (every item of a list), the
+# object store and Qdrant; scheme:// for the core, Neo4j and the gateway. Take
+# any of them out of NETWORK_ADDRESSES and this file turns red.
+#
+# The other lines are the ones the old guess refused or mistook (review #2
+# T-411, N-4): MV_LLM_URL is required and has no default at all,
+# MV_TELEGRAM_HEALTH_ADDR repeats the manifest's `:8089`, and MV_MEMORY_URL
+# passes its empty default as is. None of them is in the set, and none of them
+# needs to be.
+services:
+  redpanda:
+    image: ${REDPANDA_IMAGE:?set REDPANDA_IMAGE in build/versions.env}
+  minio:
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+  qdrant:
+    image: ${QDRANT_IMAGE:?set QDRANT_IMAGE in build/versions.env}
+  neo4j:
+    image: ${NEO4J_IMAGE:?set NEO4J_IMAGE in build/versions.env}
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092,redpanda:19092}
+      MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+      MV_CORE_URL: ${MV_CORE_URL:-http://core:8090}
+      MV_QDRANT_ADDR: ${MV_QDRANT_ADDR:-qdrant:6334}
+      MV_NEO4J_URI: ${MV_NEO4J_URI:-neo4j://neo4j:7687}
+      MV_TELEGRAM_GATEWAY_URL: ${MV_TELEGRAM_GATEWAY_URL:-http://gateway:8088}
+      MV_LLM_URL: "${MV_LLM_URL:?MV_LLM_URL is required (T-404)}"
+      MV_TELEGRAM_HEALTH_ADDR: ${MV_TELEGRAM_HEALTH_ADDR:-:8089}
+      MV_MEMORY_URL: ${MV_MEMORY_URL:-}

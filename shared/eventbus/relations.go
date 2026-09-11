@@ -1,5 +1,7 @@
-// Package eventbus provides explicit relation types for event-driven graph building.
-// Relations allow event producers to declare semantic edges in Neo4j without heuristics.
+// Explicit relation types for event-driven graph building: they let a
+// producer declare the semantic edges of an event instead of leaving
+// semantic-memory to guess them.
+
 package eventbus
 
 import (
@@ -23,35 +25,6 @@ type Relation struct {
 
 	// Metadata carries optional edge properties (action, timestamp, confidence, etc.)
 	Metadata map[string]any `json:"metadata,omitempty"`
-}
-
-// EventWithRelations wraps an Event with explicit relations for the knowledge graph.
-// Use this builder when an event producer knows which entities are connected.
-type EventWithRelations struct {
-	Event     Event
-	Relations []Relation
-}
-
-// WithRelations attaches explicit relations to an event.
-//
-// Usage:
-//
-//	ev := eventbus.NewEvent("player.action", "oracle", worldID, payload)
-//	wrapper := eventbus.WithRelations(ev, []eventbus.Relation{
-//	    {From: "player:p1", To: "item:sword_1", Type: eventbus.RelFound, Directed: true},
-//	})
-//	bus.Publish(ctx, topic, wrapper.Event)
-func WithRelations(ev Event, relations []Relation) EventWithRelations {
-	return EventWithRelations{
-		Event:     ev,
-		Relations: relations,
-	}
-}
-
-// AddRelation appends a single relation to the wrapper.
-func (w EventWithRelations) AddRelation(rel Relation) EventWithRelations {
-	w.Relations = append(w.Relations, rel)
-	return w
 }
 
 // ValidateEventRelations checks that all relations in the event are well-formed.

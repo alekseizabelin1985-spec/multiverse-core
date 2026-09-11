@@ -1,0 +1,150 @@
+# =============================================================================
+# docker-compose.legacy.yml — profile `legacy` (EPIC-001; T-008, T-397)
+# =============================================================================
+# As-is narrative-orchestrator + semantic-memory + Chroma, kept alive only while
+# MV_GM_PATH=legacy (S5, D-3, ADR-004 add. 8). The sections come from
+# services/_archive/build/docker-compose.as-is.yml; the services are frozen and
+# read their as-is variable names (no MV_ prefix, outside the shared/env
+# registry, infrastructure.md §4.1 p. 2). The whole profile disappears in
+# EPIC-003 I2 — and now that is the deletion of one file.
+#
+# Why these three are not in docker-compose.yml (T-397, dev-log Ma-1):
+# `docker compose` interpolates the WHOLE file before it filters by profile, so
+# `${CHROMA_IMAGE:?}` used to break `config`, `up` and `ps` for everybody,
+# including a machine that will never raise this profile. D-3 is not revisited:
+# CHROMA_IMAGE stays deliberately empty in build/versions.env, and an empty
+# value still fails loudly — but now only for the operator who asks for the
+# profile, which is where the decision meant it to fail.
+#
+#   make up PROFILES=legacy   -> `make legacy-src` runs first, this file is
+#                                loaded, an unset CHROMA_IMAGE stops the stack;
+#   make up                   -> this file is not loaded, nothing to
+#                                interpolate, the stack starts.
+# The Makefile adds `-f docker-compose.legacy.yml` whenever `legacy` is in the
+# active profile set (PROFILES=... or COMPOSE_PROFILES of .env).
+#
+# `neo4j` is NOT here: it is shared with the `memory` profile and stays in
+# docker-compose.yml with `profiles: ["memory", "legacy"]` (§1.3, D-3), so the
+# two profiles keep using one server and its password is a variable every clean
+# machine fills anyway (README, `make up`).
+#
+# Viability of this profile is an open question of T-008 — see dev-log ОВ-41:
+# the frozen code imports shared/config, shared/minio, shared/oracle and
+# shared/spatial, which F-3 moved to services/_archive/shared/, and F-2 deleted
+# the go.work that used to bind them together. Hence the build from
+# LEGACY_SRC_REF and not from the work tree.
+# =============================================================================
+
+# The same 50m x 5 rotation as the platform (ADR-006 add. 5). Copied and not
+# shared: a YAML anchor does not cross a compose file, and a second file that
+# only works when merged with the first would be worse than four repeated lines.
+x-legacy-logging: &legacy-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+  chromadb:
+    profiles: ["legacy"]
+    # Deliberately without a default: build/versions.env leaves CHROMA_IMAGE
+    # empty because which server tag serves the frozen chroma-go client is
+    # decided on the stand (D-3). An empty image fails loudly here; a guessed
+    # tag would fail silently at runtime.
+    image: ${CHROMA_IMAGE:?set CHROMA_IMAGE in build/versions.env once the tag is decided (T-008, D-3) — the profile `legacy` cannot run without it}
+    environment:
+      IS_PERSISTENT: "true"
+      ANONYMIZED_TELEMETRY: "false"
+    volumes:
+      # The as-is volume name on purpose: §5.5 keeps the Chroma data until the
+      # profile is removed, unlike the redpanda/minio volumes which T-004
+      # renamed so that as-is data is not silently remounted.
+      - chroma_data:/chroma/chroma
+    # Publishes nothing (§1.4): only semantic-memory talks to it.
+    expose:
+      - "8000"
+    restart: unless-stopped
+    logging: *legacy-logging
+
+  semantic-memory:
+    profiles: ["legacy"]
+    build:
+      # The as-is workspace, exported from LEGACY_SRC_REF by
+      # `make legacy-src`; the work tree no longer compiles this code.
+      context: build/.legacy-src
+      dockerfile: ../legacy.Dockerfile
+      args:
+        SERVICE: semantic-memory
+        GO_BUILD_TAGS: chroma_v2_enabled
+        BUILD_CGO: "1"
+        LEGACY_GO_IMAGE: ${LEGACY_GO_IMAGE}
+        LEGACY_RUNTIME_IMAGE: ${LEGACY_RUNTIME_IMAGE}
+        LEGACY_ONNXRUNTIME_VERSION: ${LEGACY_ONNXRUNTIME_VERSION}
+        LEGACY_ONNXRUNTIME_SHA256: ${LEGACY_ONNXRUNTIME_SHA256}
+    image: multiverse-core-legacy:semantic-memory-${MV_IMAGE_TAG:-dev}
+    environment:
+      KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+      CHROMA_URL: http://chromadb:8000
+      CHROMA_USE_V2: "true"
+      CHROMA_COLLECTION_NAME: ${LEGACY_CHROMA_COLLECTION:-multiverse_events}
+      NEO4J_URI: ${MV_NEO4J_URI:-neo4j://neo4j:7687}
+      NEO4J_USER: ${MV_NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:?set NEO4J_PASSWORD in .env}
+      MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+      SEMANTIC_PORT: "8082"
+    ports:
+      # 8083 on the host so that it does not collide with the target `memory`
+      # service, which owns 8082 (§1.4).
+      - "127.0.0.1:8083:8082"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      neo4j:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *legacy-logging
+
+  narrative-orchestrator:
+    profiles: ["legacy"]
+    build:
+      # The as-is workspace, exported from LEGACY_SRC_REF by
+      # `make legacy-src`; the work tree no longer compiles this code.
+      context: build/.legacy-src
+      dockerfile: ../legacy.Dockerfile
+      args:
+        SERVICE: narrative-orchestrator
+        LEGACY_GO_IMAGE: ${LEGACY_GO_IMAGE}
+        LEGACY_RUNTIME_IMAGE: ${LEGACY_RUNTIME_IMAGE}
+    image: multiverse-core-legacy:narrative-orchestrator-${MV_IMAGE_TAG:-dev}
+    environment:
+      KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-redpanda:9092}
+      SEMANTIC_MEMORY_URL: http://semantic-memory:8082
+      MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+      # The as-is orchestrator calls an OpenAI-compatible endpoint; on this
+      # stand that is the native llama-server, same as the target `core`.
+      ORACLE_URL: ${LEGACY_ORACLE_URL:-http://host.docker.internal:1234/v1/chat/completions}
+      ORACLE_MODEL: ${LLM_MODEL_DEFAULT}
+      ORACLE_TIMEOUT_MS: ${LEGACY_ORACLE_TIMEOUT_MS:-60000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Publishes nothing (§1.4): it only reads the bus and writes narrative.
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      semantic-memory:
+        condition: service_started
+    restart: unless-stopped
+    logging: *legacy-logging
+
+volumes:
+  # The one volume that keeps its as-is name on purpose (§5.5): the Chroma data
+  # stays until the `legacy` profile is removed in EPIC-003 I2.
+  chroma_data:

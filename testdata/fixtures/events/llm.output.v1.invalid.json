@@ -1,0 +1,28 @@
+{
+  "phase": "narrative",
+  "attempt": 1,
+  "provider": "openai_compat",
+  "model": "Qwen3.8-27B-UD-Q3_K_XL",
+  "params": {
+    "temperature": 0.7,
+    "top_p": 0.8,
+    "top_k": 20,
+    "min_p": 0,
+    "presence_penalty": 1.5,
+    "max_tokens": 700,
+    "thinking": false,
+    "format": "json_schema"
+  },
+  "prompt_hash": "6d0c1f7b4a2e8935c17d0b6ae4f5921c83be7d40a2c96185fb3e0d7c4a19e582",
+  "response_raw": "{\"text\":\"Альфа-волк отступает в подлесок, зализывая рану.\",\"mentions\":[{\"entity\":{\"id\":\"wolf-omega\",\"type\":\"npc\"}}]}",
+  "response_hash": "b74e3a09d5c81627fe4b0a93d6172c85408fbe9a3d51c67208eb4f9a1d3c6057",
+  "response_len": 214,
+  "validation_status": "rejected_unknown_entity",
+  "filter": { "applied": true, "status": "pass", "filter_version": "a-2026-09" },
+  "laws_version": "v1",
+  "latency_ms": 2480,
+  "tokens": { "prompt": 1820, "completion": 96, "cached": 1536 },
+  "cost_usd": 0,
+  "lod": "full",
+  "parse": { "strategy": "strip_think", "recovered": true, "reasoning_len": 412 }
+}

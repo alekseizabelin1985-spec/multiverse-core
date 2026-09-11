@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/group.disbanded.v1.json",
+  "title": "group.disbanded payload",
+  "description": "A group was disbanded (api-contracts.md 2.3.2, contracts.md C-04).",
+  "type": "object",
+  "properties": {
+    "group": {
+      "$ref": "_common.json#/$defs/EntityWithName"
+    },
+    "leader": {
+      "oneOf": [
+        {
+          "$ref": "_common.json#/$defs/EntityWithName"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "null means the group has no living member left (BR-13 v0.4)."
+    },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "entity": {
+            "$ref": "_common.json#/$defs/EntityRef"
+          },
+          "name": {
+            "type": "string"
+          },
+          "participation": {
+            "type": "string",
+            "enum": [
+              "active",
+              "idle"
+            ]
+          }
+        },
+        "required": [
+          "entity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cause": {
+      "type": "string",
+      "enum": [
+        "create",
+        "join",
+        "leave",
+        "death",
+        "forget",
+        "disband",
+        "group_move"
+      ]
+    }
+  },
+  "required": [
+    "group",
+    "members",
+    "cause"
+  ],
+  "additionalProperties": false
+}

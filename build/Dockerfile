@@ -1,88 +1,42 @@
-# Dockerfile — workspace-aware build for any service
-# Usage: docker build --build-arg SERVICE=<name> .
+# syntax=docker/dockerfile:1.7
+# One image for every binary of the platform; compose picks the entry point
+# with `command` (infrastructure.md §2.3).
+#
+# GO_VERSION comes from build/versions.env (F-6a, T-004); the default here is
+# the toolchain pinned in go.mod so that a plain `docker build` works.
+ARG GO_VERSION=1.26.8
 
-# ========== Builder stage ==========
-FROM golang:1.24 AS builder
-ARG SERVICE
-ARG BUILD_CGO="0"
-ARG GO_BUILD_TAGS=""
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git ca-certificates build-essential curl \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN mkdir -p /opt/onnxruntime && \
-    if [ "${BUILD_CGO}" = "1" ]; then \
-      apt-get update && apt-get install -y --no-install-recommends wget libgomp1 && \
-      wget -O /tmp/onnxruntime.tgz \
-        https://github.com/microsoft/onnxruntime/releases/download/v1.18.0/onnxruntime-linux-x64-1.18.0.tgz && \
-      tar -xzf /tmp/onnxruntime.tgz -C /opt/onnxruntime --strip-components=1 && \
-      rm -f /tmp/onnxruntime.tgz && \
-      echo "ONNX Runtime installed"; \
-    else \
-      echo "CGO disabled — skipping ONNX Runtime"; \
-    fi
-
-WORKDIR /workspace
-
-# Copy workspace file and root module (shared packages)
-COPY go.work go.work.sum* ./
+FROM golang:${GO_VERSION}-bookworm AS builder
+WORKDIR /src
+ENV CGO_ENABLED=0 GOOS=linux GOFLAGS=-trimpath
 COPY go.mod go.sum ./
-COPY shared/ ./shared/
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+ARG VERSION=dev
+# Both version variables are stamped (decision ОВ-30): main.version is what
+# `mvctl version` prints, logging.Version is the version field of every log
+# line (§7.1, NFR-041). Stamping only one leaves the other at "dev".
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -ldflags "-s -w -X main.version=${VERSION} -X multiverse-core.io/shared/logging.Version=${VERSION}" -o /out/ ./cmd/...
 
-# Copy only the target service module
-COPY services/${SERVICE}/ ./services/${SERVICE}/
-
-# Replace go.work with a minimal version: root module + target service only
-RUN printf 'go 1.24.0\n\nuse (\n\t.\n\t./services/%s\n)\n' "${SERVICE}" > go.work && rm -f go.work.sum
-
-# Download dependencies for this service
-RUN cd services/${SERVICE} && go mod download
-
-# Build the service.
-# Static linking (-extldflags "-static") is used only when CGO is disabled.
-# With CGO=1 (e.g. chroma_v2 + ONNX Runtime) dynamic linking is required.
-RUN echo "Building ${SERVICE} CGO_ENABLED=${BUILD_CGO} tags='${GO_BUILD_TAGS}'" && \
-    cd services/${SERVICE} && \
-    if [ "${BUILD_CGO}" = "1" ]; then \
-      CGO_ENABLED=1 GOOS=linux \
-        CGO_CFLAGS="-I/opt/onnxruntime/include" \
-        CGO_LDFLAGS="-L/opt/onnxruntime/lib -lonnxruntime" \
-        go build \
-          -a \
-          -tags "${GO_BUILD_TAGS}" \
-          -o /bin/${SERVICE} \
-          ./cmd/ ; \
-    else \
-      CGO_ENABLED=0 GOOS=linux go build \
-        -a -ldflags '-extldflags "-static"' \
-        -tags "${GO_BUILD_TAGS}" \
-        -o /bin/${SERVICE} \
-        ./cmd/ ; \
-    fi
-
-# ========== Runtime stage ==========
-FROM debian:bookworm-slim
-ARG SERVICE
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates tzdata libgomp1 curl \
-    && rm -rf /var/lib/apt/lists/*
-
-ARG BUILD_CGO="0"
-
-COPY --from=builder --chown=root:root /opt/onnxruntime /opt/onnxruntime
-
-RUN mkdir -p /etc/ld.so.conf.d && \
-    if [ -f "/opt/onnxruntime/lib/libonnxruntime.so.1.18.0" ]; then \
-      echo "/opt/onnxruntime/lib" > /etc/ld.so.conf.d/onnxruntime.conf && \
-      ldconfig && \
-      echo "ONNX Runtime libraries registered"; \
-    else \
-      echo "ONNX Runtime not needed — skipping ldconfig"; \
-    fi
-
-COPY --from=builder /bin/${SERVICE} ./${SERVICE}
-RUN chmod +x ./${SERVICE}
-
-CMD ["./${SERVICE}"]
+# Pinned by digest, not by the floating :nonroot tag (infrastructure.md §2.4);
+# Dependabot (ecosystem docker, directory build/) bumps the line. Refresh with:
+#   docker buildx imagetools inspect gcr.io/distroless/static-debian12:nonroot
+# or, without docker: curl -sSI -H 'Accept: application/vnd.oci.image.index.v1+json' \
+#   https://gcr.io/v2/distroless/static-debian12/manifests/nonroot | grep -i docker-content-digest
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab
+# Everything under ./cmd is copied: wave 0 builds multiverse, mvctl follows in
+# F-4c (T-010) and telegram-bot in EPIC-004, without touching this file.
+COPY --from=builder /out/ /
+# The data directories the binaries read (blueprints/, rules/, laws/, config/)
+# are added by the tasks that create them: F-10 (rules, fixtures) and EPIC-003
+# (blueprints, laws, absolute limits).
+USER nonroot:nonroot
+# No HEALTHCHECK here on purpose: one image serves every role and each role
+# listens on its own port (gateway :8088, core :8090, memory :8082), so a URL
+# baked into the image would mark two of the three unhealthy. The check lives
+# per service in compose (infrastructure.md §2.3, T-004) and calls the binary
+# itself — the image has neither shell nor curl:
+#   healthcheck: test: ["CMD", "/multiverse", "health", "--url", "http://127.0.0.1:<port>/health"]
+ENTRYPOINT ["/multiverse"]

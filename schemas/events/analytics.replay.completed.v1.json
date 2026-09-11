@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/analytics.replay.completed.v1.json",
+  "title": "analytics.replay.completed payload",
+  "description": "A journal catch-up finished (contracts.md C-14 v1.1 and clarification v0.4). One schema for both modes: State publishes mode=recovery at start, the EPIC-005 harness mode=test. Co-owned: EPIC-002 owns the file, EPIC-005 adds the fields of mode=test.",
+  "type": "object",
+  "properties": {
+    "mode": { "type": "string", "enum": ["recovery", "test"] },
+    "replay": {
+      "type": "object",
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "snapshot_id": {
+          "type": ["string", "null"],
+          "description": "null when the catch-up started without a snapshot."
+        },
+        "events_replayed": { "type": "integer", "minimum": 0 },
+        "llm_calls": { "type": "integer", "minimum": 0 },
+        "dice_rolled_new": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "state_hash_before": { "type": "string" },
+        "state_hash_after": { "type": "string", "minLength": 1 },
+        "identical": { "type": "boolean" },
+        "events_hash_match": { "type": "boolean", "description": "mode=test only (EPIC-005)." },
+        "incomplete_record": { "type": "boolean" }
+      },
+      "required": ["run_id", "events_replayed", "llm_calls", "dice_rolled_new", "duration_ms", "state_hash_after", "incomplete_record"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["mode", "replay"],
+  "additionalProperties": false
+}

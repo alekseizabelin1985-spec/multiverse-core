@@ -1,4 +1,44 @@
+# secrets & local config
 .env
-
+.env.*
+!.env.example
+# Копии, которые делает Проводник Windows: у `.env` пустое имя до точки, поэтому
+# копия называется « — копия.env» и НЕ совпадает ни с одним правилом выше —
+# файл с секретами уходил бы в индекс при первом `git add .` (2026-09-12).
+# Общее `*.env` не годится: build/versions.env, .github/ci.env и фикстура
+# линтера отслеживаются. Правило узкое — только имена копий.
+*копия*
+* - Copy*
+* - copy*
+.mcp.env
+!.mcp.env.example
+.claude/settings.local.json
+.claude/worktrees/
+# build & artifacts
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+/backups/
+# as-is sources exported by `make legacy-src` for the `legacy` profile (T-008)
+/build/.legacy-src/
+*.db
+*.db-wal
+*.db-shm
+# logs
+*.log
+# IDE / AI tooling (локальное)
+.idea/
+.vscode/
+.kilo*/
+.kilocodemodes
+.roo/
+.roomodes
 .qwen/
 gha-creds-*.json
+Docs/dev-team/.dashboard.port
+# OS
+.DS_Store
+Thumbs.db

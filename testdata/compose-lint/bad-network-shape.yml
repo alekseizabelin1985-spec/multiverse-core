@@ -1,0 +1,17 @@
+# Rule 8, the explicit set of network addresses (contracts.md §16 p. 5, T-413):
+# MV_MINIO_ENDPOINT is in the set, so compose may name the `minio` service of
+# its own network — but in the shape the process reads. The manifest declares
+# `127.0.0.1:9000`, host:port without a scheme; the MinIO client is handed an
+# endpoint and adds the scheme itself (MV_MINIO_USE_SSL), so `http://minio:9000`
+# names the right service and is still wrong. The guess this set replaced let
+# it through (review #2 T-411, N-4).
+#
+# expect-rule: 8
+# expect-text: does not have the same shape as the manifest's default '127.0.0.1:9000'
+services:
+  minio:
+    image: ${MINIO_IMAGE:?set MINIO_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-http://minio:9000}

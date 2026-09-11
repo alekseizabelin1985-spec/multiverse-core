@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/world.event_occurred.v1.json",
+  "title": "world.event_occurred payload",
+  "description": "A background event of the world told by the global GM (api-contracts.md 2.3.8). The summary is the text of the world, not of a player: it is short and carries no markup (SEC-10).",
+  "type": "object",
+  "properties": {
+    "kind": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+    "affects": {
+      "type": "array",
+      "items": { "$ref": "_common.json#/$defs/EntityWithName" }
+    }
+  },
+  "required": ["kind", "summary", "affects"],
+  "additionalProperties": false
+}

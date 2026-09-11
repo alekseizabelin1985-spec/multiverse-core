@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/encounter.ended.v1.json",
+  "title": "encounter.ended payload",
+  "description": "The encounter agent closed an encounter (api-contracts.md 2.3.7). killer is present when reason=npc_dead and a player landed the blow.",
+  "type": "object",
+  "properties": {
+    "encounter": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "reason": { "type": "string", "enum": ["npc_dead", "players_out", "abandoned"] },
+    "killer": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "rounds": { "type": "integer", "minimum": 0 }
+  },
+  "required": ["encounter", "reason", "rounds"],
+  "additionalProperties": false
+}

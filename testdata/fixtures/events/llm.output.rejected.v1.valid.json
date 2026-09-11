@@ -1,0 +1,8 @@
+{
+  "llm_output": { "event": { "id": "01JG0000000000000000000011", "type": "llm.output" } },
+  "reason": "unknown_entity",
+  "element": { "index": 0, "type": "mention" },
+  "entity": { "entity": { "id": "wolf-omega", "type": "npc" }, "name": "Омега-волк" },
+  "phase": "narrative",
+  "attempt": 1
+}

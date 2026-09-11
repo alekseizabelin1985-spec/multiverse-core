@@ -1,0 +1,29 @@
+{
+  "artifactsDir": "Docs/dev-team",
+  "language": "ru",
+  "autonomy": "gates",
+  "projectName": "multiverse-core",
+  "stack": "Go 1.26, single module (no go.work), Redpanda (Kafka API), MinIO built from source, Qdrant + Neo4j (Chroma only in the legacy compose profile), llama-server (llama.cpp) native + optional Ollama, Docker Compose",
+  "hasUI": false,
+  "git": {
+    "branches": true,
+    "commits": "auto"
+  },
+  "parallelism": {
+    "maxTeams": 1,
+    "maxAgentsPerRole": 2,
+    "maxParallelAgents": 2
+  },
+  "models": {
+    "profile": "balanced",
+    "overrides": {}
+  },
+  "counters": {
+    "feature": 0,
+    "bug": 0,
+    "epic": 13,
+    "team": 3,
+    "adr": 27,
+    "task": 429
+  }
+}

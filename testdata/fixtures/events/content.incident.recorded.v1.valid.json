@@ -1,0 +1,7 @@
+{
+  "incident": {
+    "category": "a",
+    "filter_version": "a-2026-09",
+    "llm_output": { "event": { "id": "01JG0000000000000000000012", "type": "llm.output" } }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "agent": {
+    "id": "agent-global-1",
+    "level": "global",
+    "blueprint": "global-dark-forest-world",
+    "blueprint_version": "1.0"
+  },
+  "scope": { "id": "dark-forest-world", "type": "world" },
+  "tick": { "seq": 43 },
+  "reason": ""
+}

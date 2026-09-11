@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/entity.updated.v1.json",
+  "title": "entity.updated payload",
+  "description": "State applied a proposal to one entity (contracts.md C-02 v1.2). One fact per entity; an empty changed list means the turn counted without a state change.",
+  "type": "object",
+  "properties": {
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "version": { "type": "integer", "minimum": 1 },
+    "changed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "For an append this is the path of the element (inventory[n]) and old is absent."
+          },
+          "old": true,
+          "new": true
+        },
+        "required": ["path", "new"],
+        "additionalProperties": false
+      }
+    },
+    "cause": {
+      "type": "string",
+      "description": "Union of api-contracts.md 2.3.4 and the Causes column of state-and-mechanics.md 4.6: every cause a row of contracts.OwnershipRules allows must be publishable.",
+      "enum": ["combat", "rest", "move", "loot", "spawn", "tick", "group", "create", "bootstrap", "forget",
+               "leave", "flee", "death", "resolve", "init", "author"]
+    },
+    "proposal_id": { "type": "string", "minLength": 1 },
+    "applied_at": { "$ref": "_common.json#/$defs/Timestamp" }
+  },
+  "required": ["entity", "version", "changed", "cause", "proposal_id", "applied_at"],
+  "additionalProperties": false
+}

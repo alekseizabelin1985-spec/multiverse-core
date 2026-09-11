@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/events/llm.output.rejected.v1.json",
+  "title": "llm.output.rejected payload",
+  "description": "One reason an answer of the LLM was refused (api-contracts.md 2.3.10, ADR-017 p. 3). One event per dropped element; without element the whole answer was refused. With reason=budget_exceeded there was no call at all, so llm_output is absent.",
+  "type": "object",
+  "properties": {
+    "llm_output": {
+      "type": "object",
+      "properties": {
+        "event": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "type": "string", "minLength": 1 }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["event"],
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "string",
+      "enum": ["unknown_entity", "player_agency", "level_violation", "schema_invalid", "language",
+               "filter_blocked", "filter_error", "budget_exceeded", "law_violation", "other"]
+    },
+    "element": {
+      "type": "object",
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "type": { "type": "string", "minLength": 1 }
+      },
+      "required": ["index"],
+      "additionalProperties": false
+    },
+    "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
+    "category": { "type": "string", "enum": ["a"] },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "enum": ["background", "turn", "cloud"] },
+        "limit": { "type": "integer", "minimum": 0 },
+        "window": { "type": "string", "minLength": 1 }
+      },
+      "required": ["kind", "limit", "window"],
+      "additionalProperties": false
+    },
+    "phase": { "type": "string", "enum": ["decision", "narrative", "tick", "other"] },
+    "attempt": { "type": "integer", "minimum": 1 }
+  },
+  "required": ["reason", "phase", "attempt"],
+  "additionalProperties": false
+}

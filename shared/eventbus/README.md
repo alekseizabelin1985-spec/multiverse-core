@@ -1,295 +1,229 @@
-# Event Bus
+# `shared/eventbus`
 
-Event Bus предоставляет инфраструктуру для обмена событиями между микросервисами Multiverse-Core.
+Конверт события платформы и интерфейсы шины и журнала, через которые общаются все контексты.
 
-## Структура событий
+Контракт: `Docs/dev-team/architecture/contracts.md` **C-01 v1.4** · ADR-007, ADR-027 ·
+`architecture/components/foundation.md` §5. Любое изменение публичного API этого пакета —
+**только через системного архитектора** (`contracts.md` §16).
 
-### Новый формат (рекомендуемый)
+## Что здесь есть
 
-События используют вложенную структуру для явной семантики ID:
+| Файл | Содержимое |
+|---|---|
+| `types.go` | `Event`, `Meta`, `AgentRef`, конструкторы `NewRoot`/`Derive`, опции `DeriveOption` (`With*`) |
+| `sources.go` | `SetIDSource`, `SetClock`, `SetRegistry`, `SequenceIDs` — источники, которые ставит процесс |
+| `registry.go` | `Registry`, `TypeSpec`, `Policy`, `Route`, `Event.ValidateEnvelope` |
+| `bus.go` | `Bus`, `Journal`, `Handler`, `Middleware`, `Position`, `PositionFromContext` |
+| `delivery.go` | `Delivery` — общая для всех реализаций логика чтения: валидация, ретраи, `dead_letters` |
+| `cause_id.go` | `WithCauseID`, `CauseIDNamespace` — id производного события из причины (ADR-027) |
+| `dedup.go` | `Dedup` — LRU по `event.id` у потребителя: `Seen` одним шагом, `Has`/`Add` в два |
+| `kafka.go` | реализация `Bus` + `Journal` на `segmentio/kafka-go` (Redpanda) |
+| `topics.go` | имена восьми топиков MVP-1 |
+| `payload_types.go`, `nested_payload.go`, `relations.go` | билдер payload, доступ по dot-путям, связи для графа |
 
-```json
-{
-  "entity": {
-    "id": "player-123",
-    "type": "player",
-    "name": "Вася",
-    "world": {
-      "id": "world-789"
-    }
-  },
-  "target": {
-    "entity": {
-      "id": "region-456",
-      "type": "region",
-      "name": "Темный лес"
-    }
-  },
-  "custom_fields": {
-    "weather.change.to": "шторм",
-    "weather.change.in.region.id": "region-456"
-  }
-}
-```
+In-memory реализация (`membus`, подпакет `shared/eventbus/membus`) — вторая реализация C-01 и
+транспорт режима `--bus=memory` (C-01 v1.4; до T-418 лежала в `shared/testkit`). Она использует те
+же `Route` и `Delivery`, поэтому ведёт себя одинаково с kafka-адаптером — это проверяет
+contract-тест F-5t (`shared/testkit/contract`).
 
-### Старый формат (backward compatibility)
+## Конверт
 
-Поддерживается старый плоский формат для совместимости:
+Сквозные поля — в конверте (`meta`), payload — только доменные поля по схеме типа (ADR-007 п. 1):
 
 ```json
-{
-  "entity_id": "player-123",
-  "entity_type": "player",
-  "target_id": "region-456",
-  "world_id": "world-789"
-}
+{ "id": "uuid", "type": "combat.decided", "timestamp": "2026-09-09T12:00:00Z", "source": "core/swarm",
+  "world": { "entity": { "id": "dark-forest-world", "type": "world" } },
+  "scope": { "id": "solo:player-A", "type": "solo" },
+  "meta": { "schema_version": 1, "correlation_id": "…", "causation_id": "…",
+            "causation_type": "player.attacked", "actor_kind": "human",
+            "agent": { "id": "encounter-wolf:solo:player-A", "level": "task",
+                       "blueprint": "encounter-wolf", "blueprint_version": "1.0" },
+            "replay": false, "locale": "ru", "gm_path": "agent" },
+  "payload": { "…": "…" }, "relations": [] }
 ```
 
-## API
-
-### Создание событий с типобезопасным builder pattern
+## Создание событий
 
 ```go
-// Создание события с сущностью
-payload := eventbus.NewEventPayload().
-    WithEntity("player-123", "player", "Вася").
-    WithTarget("region-456", "region", "Темный лес").
-    WithWorld("world-789")
+// Корень цепочки: correlation_id = собственный id, причины нет.
+root := eventbus.NewRoot("player.attacked", "gateway", worldID,
+    &eventbus.ScopeRef{ID: "solo:player-A", Type: "solo"},
+    eventbus.ActorHuman,
+    map[string]any{"target": map[string]any{"entity": map[string]any{"id": "wolf-1", "type": "npc"}}})
 
-// Добавление кастомных полей через dot notation
-eventbus.SetNested(payload.GetCustom(), "weather.change.to", "шторм")
-eventbus.SetNested(payload.GetCustom(), "weather.change.in.region.id", "region-456")
+// Следствие: наследует world, scope, correlation_id, actor_kind, locale, gm_path
+// и timestamp причины; causation_id/causation_type указывают на неё.
+decided := eventbus.Derive(root, "combat.decided", "core/swarm", payload,
+    eventbus.WithAgent(eventbus.AgentRef{ID: "encounter-wolf:solo:player-A",
+        Level: "task", Blueprint: "encounter-wolf"}))
 
-// Создание события
-event := eventbus.NewStructuredEvent("player.action", "entity-actor", "world-789", payload)
-bus.Publish(ctx, eventbus.TopicPlayerEvents, event)
+if err := bus.Publish(ctx, decided); err != nil { /* неизвестный тип, политика, схема */ }
 ```
 
-### Готовые функции для common событий
+`meta.gm_path` обязателен (`api-contracts.md` §2.1). `NewRoot` ставит `agent` — единственный путь
+нового кода; издатель профиля `legacy` переопределяет опцией `eventbus.WithGMPath(eventbus.GMPathLegacy)`,
+`Derive` наследует значение причины. Конверт с пустым `gm_path` не публикуется и не принимается при
+чтении (`ValidateEnvelope`).
+
+`Derive` наследует `timestamp` причины **всегда**, не только в replay: иначе две прогонки одной
+записи дают разные байты (NFR-061).
+
+### Id из причины (`WithCauseID`, C-01 v1.4, ADR-027)
 
 ```go
-// Создание entity.created события
-eventbus.PublishEntityCreated(bus, "world-789", "player-123", "player", "Вася")
-
-// Создание entity.updated события
-eventbus.PublishEntityUpdated(
-    bus,
-    "world-789",
-    "player-123",
-    "player",
-    "Вася",
-    map[string]any{
-        "level": 15,
-        "xp": 2500,
-    },
-)
-
-// Создание player.action события
-eventbus.PublishActionEvent(
-    bus,
-    "world-789",
-    "player-123",
-    "use_skill",
-    "npc-456",
-    "npc",
-    "Старейшина",
-    map[string]any{
-        "skill_id": "fireball",
-        "cooldown": 5,
-    },
-)
+text := eventbus.Derive(decided, "narrative.output", "core/swarm", payload,
+    eventbus.WithCauseID("turn"),           // parts: вид нарратива
+    eventbus.WithAgent(narrator))
 ```
 
-### Извлечение данных: сущности, скоупы, мир, универсальный доступор
+Id — UUIDv5 в пространстве имён `eventbus.CauseIDNamespace` от `causation_id`, типа события и
+`parts`; каждая часть кодируется с длиной впереди, поэтому `("a|b")` и `("a", "b")` не совпадают.
+Одна причина, тип и части дают один id при повторе публикации, после рестарта и в replay — при любом
+`SetIDSource`: генератор с этой опцией не вызывается вовсе и последовательность не сдвигается.
+Повтор гасит та дедупликация по id, которая уже есть у каждого потребителя.
+
+| Где | `parts` |
+|---|---|
+| `narrative.output` — обязательна (T-229) | вид нарратива, если на одну причину их несколько |
+| `encounter.started`, `encounter.ended` — обязательна (ADR-026) | id встречи |
+| факты State `entity.created`/`entity.updated` — рекомендована (решает EPIC-002) | id сущности |
+| `dice.rolled` | только с индексом броска: без него два броска получат один id |
+
+Опция — только для события, которое издатель публикует не больше одного раза на
+`(причина, тип, части)`. Неверные `parts` склеивают два разных события в одно, и второе потребитель
+молча гасит как дубль.
+
+Опция паникует, когда у события нет причины: в `NewRoot` (у корня нет причины — ошибка программиста,
+видна в первом тесте) и в `Derive` от конверта без `id`. Второй случай достижим по данным. Конверт без
+`id` не проходит проверку конверта, поэтому при валидации при чтении (по умолчанию) он уходит в
+`dead_letters` и до обработчика не доходит. При `MV_BUS_VALIDATE_ON_READ=false` он доходит, и паника
+опции становится паникой обработчика. Её перехватывает `Deliver` (C-01 v1.5, «Гарантии и правила»):
+событие уходит в `dead_letters`, процесс живёт, но сессия всё равно провалена — это дефект. Поэтому
+обработчик, который может работать без валидации при чтении, проверяет `ev.ID != ""` до
+`Derive(…, WithCauseID(…))`: пишет `Error` и отказывается отвечать.
+
+Идентификаторы, часы и реестр — пакетные источники, которые ставит процесс:
 
 ```go
-// Извлечение entity с поддержкой новой структуры и fallback
-entity := eventbus.ExtractEntityID(payload)
-if entity != nil {
-    fmt.Println("Entity ID:", entity.ID)
-    fmt.Println("Entity Type:", entity.Type)
-    fmt.Println("Entity Name:", entity.Name)
-    fmt.Println("World ID:", entity.World)
-}
-
-// Извлечение target entity
-target := eventbus.ExtractTargetEntityID(payload)
-if target != nil {
-    fmt.Println("Target ID:", target.ID)
-}
-
-// Извлечение world ID (новая: world.id, старая: world_id)
-worldID := eventbus.ExtractWorldID(payload)
-
-// Извлечение scope (новая: scope: {id, type}, старая: scope_id, scope_type)
-scope := eventbus.ExtractScope(payload)
-if scope != nil {
-    fmt.Println("Scope ID:", scope.ID)
-    fmt.Println("Scope Type:", scope.Type)  // solo, group, city, region, quest
-}
+eventbus.SetIDSource(uuid.NewString)       // в тестах — eventbus.SequenceIDs("ev")
+eventbus.SetClock(clock.Real{})            // в тестах — clock.NewManual(t0)
+eventbus.SetRegistry(contracts.Registry()) // shared/contracts, T-006
 ```
 
-### Универсальный доступ по dot-путям (через jsonpath)
-
-> 💡 `eventbus.PathAccessor` — это type alias на `jsonpath.Accessor` из универсального пакета `shared/jsonpath`.
-> Все методы делегируются к нему — можно использовать любые фичи jsonpath.
+## Чтение payload
 
 ```go
-// Создаём аксессор для payload:
-accessor := eventbus.NewPathAccessor(payload)  // alias на jsonpath.New()
-// Или через метод события (рекомендуется):
-accessor := event.Path()  // возвращает *jsonpath.Accessor
-
-// Извлечение примитивных типов по пути:
-entityID, ok := accessor.GetString("entity.id")           // "player-123"
-scopeType, ok := accessor.GetString("scope.type")         // "group"
-worldID, ok := accessor.GetString("world.id")             // "world-789"
-level, ok := accessor.GetInt("entity.metadata.level")     // 15
-temperature, ok := accessor.GetFloat("weather.temp.value") // 25.5
-isActive, ok := accessor.GetBool("entity.active")         // true
-
-// Извлечение сложных типов:
-metadata, ok := accessor.GetMap("entity.metadata")        // map[string]any
-inventory, ok := accessor.GetSlice("player.inventory")    // []any
-
-// Быстрая проверка существования:
-if accessor.Has("quest.objectives") {
-    // Обработка квеста...
-}
+pa := ev.Path()                            // shared/jsonpath
+entityID, _ := pa.GetString("entity.entity.id")
+worldID := eventbus.GetWorldIDFromEvent(ev)
+scope := eventbus.GetScopeFromEvent(ev)
 ```
 
-### Примеры использования в хендлерах событий с полной иерархией:
-```go
-func handlePlayerAction(event eventbus.Event) {
-    // Универсальный доступ через встроенный PathAccessor:
-    pa := event.Path()
-    
-    // Извлечение данных по иерархическим путям:
-    entityID, _ := pa.GetString("entity.id")
-    entityType, _ := pa.GetString("entity.type")
-    scopeID, _ := pa.GetString("scope.id")
-    scopeType, _ := pa.GetString("scope.type")  // solo/group/city/region/quest
-    worldID, _ := pa.GetString("world.id")
-    
-    // Кастомные поля через dot-notation:
-    action, _ := pa.GetString("action")
-    skillID, _ := pa.GetString("skill.id")
-    targetID, _ := pa.GetString("target.entity.id")
-    
-    // Метрики/статы:
-    damage, _ := pa.GetFloat("combat.damage.value")
-    cooldown, _ := pa.GetInt("skill.cooldown")
-    
-    // Логика обработки...
-}
+## Шина и журнал
 
-// Создание события с полной иерархией:
-event := eventbus.NewStructuredEvent(
-    "player.entered_region",
-    "entity-actor",
-    "world-789",
-    eventbus.NewEventPayload().
-        WithEntity("player-123", "player", "Вася").
-        WithTarget("region-456", "region", "Темный лес").
-        WithWorld("world-789").
-        WithScope("solo-abc", "solo"),  // Новый метод для scope!
-).WithCustom(map[string]any{
-    "entry.reason": "quest_trigger",
-    "weather.change.to": "шторм",  // dot-notation в custom полях!
+```go
+bus, err := eventbus.NewKafka(eventbus.KafkaConfig{
+    Brokers:  brokers,
+    Registry: reg, // shared/contracts
+    // Валидация при чтении включена по умолчанию (нулевое значение = проверять).
+    // Переменную MV_BUS_VALIDATE_ON_READ читает процесс (shared/env, T-007) и
+    // передаёт инверсию: SkipValidateOnRead = !MV_BUS_VALIDATE_ON_READ.
+    SkipValidateOnRead: !validateOnRead,
+    Log:                logger,
 })
+
+// Живая подписка: consumer group {процесс}.{контекст}, at-least-once.
+err = bus.Subscribe(ctx, eventbus.TopicSystemEvents, "core.state", handler)
+
+// Догон с курсора снапшота: чтение по офсетам без группы.
+end, _ := bus.End(ctx, eventbus.TopicSystemEvents)
+next, _ := bus.ReadRange(ctx, eventbus.TopicSystemEvents, cursor, end, handler)
+err = bus.Tail(ctx, eventbus.TopicSystemEvents, next, handler)
 ```
 
-### Dot notation helpers
+Внутри обработчика доступна позиция текущего события — её записывают в снапшот:
 
 ```go
-// Установка вложенного поля
-payload := make(map[string]any)
-eventbus.SetNested(payload, "weather.change.to", "шторм")
-eventbus.SetNested(payload, "weather.change.in.region.id", "region-456")
-
-// Чтение из вложенного поля
-to, ok := eventbus.GetNested(payload, "weather.change.to")
-if ok {
-    fmt.Println("Weather change to:", to)
+if pos, ok := eventbus.PositionFromContext(ctx); ok {
+    snapshot.Cursor[pos.Topic] = pos.Offset
 }
 ```
 
-## Форматирование для LLM контекста
+Дедуп — обязанность потребителя, а не шины:
 
 ```go
-// Форматирование события для AI
-context := eventbus.FormatEventContext(
-    sourceID, sourceName, eventID, action, targetID, targetName, timestamp,
-)
-// Результат: "{event_123:14:30} {player_456:Вася} {event_123:вошел в} {region_789:Темный лес}"
+seen := eventbus.NewDedup(eventbus.DefaultDedupCapacity)
+if seen.Seen(ev.ID) { return nil }   // повтор at-least-once
+// seen.IDs() сериализуется в снапшот, seen.Restore(ids) — при старте
 ```
 
-## Примеры событий
+`Seen` запоминает **до** обработки — так нужно, когда повтор вреден (агент встречи задвоил бы кости).
+Если побочный эффект — одна публикация, запоминать надо **после** её успеха, иначе упавшая
+публикация пропадает бесследно. Для этого есть двухшаговая форма (C-01 v1.4):
 
-### Entity created
-```json
-{
-  "entity_id": "world-123",
-  "entity_type": "world",
-  "payload": {
-    "seed": "my-world",
-    "theme": "cultivation",
-    "core": "Мир для культивации",
-    "era": "древний",
-    "unique_traits": ["magical_rivers", "floating_islands"],
-    "plan": 0
-  },
-  "world_id": "world-123"
+```go
+if answered.Has(ev.ID) { return nil }   // спросить: окно не меняется, даже порядок вытеснения
+if err := bus.Publish(ctx, text); err != nil {
+    return err                           // не запомнено: шина повторит обработчик
 }
+answered.Add(ev.ID)                      // запомнить: вытеснение и ёмкость — как у Seen
 ```
 
-### Entity created (новый формат)
-```json
-{
-  "entity": {
-    "id": "world-123",
-    "type": "world",
-    "world": {
-      "id": "world-123"
-    }
-  },
-  "payload": {
-    "seed": "my-world",
-    "theme": "cultivation"
-  }
-}
-```
+Два шага не атомарны: они рассчитывают, что обработчик не вызывается конкурентно для одного
+события, а обе реализации шины отдают топик по одному событию. Окно, заполненное любым путём,
+снимается в снапшот C-14 теми же `IDs`/`Restore`.
 
-### Player action
-```json
-{
-  "entity": {
-    "id": "player-123",
-    "type": "player",
-    "name": "Вася"
-  },
-  "target": {
-    "entity": {
-      "id": "npc-456",
-      "type": "npc",
-      "name": "Старейшина"
-    }
-  },
-  "action": "use_skill",
-  "skill_id": "fireball"
-}
-```
+## Гарантии и правила
 
-## Миграция
+- **Публикация**: топик выбирает реестр по типу; неизвестный тип, нарушение политики топика или
+  несоответствие схеме — ошибка, событие не уходит.
+- **Политики топиков**: `player_events` — `actor_kind ∈ human|ci|sim` и `meta.agent == nil`;
+  топики роя (`llm_records`, `tick.*`, `agent.*`, `narrative.output`, `combat.decided`) —
+  `meta.agent` обязателен. Проверяются при публикации всегда и при чтении, если валидация при
+  чтении не выключена (см. ниже).
+- **Валидация при чтении**: по умолчанию **включена** — нулевое значение `SkipValidateOnRead`
+  означает «проверять» (SEC-16: защитная мера не должна выключаться тем, кто про неё не знает).
+  Значение `MV_BUS_VALIDATE_ON_READ` (по умолчанию `true`) читает процесс и передаёт в конфигурацию
+  инверсию: `SkipValidateOnRead = !MV_BUS_VALIDATE_ON_READ`.
+- **Публикация без ожидания батча**: writer собирается с `BatchSize: 1` и `BatchTimeout: 10 мс`
+  вместо умолчаний kafka-go (100 сообщений и 1 с). MVP-1 публикует по одному событию в топик из
+  одной партиции — батч не заполняется, и каждая публикация ждала бы секунду, что рушит бюджет
+  подтверждения NFR-001 (≤ 300 мс). Фактическую задержку проверяет contract-тест T-014 на брокере.
+- **Доставка**: at-least-once; порядок внутри топика (одна партиция); ошибка обработчика — повтор
+  ×3 (100/500/2000 мс), затем `dead_letters` и коммит офсета: одно плохое событие не блокирует топик.
+  Тело нераспознанного сообщения в `dead_letters` усекается до `MaxDeadLetterRaw` (512 КиБ) с
+  пометкой `raw_truncated`: запись больше 1 МиБ не прошла бы в топик, офсет не закоммитился бы и
+  топик встал бы навсегда — ровно то, ради чего заводился DLQ.
+- **Остановка**: штатное завершение по отмене контекста — это `nil` из `Subscribe` и `Tail`, а не
+  `context.Canceled`; membus (T-014) даёт ту же семантику.
+- **Паника обработчика перехватывается** (C-01 v1.5): `recover` стоит вокруг вызова обработчика в
+  `Delivery.Deliver`. Через него читают `Subscribe`, `ReadRange` и `Tail` обеих реализаций.
+  Паника — дефект (NFR-012), а не временный сбой, поэтому она не повторяется. Событие сразу уходит в
+  `dead_letters` с ошибкой `eventbus.ErrHandlerPanic` (`eventbus: handler panic: <значение>`), а
+  `attempts` равен номеру вызова, в котором была паника. Стек в `dead_letters` не пишется: он идёт в
+  лог уровня `Error` с полями `panic`, `stack` и `handled=false`. Офсет коммитится после записи в
+  `dead_letters`. Если запись не удалась, `Deliver` возвращает ошибку и офсет не коммитится.
+  Письма при остановке могут повториться. Kafka-подписка коммитит с уже отменённым контекстом, и
+  коммит может не пройти. Тогда после рестарта событие приходит снова, и в `dead_letters` появляется
+  второе письмо с тем же `original.id`. Это обычный at-least-once, письма разбираются по
+  `original.id`. В `membus` курсор сдвигается по `nil`, повтора нет.
+  Без перехвата событие, уронившее процесс, пришло бы снова после рестарта и уронило бы его снова
+  вместе со всеми контекстами (ADR-001).
+  Перехват стоит только на границе доставки: паника вне обработчика по-прежнему роняет процесс.
+  **Stateful-контекст**, который после паники в своём обработчике не может доказать целостность своего
+  состояния, ставит собственный `recover` на своей границе и останавливает себя (`/health fail`) —
+  правило C-01 v1.5. Шина не знает, чьё состояние испорчено, и решает только судьбу события.
+- **Журнал**: `ReadRange` отдаёт события строго по возрастанию офсета; `End` — офсет следующего
+  сообщения (high watermark) и монотонен; признак конца журнала — позиция ≥ `End − 1` по всем
+  читаемым топикам. Отдельного `Lag()` нет.
+- **Wire-формат** — JSON конверта; новые поля добавляются без слома потребителей. Событие без
+  `meta` принимается только для типов с пометкой `deprecated` (профиль `legacy`).
 
-1. **Phase 1**: Shared helpers (payload_types.go, nested_payload.go) - готово
-2. **Phase 2**: world-generator использует новый формат - готово
-3. **Phase 3**: Consumers обновляются с fallback на старый формат
-4. **Phase 4**: Удаление fallback после миграции
+## Устаревшее
 
-## Best Practices
+`NewEvent`, `NewEventWithDescription`, `NewStructuredEvent` и `WithTimestamp` помечены
+`Deprecated`: они остаются для профиля `legacy` (`gm_path=legacy`) и удаляются вместе с ним (S5).
+В новом коде — только `NewRoot`/`Derive`.
 
-1. Используйте `WithEntity()`, `WithTarget()`, `WithWorld()` для типобезопасного создания событий
-2. Используйте `SetNested()` для кастомных полей с любой глубиной вложенности
-3. Используйте `ExtractEntityID()` и `ExtractTargetEntityID()` для извлечения ID с поддержкой обоих форматов
-4. Для LLM контекста используйте `FormatEventContext()` с форматом `{entity.id:name}`
+`MIGRATION.md` и `docs/` описывают предыдущую итерацию модели событий; решение об их переносе в
+`Docs/archive/` принимает tech-writer в T-019 (F-9).
