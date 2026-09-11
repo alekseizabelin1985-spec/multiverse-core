@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T23:34:49+03:00",
+  "updatedAt": "2026-09-12T00:02:35+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1661,32 +1661,92 @@ window.DEVTEAM_STATE =
         {
           "id": "T-432",
           "title": "compose-lint: литерал OLLAMA_* без подстановки отвергается (§16 п. 5, вариант (б))",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T22:55:09+03:00",
-          "finishedAt": null,
-          "reviewIterations": 1,
+          "finishedAt": "2026-09-12T00:00:19+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 55,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 22:55",
+              "to": "11.09 23:07",
+              "duration": "12m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 23:07",
+              "to": "11.09 23:18",
+              "duration": "10m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 23:18",
+              "to": "11.09 23:24",
+              "duration": "6m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 23:34",
+              "to": "11.09 23:52",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 23:52",
+              "to": "12.09 00:00",
+              "duration": "8m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-432-ollama-literal",
-          "worktree": ".worktrees/T-432"
+          "worktree": null,
+          "mergeCommit": "48b88fde5652f5c1a83a98ccaf7c5c49ca1983ba",
+          "mergedAt": "2026-09-12T00:01:50+03:00"
         },
         {
           "id": "T-433",
           "title": "Флак fight-NN в TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus (standTimeout 2s)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-11T23:07:04+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-11T23:49:46+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 40,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 23:07",
+              "to": "11.09 23:20",
+              "duration": "13m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 23:20",
+              "to": "11.09 23:30",
+              "duration": "9m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 23:30",
+              "to": "11.09 23:34",
+              "duration": "4m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 23:36",
+              "to": "11.09 23:49",
+              "duration": "12m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-433-stand-fight-flake",
-          "worktree": ".worktrees/T-433"
+          "worktree": null,
+          "mergeCommit": "50f643d134dd9a2eeb36f2a1f49715fa4cd246ff",
+          "mergedAt": "2026-09-11T23:52:10+03:00"
         }
       ],
       "defects": [],
@@ -5115,7 +5175,7 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "замер LLM на стенде владельца (E, прогон 1)",
       "startedAt": "2026-09-11T23:24:51+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T23:36:55+03:00"
     },
     {
       "instance": "developer#1",
@@ -5135,6 +5195,56 @@ window.DEVTEAM_STATE =
       "task": "T-432",
       "action": "ревью #2 итерации 2",
       "startedAt": "2026-09-11T23:34:49+03:00",
+      "finishedAt": "2026-09-11T23:52:10+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-433",
+      "action": "приёмка флака fight-NN",
+      "startedAt": "2026-09-11T23:36:56+03:00",
+      "finishedAt": "2026-09-11T23:49:46+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-432",
+      "action": "приёмка литерала OLLAMA_*",
+      "startedAt": "2026-09-11T23:52:10+03:00",
+      "finishedAt": "2026-09-12T00:00:19+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "дополнительный замер: Qwen3.6-35B-A3B на чистом llama.cpp",
+      "startedAt": "2026-09-11T23:53:19+03:00",
+      "finishedAt": "2026-09-11T23:59:37+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "ревью #1 замера LLM",
+      "startedAt": "2026-09-11T23:59:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "прогон 2 E на чистом llama.cpp (Qwen3.8-27B)",
+      "startedAt": "2026-09-12T00:02:35+03:00",
       "finishedAt": null
     }
   ],
@@ -7646,6 +7756,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-432 итерация 2 готова — ревью #2 в очереди; T-402 начата первой (стенд LLM поднят владельцем сейчас): devops-engineer#1, .worktrees/T-402"
+    },
+    {
+      "at": "2026-09-11T23:52:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-433 закоммичена 7784fe7, слита в эпик (50f643d). T-432 ревью #2: принять (4 Nit) — приёмка. Владелец поднял быструю модель на чистом llama.cpp (:8888)"
+    },
+    {
+      "at": "2026-09-12T00:01:50+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-432 закоммичена 817a141, слита в эпик (48b88fd)"
     }
   ],
   "blockers": [],
