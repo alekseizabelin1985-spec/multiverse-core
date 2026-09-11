@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:30:13+03:00",
+  "updatedAt": "2026-09-12T01:33:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5586,7 +5586,7 @@ window.DEVTEAM_STATE =
       "task": "T-434",
       "action": "llm-bench: прогрев, путь матрицы, prompt_ms, build_info; паритет .ps1",
       "startedAt": "2026-09-12T01:07:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T01:33:42+03:00"
     },
     {
       "instance": "architect#1",
@@ -5616,6 +5616,16 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "итерация 3 по ревью #2",
       "startedAt": "2026-09-12T01:30:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-434",
+      "action": "ревью #1 исправлений llm-bench",
+      "startedAt": "2026-09-12T01:33:42+03:00",
       "finishedAt": null
     }
   ],
