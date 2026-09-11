@@ -1,0 +1,19 @@
+# Rule 1, the source of a third-party image (NFR-071; T-429 review #1 Mi-1):
+# both tags are explicit, but neither comes from build/versions.env, so a bump
+# of the pin would not reach them. One image is merged from an anchor, the other
+# is written `image :` — T-429 reads the image as written through `config
+# --no-interpolate`, and finds both the way compose v5.2.0 does; the line
+# reader of T-413 did not see the first and refused the second for the wrong
+# reason.
+#
+# expect-rule: 1
+# expect-text: qdrant: image 'qdrant/qdrant:v1.19.1' does not come from build/versions.env
+# expect-text: neo4j: image 'neo4j:5.26.30-community' does not come from build/versions.env
+x-qdrant: &qdrant
+  image: qdrant/qdrant:v1.19.1
+
+services:
+  qdrant:
+    <<: *qdrant
+  neo4j:
+    image : neo4j:5.26.30-community

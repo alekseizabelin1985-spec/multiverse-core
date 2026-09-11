@@ -1,0 +1,13 @@
+# Rule 8 and the doubled single quote (T-429; T-413 review #1 N-1, probe
+# n05). Inside single quotes `''` is one quote, not the end of the string, so
+# the `#` below is text and compose v5.2.0 interpolates what follows it:
+# `it's # ` and an empty allow-list when .env is silent. The line reader took
+# `''` for a closing quote, the `#` for a comment, and saw nothing.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: 'it''s # ${MV_CORE_ADMIN_CLIENTS}'

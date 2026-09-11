@@ -1,0 +1,14 @@
+# A clean file for rules 7 and 8 (T-429; T-413 review #1 N-1, probe n09): an
+# interpolation inside the message of `:?`. Compose v5.2.0 evaluates that
+# message only when MV_LLM_URL is missing — on its way to refusing to start —
+# so `${MV_WORLD_ID}` in it never reaches a container and asks nothing of .env.
+# The linter used to refuse the first line under rule 8 as a platform variable
+# with no default. The second holds the marker half of rule 7 to the same
+# reading: a `:?` inside the message of another `:?` requires nothing, so
+# MV_WORLD_ID, which .env.example does not mark [required], is not asked for.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: "${MV_LLM_URL:?set MV_LLM_URL in .env before the world ${MV_WORLD_ID} starts}"
+      LLM_NOTE: "${MV_LLM_URL:?set it for ${MV_WORLD_ID:?the world}}"

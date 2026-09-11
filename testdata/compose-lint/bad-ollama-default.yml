@@ -4,8 +4,13 @@
 # compose may only repeat it; a 4 here is a second source of one value, the
 # class T-411 closed for the platform variables.
 #
+# The second expect-text holds the refusal to its own branch: the branch for
+# platform variables outside the set of network addresses also says "defaults
+# to '4' here", with a reason that does not apply (T-413 review #2, mutant r3).
+#
 # expect-rule: 8
 # expect-text: OLLAMA_NUM_PARALLEL defaults to '4' here and to '1' in shared/env/infra.go
+# expect-text: two sources of one value (contracts.md §16 p. 5)
 services:
   ollama:
     profiles: ["gpu"]

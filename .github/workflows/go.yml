@@ -342,6 +342,13 @@ jobs:
       - name: Read the pinned versions
         run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
 
+      - name: docker compose version
+        # compose-lint reads the files through `config --no-interpolate` and
+        # enables every profile with `--profile '*'` (T-429). The runner's
+        # compose is not pinned, so its version goes into the log; a compose
+        # that does not understand the wildcard makes the linter fail loudly.
+        run: docker compose version
+
       - name: docker compose config
         # .github/ci.env carries the fake values of the ${VAR:?} variables, so
         # that interpolation resolves without a .env and without a secret.
