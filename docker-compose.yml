@@ -5,11 +5,20 @@
 # Source of truth: Docs/dev-team/architecture/infrastructure.md v0.3 §1.2–§1.4,
 # §3.1.1, §5.1, §5.2, §5.3, §6.1; ADR-001 add. 4/6, ADR-005 add. 2, ADR-021.
 #
-# How to run it (infrastructure.md §1.1, §9.1):
-#   COMPOSE_ENV_FILES=.env,build/versions.env   (declared in .env / .env.example)
+# How to run it (infrastructure.md §1.1, §9.1) — through make only:
 #   make llm-up      native llama-server, outside compose
 #   make up          docker compose up -d --wait, then make health
 # Version pins never live in this file — only ${...} out of build/versions.env.
+#
+# Why make only (T-412): compose sees build/versions.env through
+# COMPOSE_ENV_FILES, and it takes that variable from the environment of its own
+# process only. The variable names the env files, so it cannot come from one of
+# them: the line in .env is inert, and a bare `docker compose config` stops on
+# the first image variable it meets, REDPANDA_IMAGE or another *_IMAGE
+# (checked on compose v5.2). The Makefile exports it. A manual
+# command (exec, logs, restart) needs the same value in the shell first:
+#   bash        export COMPOSE_ENV_FILES=.env,build/versions.env
+#   PowerShell  $env:COMPOSE_ENV_FILES = ".env,build/versions.env"
 #
 # Profiles (§1.3; `make up PROFILES=memory,bot` or COMPOSE_PROFILES in .env):
 #   (none)   redpanda, redpanda-init, minio, minio-init, gateway, core
@@ -60,8 +69,9 @@
 # publication cannot be made conditional on a profile. Where §1.4 asks for a
 # console "only in profile dev" but the console shares its service with a
 # non-console port (MinIO 9001, Neo4j 7474), this file takes the stricter
-# reading of SEC-33 and does not publish it at all; `docker compose port` or a
-# local, git-ignored docker-compose.override.yml gives the operator access.
+# reading of SEC-33 and does not publish it at all; `docker compose port` (with
+# COMPOSE_ENV_FILES in the shell, see the top of this file) or a local,
+# git-ignored docker-compose.override.yml gives the operator access.
 # =============================================================================
 
 # Log rotation of the platform: 50m x 5 (ADR-006 add. 5).

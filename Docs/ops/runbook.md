@@ -25,6 +25,16 @@ Docker Desktop, GPU для LLM).
 > «Требования»), затем `make -n up`, `make compose-lint`, и только потом
 > настоящий `make up`.
 
+> **Прямые команды `docker compose` в этом runbook** (`exec`, `restart`,
+> `logs`, `pull`, `up -d <сервис>`, файл бота) работают, только если в той же
+> оболочке задано `export COMPOSE_ENV_FILES=.env,build/versions.env`
+> (PowerShell: `$env:COMPOSE_ENV_FILES = ".env,build/versions.env"`). Без этого
+> compose не видит `build/versions.env` и падает на первой переменной образа
+> (`REDPANDA_IMAGE` или другой `*_IMAGE`) ещё до команды. Эту переменную compose берёт только из окружения своего процесса,
+> строку в `.env` он не читает: переменная называет env-файлы и поэтому не может
+> прийти из одного из них (проверено на compose v5.2, T-412). Цели `make`
+> экспортируют её сами, поэтому стек поднимается и сводится только через `make`.
+
 ## 1. Запуск с нуля (после клонирования)
 
 1. `cp .env.example .env`; заполнить переменные, отмеченные `[required]` в
@@ -62,9 +72,11 @@ Makefile'ом, только когда профиль реально запро�
 compose` интерполирует файл целиком ДО отбора по профилям, и обязательные
 переменные этих сервисов (токен бота, образ Chroma) раньше валили `make up`
 всем подряд, включая тех, кто эти профили не поднимает (T-397). **Голый
-`docker compose --profile bot up` без Makefile эти файлы не видит и
-официально не поддерживается — он молча поднимет стек без бота**; это
-решение оркестратора, а не пробел. `make up PROFILES=legacy` сам сначала
+`docker compose --profile bot up` без Makefile официально не
+поддерживается:** без `COMPOSE_ENV_FILES` в оболочке он не поднимет ничего и
+откажет на первой переменной образа (`*_IMAGE`, врезка перед разделом 1), а с
+переменной, но без `-f docker-compose.bot.yml`, не увидит файл бота и поднимет
+стек без бота. Это решение оркестратора, а не пробел. `make up PROFILES=legacy` сам сначала
 выполняет `legacy-src` (цель `up` объявляет её своей предпосылкой, срабатывает,
 как только `legacy` попал в активный набор) — она делает `rm -rf
 build/.legacy-src` и `git archive` из `LEGACY_SRC_REF`, поэтому первый запуск
@@ -124,7 +136,7 @@ core, `:8082` memory), совпадающий с опубликованным п
   `COMPOSE_PROFILES` в `.env` неизменным между `up` и `down`), иначе Makefile
   не подключит файл профиля и не остановит его сервисы.
 - Перезапуск одного процесса: `docker compose restart core` (или `gateway`,
-  `memory`).
+  `memory`) — с `COMPOSE_ENV_FILES` в оболочке (врезка перед разделом 1).
 - `make reset` — **удаляет тома**; требует свежего `make backup` и подтверждения
   вводом `yes`.
 
@@ -330,7 +342,8 @@ FILE=minio-<date>.tgz` → `make restore FILE=redpanda-<date>.tgz` → `make llm
 Одна версия за раз: изменить пин в **`build/versions.env`** (единственное место —
 его читают `docker-compose.yml`, `Makefile`, `shared/testkit.Versions()`) →
 `make backup` → `docker compose pull <сервис>` (или `make minio-image` для MinIO)
-→ `docker compose up -d <сервис>` → `make health` → `make test-integration`.
+→ `docker compose up -d <сервис>` → `make health` → `make test-integration`
+(обе команды compose — с `COMPOSE_ENV_FILES` в оболочке, врезка перед разделом 1).
 llama.cpp — по процедуре раздела 3 «Обновление билда» (сервер вне compose,
 `docker compose pull` его не касается). Ежемесячно — сверять `build/versions.env`
 с Docker Hub и релизами `ggml-org/llama.cpp` вручную (Dependabot этот файл не
@@ -387,6 +400,9 @@ logs --tail=50 telegram-bot` (токен в логе должен быть от�
 | Старт / стоп | `docker compose up -d gateway` / `stop gateway` | `docker compose restart core` | `docker compose up -d memory` (требует профиль `memory`) |
 | Логи | `make logs SERVICE=gateway` | `make logs SERVICE=core` | `make logs SERVICE=memory` |
 | Типичный сбой | контейнер не стартует → проверить `.env` (обязательные `MV_MINIO_*`) | `llm=unavailable` → раздел 3 | `qdrant`/`neo4j` не healthy → `docker compose logs qdrant neo4j` |
+
+Команды `docker compose` в таблице — с `COMPOSE_ENV_FILES` в оболочке (врезка перед
+разделом 1); `make logs` передаёт переменную сам.
 
 Пятая карточка — **`llama-server`** (нативный процесс, не сервис compose):
 

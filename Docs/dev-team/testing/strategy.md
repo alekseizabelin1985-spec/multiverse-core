@@ -294,7 +294,7 @@
 | ST-07 | S5: профиль `legacy` vs `agent`, сравнение нарративов, снятие флага | S5, US-019 | P2 | tester#2 | I2 |
 | ST-08 | S6: второй регион по инструкции автора, без правки Go | S6, US-015 | P1 | человек (автор) | I1b/I2 |
 | ST-09 | Остановка Ollama / MinIO / Redpanda по одной → `/health` ≠ ok ≤ 30 с, игра в деградации | NFR-015/016 | P1 | tester#1 + devops | I1 |
-| ST-10 | `docker compose config` без публикаций на `0.0.0.0`; `netstat`/`nmap` с другого устройства LAN | SEC-13, NFR-071 | P1 | devops + security-engineer | I1, повтор перед G4 |
+| ST-10 | `docker compose config` (с `COMPOSE_ENV_FILES=.env,build/versions.env` в оболочке, T-412) без публикаций на `0.0.0.0`; `netstat`/`nmap` с другого устройства LAN | SEC-13, NFR-071 | P1 | devops + security-engineer | I1, повтор перед G4 |
 | ST-11 | `gitleaks` по истории PR, отзыв токенов владельцем, статус ключа в `shared/oracle/README.md` | S10, US-013, NFR-040 | P1 | security-engineer + человек | волна 0, повтор перед G4 |
 | ST-12 | Чек-лист качества: выборка 100 ходов (урон, смерть, инвентарь, позиция, погода, канон) | NFR-023/024 | P2 | qa-engineer#2 + человек | после I1 |
 | ST-13 | Сверка суммы `tokens` из `llm.output` с отчётом Ollama на 100 вызовах | NFR-052 | P2 | tester#2 | вместе с B7 |

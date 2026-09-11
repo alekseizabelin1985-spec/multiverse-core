@@ -7699,3 +7699,170 @@ AGENTS.md, задания команды и оператор; рядом ест�
 - Бинарник из копии с `MV_CORE_ADDR=127.0.0.1:0`, `MV_BUS=memory`: `--contexts=all serve` → код 2 с
   подсказкой, `-h` → код 0 со строкой usage; ни одного старта процесса.
 - `pre-commit` и `gitleaks` — итог в карточке T-414, «Итерация 2».
+
+## devops-engineer#1 · T-412 · 2026-09-11
+
+Задача: голый `docker compose` не читает `COMPOSE_ENV_FILES` из `.env`, а документы обещают обратное.
+Размер S. Выбран путь (б) DoD.
+
+### 1. Воспроизведение
+
+Чистый клон: `git checkout-index -a --prefix=<mktemp>/repo/`; `.env` собран из `.env.example`, у
+переменных с `[required]` в блоке комментария — заглушки (та же логика, что у правила 7 compose-lint).
+Значений владельца нет. `COMPOSE_ENV_FILES`, `COMPOSE_FILE` и `COMPOSE_PROFILES` сняты с окружения. Docker
+Compose v5.2.0, Engine 29.6.1.
+
+| Форма | Результат |
+|---|---|
+| `docker compose config -q` (голая, `COMPOSE_ENV_FILES` только в `.env`) | **1**: `required variable REDPANDA_IMAGE is missing a value` плюс предупреждение `GO_VERSION is not set`; при повторе — `REDPANDA_CONSOLE_IMAGE` (первое попавшееся `*_IMAGE`) |
+| `COMPOSE_ENV_FILES=.env,build/versions.env` в окружении | версии видны |
+| `--env-file .env --env-file build/versions.env` | версии видны |
+| `set -a; . ./.env` в оболочке | версии видны (переменная попала в окружение) |
+| `COMPOSE_PROFILES` только в `.env` | читается: в `config --services` есть `qdrant`, `neo4j`, `memory` |
+
+Вывод: compose берёт `COMPOSE_ENV_FILES` только из окружения своего процесса. Переменная называет
+env-файлы, поэтому из одного из них прийти не может, и строка в `.env` не действует. Работает эта строка
+только у Makefile, который её экспортирует. Первый прогон с моей заглушкой упал ещё и на `MV_LLM_URL`: у
+этой переменной пометка `[required]` стоит не в последней строке комментария (T-404), а моя первая
+заглушка смотрела только в последнюю. Логика исправлена на поблочную, как у compose-lint.
+
+### 2. Выбор (б) и почему не (а)
+
+- Механизм для (а) на v5.2 есть — обёртка с `include: [{path: docker-compose.yml, env_file: [.env,
+  build/versions.env]}]`. Проверено: интерполяцию версий она проходит.
+- Без `.env` та же обёртка падает жёстко (`GetFileAttributesEx …\.env: The system cannot find the file
+  specified`), даже с `--env-file` CI. Значит, ломаются задание `compose-lint` в CI и правило 7.
+- Для (а) основной файл пришлось бы переименовать (compose сам находит `docker-compose.yml`), а Makefile
+  (`-f`), правило 7 («первый файл»), CI и локальный `docker-compose.override.yml` — перестроить. Файлы
+  профилей `bot` и `legacy` подключаются через `-f`, и `env_file` из `include` к ним не применяется:
+  им всё равно нужен экспорт из Makefile. Для S это непропорционально, ещё и с риском для CI.
+- Скопировать пины в `.env.example` — второй источник версий, нарушение NFR-071.
+- `setx COMPOSE_ENV_FILES …` — свойство машины, а не чистого клона.
+- Makefile — объявленная точка входа оператора, решение по T-397. Путь (б) лишь честно фиксирует уже
+  действующее правило и даёт однострочную форму для ручных команд compose (`exec`, `logs`, `restart`).
+
+### 3. Что изменено
+
+Только комментарии и документы. Модель композиции не изменилась: sha256 `config --format json` у
+владельца до и после совпадает.
+
+- `docker-compose.yml` (шапка, «How to run it»): «through make only» и почему; строка
+  `COMPOSE_ENV_FILES=… (declared in .env / .env.example)` убрана; форма для bash и PowerShell.
+- `Makefile` (комментарий над `COMPOSE_ENV_FILES ?=`): экспорт — единственное, через что compose видит
+  `build/versions.env`; строка в `.env` не действует.
+- `.env.example` (блок над `COMPOSE_ENV_FILES`): строку compose не читает, стек — через `make`, форма для
+  ручной команды. Сама строка остаётся: её объявляет манифест (`shared/env/infra.go`, `mvctl env check`).
+  Ни одна новая строка комментария не начинается с `ИМЯ=`, так что `env.ParseExample` не примет её за
+  закомментированную переменную.
+- `build/versions.env`, `.github/ci.env`, `scripts/compose-lint.sh`: такие же обещания в комментариях
+  исправлены.
+- `README.md` («Запуск за 5 команд»): врезка «Стек — только через `make`».
+- `Docs/ops/runbook.md`: врезка перед разделом 1 о прямых командах `docker compose`, отсылки в разделах
+  2, 5 и 8.
+- `Docs/dev-team/architecture/infrastructure.md`: §1.1 (строка хоста), §4.2 (комментарий строки в
+  целевом `.env.example`), §9 (абзац о прямых командах).
+- Новых правил линтера нет — фикстуры и мутанты не нужны.
+
+### 4. Проверки
+
+- Чистый клон с моими файлами: голая форма — **1** (как и сказано теперь в документах); `export
+  COMPOSE_ENV_FILES=.env,build/versions.env` — **0**; `make --eval 'zz-cfg: ; @$(COMPOSE) config -q'
+  zz-cfg` (ровно та команда, которую собирает Makefile) — **0**, шум `fatal: not a git repository` идёт
+  от `GIT_SHA` в экспорте без `.git`; `make compose-lint` — **0**.
+- Рабочее дерево: `make compose-lint` — ok, 15 сервисов в 3 файлах, 8 правил, 14 из 14 «плохих»
+  фикстур отвергнуты; `go run ./cmd/mvctl env check` — 67 переменных, **0**.
+- Стенд владельца (`COMPOSE_ENV_FILES=.env,build/versions.env`, `.env` не открывался, печатались только
+  коды и хеш): `config -q` — **0**; sha256 `config --format json` — `0870f33d758b0688` до и после;
+  `up --dry-run --no-build` — **0**. Контейнеры и LLM не трогались.
+- Грэп голого `docker compose` по README, CLAUDE.md, `Docs/ops`, `infrastructure.md`, `.env.example`,
+  `build/`, файлам композиции, `.github` и Makefile. Ручные команды в runbook и в §9 `infrastructure.md`
+  покрыты врезками. CI (`.github/workflows/go.yml:348`) и `.github/ci.env:9` передают файлы через
+  `--env-file` и верны. CLAUDE.md упоминает compose только в комментариях к целям `make` — верно, не
+  правился.
+- `py -m pre_commit run --files <11 путей T-412>` в изолированной копии (экспорт индекса, `git init`):
+  все хуки — Passed, golangci — Skipped (нет `.go`); каталог удалён по точному пути.
+  `gitleaks git --staged --redact .` — no leaks found, **0**. Временный чистый клон удалён по точному пути.
+
+## devops-engineer#1 · T-412 · итерация 2 по приёмке · 2026-09-11
+
+tech-lead#1 не принял задачу: в README и runbook осталась фраза, что голый `docker compose --profile bot
+up` «молча поднимет стек без бота». Врезка T-412 рядом с ней говорит обратное. Меняются только тексты.
+
+### 1. Факт на чистом клоне
+
+Экспорт индекса, `.env` из `.env.example` с заглушками у `[required]`, `COMPOSE_PROJECT_NAME=t412-iter2`
+(чтобы dry-run не касался проекта владельца). Каталог удалён по точному пути.
+
+| Форма | Результат |
+|---|---|
+| голый `docker compose --profile bot up --dry-run --no-build` | **1**: `required variable QDRANT_IMAGE is missing` |
+| `COMPOSE_ENV_FILES=.env,build/versions.env`, `--profile bot config --services` | **0**: core gateway minio minio-init redpanda redpanda-init — `telegram-bot` нет |
+| то же, `--profile bot up --dry-run --no-build` | **0**, строк `telegram-bot` — 0 |
+| то же с `-f docker-compose.yml -f docker-compose.bot.yml` | `telegram-bot` в списке сервисов |
+
+### 2. Что изменено
+
+- `README.md:92-96`, `Docs/ops/runbook.md:74-79`: без переменной — отказ на `*_IMAGE`; с переменной, но
+  без `-f docker-compose.bot.yml`, — стек без бота.
+- `Docs/dev-team/architecture/infrastructure.md:998` (§7.1, `docker compose logs core | jq`) и `:723`
+  (ручной бэкап `links.db`): оговорка про переменную и ссылка на абзац в начале §9.
+- `.env.example:44-46`: форме с `-f … docker-compose.bot.yml` нужна переменная в оболочке.
+- `Makefile:34-40`: комментарий перенесён, строки не длиннее 80.
+- `docker-compose.bot.yml:20-22`: «A bare `docker compose` without `-f` simply has no bot» заменено
+  на оба случая.
+- `docker-compose.yml:72-73`, `Docs/dev-team/architecture/diagrams/deployment.md:93`: `docker compose
+  port` — с переменной в оболочке.
+- `Docs/dev-team/architecture/threat-model.md:334` и `:382`, `Docs/dev-team/testing/strategy.md:297`:
+  `docker compose config` — с переменной (в чек-листе SEC-13 ещё и «либо `make compose-lint`»). Эти
+  файлы ведут security-engineer и QA; правка — только оговорка в скобках.
+
+### 3. Грэп голого `docker compose` и `--profile`
+
+Где искал: README.md, CLAUDE.md, AGENTS.md, .env.example, Makefile, три файла композиции, Docs/.
+Исторические записи — `Docs/dev-team/epics/**`, `journal.md`, `dashboard.html`, `state.js` — это
+протоколы, их не правят. Строки с `$(COMPOSE)` Makefile пропущены: переменную они получают от make.
+
+| Место | Статус |
+|---|---|
+| README.md:21 (Docker Desktop, плагин) | верно — про установку |
+| README.md:62, CLAUDE.md:110, CLAUDE.md:113 (комментарии к целям make) | верно — выполняет make |
+| README.md:78 (врезка T-412) | верно |
+| README.md:89 (compose интерполирует файл целиком) | верно — описывает поведение |
+| README.md:92-96 (`--profile bot up`) | **исправлено** |
+| AGENTS.md | совпадений нет |
+| .env.example:44 (голый compose не видит файлов профилей) | верно при любой форме |
+| .env.example:45-46 (форма с `-f`) | **исправлено** |
+| .env.example:49-55 (блок T-412) | верно |
+| Makefile:5, :37, :47, :49, :79 | верно — правило, комментарий T-412, сборка `$(COMPOSE)` |
+| docker-compose.yml:10, :16, :32 | верно |
+| docker-compose.yml:72-73 (`docker compose port`) | **исправлено** |
+| docker-compose.bot.yml:5, docker-compose.legacy.yml:12 | верно — описывают поведение |
+| docker-compose.bot.yml:20-22 | **исправлено** |
+| c4-container.md:87, infrastructure.md:101 | верно — описывают поведение |
+| deployment.md:93 (`docker compose port`) | **исправлено** |
+| infrastructure.md:72, :156, :157, :169, :173 | верно — таблицы инструментов и целей make |
+| infrastructure.md:316, :323 (compose-lint, `--env-file`) | верно |
+| infrastructure.md:715 (`make archive-legacy`), :1025-1027 (`make deploy`/`make rollback`) | верно — шаги целей make |
+| infrastructure.md:723 (ручной бэкап `links.db`) | **исправлено** |
+| infrastructure.md:998 (§7.1, `logs core \| jq`) | **исправлено** |
+| infrastructure.md:1017 (метрики), :1081 (обновление версий, §9) | верно / покрыто абзацем §9 |
+| infrastructure.md:1035 (абзац T-412), :1046, :1077, :1085, :1086, :1103 (§9) | верно — покрыто абзацем §9 |
+| infrastructure.md:1139 (F-6) | верно |
+| threat-model.md:296 (SEC-13, правило) | верно — не команда |
+| threat-model.md:334, :382 | **исправлено** |
+| testing/strategy.md:297 (ST-10) | **исправлено** |
+| runbook.md:28 (врезка T-412) | верно |
+| runbook.md:44 (dotenv-парсер compose) | верно — описывает поведение |
+| runbook.md:63 (`exec core`), :136, :342-346, :366-371 (файл бота), :398, :400, :402 | верно — покрыто врезкой перед разделом 1 (и отсылками) |
+| runbook.md:74-79 (`--profile bot up`) | **исправлено** |
+
+### 4. Проверки
+
+- Стенд владельца, печатались только код и хеш: `config -q` с `COMPOSE_ENV_FILES=.env,build/versions.env` —
+  **0**; sha256 `config --format json` до и после — `0870f33d758b0688`. `.env` не открывался, стек и LLM не
+  трогались.
+- `make compose-lint` — **0**: 15 сервисов в 3 файлах, 8 правил, 14 из 14 «плохих» фикстур отвергнуты.
+- `go run ./cmd/mvctl env check` — 67 переменных, **0**.
+- `py -m pre_commit run --files <12 путей итерации 2>` в изолированной копии (экспорт индекса плюс мои
+  файлы, `git init`): все хуки Passed, golangci Skipped (нет `.go`); каталог удалён по точному пути.
+- `gitleaks git --staged --redact .` — no leaks found, **0**.

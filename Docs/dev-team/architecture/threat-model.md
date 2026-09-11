@@ -331,7 +331,7 @@ flowchart LR
 - [ ] allowlist/инвайт в боте (SEC-06); команды только из личных чатов (SEC-07).
 - [ ] `client_id` == `X-Client-Id`; `route.external_id` только своей платформе; `actor_kind`/admin по списку (SEC-12).
 - [ ] `403 consent_required` на сервере (SEC-27).
-- [ ] Порты: `docker compose config` — ни одной публикации без `127.0.0.1:` (SEC-13); admin-порт core не опубликован.
+- [ ] Порты: `docker compose config` (с `COMPOSE_ENV_FILES=.env,build/versions.env` в оболочке, T-412; либо `make compose-lint`, правило 2) — ни одной публикации без `127.0.0.1:` (SEC-13); admin-порт core не опубликован.
 
 **Секреты и конфигурация**
 - [ ] `git ls-files` без `.env`, `.mcp.env`, `*.exe`, `*.log`, `.claude/worktrees`; gitleaks зелёный в CI и pre-commit (SEC-24).
@@ -379,7 +379,7 @@ flowchart LR
 
 1. Все Critical/Major из раздела 3 со статусом «покрыто» и подтверждением тестом (ссылки на прогон CI).
 2. `privacy-scan` зелёный на живом стенде (не только e2e): регистрация тестового Telegram-аккаунта → сканирование всех хранилищ и логов → `external_id_leaks = 0`.
-3. `docker compose config` без публикаций на 0.0.0.0; `nmap`/`netstat` с другого устройства LAN не видит портов сервисов.
+3. `docker compose config` (с `COMPOSE_ENV_FILES=.env,build/versions.env` в оболочке, T-412) без публикаций на 0.0.0.0; `nmap`/`netstat` с другого устройства LAN не видит портов сервисов.
 4. Пользователь подтвердил отзыв токенов из `.mcp.env` и статус ключа в `shared/oracle/README.md`; gitleaks зелёный; решение по очистке истории зафиксировано (сделано / отложено по команде).
 5. `govulncheck` без достижимых High/Critical; образы и Actions с пином.
 6. Учения `/forget`: связка удалена, `strings` чист, доставки `dropped`, сессия закрыта; бэкап зашифрован; процедура восстановления выполнена.

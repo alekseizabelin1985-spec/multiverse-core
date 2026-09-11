@@ -17,7 +17,9 @@
 #                                    interpolate, the stack starts.
 # The Makefile adds `-f docker-compose.bot.yml` whenever `bot` is in the active
 # profile set (PROFILES=... or COMPOSE_PROFILES of .env), so the operator never
-# passes it by hand. A bare `docker compose` without `-f` simply has no bot.
+# passes it by hand. A bare `docker compose` is not supported: without
+# COMPOSE_ENV_FILES in the shell it stops on the first *_IMAGE (T-412), and with
+# it but without `-f docker-compose.bot.yml` it starts the stack with no bot.
 #
 # `profiles: ["bot"]` is kept on the service as well: the file may be loaded
 # together with the others (scripts/compose-lint.sh does exactly that), and the

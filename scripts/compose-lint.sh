@@ -219,8 +219,9 @@ PY
   exit 1
 fi
 
-# The env files in the order .env declares them (COMPOSE_ENV_FILES=.env,
-# build/versions.env): the pins win over the example, as they do for `make up`.
+# The env files in the order the Makefile exports them (COMPOSE_ENV_FILES:
+# .env, then build/versions.env): the pins win over the example, as they do
+# for `make up`.
 if ! clean_out=$(docker compose -f "$primary" \
   --env-file "$clean_env" --env-file build/versions.env \
   "${profile_args[@]}" config -q 2>&1); then

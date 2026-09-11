@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T18:02:13+03:00",
+  "updatedAt": "2026-09-11T18:08:54+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1059,14 +1059,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-412",
           "title": "Голый docker compose не читает COMPOSE_ENV_FILES из .env, а документы обещают обратное",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T17:40:06+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-11T18:08:54+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 28,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 17:40",
+              "to": "11.09 17:53",
+              "duration": "13m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 17:53",
+              "to": "11.09 17:58",
+              "duration": "5m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 17:58",
+              "to": "11.09 18:05",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка 2",
+              "from": "11.09 18:05",
+              "to": "11.09 18:08",
+              "duration": "3m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-412.md"
         },
         {
@@ -1200,9 +1225,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-418",
           "title": "Перенос membus в shared/eventbus/membus",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T18:05:38+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4139,6 +4164,26 @@ window.DEVTEAM_STATE =
       "task": "T-412",
       "action": "итерация 2: ложные обещания о профиле bot в README и runbook",
       "startedAt": "2026-09-11T17:58:43+03:00",
+      "finishedAt": "2026-09-11T18:05:38+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-412",
+      "action": "повторная приёмка по диффу и грэпу",
+      "startedAt": "2026-09-11T18:05:38+03:00",
+      "finishedAt": "2026-09-11T18:08:54+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-418",
+      "action": "перенос membus в shared/eventbus/membus",
+      "startedAt": "2026-09-11T18:05:38+03:00",
       "finishedAt": null
     }
   ],
@@ -6362,6 +6407,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "devops-engineer",
       "text": "T-412 итерация 2 начата"
+    },
+    {
+      "at": "2026-09-11T18:05:38+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Коммит 564ac93: T-419 и нарезка T-230, 27 путей; тесты на коммитируемом дереве зелёные"
+    },
+    {
+      "at": "2026-09-11T18:05:38+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-412 итерация 2: README и runbook исправлены, ещё 7 мест того же класса"
+    },
+    {
+      "at": "2026-09-11T18:05:38+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-418 начата: перенос membus"
     }
   ],
   "blockers": [],

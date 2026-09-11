@@ -31,9 +31,13 @@ GIT_SHA := $(shell git rev-parse --short HEAD)
 export GOFLAGS := -buildvcs=false
 LDFLAGS := -X main.version=$(GIT_SHA) -X multiverse-core.io/shared/logging.Version=$(GIT_SHA)
 
-# Compose reads .env and build/versions.env. .env declares COMPOSE_ENV_FILES
-# for a bare `docker compose`; this default keeps `make` working when it does
-# not (§4.2).
+# Compose reads .env and build/versions.env only because of this export.
+# Compose takes COMPOSE_ENV_FILES from the environment of its own process, never
+# from .env: the variable names the env files, so it cannot come from one of
+# them. The line in .env is therefore inert, and a bare `docker compose` without
+# it stops on the first *_IMAGE variable (T-412, checked on compose v5.2) —
+# which is why the stack is run through make. A value already in the
+# environment wins (§4.2).
 COMPOSE_ENV_FILES ?= .env,build/versions.env
 export COMPOSE_ENV_FILES
 

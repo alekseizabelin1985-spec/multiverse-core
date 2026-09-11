@@ -61,6 +61,7 @@
 - **Зависимости**: F-0 (выполнен).
 - **Ссылки**: `design.md` §2 (US-013), §9 (T-16/U-5); `infrastructure.md` §4.5, §3.4; `foundation.md` §12; ADR-009 п. 8, доп. п. 10; US-013 (все три критерия); NFR-040; SEC/threat-model T-16.
 - **(T-412, 2026-09-11)** Описание COMPOSE_ENV_FILES в манифесте shared/env/infra.go (строка около 21, «env files compose reads») вводит в заблуждение: compose читает эту переменную только из окружения своего процесса, не из .env. Поправить описание (вариант а) — или убрать переменную из манифеста и .env.example (вариант б, contract-change); исполнитель выбирает с обоснованием.
+- **(приёмка T-412, 2026-09-11)** У MV_LLM_URL в .env.example нет пометки [required], хотя композиция требует её через :? (T-404), а CLAUDE.md велит заполнять только помеченное — оператор по инструкции её пропустит. Добавить пометку; проверить линтером или тестом, что каждая переменная с :? в композиции помечена [required] в .env.example.
 - **DoD**:
   - `gitleaks dir --redact .` → 0 находок; `gitleaks git --redact --log-opts="integration/mvp-1..HEAD" .` → 0;
   - `git ls-files | grep -E '\.(exe|log)$|\.mcp\.env$|settings\.local\.json$'` → пусто;

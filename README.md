@@ -71,6 +71,17 @@ make health                         # таблица статусов gateway/co
 LLM (`llama-server`) — нативный процесс вне compose: `make up`/`make down` его не
 трогают, им управляют `make llm-up` / `make llm-down` / `make llm-health`.
 
+> **Стек — только через `make`.** Версии образов лежат в `build/versions.env`, и
+> compose видит этот файл только через `COMPOSE_ENV_FILES` в окружении своего
+> процесса. Строку `COMPOSE_ENV_FILES` в `.env` compose не читает: переменная
+> называет env-файлы и поэтому не может прийти из одного из них (проверено на
+> compose v5.2, T-412). Makefile её экспортирует, а голый `docker compose config`
+> или `up` без `make` падает на первой переменной образа (`REDPANDA_IMAGE` или
+> другой `*_IMAGE`). Для ручной команды compose
+> (`exec`, `logs`, `restart`) задайте переменную в оболочке один раз:
+> `export COMPOSE_ENV_FILES=.env,build/versions.env`
+> (PowerShell: `$env:COMPOSE_ENV_FILES = ".env,build/versions.env"`).
+
 > **Профили `bot` и `legacy` — только через `make`.** Оба описаны в собственных
 > compose-файлах (`docker-compose.bot.yml`, `docker-compose.legacy.yml`) и
 > подключаются Makefile'ом, только когда профиль реально запрошен:
@@ -79,8 +90,10 @@ LLM (`llama-server`) — нативный процесс вне compose: `make u
 > файл целиком ДО отбора по профилям, и обязательные переменные этих сервисов
 > (токен бота, образ Chroma) раньше валили `make up` всем подряд, в том числе
 > тем, кто эти профили не поднимает (T-397). **Голый `docker compose --profile
-> bot up` без Makefile этих файлов не видит и официально не поддерживается —
-> он молча поднимет стек без бота**; это осознанное решение, а не пробел.
+> bot up` без Makefile официально не поддерживается:** без `COMPOSE_ENV_FILES`
+> в оболочке он не поднимет ничего и откажет на первой переменной образа
+> (`*_IMAGE`, врезка выше), а с переменной, но без `-f docker-compose.bot.yml`,
+> не увидит файл бота и поднимет стек без бота. Это осознанное решение, а не пробел.
 > Профиль `bot` сегодня всё равно не стартует: бинарник `cmd/telegram-bot`
 > появится в EPIC-004. `make up PROFILES=legacy` сам сначала выполняет
 > `legacy-src` (цель `up` объявляет её своей предпосылкой) — тот делает

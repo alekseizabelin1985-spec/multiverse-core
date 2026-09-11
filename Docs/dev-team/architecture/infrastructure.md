@@ -62,7 +62,7 @@
 
 | | `dev` (машина владельца) | `ci` (GitHub Actions) | `prod` (та же машина, «боевой» запуск) |
 |---|---|---|---|
-| Хост | Windows 11, i9-13900, 128 ГБ RAM, RTX 4090 24 ГБ; Docker Desktop 29.x (WSL2), Compose v5.x (`COMPOSE_ENV_FILES` поддерживается), Go **1.26.x** локально (ставится при F-2; сейчас 1.25.3), Git Bash, PowerShell 7, Python (`pre-commit`) | `ubuntu-latest` (4 vCPU, 16 ГБ, Docker есть, GPU нет) | как `dev` |
+| Хост | Windows 11, i9-13900, 128 ГБ RAM, RTX 4090 24 ГБ; Docker Desktop 29.x (WSL2), Compose v5.x (`COMPOSE_ENV_FILES` поддерживается только из окружения процесса, не из `.env` — его экспортирует Makefile, T-412), Go **1.26.x** локально (ставится при F-2; сейчас 1.25.3), Git Bash, PowerShell 7, Python (`pre-commit`) | `ubuntu-latest` (4 vCPU, 16 ГБ, Docker есть, GPU нет) | как `dev` |
 | Как запускается платформа | `make llm-up` (нативный llama-server, вне compose) → `make up` (compose) **или** `go run ./cmd/multiverse --contexts=all --bus=memory` для быстрой отладки без инфраструктуры | `go test` (unit/e2e без Docker; integration — testcontainers) | `make llm-up` → `make up` с `COMPOSE_PROFILES=memory,bot` (+ `gpu`, только если выбран контейнерный Ollama) |
 | LLM | **`llama-server` нативно, `127.0.0.1:1234`** (`MV_LLM_PROVIDER=openai_compat`); Ollama нативно или профиль `gpu` — опционально, для конфигураций C/A и эмбеддингов | нет; `providers/recorded` + `providers/fake` | `llama-server` нативно, модель резидентна с момента старта процесса |
 | Данные | тома Docker; допускается `make reset` (полная очистка) | эфемерные контейнеры testcontainers | тома Docker + бэкапы (§5.6) |
@@ -411,7 +411,7 @@ repos:
 # ===== compose =====
 COMPOSE_PROJECT_NAME=multiverse
 COMPOSE_PROFILES=memory,bot          # набор профилей: memory,gpu,bot,dev,legacy
-COMPOSE_ENV_FILES=.env,build/versions.env   # версии образов — только из build/versions.env
+COMPOSE_ENV_FILES=.env,build/versions.env   # compose её отсюда НЕ читает — экспортирует Makefile (T-412)
 MV_IMAGE_TAG=dev                     # тег образа multiverse-core (make deploy подставляет git sha)
 
 # ===== infrastructure (имена диктуют образы) =====
@@ -720,7 +720,7 @@ Consumer-группы: `{process}.{context}` (например `core.state`, `me
 |---|---|---|---|---|
 | Том `minio_data` (истина: сущности + снапшоты; `prompts-*` **исключён**, SEC-22) | `make backup` → остановить `core` → `docker run --rm -v multiverse_minio_data:/src:ro -v "$BACKUP_DIR":/dst alpine:3.22 tar czf /dst/minio-<date>.tgz --exclude='prompts-*' -C /src .` → запустить `core`; альтернатива без остановки — `mc mirror --overwrite --exclude 'prompts-*/**' local/ ./backups/minio-<date>/` | перед каждым `make deploy`; еженедельно (Task Scheduler → `pwsh scripts/backup.ps1`) | `%USERPROFILE%\multiverse-backups\` (вне репозитория и Docker-томов; OneDrive `Documents` не синхронизируется — U-6, отдельного требования нет), последние 4 еженедельных + все предрелизные за 30 дней | ежемесячно: `make restore FILE=… TARGET=scratch` в отдельный compose-проект (`COMPOSE_PROJECT_NAME=mv-restore`) → `mvctl report --audit` → `state_hash` совпадает со снапшотом |
 | Том `redpanda_data` (журнал после снапшота) | тот же `tar` при остановленном `redpanda` | вместе с MinIO | там же | восстановление вместе с MinIO; после старта `core` — `analytics.replay.completed identical=true` |
-| `links.db` (ПДн; SEC-05) | `docker compose exec gateway /multiverse db backup --out /data/backup/links-<date>.db` → `docker cp` на хост → `age -r "$MV_BACKUP_AGE_RECIPIENT" -o links-<date>.db.age` → удалить открытую копию (на хосте и в томе) | вместе с остальным (объём ≤ 10 записей — можно после каждого изменения) | **отдельный каталог** `%USERPROFILE%\multiverse-backups\links\`; **≤ 30 дней**, скрипт чистит старше; предрелизная копия — основа отката миграции (ADR-019: `Down` нет) | ежеквартально (T-16 п. 5): `age -d` → `multiverse db check` (`PRAGMA integrity_check`) |
+| `links.db` (ПДн; SEC-05) | `docker compose exec gateway /multiverse db backup --out /data/backup/links-<date>.db` (вручную — с `COMPOSE_ENV_FILES` в оболочке, см. абзац в начале §9, T-412) → `docker cp` на хост → `age -r "$MV_BACKUP_AGE_RECIPIENT" -o links-<date>.db.age` → удалить открытую копию (на хосте и в томе) | вместе с остальным (объём ≤ 10 записей — можно после каждого изменения) | **отдельный каталог** `%USERPROFILE%\multiverse-backups\links\`; **≤ 30 дней**, скрипт чистит старше; предрелизная копия — основа отката миграции (ADR-019: `Down` нет) | ежеквартально (T-16 п. 5): `age -d` → `multiverse db check` (`PRAGMA integrity_check`) |
 | `gateway.db` (сессии, outbox) | тем же `db backup` без шифрования | вместе | там же | как выше |
 | Qdrant, Neo4j | не бэкапятся — `mvctl memory rebuild` | — | — | rebuild — runbook §9.4 |
 | Модели LLM (`.gguf` в `MV_LLM_MODELS_DIR`; модели Ollama) | не бэкапятся — скачиваются заново (`ops/models.txt`; для Ollama — `make models`). Единственное, что фиксируется в Git, — **имя** модели (`LLM_MODEL_DEFAULT`) и билд (`LLAMACPP_BUILD`) | — | — | — |
@@ -995,7 +995,7 @@ Ollama остаётся установленной и поддерживаетс
 
 - `shared/logging`: `slog` JSON в stdout; обязательные поля через middleware шины и HTTP: `ts, level, service (gateway|core|memory|telegram-bot), context, msg, correlation_id, event_id, event_type, agent.level?, handled (для error), version`. Уровень — `MV_LOG_LEVEL`; `debug` не включается в `prod`. `ReplaceAttr` редактирует ключи `external_id`, `token`, `authorization`, `api_key`, `text` (SEC-02/28); `forbidigo` запрещает `log.Printf`.
 - **ПДн и текст**: логгер не принимает произвольные `map`/структуры событий — только явные поля; тела `POST /v1/links/*`, `/v1/characters` и обновления Telegram не логируются; `player.said`/`narrative.output` в логах — только `event_id`, длина текста. Бот редактирует `bot<digits>:<token>` в любом сообщении (ADR-006 доп. п. 3). Тест NFR-041 (`e2e`, `privacy-scan`) прогоняет фикстуры с внешним ID и `username` и `grep`-ает логи всех процессов и бота.
-- Docker: `logging: {driver: json-file, options: {max-size: "50m", max-file: "5"}}` для платформы; **`telegram-bot` — `max-size: "10m", max-file: "3"`** (D-12, ADR-006 доп. п. 5: ротация по объёму, «≤ 7 дней» — ориентир; логи бота без ПДн по построению; внешний cron/`lumberjack` не вводятся) и `MV_LOG_LEVEL=info`. Просмотр: `make logs SERVICE=core`, фильтр по корреляции `docker compose logs core | jq -c 'select(.correlation_id=="…")'`.
+- Docker: `logging: {driver: json-file, options: {max-size: "50m", max-file: "5"}}` для платформы; **`telegram-bot` — `max-size: "10m", max-file: "3"`** (D-12, ADR-006 доп. п. 5: ротация по объёму, «≤ 7 дней» — ориентир; логи бота без ПДн по построению; внешний cron/`lumberjack` не вводятся) и `MV_LOG_LEVEL=info`. Просмотр: `make logs SERVICE=core`, фильтр по корреляции `docker compose logs core | jq -c 'select(.correlation_id=="…")'` — с `COMPOSE_ENV_FILES` в оболочке, см. абзац в начале §9 (T-412); `make logs` передаёт переменную сам.
 
 ### 7.2. Health
 
@@ -1031,6 +1031,8 @@ Ollama остаётся установленной и поддерживаетс
 ---
 
 ## 9. Runbook — заготовки (переносятся в `docs/ops/runbook.md` tech-writer'ом на A7)
+
+**Прямые команды `docker compose` в этом разделе (T-412)** требуют в оболочке `COMPOSE_ENV_FILES=.env,build/versions.env`: compose берёт эту переменную только из окружения своего процесса, строку в `.env` не читает (переменная называет env-файлы и не может прийти из одного из них; проверено на compose v5.2). Без неё compose не видит `build/versions.env` и падает на первой переменной образа (`REDPANDA_IMAGE` или другой `*_IMAGE`). Цели `make` экспортируют её сами — стек поднимается только через `make`.
 
 ### 9.1. Запуск с нуля (после клонирования)
 1. `cp .env.example .env`; заполнить `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` (≥ 16 симв.), `MV_MINIO_ACCESS_KEY/SECRET_KEY`, `NEO4J_PASSWORD`/`MV_NEO4J_PASSWORD`, при боте — `MV_TELEGRAM_BOT_TOKEN` и `MV_TELEGRAM_ALLOWED_USER_IDS`; выставить `COMPOSE_PROFILES`.
