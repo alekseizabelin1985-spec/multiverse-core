@@ -12,9 +12,9 @@ import (
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
-	"multiverse-core.io/shared/testkit/membus"
 	"multiverse-core.io/shared/testkit/state"
 )
 

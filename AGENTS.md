@@ -105,7 +105,7 @@ cmd/multiverse/     # бинарник платформы (serve/health/db), ф�
 cmd/mvctl/           # CLI оператора: contracts, env, storage, privacy, version (реализованы),
                       # world/blueprint/laws/record/golden/llm/memory/report/trace (зарезервированы)
 internal/mechanics/  # единственный реализованный доменный пакет на сейчас
-shared/eventbus/     # конверт события, Bus/Journal, DLQ, kafka-реализация
+shared/eventbus/     # конверт события, Bus/Journal, DLQ, kafka-реализация, membus/ (в памяти)
 shared/jsonpath/      # универсальный доступ по dot-path к map[string]any
 shared/contracts/     # реестр типов событий + JSON-схемы
 shared/entity/        # модель сущности v2

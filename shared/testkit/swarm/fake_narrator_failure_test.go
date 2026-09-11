@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"multiverse-core.io/shared/eventbus"
-	"multiverse-core.io/shared/testkit/membus"
+	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/testkit/swarm"
 )
 

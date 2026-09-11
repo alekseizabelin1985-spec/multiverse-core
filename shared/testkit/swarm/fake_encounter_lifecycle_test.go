@@ -10,8 +10,8 @@ import (
 	mech "multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
 	tkmech "multiverse-core.io/shared/testkit/mechanics"
-	"multiverse-core.io/shared/testkit/membus"
 	"multiverse-core.io/shared/testkit/swarm"
 )
 

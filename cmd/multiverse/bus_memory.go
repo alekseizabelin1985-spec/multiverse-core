@@ -5,18 +5,16 @@ import (
 
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
-	"multiverse-core.io/shared/testkit/membus"
+	"multiverse-core.io/shared/eventbus/membus"
 )
 
 // newMemoryBus builds the in-process transport of --bus=memory, the one process
 // e2e runs without Docker (foundation.md §2, ADR-010).
 //
-// This file is one of the two places the binary reaches into shared/testkit,
-// and it is a file of its own for that reason: .golangci.yml lets exactly this
-// file import exactly shared/testkit/membus, so no other double can come in
-// through the same door. The other is fake_contexts.go, the hook of I1-α that
-// mounts the FAKE swarm context (T-255) and leaves again with T-256. The memory
-// bus is the real transport of a mode that stays.
+// membus is the second implementation of C-01, next to the kafka adapter, and
+// the real transport of a mode that stays, so it lives in shared/eventbus and
+// this file needs no exception from the testkit ban of .golangci.yml (T-418,
+// ADR-001 addendum 2026-09-11).
 //
 // The topics are the real list of the registry, as the contract test of the bus
 // passes them: an empty list would make membus create topics on first use,

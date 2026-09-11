@@ -7866,3 +7866,64 @@ up` «молча поднимет стек без бота». Врезка T-412
 - `py -m pre_commit run --files <12 путей итерации 2>` в изолированной копии (экспорт индекса плюс мои
   файлы, `git init`): все хуки Passed, golangci Skipped (нет `.go`); каталог удалён по точному пути.
 - `gitleaks git --staged --redact .` — no leaks found, **0**.
+
+## developer#1 · T-418 · перенос membus в shared/eventbus/membus · 2026-09-11
+
+Причина: C-01 v1.4 и дополнение ADR-001 от 2026-09-11 называют `membus` второй реализацией C-01 и
+транспортом `--bus=memory`, а не двойником. Реализация переезжает к kafka-адаптеру, а узкое исключение
+depguard T-410 для `cmd/multiverse/bus_memory.go` снимается.
+
+### 1. Перенос
+
+- `git mv shared/testkit/membus shared/eventbus/membus`. История идёт через `--follow`.
+- Импортёров 16 файлов. Собственный тест пакета переехал вместе с ним, остаются 15 внешних:
+  `bus_memory.go` и 14 тестов в `cmd/multiverse`, `shared/testkit/{contract,gateway,state,swarm}`,
+  `test/e2e`, `test/fixtures`. Правка в каждом — одна строка импорта, после неё gofmt.
+  `services/*` путь модуля не импортируют, `internal/*` — тоже.
+- В `membus` нет импорта `shared/testkit`, только `clock` и `eventbus`. Тест пакета использует
+  `shared/testkit` (Deterministic, After, NewDedup), это `_test.go`.
+
+### 2. depguard
+
+- Снято правило `cmd-multiverse-bus-memory` и исключение `!**/cmd/multiverse/bus_memory.go` в
+  `no-testkit-in-production`. `desc` называет одно исключение — хук T-255 `fake_contexts.go`.
+- Мутанты сделаны в изолированной копии, не в рабочем дереве. Контрольный (синтаксическая ошибка) —
+  красный. Пустой импорт `shared/testkit` в `bus_memory.go` — depguard, 1 находка. Прежний путь
+  `shared/testkit/membus` (пакет восстановлен в копии) — depguard, 1 находка, а под `.golangci.yml` из
+  HEAD — 0: это и было исключение. После восстановления — 0.
+
+### 3. Документы
+
+Исправлено: `CLAUDE.md`, `AGENTS.md`, `shared/eventbus/README.md`, `components/foundation.md` §1 и §9
+(заодно путь contract-теста: `shared/testkit/contract`, а не несуществующий
+`shared/eventbus/bus_contract_test.go`), doc-комментарии `membus.go`, `bus_memory.go`, `contract.go`.
+Не правил: записи прошлого (журнал, dev-log, ревью, карточки, ADR своего времени). Не моя область:
+текущий текст `contracts.md`, `ownership.md`, `api-contracts.md`, `ADR-010`,
+`c4-component-foundation.md`, дизайн EPIC-003, а также файлы T-412 — список отдан оркестратору.
+
+### 4. Проверки
+
+- `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — все ok.
+- Contract-тест на membus с нового пути: 21 из 21, `TwoStepDedup…` в их числе.
+- `go test -tags e2e ./test/...` — ok; `go vet -tags integration ./shared/testkit/...` — 0.
+- `golangci-lint run ./...` — 0 issues; `mvctl contracts check` — 0.
+- Живой запуск `serve --contexts=all --bus=memory` на `127.0.0.1:18917`: `/health` ok, семь контекстов ok.
+  Остановлен свой PID, порт свободен.
+- `-race` не запускался (T-401), Redpanda не запускалась.
+
+### 5. Добавка до ревью (решение оркестратора)
+
+- `.golangci.yml`: в `files` правила `no-testkit-in-production` добавлен `**/shared/eventbus/**`, потому что
+  `membus` теперь код бинарника. `_test.go` по-прежнему исключены. `desc` называет охват и единственное
+  исключение — хук T-255. Не-тестовых импортов `testkit` в `shared/eventbus/**` сейчас нет.
+- Мутанты в изолированной копии, линтер по `./shared/eventbus/...`:
+  - контрольный (синтаксическая ошибка в `membus.go`) — красный;
+  - `shared/testkit` в `membus.go` — depguard, 1 находка, а под конфигом из HEAD — 0;
+  - тот же импорт в `membus/mutant_test.go` — 0;
+  - после восстановления — 0.
+- Бывшие файлы T-412: `README.md:128`, `:139`, `testing/strategy.md:90`, `:368`. `infrastructure.md:1138`
+  не тронут: это запись F-5t, файл правит T-413.
+- `golangci-lint run ./...` — 0 issues; `go build ./... && go vet ./...` — 0;
+  `go test -short -count=1 ./shared/eventbus/... ./cmd/...` — ok.
+- pre-commit в изолированной копии (база HEAD плюс экспорт индекса) — все хуки Passed.
+  `gitleaks git --staged --redact .` — no leaks found.

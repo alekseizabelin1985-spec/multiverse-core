@@ -1,8 +1,10 @@
-// Package membus is the in-process Bus and Journal of the platform: the stub
-// every epic writes its tests against until the broker is worth starting
-// (contracts.md C-01, foundation.md §9).
+// Package membus is the in-process Bus and Journal of the platform: the second
+// implementation of C-01 next to the kafka adapter, run by the same contract
+// test, and the transport of --bus=memory (contracts.md C-01 v1.4,
+// foundation.md §2). Every epic writes its unit tests against it until the
+// broker is worth starting.
 //
-// It is not a second implementation of the C-01 rules. Publication goes
+// It implements the interfaces, not a second copy of the rules. Publication goes
 // through eventbus.Route and reading through eventbus.Delivery, exactly as the
 // kafka adapter does, so validation, the topic policies, the retries and the
 // dead-letter fallback cannot drift between the two. What lives here is only

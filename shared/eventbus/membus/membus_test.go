@@ -10,8 +10,8 @@ import (
 
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/testkit"
-	"multiverse-core.io/shared/testkit/membus"
 )
 
 // noPause is a backoff of three retries that does not wait: the number of

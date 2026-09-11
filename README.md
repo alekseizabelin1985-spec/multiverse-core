@@ -125,7 +125,7 @@ multiverse-core/
 │                            #  internal/laws, internal/gateway, internal/memory —
 │                            #  появятся по мере реализации своих эпиков)
 ├── shared/
-│   ├── eventbus/           # конверт события, Bus/Journal, DLQ, kafka-реализация
+│   ├── eventbus/           # конверт события, Bus/Journal, DLQ, kafka-реализация, membus/ (в памяти)
 │   ├── jsonpath/           # универсальный доступ по dot-path к любым map[string]any
 │   ├── contracts/          # реестр типов событий, JSON Schema 2020-12, OwnershipRules
 │   ├── entity/             # модель сущности v2 (Op/ApplyOps/StateHash/History)
@@ -136,7 +136,7 @@ multiverse-core/
 │   ├── clock/              # Clock/Timers (реальные и управляемые для тестов)
 │   ├── agent/               # каркас роя агентов GM (типы, парсер блупринтов; целевой
 │   │                         # рантайм — internal/swarm, EPIC-003)
-│   └── testkit/             # membus, contract-тест шины, фейки (FakeState,
+│   └── testkit/             # contract-тест шины, фейки (FakeState,
 │                             # FixedMechanics, Harness, FakeNarrator) для тестов
 │                             # и e2e других команд
 ├── schemas/events/          # JSON-схемы событий (source of truth для shared/contracts)

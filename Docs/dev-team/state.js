@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T18:08:54+03:00",
+  "updatedAt": "2026-09-11T18:40:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1097,9 +1097,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-413",
           "title": "Пограничные случаи правил 3 и 8 линтера композиции",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-11T18:12:02+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -1225,14 +1225,27 @@ window.DEVTEAM_STATE =
         {
           "id": "T-418",
           "title": "Перенос membus в shared/eventbus/membus",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-11T18:05:38+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-11T18:40:44+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 28,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 18:05",
+              "to": "11.09 18:23",
+              "duration": "18m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 18:23",
+              "to": "11.09 18:33",
+              "duration": "9m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-418.md"
         },
         {
@@ -1287,6 +1300,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-426.md"
+        },
+        {
+          "id": "T-428",
+          "title": "Проход по документам после переноса membus (T-418)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-428.md"
         }
       ],
       "defects": [],
@@ -4184,7 +4210,27 @@ window.DEVTEAM_STATE =
       "task": "T-418",
       "action": "перенос membus в shared/eventbus/membus",
       "startedAt": "2026-09-11T18:05:38+03:00",
+      "finishedAt": "2026-09-11T18:23:58+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-413",
+      "action": "правила 3 и 8 линтера композиции, умолчания OLLAMA, пометки required",
+      "startedAt": "2026-09-11T18:12:02+03:00",
       "finishedAt": null
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-418",
+      "action": "ревью #1: перенос membus, depguard на shared/eventbus",
+      "startedAt": "2026-09-11T18:23:58+03:00",
+      "finishedAt": "2026-09-11T18:33:55+03:00"
     }
   ],
   "events": [
@@ -6425,6 +6471,48 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "developer",
       "text": "T-418 начата: перенос membus"
+    },
+    {
+      "at": "2026-09-11T18:12:02+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит 0e3d795: T-412, 20 путей; compose-lint и env check на коммитируемом дереве"
+    },
+    {
+      "at": "2026-09-11T18:12:02+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-413 начата"
+    },
+    {
+      "at": "2026-09-11T18:18:16+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-418: membus перенесён в shared/eventbus/membus, исключение depguard снято; добавка до ревью"
+    },
+    {
+      "at": "2026-09-11T18:18:16+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-428: документы после переноса membus"
+    },
+    {
+      "at": "2026-09-11T18:23:58+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-418 добавка: depguard охватывает shared/eventbus, README и стратегия обновлены"
+    },
+    {
+      "at": "2026-09-11T18:23:58+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-418 на ревью #1"
+    },
+    {
+      "at": "2026-09-11T18:33:55+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-418 ревью #1: принять (Nit 2)"
     }
   ],
   "blockers": [],

@@ -41,6 +41,7 @@ multiverse-core/
 │   └── mechanics/              # типы механики C-03, Load(rules/*.yaml), формулы, RNG
 ├── shared/                     # общий код единого модуля (не отдельные Go-модули)
 │   ├── eventbus/                # конверт события (Meta, World, Scope), Bus/Journal, DLQ, kafka
+│   │   └── membus/               # вторая реализация Bus/Journal в памяти (--bus=memory, unit-тесты)
 │   ├── jsonpath/                 # универсальный доступ по dot-path к map[string]any
 │   ├── contracts/                # реестр типов событий, JSON Schema 2020-12, OwnershipRules
 │   ├── entity/                   # модель сущности v2 (Op/ApplyOps/StateHash/History)
@@ -51,8 +52,8 @@ multiverse-core/
 │   ├── clock/                    # Clock/Timers (реальные и управляемые для тестов)
 │   ├── agent/                    # каркас роя агентов GM (типы, парсер MD-блупринтов);
 │   │                              # целевой рантайм — internal/swarm (EPIC-003)
-│   └── testkit/                  # membus, contract-тест шины, фейки для тестов и e2e
-│       ├── membus/, contract/     # in-memory Bus/Journal + contract-тест против kafka
+│   └── testkit/                  # contract-тест шины, фейки для тестов и e2e
+│       ├── contract/              # contract-тест шины: membus и kafka одним набором проверок
 │       ├── state/, mechanics/     # FakeState, FixedMechanics (заглушки до EPIC-002)
 │       ├── gateway/, swarm/       # Harness, FakeNarrator (заглушки до EPIC-003/004)
 │       └── containers.go, versions.go
@@ -219,11 +220,16 @@ for _, path := range acc.GetAllPaths() { fmt.Println(path) }
 ### Тестовые заглушки (`shared/testkit`)
 
 До реализации своих эпиков команды используют общие заглушки на in-memory шине
-(`shared/testkit/membus`): `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`,
+`shared/eventbus/membus`: `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`,
 `testkit/gateway.Harness`, `testkit/swarm.FakeNarrator`. Сигнатуры заглушек совпадают
 с целевыми реализациями — замена не требует правок у потребителей (проверяется
-компиляцией тестов-потребителей). Contract-тест шины (`shared/testkit/contract`)
-гоняет один и тот же набор проверок против `membus` и настоящей Redpanda.
+компиляцией тестов-потребителей). `membus` — не заглушка, а вторая реализация
+`Bus`/`Journal` (C-01) и транспорт `--bus=memory`, поэтому живёт рядом с kafka-адаптером,
+а не в `shared/testkit`. Contract-тест шины (`shared/testkit/contract`) гоняет один и тот
+же набор проверок против `membus` и настоящей Redpanda. Production-код (`cmd/**`,
+`internal/**`, `shared/eventbus/**`, включая `membus`) `shared/testkit` не импортирует
+(depguard `no-testkit-in-production`, тесты исключены);
+единственное исключение — хук `cmd/multiverse/fake_contexts.go` (T-255, уходит с T-256).
 
 ## Рабочий процесс разработки
 

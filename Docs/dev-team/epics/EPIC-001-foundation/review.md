@@ -10364,3 +10364,122 @@ developer#3) не заходил.
 2. Ловушку overlay с коротким именем пути (`CD86~1` → кириллица) описать в руководстве по мутантам или в
    памяти команды. С абсолютным ключом прогон молча становится пустым, и контрольный мутант с
    синтаксической ошибкой должен быть обязательным шагом каждого прогона мутантов.
+
+## T-418 · ревью #1 · 2026-09-11 · code-reviewer#1
+
+### Границы ревью
+
+Задача T-418 «Перенос membus в shared/eventbus/membus», метка `contract-change`. Проверен дифф индекса
+`git diff --cached -M`: 33 пути. Код и конфиги:
+- `.golangci.yml`;
+- `cmd/multiverse/{bus_memory.go, fake_contexts_test.go, serve_test.go}`;
+- `shared/eventbus/membus/{membus.go, membus_test.go}` (R097, R099);
+- `shared/testkit/contract/{contract.go, membus_test.go}`;
+- 9 тестов `shared/testkit/{gateway,state,swarm}`;
+- `test/e2e/stubs_v0_test.go`, `test/fixtures/events_test.go`.
+
+Документы: `CLAUDE.md`, `AGENTS.md`, `README.md`, `shared/eventbus/README.md`, `components/foundation.md`
+§1 и §9, `testing/strategy.md`.
+
+Что прочитано до диффа:
+- `### T-418` в `tasks.md` и карточка с «Выполнением» и «Добавкой до ревью»;
+- `dev-log.md`, раздел «developer#1 · T-418»;
+- `journal.md`: T-410 (решения, ревью #1–#2, приёмка), T-416 и её приёмка, T-425 и её приёмка, записи
+  T-418 и решение оркестратора о расширении правила;
+- `contracts.md` v0.8: C-01 (v1.4, v1.5) и блок «Заглушка для потребителей» C-01.
+
+Всё запускалось в изолированной копии из экспорта индекса (`git checkout-index -a` в каталог из
+`mktemp -d`). Для сравнения с HEAD — вторая копия из `git archive HEAD`. Обе удалены по точному пути.
+Рабочее дерево не менялось, файлы T-413 (`shared/env`, `scripts/compose-lint.sh`, `testdata/compose-lint/`,
+`.env.example`, `infrastructure.md`) не открывались. `-overlay` не использовался: мутанты правились в
+файлах копии и восстанавливались из резервной копии со сверкой `cmp`. Redpanda и интеграционные тесты не
+запускались, `-race` недоступен (T-401). Стек и `:8888` не трогались.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 2.
+
+Перенос чистый. Git видит rename, а не delete+add. API `membus` не изменился: `go doc -all` совпадает
+до байта во всём, кроме doc-комментария пакета. Код `membus.go` без комментариев совпадает с HEAD. Старый
+путь в коде, конфигах и сборке не остался. Бинарник изменился только путём одного пакета, `testkit` в
+нём по-прежнему только через хук T-255. Правило depguard ловит то, что должно ловить, и не ловит законные
+импорты в тестах, в `test/e2e` и в `shared/testkit/*`. Оба Nit касаются документации.
+
+### Замечания
+
+#### Critical / Major / Minor
+
+Нет.
+
+#### Nit
+
+**N-1. `CLAUDE.md:229-230` — охват правила назван не полностью.** Текст: «Production-код (`cmd/**`,
+`internal/**`) `shared/testkit` не импортирует». После добавки до ревью правило охватывает и
+`shared/eventbus/**`, так говорит `desc` в `.golangci.yml:87` и мутант M1 ниже. Утверждение не
+ложное, но неполное, а CLAUDE.md читают агенты как инструкцию.
+*Как исправить:* «Production-код (`cmd/**`, `internal/**`, `shared/eventbus/**`, включая `membus`)».
+
+**N-2. `.golangci.yml:91` — строка комментария 105 символов.** Соседние строки блока 75–78 символов.
+Это след склейки после удаления абзаца про `bus_memory.go`.
+*Как исправить:* перенести `MV_SWARM_FAKE=true mounts FakeEncounter and` на следующую строку.
+
+### Что проверено экспериментом
+
+**Заявления автора.**
+
+| Заявление | Проверка | Результат |
+|---|---|---|
+| `git mv` сохраняет историю | `git diff --cached -M --name-status` | `R097 membus.go`, `R099 membus_test.go`: rename при пороге по умолчанию 50 %, тот же механизм, что у `--follow` |
+| импортёров 15, все обновлены | дифф: `bus_memory.go` + 14 тестов (+ собственный тест пакета) | 15 совпадает |
+| старый путь не остался | `git grep --cached "testkit/membus" -- ':!Docs'` | пусто (exit 1): `.golangci.yml`, `Makefile`, `.github/`, `build/`, `services/*`, `internal/*` |
+| API не изменился | `go doc -all` HEAD vs индекс; код без строк `//` | FUNCTIONS/TYPES совпадают; не-комментарийный код идентичен; тест пакета отличается только строкой импорта |
+| contract-тест с нового пути | `go test -short -count=1 -run TestBusContractOnMembus -v ./shared/testkit/contract/` | 21 PASS, 0 FAIL, `TwoStepDedupRemembersOnlyAfterTheSideEffect` в их числе |
+| в бинарнике testkit только через хук | `go list -deps ./cmd/multiverse`, HEAD vs индекс | разница — ровно `-shared/testkit/membus +shared/eventbus/membus`; `testkit/{swarm,swarm/template,state,mechanics}` как в HEAD; из не-testkit пакетов testkit импортирует только `cmd/multiverse` (`testkit/swarm`, хук T-255) |
+
+**Прогоны в копии индекса.**
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./...` — 27 пакетов ok, 0 FAIL, в том числе `shared/eventbus/membus`.
+- `go test -tags e2e -count=1 ./test/...` — `test/e2e` ok (4.8 с), `test/fixtures` ok.
+- `go vet -tags integration ./shared/testkit/... ./shared/eventbus/...` — 0; `go vet -tags e2e ./test/...` — 0.
+- `golangci-lint run ./...` (v2.13.2) — 0 issues.
+- `go run ./cmd/mvctl contracts check` — 65 types, 8 topics, 58 schema files, 0.
+- Живой запуск бинарника из копии: `MV_CORE_ADDR=127.0.0.1:18941 mv418.exe serve --contexts=all
+  --bus=memory` (порт перед этим свободен). `/health`:
+  `{"status":"ok","details":{"contexts":{…семь…:"ok"}}}`. Строка старта: `bus: memory (--bus)`. Слушатель
+  PID 56148 перед остановкой сверен по пути exe (`scratchpad\mv418.exe`) и командной строке, остановлен
+  только он. После — `:18941` не слушается, `mv418.exe` в системе нет.
+
+**Мутанты depguard** (линтер по затронутым пакетам копии).
+
+| # | Мутант | Результат |
+|---|---|---|
+| M0 | контроль: `func (` в конец `membus.go` | красный, typecheck, код 7 |
+| M1 | `_ "…/shared/testkit"` в `membus.go` | depguard `no-testkit-in-production`, 1 |
+| M1-был | M1 под `.golangci.yml` из HEAD | depguard 0 — до добавки проходило молча |
+| M2 | тот же импорт в `membus/mutant_test.go` (`package membus`) | 0 — тесты не задеты |
+| M3 | `bus_memory.go` на старый путь `shared/testkit/membus` (пакет восстановлен в копии) | depguard `no-testkit-in-production`, 1 |
+| M3-был | M3 под `.golangci.yml` из HEAD | 0 — прежнее исключение пропускало |
+| M4 | `_ "…/shared/testkit"` в `internal/mechanics/actor.go` | depguard, 1 — прежние globs не сломаны |
+| M5 | `_ "…/shared/testkit/state"` в `fake_contexts.go` | depguard `cmd-multiverse-fake-contexts`, 1 — хук по-прежнему узкий |
+| M6 | `_ "…/shared/testkit"` в не-тестовом `test/e2e/doc.go` | 0 — правило не шире нужного |
+
+В M1, M4 и M5 кроме depguard по 2 находки формата: вставленный импорт стоит не в своей группе. Это
+артефакт мутанта, не задачи. Законные импорты `testkit`, которые чистый прогон линтера пропускает:
+`shared/eventbus/membus/membus_test.go`, `test/e2e/{empty_world,stubs_v0}_test.go`, не-тестовые
+`shared/testkit/contract/contract.go` и `shared/testkit/swarm/{fake_context,fake_narrator}.go`. После
+восстановления каждый файл сверен `cmp`, итоговый `golangci-lint run ./...` — 0 issues.
+
+**Документы.** Карты каталогов в `CLAUDE.md`, `AGENTS.md`, `README.md`, абзац `shared/eventbus/README.md`,
+§1 и §9 `foundation.md`, `strategy.md:90` и `:368` соответствуют дереву. Оставшиеся упоминания
+`shared/testkit/membus` в `Docs/` — это `contracts.md:191` и `:577`, `ownership.md`, `api-contracts.md:259`,
+`ADR-010:30`, `c4-component-foundation.md`, `EPIC-003/design.md:142`, `infrastructure.md:1138` и записи
+прошлого. Все они уже собраны в T-428 и в это ревью не входят.
+
+### Предложения в бэклог
+
+1. N-1 можно закрыть в T-428 вместе с остальными документами, если оркестратор не закроет его в этой
+   задаче.
+2. Для памяти команды о живых запусках: в Git Bash `cd … && exe … &` даёт в `$!` подоболочку bash, а не
+   exe. Её winpid — не слушатель. Слушателя опознавать по `netstat -ano` на своём порту, затем по пути exe
+   и командной строке. В этом ревью первая попытка остановки попала в собственную подоболочку. Процесс
+   сверен и остановлен вторым шагом, чужое не задето.

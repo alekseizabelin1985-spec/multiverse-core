@@ -15,8 +15,8 @@ import (
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/runtime"
-	"multiverse-core.io/shared/testkit/membus"
 )
 
 // recorder is the one timeline of a run: what the contexts did and when the

@@ -21,8 +21,10 @@
 | `topics.go` | имена восьми топиков MVP-1 |
 | `payload_types.go`, `nested_payload.go`, `relations.go` | билдер payload, доступ по dot-путям, связи для графа |
 
-In-memory реализация (`membus`) живёт в `shared/testkit` (T-014) и использует те же `Route` и
-`Delivery`, поэтому ведёт себя одинаково с kafka-адаптером — это проверяет contract-тест F-5t.
+In-memory реализация (`membus`, подпакет `shared/eventbus/membus`) — вторая реализация C-01 и
+транспорт режима `--bus=memory` (C-01 v1.4; до T-418 лежала в `shared/testkit`). Она использует те
+же `Route` и `Delivery`, поэтому ведёт себя одинаково с kafka-адаптером — это проверяет
+contract-тест F-5t (`shared/testkit/contract`).
 
 ## Конверт
 

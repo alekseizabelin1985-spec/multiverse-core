@@ -23,6 +23,7 @@ internal/
   memory/                      EPIC-005
 shared/
   eventbus/                    C-01: конверт, Meta, NewRoot/Derive, Bus, Journal, kafka-адаптер, Dedup, middleware
+    membus/                    вторая реализация Bus + Journal в памяти, транспорт --bus=memory (T-418; см. §9)
   jsonpath/                    как есть
   contracts/                   реестр типов, Lookup/Validate/Topics/OwnershipRules, загрузка схем из schemas/
   entity/                      EPIC-002 (переписывается в волне 1; в волне 0 — только перенос в модуль)
@@ -271,8 +272,10 @@ func BusMiddleware(l *slog.Logger) eventbus.Middleware       // кладёт п�
 ## 9. `shared/testkit`
 
 ```
+shared/eventbus/membus/   Bus + Journal в памяти: топики — упорядоченные срезы; офсеты = индексы; Subscribe — горутина на группу; End(); chaos: Duplicate(p), ReorderTopics
+                          (вторая реализация C-01, не двойник; до T-418 — shared/testkit/membus; C-01 v1.4, ADR-001 доп. 2026-09-11)
 shared/testkit/
-  membus/       Bus + Journal в памяти: топики — упорядоченные срезы; офсеты = индексы; Subscribe — горутина на группу; End(); chaos: Duplicate(p), ReorderTopics
+  contract/     contract-тест шины: один набор проверок против membus (-short) и Redpanda (-tags integration)
   dedup.go      type Dedup = eventbus.Dedup (псевдоним для совместимости C-01)
   versions.go   Versions() — пины из build/versions.env для testcontainers (Дополнение после G2: D-13)
   containers.go testcontainers: redpanda, minio (образ из build/minio.Dockerfile), qdrant, neo4j
@@ -285,9 +288,9 @@ shared/testkit/
   llm/          FakeProvider (EPIC-003)
 ```
 
-`membus` обязан воспроизводить семантику адаптера (порядок в топике, at-least-once по флагу, DLQ, `Position` в ctx, `Journal` включая `End`); расхождения ловит общий набор contract-тестов шины (`shared/eventbus/bus_contract_test.go`), запускаемый и против membus (`-short`), и против testcontainers `redpanda` (`-tags integration`).
+`membus` обязан воспроизводить семантику адаптера (порядок в топике, at-least-once по флагу, DLQ, `Position` в ctx, `Journal` включая `End`); расхождения ловит общий набор contract-тестов шины (`shared/testkit/contract`), запускаемый и против membus (`-short`), и против testcontainers `redpanda` (`-tags integration`).
 
-**Дополнение после G2 (F-10, `decomposition-review.md` §3.3, `epics.md` §6)**: заглушки v0 контрактов C-02…C-05 создаёт EPIC-001 в волне 0, чтобы TEAM-2/TEAM-3 стартовали без ожидания поставщиков. Трёхступенчатое владение `shared/testkit`: ядро (`membus`, `dedup`, `versions`, `containers`, `fixtures`, contract-тест) — EPIC-001 → tech-lead#1; подпакеты `state/`, `mechanics/`, `swarm/`, `gateway/` — v0 пишет EPIC-001 (developer + architect#1), с волны 1 владелец — поставщик контракта, который заменяет v0 реализацией в своей ветке. Правило: потребитель заглушки её не правит — запрос владельцу. Состав v0 — `epics/EPIC-001-foundation/design.md` §5.
+**Дополнение после G2 (F-10, `decomposition-review.md` §3.3, `epics.md` §6)**: заглушки v0 контрактов C-02…C-05 создаёт EPIC-001 в волне 0, чтобы TEAM-2/TEAM-3 стартовали без ожидания поставщиков. Трёхступенчатое владение `shared/testkit`: ядро (`dedup`, `versions`, `containers`, `fixtures`, contract-тест) — EPIC-001 → tech-lead#1 (`membus` с T-418 — в `shared/eventbus/membus`, владение как у `shared/eventbus/**`: изменение только через system-architect); подпакеты `state/`, `mechanics/`, `swarm/`, `gateway/` — v0 пишет EPIC-001 (developer + architect#1), с волны 1 владелец — поставщик контракта, который заменяет v0 реализацией в своей ветке. Правило: потребитель заглушки её не правит — запрос владельцу. Состав v0 — `epics/EPIC-001-foundation/design.md` §5.
 
 ---
 

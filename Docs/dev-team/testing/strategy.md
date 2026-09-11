@@ -87,7 +87,7 @@
 
 ### 2.2. Тестовый инструментарий (что должно существовать)
 
-`shared/testkit`: `membus` (шина + `Journal` + `--chaos`), `Dedup`, `Versions()`, `containers`; `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`; `testkit/gateway.Harness`, `FakeGateway`; `testkit/swarm.FakeNarrator`, `FakeEncounter`, `RecordingWriter`, `template/ru.go`; `shared/clock.Manual`/`ManualTimers`; `internal/replay.EventClock`/`NullTimers`; `providers/{fake,recorded}`; фикстуры `testdata/fixtures/{world,region,npc,players}.json`, `testdata/analytics/*.jsonl`, `testdata/recordings/*.jsonl`, `testdata/golden/`.
+`shared/eventbus/membus` (шина + `Journal` + `--chaos`); `shared/testkit`: `Dedup`, `Versions()`, `containers`; `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`; `testkit/gateway.Harness`, `FakeGateway`; `testkit/swarm.FakeNarrator`, `FakeEncounter`, `RecordingWriter`, `template/ru.go`; `shared/clock.Manual`/`ManualTimers`; `internal/replay.EventClock`/`NullTimers`; `providers/{fake,recorded}`; фикстуры `testdata/fixtures/{world,region,npc,players}.json`, `testdata/analytics/*.jsonl`, `testdata/recordings/*.jsonl`, `testdata/golden/`.
 
 ### 2.3. CI (`.github/workflows/go.yml`, F-7)
 
@@ -365,7 +365,7 @@
 
 | Заглушка | Реальный поставщик | CT | Когда |
 |---|---|---|---|
-| `testkit/membus` | kafka-адаптер (testcontainers) | CT-01 | до старта волны 1 (F-5t) |
+| `eventbus/membus` | kafka-адаптер (testcontainers) | CT-01 | до старта волны 1 (F-5t) |
 | `testkit/state.FakeState` | `internal/state` | CT-03 | I1 (после слияния 002) |
 | `testkit/mechanics.FixedMechanics` | `mechanics.Rules` | CT-04 | I1 |
 | `testkit/gateway.Harness` v0 | `internal/gateway` + бот | CT-05, CT-08 | I1-α |

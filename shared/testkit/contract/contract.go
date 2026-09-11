@@ -3,8 +3,8 @@
 //
 // The point of writing it once is that membus and the kafka adapter cannot
 // drift apart unnoticed. Whatever an epic learns about the bus from membus in
-// a unit test must hold on the broker, or the stub is lying — and the whole
-// parallel plan of the waves rests on the stub telling the truth (foundation.md
+// a unit test must hold on the broker, or membus is lying — and the whole
+// parallel plan of the waves rests on membus telling the truth (foundation.md
 // §9, ADR-010, tasks.md T-014).
 //
 // The suite is offset relative and never assumes an empty journal: every case

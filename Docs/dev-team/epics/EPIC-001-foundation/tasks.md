@@ -570,3 +570,9 @@
 - **Документы**: комментарий `Handler` в `bus.go`, README `shared/eventbus` (абзацы «Паника не ловится» и «Id из причины»), `components/foundation.md` §5.
 - **Срок и порядок**: до первой настоящей подписки в бинарнике (T-055 или T-237), не позже интеграции I1-α; после T-418 — обе трогают `membus` и contract-тест.
 - **Исполнитель**: developer.
+
+### T-428: Проход по документам после переноса membus (T-418) · Размер: XS · Статус: todo · Волна 1 (после T-418 и T-413)
+- **Причина (T-418)**: после переноса membus в shared/eventbus/membus в документах архитектора и тимлида остались строки о прежнем месте: contracts.md:191 («сегодня shared/testkit/membus») и :577 (стрелка переезда), plan/ownership.md:15-16 («до переезда … импортов два»), analysis/api-contracts.md:259, ADR-010:30, diagrams/c4-component-foundation.md:31 (testkit содержит membus) и :63, epics/EPIC-003-swarm-llm-laws/design.md:142, plan/decomposition-review.md:96, architecture/infrastructure.md:1138 (F-5t, запись сдачи — только пометка).
+- **Правило**: действующий текст — заменить на факт «с T-418 — shared/eventbus/membus; единственный импорт shared/testkit в бинарнике — хук T-255»; записи прошлого (ADR своего времени, ревью, сведения) — пометка, не переписывать.
+- **DoD**: грэп testkit/membus по Docs/ — вне записей прошлого пусто; список «файл:строка — заменено / помечено».
+- **Исполнитель**: tech-writer (Sonnet — по маршрутизации моделей). После приёмки T-418 и T-413 (infrastructure.md правит T-413).

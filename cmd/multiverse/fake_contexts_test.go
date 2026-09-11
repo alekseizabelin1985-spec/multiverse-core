@@ -19,11 +19,11 @@ import (
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
-	"multiverse-core.io/shared/testkit/membus"
 	"multiverse-core.io/shared/testkit/state"
 	"multiverse-core.io/shared/testkit/swarm"
 )
