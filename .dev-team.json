@@ -6,8 +6,12 @@
   "stack": "Go 1.26, single module (no go.work), Redpanda (Kafka API), MinIO built from source, Qdrant + Neo4j (Chroma only in the legacy compose profile), llama-server (llama.cpp) native + optional Ollama, Docker Compose",
   "hasUI": false,
   "git": {
-    "branches": true,
-    "commits": "auto"
+    "commits": "auto",
+    "flow": "gitflow",
+    "worktrees": "auto",
+    "worktreeDir": ".worktrees",
+    "worktreeSetup": "go mod download",
+    "deleteMergedBranches": true
   },
   "parallelism": {
     "maxTeams": 1,

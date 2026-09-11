@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T19:29:16+03:00",
+  "updatedAt": "2026-09-11T20:08:16+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1097,14 +1097,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-413",
           "title": "Пограничные случаи правил 3 и 8 линтера композиции",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T18:12:02+03:00",
-          "finishedAt": null,
-          "reviewIterations": 1,
+          "finishedAt": "2026-09-11T20:03:52+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 111,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 18:12",
+              "to": "11.09 18:53",
+              "duration": "41m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 18:53",
+              "to": "11.09 19:14",
+              "duration": "21m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 19:14",
+              "to": "11.09 19:39",
+              "duration": "24m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 19:39",
+              "to": "11.09 20:03",
+              "duration": "24m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-413.md"
         },
         {
@@ -1360,7 +1385,8 @@ window.DEVTEAM_STATE =
         }
       ],
       "defects": [],
-      "epic": "EPIC-001"
+      "epic": "EPIC-001",
+      "worktree": ".worktrees/EPIC-001"
     },
     {
       "id": "EPIC-002",
@@ -4324,7 +4350,7 @@ window.DEVTEAM_STATE =
       "task": "T-413",
       "action": "итерация 2: пробел перед двоеточием в правиле 3, фикстуры на новые условия",
       "startedAt": "2026-09-11T19:14:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T19:39:19+03:00"
     },
     {
       "role": "code-reviewer",
@@ -4345,6 +4371,16 @@ window.DEVTEAM_STATE =
       "action": "приёмка по DoD после ревью #2",
       "startedAt": "2026-09-11T19:24:33+03:00",
       "finishedAt": "2026-09-11T19:29:16+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-413",
+      "action": "ревью #2: пробел перед двоеточием, EXTERNAL_PREFIX, самопроверка",
+      "startedAt": "2026-09-11T19:39:19+03:00",
+      "finishedAt": "2026-09-11T20:03:52+03:00"
     }
   ],
   "events": [
@@ -6711,6 +6747,42 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "tech-lead",
       "text": "T-426 на приёмке у tech-lead#1"
+    },
+    {
+      "at": "2026-09-11T19:39:19+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит T-426 пересобран (05e88a6) без go.yml T-413, попавшего по неполному шаблону исключения"
+    },
+    {
+      "at": "2026-09-11T19:39:19+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-413 на ревью #2"
+    },
+    {
+      "at": "2026-09-11T19:39:19+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Плагин dev-team 0.7.0: ветка на задачу и worktree — модель git на решение пользователя"
+    },
+    {
+      "at": "2026-09-11T19:43:34+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Решение пользователя: полный gitflow сейчас — develop, ветки эпиков и задач, основная папка на develop"
+    },
+    {
+      "at": "2026-09-11T19:51:43+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-413 ревью #2: принять (0 Critical/Major/Minor, 2 Nit по силе фикстур); Nit закрываются итерацией 3 до приёмки"
+    },
+    {
+      "at": "2026-09-11T20:08:16+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-413 закоммичена (a29791e). Переход на gitflow: develop = merge эпика (eb5ec39), основная папка на develop, ветка эпика — .worktrees/EPIC-001"
     }
   ],
   "blockers": [],
