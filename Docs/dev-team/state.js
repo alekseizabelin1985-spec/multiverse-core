@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T20:08:16+03:00",
+  "updatedAt": "2026-09-11T21:14:56+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1130,7 +1130,9 @@ window.DEVTEAM_STATE =
               "duration": "24m"
             }
           ],
-          "card": "epics/EPIC-001-foundation/tasks/T-413.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-413.md",
+          "branch": "epic/EPIC-001-foundation",
+          "mergeCommit": "a29791ea730bb97c169bfb61558538369cba367e"
         },
         {
           "id": "T-414",
@@ -1173,15 +1175,56 @@ window.DEVTEAM_STATE =
         {
           "id": "T-415",
           "title": "Обходные и беззвучные пути: recover в StartAll, ошибка публикации у заглушки встречи, хук go-fmt вне модуля",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T20:10:06+03:00",
+          "finishedAt": "2026-09-11T21:12:04+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-415.md"
+          "spentMinutes": 61,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 20:10",
+              "to": "11.09 20:28",
+              "duration": "18m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 20:28",
+              "to": "11.09 20:40",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 20:40",
+              "to": "11.09 20:50",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 20:50",
+              "to": "11.09 20:56",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 20:56",
+              "to": "11.09 21:03",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка 2",
+              "from": "11.09 21:03",
+              "to": "11.09 21:12",
+              "duration": "9m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-415.md",
+          "branch": "task/T-415-silent-paths",
+          "worktree": null,
+          "mergeCommit": "1a2c2d8b7715b909e16bfa87c672feef06af93b8",
+          "mergedAt": "2026-09-11T21:14:56+03:00"
         },
         {
           "id": "T-416",
@@ -1360,19 +1403,74 @@ window.DEVTEAM_STATE =
         {
           "id": "T-428",
           "title": "Проход по документам после переноса membus (T-418)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "tech-writer#1",
+          "startedAt": "2026-09-11T20:09:01+03:00",
+          "finishedAt": "2026-09-11T20:44:59+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-428.md"
+          "spentMinutes": 35,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 20:09",
+              "to": "11.09 20:18",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 20:18",
+              "to": "11.09 20:24",
+              "duration": "6m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 20:24",
+              "to": "11.09 20:33",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 20:33",
+              "to": "11.09 20:36",
+              "duration": "3m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "11.09 20:36",
+              "to": "11.09 20:39",
+              "duration": "2m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 20:39",
+              "to": "11.09 20:44",
+              "duration": "5m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-428.md",
+          "branch": "task/T-428-docs-after-membus",
+          "mergeCommit": "4d7c209ee0eb40a53a439f39fcbc1b8e2db9b59a",
+          "mergedAt": "2026-09-11T20:44:59+03:00"
         },
         {
           "id": "T-429",
           "title": "compose-lint: значения из docker compose config --no-interpolate вместо разбора строк YAML",
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-11T20:45:50+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-429.md",
+          "branch": "task/T-429-compose-lint-config",
+          "worktree": ".worktrees/T-429"
+        },
+        {
+          "id": "T-430",
+          "title": "recover в StopAll; вопрос system-architect: %w только для ErrHandlerPanic",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -1381,7 +1479,7 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-429.md"
+          "card": "epics/EPIC-001-foundation/tasks.md"
         }
       ],
       "defects": [],
@@ -4381,6 +4479,146 @@ window.DEVTEAM_STATE =
       "action": "ревью #2: пробел перед двоеточием, EXTERNAL_PREFIX, самопроверка",
       "startedAt": "2026-09-11T19:39:19+03:00",
       "finishedAt": "2026-09-11T20:03:52+03:00"
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "проход по документам после переноса membus",
+      "startedAt": "2026-09-11T20:09:01+03:00",
+      "finishedAt": "2026-09-11T20:18:10+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "обходные и беззвучные пути (без хука .claude владельца)",
+      "startedAt": "2026-09-11T20:10:06+03:00",
+      "finishedAt": "2026-09-11T20:28:37+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "ревью прохода по документам",
+      "startedAt": "2026-09-11T20:18:10+03:00",
+      "finishedAt": "2026-09-11T20:24:27+03:00"
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "итерация 2 по ревью #1 (Ma-1, Mi-1…4, N-1, N-2)",
+      "startedAt": "2026-09-11T20:24:27+03:00",
+      "finishedAt": "2026-09-11T20:33:41+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "ревью #1 обходных и беззвучных путей",
+      "startedAt": "2026-09-11T20:28:37+03:00",
+      "finishedAt": "2026-09-11T20:40:48+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "ревью #2 прохода по документам",
+      "startedAt": "2026-09-11T20:33:41+03:00",
+      "finishedAt": "2026-09-11T20:36:55+03:00"
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "итерация 3: v1.5a и два Nit ревью #2",
+      "startedAt": "2026-09-11T20:36:55+03:00",
+      "finishedAt": "2026-09-11T20:39:12+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-428",
+      "action": "приёмка прохода по документам",
+      "startedAt": "2026-09-11T20:39:12+03:00",
+      "finishedAt": "2026-09-11T20:44:59+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "итерация 2 по ревью #1 (Mi-1, N-1…N-4, флак EPIC-003)",
+      "startedAt": "2026-09-11T20:40:48+03:00",
+      "finishedAt": "2026-09-11T20:50:21+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-429",
+      "action": "compose-lint на docker compose config --no-interpolate",
+      "startedAt": "2026-09-11T20:45:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-11T20:50:21+03:00",
+      "finishedAt": "2026-09-11T20:56:43+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "приёмка по DoD",
+      "startedAt": "2026-09-11T20:56:43+03:00",
+      "finishedAt": "2026-09-11T21:03:04+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-415",
+      "action": "подтверждение правок в файлах EPIC-003",
+      "startedAt": "2026-09-11T21:03:04+03:00",
+      "finishedAt": "2026-09-11T21:12:04+03:00"
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "EPIC-003-Q",
+      "action": "решения: T-427 и §10 п. 14 индекса EPIC-003",
+      "startedAt": "2026-09-11T21:14:56+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -6783,6 +7021,42 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-413 закоммичена (a29791e). Переход на gitflow: develop = merge эпика (eb5ec39), основная папка на develop, ветка эпика — .worktrees/EPIC-001"
+    },
+    {
+      "at": "2026-09-11T20:09:01+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-428 начата: ветка task/T-428-docs-after-membus в .worktrees/EPIC-001 (первая задача по gitflow), tech-writer#1 (Sonnet)"
+    },
+    {
+      "at": "2026-09-11T20:10:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-415 начата параллельно с T-428: ветка task/T-415-silent-paths в .worktrees/T-415; пункт про .claude/hooks/go-fmt.ps1 исключён — файл владельца"
+    },
+    {
+      "at": "2026-09-11T20:45:26+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-428 принята tech-lead#1 и закоммичена f4ad897 в task/T-428; finish слил её в эпик (4d7c209), ветка задачи удалена"
+    },
+    {
+      "at": "2026-09-11T20:45:50+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-429 начата параллельно с T-415: ветка task/T-429-compose-lint-config в .worktrees/T-429, devops-engineer#1 (Opus)"
+    },
+    {
+      "at": "2026-09-11T21:04:26+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-415 принята tech-lead#1 (ревью #1 и #2 — принять); ждёт подтверждения tech-lead#2 по файлам EPIC-003. Заведена T-430 (бэклог)"
+    },
+    {
+      "at": "2026-09-11T21:14:56+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-415 закоммичена 14384f6 (тесты на дереве коммита и хуки зелёные), finish слил её в эпик (1a2c2d8); рабочая папка и ветка задачи удалены"
     }
   ],
   "blockers": [],
