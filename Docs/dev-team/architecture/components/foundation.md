@@ -33,7 +33,7 @@ shared/
   logging/                     slog JSON, обязательные поля, With(ctx), middleware шины
   clock/                       Clock, Timers, Real, Manual (интерфейсы времени; EventClock — internal/replay)
   runtime/                     Context, Deps, Mode, Status, Registry контекстов
-  testkit/                     membus, Dedup-псевдоним, harness-каркас, фикстуры; фейки — в подпакетах владельцев (v0 создаёт F-10, см. §9)
+  testkit/                     contract-тест шины, Dedup-псевдоним, harness-каркас, фикстуры; фейки — в подпакетах владельцев (v0 создаёт F-10, см. §9); membus — под eventbus/ выше (T-418)
 schemas/
   embed.go                     package schemas; //go:embed events/**/*.json agent/**/*.json → FS
   events/_common.json, _envelope.json, <type>.v<n>.json
@@ -349,6 +349,8 @@ flowchart LR
     F7 --> F9[F-9 CLAUDE/AGENTS/README]
 ```
 
+Диаграмма — запись планирования волны 0 (нарезка tech-lead#1, до T-418); узел `F5t` называет `membus` частью `testkit`, как это было на момент нарезки. Факт (с T-418 `membus` — в `shared/eventbus/membus`) — в критерии готовности EPIC-001 ниже (§12, строка с `testkit` содержит membus).
+
 Уточнения:
 
 - **F-0** (Дополнение после G2) — выполнен оркестратором 2026-09-09: gitlink'и `.claude/worktrees/*` удалены из индекса, `git status` работает, коммит 744fb10, ветка `integration/mvp-1` создана от `feature/agent-gm-core`.
@@ -364,7 +366,7 @@ flowchart LR
 
 Порядок (по `epics.md` §6): **F-0 → F-1 ∥ F-3 → F-2 → (F-4a ∥ F-4b ∥ F-5 ∥ F-6) → (F-4c ∥ F-5t ∥ F-10 ∥ F-7 ∥ F-8) → F-9**; критический путь волны 0: F-1 → F-2 → F-4a → F-5t.
 
-Критерий готовности EPIC-001 (из `epics.md` v0.2): `git status` чист и работает; `pre-commit` с `gitleaks` установлен, `gitleaks git --redact` = 0; `make ci` зелёный; `make up` поднимает инфраструктуру и `core|gateway|memory` с `/health ok`; contract-тест шины на testcontainers; `testkit` содержит membus + v0 заглушек C-02…C-05; `mvctl contracts check` без фантомов; секретов в HEAD нет; `services/_archive/` и замороженные сервисы вне `go build ./...`; `baseline.md` с выбором конфигурации по U-2.
+Критерий готовности EPIC-001 (из `epics.md` v0.2): `git status` чист и работает; `pre-commit` с `gitleaks` установлен, `gitleaks git --redact` = 0; `make ci` зелёный; `make up` поднимает инфраструктуру и `core|gateway|memory` с `/health ok`; contract-тест шины на testcontainers; `testkit` содержит membus + v0 заглушек C-02…C-05 (с T-418 `membus` — в `shared/eventbus/membus`); `mvctl contracts check` без фантомов; секретов в HEAD нет; `services/_archive/` и замороженные сервисы вне `go build ./...`; `baseline.md` с выбором конфигурации по U-2.
 
 ---
 

@@ -139,7 +139,7 @@
 
 | Контракт | Заглушка | Откуда/когда | Как используем | Замена |
 |---|---|---|---|---|
-| C-01 шина/журнал/реестр | `testkit/membus` (+`Journal`, `Dedup`, `--chaos=duplicate`), `shared/contracts` со схемами `_common` | EPIC-001, волна 0 | все unit/e2e; свои схемы добавляем в `schemas/events/` + PR в реестр (A5/A6) | kafka-адаптер в integration |
+| C-01 шина/журнал/реестр | `membus` (`shared/eventbus/membus`, с T-418; +`Journal`, `Dedup`, `--chaos=duplicate`), `shared/contracts` со схемами `_common` | EPIC-001, волна 0 | все unit/e2e; свои схемы добавляем в `schemas/events/` + PR в реестр (A5/A6) | kafka-адаптер в integration |
 | C-02 факты State | `testkit/state.FakeState` v0 (ops в память, факты, без инвариантов; `WithInvariants()` — позже) | F-10 (v0) → EPIC-002 I1 | WorldView, `expected_version`, `entity.create.proposed encounter/npc` | реальный State при интеграции I1 (слияние 002 раньше 003) |
 | C-03 механика | `internal/mechanics` типы + `Load` + `rules/dark-forest.yaml` (F-10), `testkit/mechanics.FixedMechanics` (табличные исходы по seed) | F-10 → EPIC-002 I1 (`Resolve`) | R7/G1/C4 компилируются против типов C-03 v1.1; `Invariants()` для стража — при отсутствии реализации страж получает пустую карту → `/health degraded {laws: unknown_check}` (ожидаемо до слияния 002) | реальный `Resolve/Invariants` |
 | C-04 действия игрока | `testkit/gateway.Harness` v0 (генератор `player.*` из фикстур в `membus`, без HTTP) | F-10 → EPIC-004 | e2e `solo-30`, `death`, `flee-fail`; `round.closed` для G1 генерирует харнесс | HTTP-харнесс EPIC-004 при интеграции |
