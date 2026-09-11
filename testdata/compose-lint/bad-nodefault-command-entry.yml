@@ -1,0 +1,13 @@
+# Rule 8 and the advice for an entry outside `environment` (T-429 review #1
+# N-4). `CLIENTS=${MV_CORE_ADMIN_CLIENTS}` in a command reads like an entry,
+# but it is text for the process: with .env silent it gets `CLIENTS=`. The
+# refusal is right; "pass it through as a key with no value" is not a fix here,
+# so the message must give the advice for a longer string.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+# expect-text: it is part of a larger string here
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    command: ["run", "CLIENTS=${MV_CORE_ADMIN_CLIENTS}"]

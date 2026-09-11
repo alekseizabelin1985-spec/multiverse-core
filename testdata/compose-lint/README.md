@@ -21,21 +21,36 @@ when an `# expect-text:` fragment is missing from the refusal (T-413). The run
 also fails when a fixture carries two `# expect-rule:` lines, when a fixture is
 named `*.yaml` (only `*.yml` is read), and when the directory is missing or
 holds no bad or no good fixture at all — a moved directory must not turn the
-self-test into a silent pass (T-413 review #1 Mi-3, N-2). The last line says how
-many of each ran. The directory can be overridden with `COMPOSE_LINT_FIXTURES`,
-which is how the self-test itself is tested.
+self-test into a silent pass (T-413 review #1 Mi-3, N-2). The run also takes the
+first `good-*.yml` once more by a path relative to its own directory, from that
+directory: a relative `-f` belongs to the caller, not to the repository root
+(T-413 review #1 N-3). The last line says how many of each ran. The directory
+can be overridden with `COMPOSE_LINT_FIXTURES`, which is how the self-test
+itself is tested. The fixtures run side by side (`COMPOSE_LINT_JOBS`, the number
+of processors by default) and are judged in the order of the files (T-429).
+
+Rules 3, 7 and 8 read a fixture the way compose reads it: through `docker
+compose config --no-interpolate`, the values after YAML and before
+interpolation (T-429). The `bad-yaml-*` fixtures and the flow-mapping, the
+continuation-line and the escaped-brace ones are the forms the line reader of
+T-413 got wrong; for each, the reference is what compose v5.2.0 (the version on
+the owner's machine) makes of it, and the header of the fixture says so.
 
 | File | Rule | What it plants |
 |---|---|---|
 | `bad-latest.yml` | 1 | a third-party image on a floating `latest` tag (NFR-071) |
+| `bad-image-unpinned.yml` | 1 | third-party images with explicit tags that do not come from `build/versions.env`, one merged from an anchor and one written `image :` (T-429 review #1 Mi-1) |
 | `bad-port.yml` | 2 | a published port that is not bound to `127.0.0.1` (SEC-13) |
 | `bad-env-list.yml` | 3 | a literal password in an `environment` written as a YAML list (`- KEY=value`) |
-| `bad-anchor.yml` | 3 | literal credentials in an anchor other than `x-platform-env` |
+| `bad-anchor.yml` | 3 | literal credentials in an anchor other than `x-platform-env`; the finding is reported once with both places, the anchor and the service that merges it (T-429 review #1 N-2) |
 | `bad-secret-passthrough.yml` | 3 | a required credential passed through as a key with no value — the form rule 8 recommends for allow-lists, never right for a secret (T-411) |
 | `bad-secret-quoted-key.yml` | 3 | the same key with no value, quoted: `"MINIO_ROOT_USER":` (T-411 review #1 N-3) |
 | `bad-secret-quoted-list.yml` | 3 | a literal credential in a list item quoted as a whole, `- "KEY=value"` (N-3) |
 | `bad-secret-spaced-colon.yml` | 3 | a bare required credential and a literal password with the colons aligned, `KEY : value` — one space before one colon, several before the other (T-413 review #1 Ma-1, review #2 N-1) |
 | `bad-secret-escaped.yml` | 3 | `$${MINIO_ROOT_PASSWORD:?...}` — compose's escape, so the container gets the literal text as its password (T-413) |
+| `bad-secret-number.yml` | 3 | `MV_LLM_API_KEY: 1234567890` — a literal YAML reads as a number is still a literal (T-429 review #1 N-1) |
+| `bad-secret-flow-mapping.yml` | 3 | a literal password in a flow mapping, `environment: {KEY: value, ...}` (T-429; T-413 review #1 N-1) |
+| `bad-secret-multiline-plain.yml` | 3 | `MV_LLM_API_KEY:` with a literal on the next line — a key WITH a value to YAML, not a key without one (T-429; T-413 review #2) |
 | `bad-required-outside-default.yml` | 7 | a `${VAR:?}` on a service outside the default profile set, which breaks `docker compose` for everybody (T-397) |
 | `bad-env-example-comment.yml` | 7 | an empty variable with an inline comment in the paired `bad-env-example-comment.env`: compose reads the comment as the value, so `${VAR:?}` never fires (T-397) |
 | `bad-required-unmarked.yml` | 7 | a `${VAR:?}` of the always-loaded file whose variable the paired `bad-required-unmarked.env` does not mark `[required]` — the operator following the README skips it (T-412 acceptance, T-413) |
@@ -48,7 +63,7 @@ which is how the self-test itself is tested.
 | `bad-network-shape.yml` | 8 | `MV_MINIO_ENDPOINT` with a scheme, where the manifest's default is host:port (T-411 review #2 N-4) |
 | `bad-network-core-addr.yml` | 8 | `MV_CORE_ADDR`, a listen address, defaulting to a service of the network (N-4) |
 | `bad-network-outside-set.yml` | 8 | a network variable outside the explicit set; the refusal says to add it there (N-4) |
-| `bad-ollama-default.yml` | 8 | an `OLLAMA_*` default different from the manifest's `DeclareExternal` (contracts.md §16 p. 5) |
+| `bad-ollama-default.yml` | 8 | an `OLLAMA_*` default different from the manifest's `DeclareExternal` (contracts.md §16 p. 5); the second `expect-text` holds it to its own branch, not to the one for platform variables (T-413 review #2, mutant r3) |
 | `bad-ollama-passthrough.yml` | 8 | an `OLLAMA_*` key with no value — the container would run on the image's default, not ours |
 | `bad-ollama-spaced-colon.yml` | 8 | the same with the colons aligned: `OLLAMA_KEEP_ALIVE :` with one space, `OLLAMA_NUM_PARALLEL      :` with several (Ma-1, review #2 N-1) |
 | `bad-ollama-nodefault.yml` | 8 | `${OLLAMA_X}` with no modifier: the container gets an empty value instead of the manifest's (Mi-1) |
@@ -58,10 +73,17 @@ which is how the self-test itself is tested.
 | `bad-nodefault-bare.yml` | 8 | the same trap spelled `$MV_X` (Mi-2) |
 | `bad-nodefault-after-escape.yml` | 8 | the same trap after compose's escape: `$$$MV_X` (N-6) |
 | `bad-nodefault-in-command.yml` | 8 | the same trap inside a `command:`, where the advice is not "a key with no value" (N-5) |
+| `bad-anchor-nodefault.yml` | 8 | `${MV_X}` in an `x-*` anchor merged into a service's `environment`: the anchor's place is an environment entry too, so both places get the same advice and one refusal (T-429 review #2 N-1) |
+| `bad-nodefault-command-entry.yml` | 8 | `CLIENTS=${MV_X}` in a command: an entry to read, text to the process, so the advice is the one for a longer string (T-429 review #1 N-4) |
 | `bad-alternate-colon.yml` | 8 | `${MV_X:+x}`: compose's own text when set, empty when `.env` is silent (N-6) |
 | `bad-alternate-plain.yml` | 8 | `${MV_X+x}`, the same without the colon (N-6) |
 | `bad-default-nested-outer.yml` | 8 | a default that is another interpolation, `${MV_X:-${Y:-d}}` (T-411 review #1 N-1) |
 | `bad-default-nested-inner.yml` | 8 | a wrong platform default nested inside an as-is variable's default (N-1) |
+| `bad-default-escaped-brace.yml` | 8 | `${MV_X:-$${Y}}`: compose closes it at the second brace, and the refusal quotes the whole default, not a garbled `$${Y` (T-429; T-413 review #1 N-1) |
+| `bad-yaml-escaped-dollar.yml` | 8 | `"\x24{MV_X}"`: a YAML escape for the dollar, which compose interpolates (T-429; T-413 review #1 N-1) |
+| `bad-yaml-doubled-quote.yml` | 8 | `'it''s # ${MV_X}'`: `''` is one quote, so the `#` is text (T-429; N-1) |
+| `bad-yaml-block-scalar-comment.yml` | 8 | a line `# ${MV_X}` inside a `\|` block, which is text, not a comment (T-429; N-1) |
+| `bad-yaml-multiline-quoted-comment.yml` | 8 | `# ${MV_X}` on the continuation line of a quoted string (T-429; N-1) |
 | `good-network-set.yml` | — | the six network addresses naming services in the right shape, and `MV_LLM_URL`, `MV_TELEGRAM_HEALTH_ADDR`, `MV_MEMORY_URL` that the old guess mistook (N-4) |
 | `good-escaped-dollar.yml` | — | `$${MV_X:-d}` and `$$MV_X` in a command: text for the container's shell (N-1) |
 | `good-comment-after-bare-key.yml` | — | keys with no value followed by a YAML comment, one quoting `${MV_X}` (N-5) |
@@ -69,6 +91,8 @@ which is how the self-test itself is tested.
 | `good-ollama-defaults.yml` | — | the `OLLAMA_*` block with the manifest's defaults |
 | `good-spaced-colon.yml` | — | the correct forms with the colons aligned (Ma-1) |
 | `good-compose-project-name.yml` | — | `${COMPOSE_PROJECT_NAME}` with no modifier: compose sets it itself, and the contract holds compose to third-party defaults for `OLLAMA_*` only (Mi-1) |
+| `good-image-pinned.yml` | — | third-party images from the pins of `build/versions.env`, from an anchor and written `image :` (T-429 review #1 Mi-1) |
+| `good-required-message-nested.yml` | — | `${MV_LLM_URL:?... ${MV_WORLD_ID} ...}`: compose evaluates the message of `:?` only on its way to a refusal, so nothing in it is checked (T-429; T-413 review #1 N-1) |
 
 A fixture may bring its own example environment: when `x.env` sits next to
 `x.yml`, the linter reads it instead of `.env.example` for rule 7 — both the

@@ -1,8 +1,12 @@
 # Rule 3: an anchor that is not called x-platform-env. Secrets do not become
 # safe by being merged in from a differently named block (SEC-14).
 #
+# The model repeats the anchor in the service that merges it; the finding is
+# reported once with both places, separated by a comma (T-429 review #1 N-2).
+#
 # expect-rule: 3
 # expect-text: NEO4J_PASSWORD carries the literal
+# expect-text: NEO4J_PASSWORD, testdata/
 x-extra-env: &extra-env
   NEO4J_PASSWORD: fixture-only-not-a-secret
   MV_MINIO_SECRET_KEY: fixture-only-not-a-secret-0000

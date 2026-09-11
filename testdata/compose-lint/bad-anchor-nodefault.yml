@@ -1,0 +1,19 @@
+# Rule 8 in an anchor merged into the environment of a service (T-429 review
+# #2 N-1). `${MV_CORE_ADMIN_CLIENTS}` with no modifier hands the process an
+# empty allow-list when .env is silent. The anchor's entry is an environment
+# entry too — it is merged into one — so both places get the same advice, a key
+# with no value, and the finding is reported once: the comma after the place of
+# the service is there only when the anchor's place got the same text.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+# expect-text: pass it through as a key with no value
+# expect-text: services.core.environment.MV_CORE_ADMIN_CLIENTS,
+x-admin-env: &admin-env
+  MV_CORE_ADMIN_CLIENTS: ${MV_CORE_ADMIN_CLIENTS}
+
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      <<: *admin-env

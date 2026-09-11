@@ -1,0 +1,14 @@
+# Rule 8 and where a default ends (T-429; T-413 review #1 N-1). Compose v5.2.0
+# closes `${MV_LOG_LEVEL:-$${LEVEL}}` at the SECOND brace: it counts every
+# `${`, the one inside the escape `$${` too, and undoes the escape only when it
+# interpolates the default. With .env silent the process gets the text
+# `${LEVEL}`. The linter used to skip `$$` while counting, close at the first
+# brace and report a garbled `$${LEVEL` as the default.
+#
+# expect-rule: 8
+# expect-text: MV_LOG_LEVEL defaults to '$${LEVEL}' here and to 'info'
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-$${LEVEL}}

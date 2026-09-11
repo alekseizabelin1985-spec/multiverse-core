@@ -71,6 +71,25 @@
 #      - a name the manifest does not declare, or declares retired, is
 #        rejected too — that is also what makes a parse miss loud.
 #
+# Where the values come from. Rules 1-6 read the resolved model, `docker
+# compose config --format json` over every file and profile at once. Rules 3, 7
+# and 8 — and the source of an image for rule 1 — cannot: interpolation has
+# already happened there, and a literal password looks exactly like a correct
+# `${VAR:?}`. They read each file on its own through `docker compose config
+# --no-interpolate --no-consistency --format json --profile '*'`: every value
+# after YAML has parsed it and before compose has interpolated it. Quotes,
+# `''`, `\x24`, block scalars, flow mappings, continuation lines, `KEY :` and
+# comments are thereby compose's own reading, not a copy of it — the line
+# reader this replaced missed each of them in turn (T-429; T-413 review #1
+# N-1, review #2). What is reproduced here is the interpolation alone, and it
+# follows compose there too:
+# the message of `${VAR:?msg}` is evaluated only when compose is about to refuse
+# anyway, so nothing in it is checked, and `${VAR:-$${X}}` closes at the second
+# brace. Keys are not interpolated by compose and are not read as text. A place
+# is named by its path in the model (`services.core.environment.MV_X`), and a
+# finding repeated by an anchor merged into several services is reported once,
+# with every place.
+#
 # Rule 8, the shape of the fix it asks for: pass the variable through as a key
 # with no value (`MV_X:` in a mapping, `- MV_X` in a list). Compose then sets it
 # from .env when .env has it — empty included, which for an allow-list means
@@ -103,12 +122,15 @@
 #   scripts/compose-lint.sh [-f <compose file>]...
 #   scripts/compose-lint.sh --fixtures
 # The first -f replaces the default set of files; further -f add to it. The
-# first file in the set is the one rule 7 applies to.
+# first file in the set is the one rule 7 applies to. A relative -f is relative
+# to the directory the linter is called from, as for docker compose itself
+# (T-413 review #1 N-3); a file that does not exist is refused by name.
 # --fixtures runs the linter over its own fixtures in testdata/compose-lint:
 # every bad-*.yml must be rejected by exactly the rule its `# expect-rule: N`
 # line names, and its message must contain every `# expect-text: ...` line of
 # the fixture; every good-*.yml must pass. A fixture rejected by another rule
-# proves nothing about its own (T-411 acceptance).
+# proves nothing about its own (T-411 acceptance). The fixtures run side by
+# side and are judged in a fixed order afterwards (T-429).
 # Environment:
 #   COMPOSE_LINT_ENV_FILES  space separated env files (default:
 #                           "build/versions.env .github/ci.env")
@@ -116,12 +138,26 @@
 #                           (default: all of them)
 #   COMPOSE_LINT_FIXTURES   the directory --fixtures reads
 #                           (default: testdata/compose-lint)
+#   COMPOSE_LINT_JOBS       how many fixtures --fixtures runs at once
+#                           (default: the number of processors)
 # =============================================================================
 set -euo pipefail
 
-repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-self="$repo_root/scripts/$(basename -- "${BASH_SOURCE[0]}")"
-cd "$repo_root"
+# Builtins only on the way in, here and in the fixture loop: a fork costs tens
+# of milliseconds in Git Bash, and --fixtures starts this script fifty times.
+case ${BASH_SOURCE[0]} in
+*/*) script_dir=${BASH_SOURCE[0]%/*} ;;
+*) script_dir=. ;;
+esac
+caller_pwd=$PWD
+CDPATH='' cd -- "$script_dir/.."
+repo_root=$PWD
+self="$repo_root/scripts/${BASH_SOURCE[0]##*/}"
+
+# Python prints the refusals, and on Windows a pipe would otherwise get them in
+# the console code page — `§` of a message would then never match the `§` of a
+# fixture's `# expect-text:` line, which is UTF-8 like every file here.
+export PYTHONIOENCODING=utf-8
 
 # The caller may be `make`, which exports COMPOSE_ENV_FILES, or a shell where
 # the operator set COMPOSE_FILE/COMPOSE_PROFILES for their own stack. Every file
@@ -134,7 +170,14 @@ unset COMPOSE_ENV_FILES COMPOSE_FILE COMPOSE_PROFILES
 # --------------------------------------------------------------------------
 run_fixtures() {
   local dir=${COMPOSE_LINT_FIXTURES:-testdata/compose-lint} failed=0 bad good expected got out text
-  local ok stray lines n_bad=0 n_good=0
+  local ok stray line n n_bad=0 n_good=0 work limit i running rc near rest rule root
+  local -a bads=() wants=() goods=()
+  local -A fired=()
+  # The loop reads with builtins — `read`, `[[ =~ ]]`, pattern matching — and
+  # forks only to run the linter. With fifty fixtures, the `grep`, `sed` and
+  # `cat` of each one cost Git Bash more than the runs themselves (T-429).
+  local re_rule='^# expect-rule:' re_num='^# expect-rule:[[:space:]]*([0-9]+)[[:space:]]*$'
+  local re_text='^# expect-text:[[:space:]]*(.*)$' re_fired='\[rule ([0-9]+)\]'
   # A moved, renamed or mistyped directory must not turn the self-test into a
   # silent pass (T-413 review #1 Mi-3): no fixtures is a failure, not a clean run.
   if [ ! -d "$dir" ]; then
@@ -151,27 +194,98 @@ run_fixtures() {
     # No match leaves the pattern itself, and `set -e` would end the run there.
     [ -e "$bad" ] || continue
     n_bad=$((n_bad + 1))
-    lines=$(grep -c '^# expect-rule:' "$bad" || true)
-    if [ "$lines" -gt 1 ]; then
-      echo "compose-lint: $bad has $lines '# expect-rule:' lines; a fixture plants exactly one rule" >&2
+    n=0
+    expected=""
+    while IFS= read -r line || [ -n "$line" ]; do
+      line=${line%$'\r'}
+      [[ $line =~ $re_rule ]] || continue
+      n=$((n + 1))
+      if [ -z "$expected" ] && [[ $line =~ $re_num ]]; then
+        expected=${BASH_REMATCH[1]}
+      fi
+    done <"$bad"
+    if [ "$n" -gt 1 ]; then
+      echo "compose-lint: $bad has $n '# expect-rule:' lines; a fixture plants exactly one rule" >&2
       failed=1
       continue
     fi
-    expected=$(sed -n 's/^# expect-rule:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$bad" | head -n 1)
     if [ -z "$expected" ]; then
       echo "compose-lint: $bad has no '# expect-rule: N' line, so nothing says which rule it plants" >&2
       failed=1
       continue
     fi
-    if out=$(bash "$self" -f "$bad" 2>&1); then
+    bads+=("$bad")
+    wants+=("$expected")
+  done
+  for good in "$dir"/good-*.yml; do
+    [ -e "$good" ] || continue
+    n_good=$((n_good + 1))
+    goods+=("$good")
+  done
+
+  # Each fixture is a run of its own — three calls of `docker compose config`
+  # and two of Python, about a second — and nothing is shared between them, so
+  # they run side by side (T-429: one after another they took 90 s). The
+  # verdicts are read afterwards in the order of the files, so the output does
+  # not depend on which run finished first. One more run takes the first good
+  # fixture by a path relative to its own directory, from that directory: a
+  # relative -f is the caller's, not the repository root's (T-413 review #1 N-3).
+  work=$(mktemp -d)
+  # shellcheck disable=SC2064 # the directory is known now and must go whatever happens
+  trap "rm -rf '$work'" EXIT
+  limit=${COMPOSE_LINT_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+  i=0
+  running=0
+  for bad in "${bads[@]}" "${goods[@]}"; do
+    if [ "$running" -ge "$limit" ]; then
+      wait -n || true
+      running=$((running - 1))
+    fi
+    (
+      set +e
+      bash "$self" -f "$bad" >"$work/$i.out" 2>&1
+      echo $? >"$work/$i.rc"
+    ) &
+    running=$((running + 1))
+    i=$((i + 1))
+  done
+  if [ ${#goods[@]} -gt 0 ]; then
+    good=${goods[0]}
+    (
+      set +e
+      cd -- "${good%/*}" || exit
+      bash "$self" -f "${good##*/}" >"$work/near.out" 2>&1
+      echo $? >"$work/near.rc"
+    ) &
+  fi
+  wait
+
+  i=0
+  for bad in "${bads[@]}"; do
+    expected=${wants[$i]}
+    out=""
+    rc=2
+    [ -f "$work/$i.out" ] && { IFS= read -r -d '' out || true; } <"$work/$i.out"
+    [ -f "$work/$i.rc" ] && { read -r rc || true; } <"$work/$i.rc"
+    i=$((i + 1))
+    if [ "$rc" = 0 ]; then
       echo "compose-lint: $bad broke rule $expected but passed the linter" >&2
       failed=1
       continue
     fi
     # Every rule that fired, not only the expected one: a fixture that is red
     # for two reasons stops proving either the moment one of them is fixed.
-    got=$(printf '%s\n' "$out" | grep -oE '\[rule [0-9]+\]' | sort -u | tr '\n' ' ' || true)
-    if [ "$got" != "[rule $expected] " ]; then
+    fired=()
+    rest=$out
+    while [[ $rest =~ $re_fired ]]; do
+      fired[${BASH_REMATCH[1]}]=1
+      rest=${rest#*"${BASH_REMATCH[0]}"}
+    done
+    if [ "${#fired[@]}" -ne 1 ] || [ -z "${fired[$expected]:-}" ]; then
+      got=""
+      for rule in "${!fired[@]}"; do
+        got+="[rule $rule] "
+      done
       {
         echo "compose-lint: $bad plants rule $expected but was rejected by: ${got:-no rule at all}"
         printf '%s\n' "$out" | sed 's/^/    /'
@@ -180,9 +294,12 @@ run_fixtures() {
       continue
     fi
     ok=1
-    while IFS= read -r text; do
+    while IFS= read -r line || [ -n "$line" ]; do
+      line=${line%$'\r'}
+      [[ $line =~ $re_text ]] || continue
+      text=${BASH_REMATCH[1]}
       [ -n "$text" ] || continue
-      if ! printf '%s\n' "$out" | grep -qF -- "$text"; then
+      if [[ $out != *"$text"* ]]; then
         {
           echo "compose-lint: $bad was rejected by rule $expected, but not for the reason it plants — no '$text' in:"
           printf '%s\n' "$out" | sed 's/^/    /'
@@ -190,14 +307,17 @@ run_fixtures() {
         ok=0
         failed=1
       fi
-    done < <(sed -n 's/^# expect-text:[[:space:]]*//p' "$bad")
+    done <"$bad"
     # Said only on a full match: a wrong reason is not "as it must be".
     [ "$ok" = 1 ] && echo "compose-lint: $bad rejected by rule $expected, as it must be"
   done
-  for good in "$dir"/good-*.yml; do
-    [ -e "$good" ] || continue
-    n_good=$((n_good + 1))
-    if ! out=$(bash "$self" -f "$good" 2>&1); then
+  for good in "${goods[@]}"; do
+    out=""
+    rc=2
+    [ -f "$work/$i.out" ] && { IFS= read -r -d '' out || true; } <"$work/$i.out"
+    [ -f "$work/$i.rc" ] && { read -r rc || true; } <"$work/$i.rc"
+    i=$((i + 1))
+    if [ "$rc" != 0 ]; then
       {
         echo "compose-lint: $good is clean but the linter rejected it:"
         printf '%s\n' "$out" | sed 's/^/    /'
@@ -207,6 +327,27 @@ run_fixtures() {
     fi
     echo "compose-lint: $good passed, as it must"
   done
+  if [ ${#goods[@]} -gt 0 ]; then
+    near=${goods[0]##*/}
+    # The run of the same fixture from the root is the one right after the bad
+    # ones; only when it passed does a failure here say anything about -f.
+    root=2
+    [ -f "$work/${#bads[@]}.rc" ] && { read -r root || true; } <"$work/${#bads[@]}.rc"
+    rc=2
+    [ -f "$work/near.rc" ] && { read -r rc || true; } <"$work/near.rc"
+    if [ "$root" != 0 ]; then
+      echo "compose-lint: $near was not checked as -f $near from its own directory: it does not pass from the repository root either (see above)" >&2
+      failed=1
+    elif [ "$rc" != 0 ]; then
+      {
+        echo "compose-lint: $near passes from the repository root but not as -f $near from its own directory:"
+        sed 's/^/    /' "$work/near.out"
+      } >&2
+      failed=1
+    else
+      echo "compose-lint: $near passed as -f $near from its own directory, as it must"
+    fi
+  fi
   if [ "$n_bad" -eq 0 ] || [ "$n_good" -eq 0 ]; then
     echo "compose-lint: $dir holds $n_bad bad and $n_good good fixtures; the self-test needs both kinds, or it proves nothing" >&2
     failed=1
@@ -215,11 +356,40 @@ run_fixtures() {
   return "$failed"
 }
 
+# A relative -f is relative to the directory the linter was called from, as it
+# is for docker compose; resolving it against the repository root, where this
+# script works, turned a mistyped path into a refusal of rule 7 that spoke of a
+# clean machine (T-413 review #1 N-3). A path inside the repository is shown
+# relative to its root, as it always was.
+resolve_file() {
+  local path=${1//\\//}
+  case "$path" in
+  /* | [A-Za-z]:/*) ;;
+  *) path="$caller_pwd/$path" ;;
+  esac
+  if [ ! -f "$path" ]; then
+    echo "compose-lint: no such compose file: $1 (looked for $path)" >&2
+    return 1
+  fi
+  # Normalised by the shell itself (`..`, `.`, a drive letter), without a fork.
+  CDPATH='' cd -- "${path%/*}"
+  resolved="$PWD/${path##*/}"
+  cd -- "$repo_root"
+  case "$resolved" in
+  "$repo_root"/*) resolved=${resolved#"$repo_root"/} ;;
+  esac
+}
+
 compose_files=()
 while [ $# -gt 0 ]; do
   case "$1" in
   -f | --file)
-    compose_files+=("$2")
+    if [ $# -lt 2 ]; then
+      echo "compose-lint: $1 needs a compose file" >&2
+      exit 2
+    fi
+    resolve_file "$2" || exit 2
+    compose_files+=("$resolved")
     shift 2
     ;;
   --fixtures)
@@ -248,8 +418,11 @@ fi
 read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-build/versions.env .github/ci.env}"
 read -r -a profiles <<<"${COMPOSE_LINT_PROFILES:-gpu memory dev legacy bot}"
 
-python_bin=$(command -v python3 || command -v python || true)
-if [ -z "$python_bin" ]; then
+if command -v python3 >/dev/null 2>&1; then
+  python_bin=python3
+elif command -v python >/dev/null 2>&1; then
+  python_bin=python
+else
   echo "compose-lint: python3 is required to read the compose model" >&2
   exit 2
 fi
@@ -258,15 +431,64 @@ profile_args=()
 for p in "${profiles[@]}"; do
   [ -n "$p" ] && profile_args+=(--profile "$p")
 done
+env_args=()
+for f in "${env_files[@]}"; do
+  [ -n "$f" ] && env_args+=(--env-file "$f")
+done
+
+work=$(mktemp -d)
+clean_env="$work/clean.env"
+marks="$work/marks.tsv"
+# `wait` first: a model still being written when a rule refuses early must not
+# race the removal of its directory.
+trap 'wait; rm -rf "$work"' EXIT
+
+# --------------------------------------------------------------------------
+# The models, started now and read later: none of them depends on rule 7, and
+# each `docker compose config` costs half a second, so they run while it does.
+#   model.json  — every file and every profile of the list, interpolated with
+#                 the env files: what the containers get (rules 1-6);
+#   raw.N.json  — file N on its own, every profile ('*'), NOT interpolated: the
+#                 values as written, after YAML (rules 3, 7, 8 and the source of
+#                 an image for rule 1). One file at a time, so that a finding
+#                 names its file. A per-profile file is not a whole project
+#                 on its own — telegram-bot depends on `gateway` of the main
+#                 file — so the consistency check is off: compose v5.2 skips
+#                 it for an uninterpolated read anyway (and does not filter
+#                 such a read by profile either), but a compose that builds
+#                 the project first would refuse the file, and would drop
+#                 the services outside the profiles it enables — hence
+#                 --no-consistency and '*'. Neither changes a byte of the
+#                 v5.2 output.
+#   raw.N.yml   — the file as text, for the one textual check of rule 5.
+# The env files are passed to the uninterpolated reads as well: without them
+# compose would load the .env of the project directory, the operator's own.
+# --------------------------------------------------------------------------
+args=(compose)
+for f in "${compose_files[@]}"; do
+  args+=(-f "$f")
+done
+# Every profile at once: the resolved model keeps each service's `profiles`, so
+# one pass covers the whole topology and rule 2 can still tell a `dev` console
+# from a production port.
+args+=("${env_args[@]}" "${profile_args[@]}")
+docker "${args[@]}" config --format json >"$work/model.json" 2>"$work/model.err" &
+model_pid=$!
+raw_pids=()
+: >"$work/names"
+for i in "${!compose_files[@]}"; do
+  docker compose -f "${compose_files[$i]}" "${env_args[@]}" --profile '*' \
+    config --no-interpolate --no-consistency --format json >"$work/raw.$i.json" 2>"$work/raw.$i.err" &
+  raw_pids+=($!)
+  cp -- "${compose_files[$i]}" "$work/raw.$i.yml"
+  printf '%s\n' "${compose_files[$i]}" >>"$work/names"
+done
 
 # --------------------------------------------------------------------------
 # Rule 7 — the always-loaded file starts on a clean machine.
-# Runs first and on its own: if this fails, nothing else about the file matters
-# to an operator who cannot get past `docker compose config`.
+# Judged first and on its own: if this fails, nothing else about the file
+# matters to an operator who cannot get past `docker compose config`.
 # --------------------------------------------------------------------------
-clean_env=$(mktemp)
-marks=$(mktemp)
-trap 'rm -f "$clean_env" "$marks"' EXIT
 
 primary=${compose_files[0]}
 # A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
@@ -374,22 +596,19 @@ if ! clean_out=$(docker compose -f "$primary" \
 fi
 
 # --------------------------------------------------------------------------
-# Rules 1-6 and 8, and the marker half of rule 7 — the resolved model and the
-# files as written, every file and every profile at once.
+# Rules 1-6 and 8, and the marker half of rule 7 — the models started above.
 # --------------------------------------------------------------------------
-args=(compose)
-for f in "${compose_files[@]}"; do
-  args+=(-f "$f")
+if ! wait "$model_pid"; then
+  cat "$work/model.err" >&2
+  exit 1
+fi
+for i in "${!raw_pids[@]}"; do
+  if ! wait "${raw_pids[$i]}"; then
+    echo "compose-lint: docker compose cannot read ${compose_files[$i]} as written (config --no-interpolate):" >&2
+    cat "$work/raw.$i.err" >&2
+    exit 1
+  fi
 done
-for f in "${env_files[@]}"; do
-  [ -n "$f" ] && args+=(--env-file "$f")
-done
-# Every profile at once: the resolved model keeps each service's `profiles`, so
-# one pass covers the whole topology and rule 2 can still tell a `dev` console
-# from a production port.
-args+=("${profile_args[@]}")
-
-model=$(docker "${args[@]}" config --format json)
 
 # Rule 3's second half needs the work tree, not the model. The scope is what
 # the target platform is built from — compose, build/, scripts/, the single Go
@@ -405,8 +624,8 @@ minioadmin_hits=$(git grep -i -n -- minioadmin -- \
   ':!scripts/compose-lint.sh' |
   grep -v -i -E '(never|not|не) minioadmin' || true)
 
-MODEL_JSON="$model" MINIOADMIN_HITS="$minioadmin_hits" \
-  COMPOSE_FILE_PATHS="${compose_files[*]}" MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
+WORK_DIR="$work" MINIOADMIN_HITS="$minioadmin_hits" \
+  MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
   "$python_bin" - <<'PY'
 import ipaddress
 import json
@@ -415,15 +634,40 @@ import re
 import sys
 from urllib.parse import urlsplit
 
-model = json.loads(os.environ["MODEL_JSON"])
-compose_paths = os.environ["COMPOSE_FILE_PATHS"].split()
-raw_files = []
-for path in compose_paths:
-    with open(path, encoding="utf-8") as fh:
-        raw_files.append((path, fh.read()))
+work = os.environ["WORK_DIR"]
+
+
+def read(name, parse=False):
+    with open(os.path.join(work, name), encoding="utf-8") as fh:
+        return json.load(fh) if parse else fh.read()
+
+
+model = read("model.json", parse=True)
+compose_paths = read("names").splitlines()
+# (file, the file as compose reads it before interpolation): rules 1, 3, 7, 8.
+raw_models = [(path, read(f"raw.{i}.json", parse=True) or {}) for i, path in enumerate(compose_paths)]
+# (file, its text): the one textual check of rule 5.
+raw_files = [(path, read(f"raw.{i}.yml")) for i, path in enumerate(compose_paths)]
 
 services = model.get("services") or {}
 service_names = set(services)
+
+# The uninterpolated reads enable every profile with '*'. Compose v5.2 does not
+# filter such a read by profile anyway, but a compose that does, and does not
+# know the wildcard, would enable a profile literally named '*' and drop every
+# service that has a profile — rules 3, 7 and 8 would then pass them in
+# silence. Every service of the resolved model must be in one of the reads.
+written = set()
+for _, raw in raw_models:
+    written |= set(raw.get("services") or {})
+if service_names - written:
+    print(
+        f"compose-lint: {', '.join(sorted(service_names - written))} missing from the "
+        "uninterpolated read (config --no-interpolate --profile '*'); this docker compose "
+        "does not enable every profile with '*', so rules 3, 7 and 8 cannot see them",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 failures = []
 
@@ -432,12 +676,32 @@ def fail(rule, message):
     failures.append(f"[rule {rule}] {message}")
 
 
+# A finding of rules 3 and 8 at one place of a model. The model repeats an
+# anchor in every service that merges it, so one finding is reported once,
+# with all of its places, in the order they were found.
+noted = {}
+
+
+def note(rule, where, message):
+    noted.setdefault((rule, message), []).append(where)
+
+
+def flush():
+    for (rule, message), places in noted.items():
+        shown = ", ".join(places[:3])
+        if len(places) > 3:
+            shown += f" and {len(places) - 3} more"
+        fail(rule, f"{shown}: {message}")
+    noted.clear()
+
+
 # --------------------------------------------------------------------------
-# Reading the files as written. Rules 3, 7 and 8 look at the text, not at the
-# model — the model has already substituted every value, so a literal password
-# and a correct `${VAR:?}` look the same there. What compose itself does to a
-# line is reproduced here and nowhere else, so that the three rules cannot
-# disagree about it.
+# The values as written. Rules 3, 7 and 8 read raw_models, not the model: the
+# model has already substituted every value, so a literal password and a
+# correct `${VAR:?}` look the same there. YAML is compose's business (config
+# --no-interpolate, see the header); what compose does to a value after that —
+# the interpolation — is reproduced here and nowhere else, so that the three
+# rules cannot disagree about it.
 # --------------------------------------------------------------------------
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 BODY = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-?+])(.*))?", re.S)
@@ -468,11 +732,13 @@ def interpolations(text):
             i += 2
             continue
         if text.startswith("${", i):
+            # The closing brace is found as compose finds it: every `${` opens
+            # a level, the one inside `$${` included — that escape is undone
+            # only when the default itself is interpolated, so `${U:-$${Q}}`
+            # ends at the second brace. This loop used to skip `$$` and close
+            # at the first (T-413 review #1 N-1).
             j, depth = i + 2, 1
             while j < n:
-                if text.startswith("$$", j):
-                    j += 2
-                    continue
                 if text.startswith("${", j):
                     depth += 1
                     j += 2
@@ -502,65 +768,68 @@ def interpolations(text):
 
 
 def walk(refs):
+    """Every interpolation compose may perform, nested ones included — but not
+    inside the message of `:?` or `?`. Compose evaluates that message only on
+    its way to a refusal, so nothing in it ever reaches a container or asks
+    anything more of .env (T-413 review #1 N-1: `${MV_LLM_URL:?need
+    ${MV_WORLD_ID}}` was refused, and compose starts with it)."""
     for ref in refs:
         yield ref
-        yield from walk(ref.inner)
-
-
-def strip_comment(line):
-    """The line without its YAML comment: a `#` at the start of the line or
-    after whitespace, outside quotes (review #2 T-411, N-5). Compose does not
-    interpolate a comment, so neither rule may read one."""
-    quote = None
-    i = 0
-    while i < len(line):
-        c = line[i]
-        if quote:
-            if quote == '"' and c == "\\":
-                i += 2
-                continue
-            if c == quote:
-                quote = None
-        elif c in "\"'" and (i == 0 or line[i - 1] in " \t:-[{,"):
-            quote = c
-        elif c == "#" and (i == 0 or line[i - 1] in " \t"):
-            return line[:i].rstrip()
-        i += 1
-    return line.rstrip()
-
-
-def unquote(value):
-    v = value.strip()
-    if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
-        return v[1:-1]
-    return v
+        if not ref.op.endswith("?"):
+            yield from walk(ref.inner)
 
 
 LISTED = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(?:=(.*))?", re.S)
-# `[ \t]*` before the colon: `KEY : value` is a key to YAML and to compose (v5.2
-# reads `A7 : spaced` as A7), and a linter that wants the colon flush lets a
-# literal password through in a file that aligns its colons (T-413 review #1
-# Ma-1 — the old pattern allowed the space, the first T-413 one did not).
-MAPPED = re.compile(r"""(["']?)([A-Za-z_][A-Za-z0-9_]*)\1[ \t]*:(?:[ \t]+(.*))?""", re.S)
 
 
-def entry(code):
-    """(key, value) of a line of an `environment` block, whatever its layout:
-    `KEY: value`, `"KEY": value` (N-3), `- KEY=value`, `- "KEY=value"`. The
-    value is None for a key with no value (`KEY:`, `- KEY`), and keeps its
-    quotes otherwise. None for a line that is not a key at all. `code` is a
-    line with its comment already stripped."""
-    body = code.strip()
-    if body == "-" or body.startswith("- "):
-        body = body[1:].strip()
-        # `- "KEY=value"`: in a list the quotes wrap the whole item.
-        body = unquote(body)
-        m = LISTED.fullmatch(body)
-        return (m.group(1), m.group(2)) if m else None
-    m = MAPPED.fullmatch(body)
-    if not m:
-        return None
-    return m.group(2), (m.group(3) if m.group(3) else None)
+class Item:
+    """One scalar of a model, at `where` (`services.core.environment.MV_X`).
+    An entry — a mapping key with its value, or a list item `NAME` or
+    `NAME=value` as `environment` and `args` write them — has a `key`, and its
+    `value` is None for a key with no value (`KEY:`, `KEY: null`, `- KEY`).
+    `text` is the whole string compose interpolates, None for a null.
+    `parent` is the path of the mapping or list that holds it."""
+
+    def __init__(self, where, key, value, text, parent):
+        self.where, self.key, self.value, self.text = where, key, value, text
+        self.parent = parent
+
+
+def text_of(value):
+    """A scalar as compose hands it on: `8080` and `true` reach a container as
+    text. Only a string can hold an interpolation."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+def scalars(node, where=""):
+    """Every scalar of node, depth first, in the order the file has them. A
+    list item is an entry whenever it reads as one, whatever the list is: the
+    rules are about values, and a credential in a list outside `environment` is
+    no less a credential. Keys are never text — compose does not interpolate
+    them."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            here = f"{where}.{key}" if where else str(key)
+            if isinstance(value, (dict, list)):
+                yield from scalars(value, here)
+            else:
+                yield Item(here, key, text_of(value), text_of(value), where)
+    elif isinstance(node, list):
+        for n, value in enumerate(node):
+            here = f"{where}[{n}]"
+            if isinstance(value, (dict, list)):
+                yield from scalars(value, here)
+                continue
+            text = text_of(value)
+            m = LISTED.fullmatch(text) if text is not None else None
+            if m:
+                yield Item(here, m.group(1), m.group(2), text, where)
+            else:
+                yield Item(here, None, None, text, where)
 
 
 # --------------------------------------------------------------------------
@@ -579,19 +848,16 @@ with open("build/versions.env", encoding="utf-8") as fh:
 # only asks that the tag is explicit.
 LOCAL_IMAGE_PREFIXES = ("multiverse-core:", "multiverse-core-legacy:", "multiverse-core/")
 
-# `image:` as written in the files, per service, so that rule 1 can see the
-# variable and not only the value it interpolated to.
+# `image:` as written, per service, so that rule 1 can see the variable and not
+# only the value it interpolated to. From the uninterpolated read, like rules
+# 3, 7 and 8: an image merged from an anchor or written `image :` is found as
+# compose finds it (the line reader refused the latter, T-413 review #2).
 raw_images = {}
-for _, raw in raw_files:
-    current = None
-    for line in raw.splitlines():
-        m = re.match(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$", line)
-        if m:
-            current = m.group(1)
-            continue
-        m = re.match(r"^    image:\s*(\S.*?)\s*$", line)
-        if m and current:
-            raw_images[current] = m.group(1)
+for _, raw in raw_models:
+    for name, svc in (raw.get("services") or {}).items():
+        image = (svc or {}).get("image")
+        if isinstance(image, str):
+            raw_images[name] = image
 
 # --------------------------------------------------------------------------
 # Rule 1 — pinned images
@@ -615,7 +881,7 @@ for name, svc in sorted(services.items()):
         fail(
             1,
             f"{name}: image {image!r} does not come from build/versions.env "
-            f"(source line: {source!r})",
+            f"(as written: {source!r})",
         )
 
 # --------------------------------------------------------------------------
@@ -669,60 +935,38 @@ MUST_BE_REQUIRED = {
     "MV_TELEGRAM_BOT_TOKEN",
 }
 
-# Credentials as written, in one pass over every file. Layout is deliberately
-# not part of the rule — `environment` may be a mapping (`KEY: value`) or a
-# list (`- KEY=value`), a key may be quoted, and a secret may sit in any anchor
-# (`x-platform-env` and whatever the next one is called), not only in a service
-# block. Anchoring on any of them would leave exactly the hole this rule exists
-# to close. The nearest enclosing key is tracked only to name the place in the
-# message.
-TOP_LEVEL = re.compile(r"^([A-Za-z0-9_][A-Za-z0-9._-]*):")
-BLOCK = re.compile(r"^  ([A-Za-z0-9][A-Za-z0-9._-]*):\s*$")
-
-for compose_path, raw in raw_files:
-    context = compose_path
-    for lineno, line in enumerate(raw.splitlines(), 1):
-        code = strip_comment(line)
-        if not code.strip():
+# Credentials as written, in every file and wherever they sit. Layout is not
+# part of the rule — `environment` may be a mapping or a list, a key may be
+# quoted, and a secret may sit in any anchor (`x-platform-env` and whatever the
+# next one is called), not only in a service. After YAML none of that is left
+# to get wrong: a flow mapping, a continuation line and `KEY :` are entries like
+# any other (T-429).
+for compose_path, raw in raw_models:
+    for item in scalars(raw):
+        key, value = item.key, item.value
+        if key is None:
             continue
-        e = entry(code)
+        where = f"{compose_path} {item.where}"
         # A key with no value: compose fills it from .env when .env has it and
         # otherwise leaves it out of the container — for a credential the
         # stack must refuse to start without, that is a silent fallback to
-        # whatever the image does on its own (MinIO: minioadmin). Checked
-        # before BLOCK, because at indent 2 inside an anchor it looks exactly
-        # like the name of a block (T-411).
-        if e and e[1] is None and e[0] in MUST_BE_REQUIRED:
-            fail(
-                3,
-                f"{compose_path} {context}:{lineno}: {e[0]} is passed through "
-                "with no value; an unset credential would just be left out, so it "
-                "needs ${VAR:?}",
-            )
+        # whatever the image does on its own (MinIO: minioadmin; T-411).
+        if value is None:
+            if key in MUST_BE_REQUIRED:
+                note(3, where, f"{key} is passed through with no value; an unset "
+                               "credential would just be left out, so it needs ${VAR:?}")
             continue
-        m = TOP_LEVEL.match(code) or BLOCK.match(code)
-        if m:
-            context = m.group(1)
+        if not SECRET_KEY.match(key):
             continue
-        if not e or e[1] is None or not SECRET_KEY.match(e[0]):
-            continue
-        key, value = e
         # Real interpolations only: `$${KEY:?}` hands the container the literal
         # text, which is a default credential like any other.
         refs = [r for r in interpolations(value) if r.name]
         if not refs:
-            fail(
-                3,
-                f"{compose_path} {context}:{lineno}: {key} carries the literal "
-                f"{value!r}; use ${{{key}:?...}}",
-            )
-            continue
-        if key in MUST_BE_REQUIRED and not any(r.op == ":?" for r in refs):
-            fail(
-                3,
-                f"{compose_path} {context}:{lineno}: {key} has a default ({value!r}); "
-                "a missing credential must stop the stack, so it needs ${VAR:?}",
-            )
+            note(3, where, f"{key} carries the literal {value!r}; use ${{{key}:?...}}")
+        elif key in MUST_BE_REQUIRED and not any(r.op == ":?" for r in refs):
+            note(3, where, f"{key} has a default ({value!r}); a missing credential must "
+                           "stop the stack, so it needs ${VAR:?}")
+flush()
 
 hits = [h for h in os.environ.get("MINIOADMIN_HITS", "").splitlines() if h.strip()]
 for hit in hits:
@@ -827,23 +1071,26 @@ with open(os.environ["MARKS_PATH"], encoding="utf-8") as fh:
         if sep:
             marked[name] = flag == "required"
 
-primary_path, primary_raw = raw_files[0]
+primary_path, primary_raw = raw_models[0]
 asked = set()
-for lineno, line in enumerate(primary_raw.splitlines(), 1):
-    for ref in walk(interpolations(strip_comment(line))):
+for item in scalars(primary_raw):
+    if item.text is None:
+        continue
+    for ref in walk(interpolations(item.text)):
         if not ref.name or not ref.op.endswith("?") or ref.name in versions or ref.name in asked:
             continue
         asked.add(ref.name)
+        where = f"{primary_path} {item.where}"
         if ref.name not in marked:
             fail(
                 7,
-                f"{primary_path}:{lineno}: {ref.name} is required here (`{ref.op}`) and "
+                f"{where}: {ref.name} is required here (`{ref.op}`) and "
                 f"absent from {EXAMPLE}; a clean machine never gets it",
             )
         elif not marked[ref.name]:
             fail(
                 7,
-                f"{primary_path}:{lineno}: {ref.name} is required here (`{ref.op}`) but "
+                f"{where}: {ref.name} is required here (`{ref.op}`) but "
                 f"{EXAMPLE} does not mark it [required]: the README asks an operator to "
                 "fill the marked variables and nothing else, so this one is skipped "
                 "until `make up` refuses (T-412 acceptance). Put [required] in the "
@@ -959,12 +1206,13 @@ for name in sorted(NETWORK_ADDRESSES):
 def unknown(where, name):
     """Retired and undeclared names fail whatever form the interpolation takes."""
     if name in retired:
-        fail(8, f"{where}: {name} is declared retired in {MANIFEST}; nothing reads it")
+        note(8, where, f"{name} is declared retired in {MANIFEST}; nothing reads it")
         return True
     if name not in manifest:
-        fail(
+        note(
             8,
-            f"{where}: {name} is not declared in {MANIFEST}, so its value here "
+            where,
+            f"{name} is not declared in {MANIFEST}, so its value here "
             "has nothing to agree with (and mvctl env check cannot see it)",
         )
         return True
@@ -988,8 +1236,11 @@ def fix_for(name, default, whole):
 
 
 def check(where, ref, whole):
-    for inner in ref.inner:
-        check(where, inner, False)
+    # Not inside the message of `:?`/`?`: compose evaluates it only on its way
+    # to a refusal, so nothing in it reaches a container (see walk).
+    if not ref.op.endswith("?"):
+        for inner in ref.inner:
+            check(where, inner, False)
     name = ref.name
     if name is None:
         return
@@ -1005,9 +1256,10 @@ def check(where, ref, whole):
     if op.endswith("?"):
         return  # no default at all: rule 7's
     if op.endswith("+"):
-        fail(
+        note(
             8,
-            f"{where}: {ref.text} hands the process compose's own text when {name} "
+            where,
+            f"{ref.text} hands the process compose's own text when {name} "
             "is set and an EMPTY value when .env is silent - never the operator's "
             f"value and never the default of {source} (T-411 review #2 N-6); "
             + fix_for(name, default, whole),
@@ -1017,16 +1269,18 @@ def check(where, ref, whole):
         if default != "" and not name.startswith("MV_"):
             # No process of the platform reads it, so the allow-list text below
             # does not apply; what goes wrong is the container (review #1 Mi-1).
-            fail(
+            note(
                 8,
-                f"{where}: {ref.text} has no default: when .env is silent the container "
+                where,
+                f"{ref.text} has no default: when .env is silent the container "
                 f"gets an EMPTY {name} instead of the default of {source} ({default!r}); "
                 + fix_for(name, default, whole),
             )
         elif default != "":
-            fail(
+            note(
                 8,
-                f"{where}: {ref.text} has neither a default nor `:?`: when .env is "
+                where,
+                f"{ref.text} has neither a default nor `:?`: when .env is "
                 f"silent the process gets an EMPTY {name}, not the default of {source} "
                 f"({default!r}), and shared/env reads set-to-empty as a value - for an "
                 "allow-list that is nobody (T-411 review #1 Mi-2); "
@@ -1035,9 +1289,10 @@ def check(where, ref, whole):
         return
     value = ref.arg
     if ref.inner:
-        fail(
+        note(
             8,
-            f"{where}: {name} falls back to another variable here ({value!r}), and "
+            where,
+            f"{name} falls back to another variable here ({value!r}), and "
             f"{source} declares {default!r}: one value with two sources by "
             "construction (T-411 review #1 N-1); " + fix_for(name, default, whole),
         )
@@ -1045,9 +1300,10 @@ def check(where, ref, whole):
     if value == default:
         return
     if not name.startswith("MV_"):
-        fail(
+        note(
             8,
-            f"{where}: {name} defaults to {value!r} here and to {default!r} in "
+            where,
+            f"{name} defaults to {value!r} here and to {default!r} in "
             f"{source} - two sources of one value (contracts.md §16 p. 5); "
             + fix_for(name, default, whole),
         )
@@ -1056,25 +1312,28 @@ def check(where, ref, whole):
         misshapen = [i for i in items(value) if shape(i) != want]
         foreign = [i for i in items(value) if host(i) not in service_names]
         if misshapen:
-            fail(
+            note(
                 8,
-                f"{where}: {name} defaults to {value!r} here; {misshapen[0]!r} does not "
+                where,
+                f"{name} defaults to {value!r} here; {misshapen[0]!r} does not "
                 f"have the same shape as the manifest's default {default!r} ({want}) - "
                 "a network address may name a service of this network, but in the "
                 "shape the process reads (contracts.md §16 p. 5)",
             )
         elif foreign:
-            fail(
+            note(
                 8,
-                f"{where}: {name} defaults to {value!r} here and to {default!r} in "
+                where,
+                f"{name} defaults to {value!r} here and to {default!r} in "
                 f"{source}; {foreign[0]!r} is not a service of this compose network, so "
                 "it is a second, invented source of the value (T-411). Every item "
                 "must name a service of this file",
             )
     elif name in NOT_NETWORK_ADDRESSES:
-        fail(
+        note(
             8,
-            f"{where}: {name} defaults to {value!r} here and to {default!r} in "
+            where,
+            f"{name} defaults to {value!r} here and to {default!r} in "
             f"{source}; it is {NOT_NETWORK_ADDRESSES[name]}, and contracts.md §16 "
             "p. 5 keeps it out of the set of network addresses; "
             + fix_for(name, default, whole),
@@ -1086,9 +1345,10 @@ def check(where, ref, whole):
                     "add it to the explicit set NETWORK_ADDRESSES of rule 8 and to "
                     "contracts.md §16 p. 5 - through the system architect, it is a "
                     "change of the contract.")
-        fail(
+        note(
             8,
-            f"{where}: {name} defaults to {value!r} here and to {default!r} in "
+            where,
+            f"{name} defaults to {value!r} here and to {default!r} in "
             f"{source} - two sources of one value (T-411); {name} is not in the "
             "explicit set of network addresses, the only variables compose may "
             "point at a service of its own network; "
@@ -1096,24 +1356,30 @@ def check(where, ref, whole):
         )
 
 
-for compose_path, raw in raw_files:
-    for lineno, line in enumerate(raw.splitlines(), 1):
-        code = strip_comment(line)
-        if not code.strip():
-            continue
-        where = f"{compose_path}:{lineno}"
-        e = entry(code)
-        if e and e[1] is None and e[0] in external:
-            fail(
+for compose_path, raw in raw_models:
+    for item in scalars(raw):
+        where = f"{compose_path} {item.where}"
+        if item.key is not None and item.value is None and item.key in external:
+            note(
                 8,
-                f"{where}: {e[0]} is passed through with no value; with .env silent "
+                where,
+                f"{item.key} is passed through with no value; with .env silent "
                 "the container then runs on the image's own default, not on the "
-                f"default of {EXTERNALS} ({external[e[0]]!r}); "
-                + fix_for(e[0], external[e[0]], True),
+                f"default of {EXTERNALS} ({external[item.key]!r}); "
+                + fix_for(item.key, external[item.key], True),
             )
-        value = unquote(e[1]) if e and e[1] is not None else None
-        for ref in interpolations(code):
-            check(where, ref, whole=value is not None and ref.text == value)
+        if item.text is None:
+            continue
+        # `whole`: the interpolation IS the value of an `environment` entry — of
+        # a service, or of a top-level anchor that is merged into one — so a
+        # key with no value is a fix on offer. `KEY=${X}` in a command, a label
+        # or a build arg is an entry too, but leaving its value out passes
+        # nothing through (T-429 review #1 N-4).
+        in_env = item.parent.endswith(".environment") or (
+            item.parent.startswith("x-") and "." not in item.parent and "[" not in item.parent)
+        for ref in interpolations(item.text):
+            check(where, ref, whole=in_env and item.value is not None and ref.text == item.value)
+flush()
 
 # --------------------------------------------------------------------------
 if failures:
