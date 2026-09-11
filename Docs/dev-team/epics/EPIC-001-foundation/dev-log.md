@@ -8139,3 +8139,29 @@ N-6: шапка Makefile — «GNU make 4.3+ (CI: ubuntu-latest, 4.3)», нов�
 ## devops-engineer#1 · T-432 · итерация 2 по ревью #1 (вердикт «принять») · 2026-09-11
 
 Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`), третья ветка текста отказа «wraps … in other text; the value must be the interpolation alone», m2 ревьюера (q1) и выключение ветки (q3) убиты. Mi-2 (а) частично: для `OLLAMA_*` отвергается `${OLLAMA_X-d}` (строка `OLLAMA_X=` в `.env` дала бы пустое значение), фикстура `bad-ollama-plain-dash`, q2 убит; `?`/`:?` оставлены правилу 7. Отказ, шапка скрипта и `infrastructure.md` §3.1.1 п. 8 больше не говорят «единственная форма», а говорят «rule 8 accepts `${OLLAMA_X:-d}` (`:?` — правило 7)». Пробел для `:?` в файлах профилей — в бэклоге карточки. Контроль q0 красный, тождественный q9 чистый, копия удалена по сохранённому пути. `make compose-lint` → 0 (20 с, 52 bad / 10 good), хеши владельца прежние, `make -o secrets-scan ci` → 0 (test-race SKIPPED). Не коммитил.
+
+<!-- dev-log T-406 -->
+## developer#1 · T-406 · удалить `readySubscriber`, закрепить гарантию первого офсета кейсом контракта · 2026-09-12
+
+Ветка `task/T-406-drop-ready-subscriber` (от `48b88fd`), TEAM-1, Opus. Подробности — карточка `tasks/T-406.md`, раздел «Выполнение».
+
+- **Сделано:**
+  - `state.go`: удалены `readySubscriber`, `subscribe` с приведением типа и комментарий о ветке. `Start` запускает `bus.Subscribe` в горутине и публикует `analytics.replay.completed`, без каналов `ready`/`stopped`. Doc-комментарий опирается на C-01 v1.2 и ADR-022.
+  - `state_test.go`: удалены «часовой» `TestTheBusOfTheTestsDoesNotReportReadiness` с `readyReporter`, а также `TestStartSubscribesBeforeItAnnounces` с `readyBus`/`gateWindow`/`racedTheGate`.
+  - `contract.go`: новый кейс `ANewGroupStartsAtTheFirstOffset`. Кейс публикует до подписки; первая доставка новой группы должна быть на первом офсете топика по журналу, свои события — по порядку на `base…base+2`.
+- **Отклонение:** кроме «часового» удалён `TestStartSubscribesBeforeItAnnounces`. Он проверял только удаляемую ветку (двойник с `SubscribeReady`) и после удаления краснел бы по построению. Порядок «подписаться → просигналить» по ADR-022 п. 2 больше ни на чём не держится. API `shared/eventbus` не менялся.
+- **Проверено:** `go build ./... && go vet ./... && go vet -tags e2e ./test/...` → 0; `go vet -tags integration ./shared/testkit/contract/` → 0; `go test -short -count=1 ./...` → 27 пакетов ok; e2e ok (10 с); `golangci-lint run ./...` → 0 issues; `gofmt` чисто. `-race` недоступен (нет cgo).
+- **Мутанты** (копия в scratch, `mktemp -d`, без `-overlay`, копия удалена по сохранённому пути):
+  - M0, контрольный — красный (сборка).
+  - M1, группа с офсета 1 — красный.
+  - M2, группа с конца — красный.
+  - M3, группа за три записи до конца — **красный только новый кейс**, всё остальное зелёное. Прежний набор не отличал «с первого офсета» от «незадолго до конца».
+- **Redpanda не прогонялась** — прогон с T-394.
+- Не коммитил.
+
+## developer#1 · T-406 · итерация 2 по ревью #1 (вердикт «принять», Nit 3) · 2026-09-12
+
+- N-1: doc `Start` без «in that order». Подписка запускается в горутине, сигнал не ждёт её; гарантия держится на C-01 v1.2 / ADR-022.
+- N-2: `ReadRange` в новом кейсе под `context.WithTimeout(t.Context(), Timeout)`, как в `JournalStopsAtTheEndOfTheJournal`.
+- N-3: в карточке объём на Redpanda — 17 + 3 события; риск retention снят (`kafka-go` v0.4.51 `reader.go:1393-1397`), при смене версии — перепроверить.
+- Прогоны: `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/` → 0; `gofmt` чисто; `go test -short -count=1 ./...` → 27 пакетов ok, 0 FAIL; `golangci-lint run ./...` → 0 issues. `-race` недоступен (нет cgo). Мутанты не делались (правки текста и срока чтения). Не коммитил.
