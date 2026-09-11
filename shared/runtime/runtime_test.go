@@ -317,11 +317,215 @@ func TestStopAllRunsInReverseOrder(t *testing.T) {
 		&fake{name: "mechanics", stopped: &stopped},
 		&fake{name: "swarm", stopped: &stopped},
 	}
-	if errs := runtime.StopAll(context.Background(), contexts); len(errs) != 0 {
+	if errs := runtime.StopAll(context.Background(), contexts, nil); len(errs) != 0 {
 		t.Fatalf("StopAll errors = %v", errs)
 	}
 	if strings.Join(stopped, ",") != "swarm,mechanics,state" {
 		t.Fatalf("stopped = %v, want reverse start order", stopped)
+	}
+}
+
+// stopPanicking is a context whose Stop panics with value once it has put
+// itself on the list of the stopped.
+type stopPanicking struct {
+	fake
+	value any
+}
+
+func (p *stopPanicking) Stop(ctx context.Context) error {
+	_ = p.fake.Stop(ctx)
+	panic(p.value)
+}
+
+// failingStop is a context whose Stop returns err.
+type failingStop struct {
+	fake
+	err error
+}
+
+func (f *failingStop) Stop(ctx context.Context) error {
+	_ = f.fake.Stop(ctx)
+	return f.err
+}
+
+// records keeps every record logged through it, so a test reads an attribute
+// as it was logged, not as a text handler quotes it.
+type records struct{ list []slog.Record }
+
+func (h *records) Enabled(context.Context, slog.Level) bool { return true }
+func (h *records) WithAttrs([]slog.Attr) slog.Handler       { return h }
+func (h *records) WithGroup(string) slog.Handler            { return h }
+
+func (h *records) Handle(_ context.Context, r slog.Record) error {
+	h.list = append(h.list, r.Clone())
+	return nil
+}
+
+func attr(r slog.Record, key string) string {
+	var value string
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == key {
+			value = a.Value.String()
+			return false
+		}
+		return true
+	})
+	return value
+}
+
+// noPanicOut runs f and fails the test when a panic leaves it.
+func noPanicOut(t *testing.T, what string, f func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("%s let the panic out: %v", what, r)
+		}
+	}()
+	f()
+}
+
+// T-430, C-01 v1.6: a panic in Stop is an error of that context, not an
+// unwinding that cuts the stop of the others short and closes the bus under
+// them (ADR-023 p. 4). The error is one line; the log gets the value as it is
+// and the stack.
+func TestStopAllTurnsAPanicIntoAnError(t *testing.T) {
+	tests := map[string]struct {
+		value  any
+		want   string
+		logged string
+	}{
+		"a string":                 {value: "boom", want: "stop context mechanics: panic: boom", logged: "boom"},
+		"an error":                 {value: errors.New("broken wiring"), want: "stop context mechanics: panic: broken wiring"},
+		"nil":                      {value: nil, want: "stop context mechanics: panic: panic called with nil argument"},
+		"an unprintable value":     {value: unprintable{}, want: "stop context mechanics: panic: runtime_test.unprintable (printing the value panicked)"},
+		"a value of several lines": {value: "a\nb", want: `stop context mechanics: panic: a\nb`, logged: "a\nb"},
+		"a value with CRLF":        {value: "a\r\nb", want: `stop context mechanics: panic: a\r\nb`, logged: "a\r\nb"},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var stopped []string
+			log := &records{}
+			contexts := []runtime.Context{
+				&fake{name: "state", stopped: &stopped},
+				&stopPanicking{fake: fake{name: "mechanics", stopped: &stopped}, value: tc.value},
+				&fake{name: "swarm", stopped: &stopped},
+			}
+
+			var errs []error
+			noPanicOut(t, "StopAll", func() {
+				errs = runtime.StopAll(context.Background(), contexts, slog.New(log))
+			})
+
+			if strings.Join(stopped, ",") != "swarm,mechanics,state" {
+				t.Errorf("stopped = %v, want swarm,mechanics,state: the panic cut the stop of the rest short", stopped)
+			}
+			if len(errs) != 1 {
+				t.Fatalf("StopAll errors = %q, want the one of mechanics", errs)
+			}
+			got := errs[0].Error()
+			if !strings.HasPrefix(got, tc.want) {
+				t.Errorf("error = %q, want %q", got, tc.want)
+			}
+			if strings.ContainsAny(got, "\r\n") || strings.Contains(got, "goroutine") {
+				t.Errorf("error = %q, want one line without the stack", got)
+			}
+			if len(log.list) != 1 || log.list[0].Level != slog.LevelError {
+				t.Fatalf("log = %d records, want one Error for the panic", len(log.list))
+			}
+			rec := log.list[0]
+			if attr(rec, "context") != "mechanics" || !strings.Contains(attr(rec, "stack"), "goroutine") {
+				t.Errorf("log: context = %q, stack = %q; want mechanics and the stack", attr(rec, "context"), attr(rec, "stack"))
+			}
+			if tc.logged != "" && attr(rec, "panic") != tc.logged {
+				t.Errorf("log: panic = %q, want the value as it is, %q", attr(rec, "panic"), tc.logged)
+			}
+		})
+	}
+}
+
+// The log of StopAll is optional, like Deps.Log of StartAll.
+func TestStopAllTurnsAPanicIntoAnErrorWithoutALogger(t *testing.T) {
+	p := &stopPanicking{fake: fake{name: "gateway"}, value: "boom"}
+	var errs []error
+	noPanicOut(t, "StopAll", func() { errs = runtime.StopAll(context.Background(), []runtime.Context{p}, nil) })
+	if len(errs) != 1 || errs[0].Error() != "stop context gateway: panic: boom" {
+		t.Fatalf("StopAll = %q, want the panic as an error", errs)
+	}
+}
+
+// T-430, C-01 v1.6: the errors of the rollback of StartAll are no longer
+// dropped. They follow the start error on the same line, in the reverse order
+// of the rollback; the chain stays the one of the start error; a panic in
+// Stop on the way back is one of them.
+func TestStartAllReportsTheRollbackOnTheSameLine(t *testing.T) {
+	errStart := errors.New("boom")
+	errFlush := errors.New("flush failed")
+	var stopped []string
+	log := &records{}
+	contexts := []runtime.Context{
+		&stopPanicking{fake: fake{name: "state", stopped: &stopped}, value: "stuck"},
+		&failingStop{fake: fake{name: "mechanics", stopped: &stopped}, err: errFlush},
+		&fake{name: "swarm", startErr: errStart, stopped: &stopped},
+	}
+
+	var err error
+	noPanicOut(t, "StartAll", func() {
+		err = runtime.StartAll(context.Background(), contexts, runtime.Deps{Log: slog.New(log)})
+	})
+
+	want := "start context swarm: boom; stop context mechanics: flush failed; stop context state: panic: stuck"
+	if err == nil || err.Error() != want {
+		t.Fatalf("StartAll = %v, want %q", err, want)
+	}
+	if !errors.Is(err, errStart) {
+		t.Error("errors.Is(err, start error) = false: the chain must stay the one of the start error")
+	}
+	if errors.Is(err, errFlush) {
+		t.Error("errors.Is(err, stop error) = true: the rollback errors go in as text, not into the chain")
+	}
+	if strings.Join(stopped, ",") != "mechanics,state" {
+		t.Errorf("stopped = %v, want mechanics,state", stopped)
+	}
+	if len(log.list) != 1 || attr(log.list[0], "context") != "state" ||
+		!strings.Contains(attr(log.list[0], "stack"), "goroutine") {
+		t.Errorf("log = %d records, want one Error with the stack of the panic of state", len(log.list))
+	}
+}
+
+// T-430, C-01 v1.6: whatever the value of a panic, in Start or in Stop, the
+// error of StartAll stays one line of stderr; the log keeps the value as it is.
+func TestStartAllKeepsAPanicOfSeveralLinesOnOneLine(t *testing.T) {
+	tests := map[string]struct{ value, want string }{
+		"LF":   {value: "a\nb", want: `start context mechanics: panic: a\nb; stop context state: panic: a\nb`},
+		"CRLF": {value: "a\r\nb", want: `start context mechanics: panic: a\r\nb; stop context state: panic: a\r\nb`},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			log := &records{}
+			contexts := []runtime.Context{
+				&stopPanicking{fake: fake{name: "state"}, value: tc.value},
+				&panicking{fake: fake{name: "mechanics"}, value: tc.value},
+			}
+
+			var err error
+			noPanicOut(t, "StartAll", func() {
+				err = runtime.StartAll(context.Background(), contexts, runtime.Deps{Log: slog.New(log)})
+			})
+
+			if err == nil || err.Error() != tc.want {
+				t.Fatalf("StartAll = %q, want %q", err, tc.want)
+			}
+			if len(log.list) != 2 {
+				t.Fatalf("log = %d records, want one per panic", len(log.list))
+			}
+			for i, owner := range []string{"mechanics", "state"} {
+				rec := log.list[i]
+				if attr(rec, "context") != owner || attr(rec, "panic") != tc.value {
+					t.Errorf("log[%d]: context = %q, panic = %q; want %s and the value as it is, %q",
+						i, attr(rec, "context"), attr(rec, "panic"), owner, tc.value)
+				}
+			}
+		})
 	}
 }
 
