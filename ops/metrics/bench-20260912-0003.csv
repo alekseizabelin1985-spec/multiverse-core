@@ -1,0 +1,4 @@
+config,provider,placement,model,phase,num_ctx,kv_cache,n,first_call_ms,p50_ms,p95_ms,prompt_tok,completion_tok,cached_tok,tps,valid_json_ratio,cjk_ratio,latin_ratio,lang_pass_ratio,vram_used_mb,llamacpp_build,verdict,repeat,started_at
+E,openai_compat,native,D:\Models\unsloth\Qwen3.8\Qwen3.8-27B-UD-Q3_K_XL.gguf,tick,200192,unknown,10,130,3158,4968,4719,1028,1674,44.5,1.0,0.0,0.0,1.0,19406,b10441(pin),n/a,1,2026-09-12T00:03:12
+E,openai_compat,native,D:\Models\unsloth\Qwen3.8\Qwen3.8-27B-UD-Q3_K_XL.gguf,phase2,200192,unknown,10,130,2422,2585,4204,848,1566,48.0,1.0,0.0,0.0,1.0,19406,b10441(pin),pass,1,2026-09-12T00:03:12
+E,openai_compat,native,D:\Models\unsloth\Qwen3.8\Qwen3.8-27B-UD-Q3_K_XL.gguf,phase2-group3,200192,unknown,10,130,3900,4382,4870,1439,1548,47.6,1.0,0.0,0.003,1.0,19406,b10441(pin),pass*,1,2026-09-12T00:03:12

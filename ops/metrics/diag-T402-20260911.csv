@@ -1,0 +1,17 @@
+when,stand,path,prompt_id,latency_ms,prompt_n,cache_n,prompt_ms,predicted_n,predicted_ms,unexplained_ms,busy_slots_before
+after bench-20260911-2327,E Qwen3.8-27B b10840,router :8888,df-08-wolf-retreats.phase2,2822,247,174,365,78,1582,875,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,router :8888,df-06-hunter-blind.phase2,6971,231,174,343,64,1288,5340,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,router :8888,df-08-wolf-retreats.phase2,8236,247,174,497,104,2105,5634,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,router :8888,df-06-hunter-blind.phase2,2665,231,174,330,55,1111,1224,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,router :8888,df-08-wolf-retreats.phase2,2773,247,174,319,102,2071,383,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,direct llama-server :62450,df-08-wolf-retreats.phase2,2345,4,417,170,99,2013,162,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,direct llama-server :62450,df-06-hunter-blind.phase2,1790,231,174,321,55,1162,307,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,direct llama-server :62450,df-08-wolf-retreats.phase2,2282,247,174,337,85,1813,132,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,direct llama-server :62450,df-06-hunter-blind.phase2,1632,231,174,310,60,1201,121,0
+after bench-20260911-2327,E Qwen3.8-27B b10840,direct llama-server :62450,df-08-wolf-retreats.phase2,1751,247,174,311,65,1324,117,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,ping (max_tokens 1),539,13,0,205,1,0,334,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,df-08-wolf-retreats.phase2,982,4,417,86,81,679,217,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,df-10-dawn-silence.phase2,1112,222,174,168,94,792,152,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,df-08-wolf-retreats.phase2,1309,247,174,172,122,1009,128,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,df-10-dawn-silence.phase2,1097,4,392,89,94,771,238,0
+after bench-20260911-2353,Q36-A3B b10878,direct llama-server :8888,df-08-wolf-retreats.phase2,946,247,174,169,80,639,138,0
