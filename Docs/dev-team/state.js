@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T22:55:09+03:00",
+  "updatedAt": "2026-09-11T23:09:34+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1551,17 +1551,44 @@ window.DEVTEAM_STATE =
         {
           "id": "T-430",
           "title": "recover в StopAll; вопрос system-architect: %w только для ErrHandlerPanic",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-11T22:37:32+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-11T23:05:31+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 27,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 22:37",
+              "to": "11.09 22:48",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 22:48",
+              "to": "11.09 22:56",
+              "duration": "7m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 22:56",
+              "to": "11.09 22:58",
+              "duration": "1m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 22:58",
+              "to": "11.09 23:05",
+              "duration": "6m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-430-panic-in-stop",
-          "worktree": ".worktrees/T-430"
+          "worktree": null,
+          "mergeCommit": "06c90399adef1087197b6a6f3d2a6ed5a8d7d0bc",
+          "mergedAt": "2026-09-11T23:07:04+03:00"
         },
         {
           "id": "T-431",
@@ -1647,15 +1674,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-433",
           "title": "Флак fight-NN в TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus (standTimeout 2s)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T23:07:04+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-433-stand-fight-flake",
+          "worktree": ".worktrees/T-433"
         }
       ],
       "defects": [],
@@ -5004,7 +5033,7 @@ window.DEVTEAM_STATE =
       "task": "T-430",
       "action": "ревью #1 паники в Stop",
       "startedAt": "2026-09-11T22:48:57+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T22:56:53+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -5014,6 +5043,36 @@ window.DEVTEAM_STATE =
       "task": "T-432",
       "action": "литерал OLLAMA_* отвергается (§16 п. 5)",
       "startedAt": "2026-09-11T22:55:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-430",
+      "action": "итерация 2: doc-комментарий StartAll (Mi-1)",
+      "startedAt": "2026-09-11T22:56:53+03:00",
+      "finishedAt": "2026-09-11T22:58:45+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-430",
+      "action": "приёмка паники в Stop",
+      "startedAt": "2026-09-11T22:58:45+03:00",
+      "finishedAt": "2026-09-11T23:05:31+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-433",
+      "action": "флак fight-NN в стенде Harness + встреча",
+      "startedAt": "2026-09-11T23:07:04+03:00",
       "finishedAt": null
     }
   ],
@@ -7507,6 +7566,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-401 закоммичена 642786f, конфликт tasks.md разрешён через sync (сторона эпика + раздел T-433), слита в эпик (ae3eb0a). T-432 начата (devops-engineer#1, .worktrees/T-432)"
+    },
+    {
+      "at": "2026-09-11T23:07:04+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-430 закоммичена 27e99c6 [contract-change], слита в эпик (06c9039). T-433 начата (developer#1, .worktrees/T-433)"
+    },
+    {
+      "at": "2026-09-11T23:09:34+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Дефект T-431: отпечаток индекса в .gitleaksignore сдвинут 511 → 514 — make secrets-scan снова зелёный, коммит 9455016 в эпике"
     }
   ],
   "blockers": [],
