@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:23:27+03:00",
+  "updatedAt": "2026-09-12T01:30:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1879,7 +1879,7 @@ window.DEVTEAM_STATE =
           "assignee": "architect#1",
           "startedAt": "2026-09-12T00:38:07+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -5606,6 +5606,16 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "ревью #2 итерации 2",
       "startedAt": "2026-09-12T01:23:27+03:00",
+      "finishedAt": "2026-09-12T01:30:13+03:00"
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-435",
+      "action": "итерация 3 по ревью #2",
+      "startedAt": "2026-09-12T01:30:13+03:00",
       "finishedAt": null
     }
   ],
