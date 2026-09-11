@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:10:29+03:00",
+  "updatedAt": "2026-09-12T01:23:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5596,6 +5596,16 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "итерация 2 по ревью #1 и ответам владельца",
       "startedAt": "2026-09-12T01:10:29+03:00",
+      "finishedAt": "2026-09-12T01:23:27+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-435",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-12T01:23:27+03:00",
       "finishedAt": null
     }
   ],
