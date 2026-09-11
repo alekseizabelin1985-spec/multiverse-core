@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:44:59+03:00",
+  "updatedAt": "2026-09-12T01:45:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5680,7 +5680,7 @@ window.DEVTEAM_STATE =
       "task": "T-434",
       "action": "ревью #1 исправлений llm-bench",
       "startedAt": "2026-09-12T01:33:42+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T01:45:31+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -5700,6 +5700,16 @@ window.DEVTEAM_STATE =
       "task": "T-436",
       "action": "kafka: Close не отменяет контекст обработчика; якорь",
       "startedAt": "2026-09-12T01:44:59+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-434",
+      "action": "приёмка исправлений llm-bench",
+      "startedAt": "2026-09-12T01:45:31+03:00",
       "finishedAt": null
     }
   ],
