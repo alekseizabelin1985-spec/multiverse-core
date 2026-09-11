@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"multiverse-core.io/shared/contracts"
@@ -33,7 +34,7 @@ const (
 func TestEnteringARegionWithAWolfOpensAnEncounter(t *testing.T) {
 	enc, bus := fightStub(t)
 
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	create := onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeCreateProposed)
 	pa := create.Path()
@@ -79,7 +80,7 @@ func TestEnteringARegionWithAWolfOpensAnEncounter(t *testing.T) {
 // is what notices it (FR-020).
 func TestTheRoundOfTheEncounterComesFromTheRulesFile(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	started := onlyOne(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterStarted)
 	round := mechanics(t).Rules().Document().Round
@@ -96,6 +97,7 @@ func TestNothingOpensWhereNothingIsAlive(t *testing.T) {
 	enc, bus := fightStubWith(t, dead(wolfID))
 
 	act(t, enc, entered(playerA, nameA, regionID, regName))
+	answer(t, enc, bus)
 
 	if got := eventsOf(t, bus, eventbus.TopicWorldEvents); len(got) != 0 {
 		t.Errorf("%d events about a fight that has nobody in it", len(got))
@@ -109,8 +111,8 @@ func TestNothingOpensWhereNothingIsAlive(t *testing.T) {
 func TestASecondEntryDoesNotOpenASecondEncounter(t *testing.T) {
 	enc, bus := fightStub(t)
 
-	act(t, enc, entered(playerA, nameA, regionID, regName))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
+	openFight(t, enc, bus)
 
 	if got := ofType(eventsOf(t, bus, eventbus.TopicWorldEvents), swarm.TypeEncounterStarted); len(got) != 1 {
 		t.Errorf("%d encounters opened, want exactly one", len(got))
@@ -125,7 +127,7 @@ func TestASecondEntryDoesNotOpenASecondEncounter(t *testing.T) {
 // carrying the version each entity was expected to be at.
 func TestAnExchangeIsFourDiceAndTwoDecisions(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	blow := attackWhere(t, func(id string) bool {
 		// A hit that cannot kill (a wolf has 10 hit points and d6 cannot reach
 		// them), answered by a hit: the exchange both sides land.
@@ -198,10 +200,14 @@ func TestAnExchangeIsFourDiceAndTwoDecisions(t *testing.T) {
 // fighter are merged before the package leaves.
 func TestOneEntityOneChangeSet(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	act(t, enc, attackWhere(t, func(id string) bool { return hits(tkmech.Verdict(id, 0)) }))
 
-	for _, proposal := range ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed) {
+	proposals := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
+	if len(proposals) == 0 {
+		t.Fatal("the blow was answered by no package: the test proves nothing")
+	}
+	for _, proposal := range proposals {
 		seen := make(map[string]bool)
 		for _, set := range changeSets(t, proposal) {
 			if seen[set.Ref().ID] {
@@ -221,7 +227,7 @@ func TestTheSecondExchangeProposesAgainstTheVersionTheFirstOneLeft(t *testing.T)
 	// A wolf too big to fall in two blows, so that both exchanges reach a
 	// proposal about the same living entity.
 	enc, bus := fightStubWith(t, attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	lands := func(id string) bool { return hits(tkmech.Verdict(id, 0)) }
 	act(t, enc, attackWhere(t, lands))
@@ -247,34 +253,12 @@ func TestTheSecondExchangeProposesAgainstTheVersionTheFirstOneLeft(t *testing.T)
 	}
 }
 
-// TestAWolfKilledElsewhereIsNotAttackedAgain: an encounter is open, and the
-// wolf in it dies of something the stub did not decide — another agent, another
-// player, a proposal of the world. The next swing finds no target and is
-// answered with nothing rather than resolved against a corpse (inv-01).
-func TestAWolfKilledElsewhereIsNotAttackedAgain(t *testing.T) {
-	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
-	before := len(allEvents(t, bus))
-
-	if err := enc.Observe(t.Context(), died(wolfID)); err != nil {
-		t.Fatalf("observe the death: %v", err)
-	}
-	act(t, enc, attack(playerA, nameA, wolfID))
-	// The same swing with no target named, which is answered by picking the
-	// first NPC of the encounter still standing — and there is none.
-	act(t, enc, attackAnything(playerA, nameA))
-
-	if after := len(allEvents(t, bus)); after != before {
-		t.Errorf("%d events were published for a swing at a corpse", after-before)
-	}
-}
-
 // TestTheFactsOfStateMoveWhatTheStubProposesAgainst: the world of the stub is
 // the world of State, and a change the stub did not make is still a change it
 // has to propose against — the version and the hit points both.
 func TestTheFactsOfStateMoveWhatTheStubProposesAgainst(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	if err := enc.Observe(t.Context(), hurt(wolfID, 4, 10, 8)); err != nil {
 		t.Fatalf("observe: %v", err)
@@ -324,7 +308,7 @@ func TestAnEntryWithoutARegionIsPassedOver(t *testing.T) {
 // defect alive.
 func TestAMissStillCostsTheRound(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	encounterID := encounterOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeCreateProposed))
 
 	act(t, enc, attackWhere(t, func(id string) bool {
@@ -364,7 +348,7 @@ func TestEveryActionTheEncounterTakesIsAnsweredWithOnePackage(t *testing.T) {
 	// A wolf too big to fall quickly, so that the run reaches exchanges of
 	// every kind before somebody goes down.
 	enc, bus := fightStubWith(t, attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	actions := 0
 	for i := 0; i < 20; i++ {
@@ -372,6 +356,7 @@ func TestEveryActionTheEncounterTakesIsAnsweredWithOnePackage(t *testing.T) {
 			break
 		}
 		act(t, enc, attack(playerA, nameA, wolfID))
+		answer(t, enc, bus)
 		actions++
 		got := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
 		if len(got) != actions {
@@ -391,7 +376,7 @@ func TestEveryActionTheEncounterTakesIsAnsweredWithOnePackage(t *testing.T) {
 // a package whose sets moved around would read as a different run.
 func TestThePackageKeepsTheOrderTheFightersWereTouchedIn(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	encounterID := encounterOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeCreateProposed))
 
 	act(t, enc, attackWhere(t, func(id string) bool {
@@ -420,11 +405,11 @@ func TestThePackageKeepsTheOrderTheFightersWereTouchedIn(t *testing.T) {
 // the record of the round) and a flight (the position of an escape).
 func TestEveryProposalPassesTheOwnershipTable(t *testing.T) {
 	fight, fightBus := fightStub(t)
-	act(t, fight, entered(playerA, nameA, regionID, regName))
+	openFight(t, fight, fightBus)
 	swingUntilOver(t, fight, fightBus)
 
 	flight, flightBus := fightStub(t)
-	act(t, flight, entered(playerA, nameA, regionID, regName))
+	openFight(t, flight, flightBus)
 	act(t, flight, fleeWhere(t, func(id string) bool { return hits(tkmech.Verdict(id, 0)) }))
 
 	kinds := make(map[string]bool)
@@ -484,10 +469,13 @@ func TestAnAttackOutsideAnEncounterIsPassedOver(t *testing.T) {
 // event type for a stub two epics from removal — what T-018 turned down.
 func TestAnActionAfterTheFightIsOverIsAnsweredWithSilence(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	swingUntilOver(t, enc, bus)
 	if _, open := enc.ActiveEncounter(playerA); open {
 		t.Fatal("the fight is still on; this test is about what comes after it")
+	}
+	if got := ofType(eventsOf(t, bus, eventbus.TopicWorldEvents), swarm.TypeEncounterEnded); len(got) != 1 {
+		t.Fatalf("%d fights ended: this test is about what comes after one", len(got))
 	}
 	before := len(allEvents(t, bus))
 
@@ -506,7 +494,7 @@ func TestAnActionAfterTheFightIsOverIsAnsweredWithSilence(t *testing.T) {
 // closes with npc_dead and names who landed the blow.
 func TestTheWolfDies(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	swingUntilOver(t, enc, bus)
 
@@ -539,7 +527,7 @@ func TestTheWolfDies(t *testing.T) {
 // answer to one action.
 func TestTheEncounterEntityRecordsTheFightItHeld(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	encounterID := encounterOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeCreateProposed))
 	swingUntilOver(t, enc, bus)
 
@@ -598,7 +586,7 @@ func TestTheEncounterEntityRecordsTheFightItHeld(t *testing.T) {
 // appended once — and a swing at a corpse produces nothing at all.
 func TestTheTrophyIsHandedOutOnce(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	swingUntilOver(t, enc, bus)
 
 	// Two more swings after the fight is over, the way an impatient player
@@ -634,7 +622,7 @@ func TestTheCharacterDies(t *testing.T) {
 	// one exchange: whatever the table rolls, the fight can only end one way.
 	enc, bus := fightStubWith(t, attr(playerA, entity.AttrHP, 1),
 		attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	swingUntilOver(t, enc, bus)
 
@@ -656,7 +644,7 @@ func TestTheCharacterDies(t *testing.T) {
 // costs a strike out of turn.
 func TestAFailedFlightIsAnsweredWithAFreeAttack(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	act(t, enc, fleeWhere(t, func(id string) bool {
 		return !hits(tkmech.Verdict(id, 0)) && hits(tkmech.Verdict(id, 1))
@@ -705,7 +693,7 @@ func TestAFailedFlightIsAnsweredWithAFreeAttack(t *testing.T) {
 // to where the rules put them (flee.success_position, DR-19).
 func TestASuccessfulFlightEndsTheEncounter(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	act(t, enc, fleeWhere(t, func(id string) bool { return hits(tkmech.Verdict(id, 0)) }))
 
@@ -718,6 +706,9 @@ func TestASuccessfulFlightEndsTheEncounter(t *testing.T) {
 	}
 	want := mechanics(t).Rules().FleePosition(worldID, regionID)
 	assertOp(t, opsFor(t, bus, playerA), entity.AttrPosition, want)
+
+	// The end follows the fact of the package that closes the fight.
+	answer(t, enc, bus)
 
 	ended := onlyOne(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded)
 	if reason, _ := ended.Path().GetString("reason"); reason != entity.ResolutionPlayersOut {
@@ -733,7 +724,7 @@ func TestARestIsNotTheBusinessOfTheEncounter(t *testing.T) {
 	enc, bus := fightStub(t)
 
 	act(t, enc, rest(playerA, nameA))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	before := len(allEvents(t, bus))
 	act(t, enc, rest(playerA, nameA))
 
@@ -759,11 +750,15 @@ func TestAnActionOfAnotherWorldIsPassedOver(t *testing.T) {
 // second copy of one swing must not roll a second set of dice.
 func TestARedeliveredActionIsAnsweredOnce(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	blow := attackWhere(t, func(id string) bool { return hits(tkmech.Verdict(id, 0)) })
+	opened := len(allEvents(t, bus))
 
 	act(t, enc, blow)
 	before := len(allEvents(t, bus))
+	if before == opened {
+		t.Fatal("the first delivery was answered by nothing: the test proves nothing")
+	}
 	act(t, enc, blow)
 
 	if after := len(allEvents(t, bus)); after != before {
@@ -779,6 +774,9 @@ func TestARedeliveredActionIsAnsweredOnce(t *testing.T) {
 // the bus does on read (MV_BUS_VALIDATE_ON_READ, SEC-16).
 func TestTheStubAnswersThroughItsSubscriptions(t *testing.T) {
 	enc, bus := fightStub(t)
+	// The fight opens only once State has created its encounter (C-05 v1.4
+	// p. 4), so State answers on the same bus.
+	stateAnswering(t, bus)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	if err := enc.Start(ctx); err != nil {
@@ -846,10 +844,16 @@ func TestTheFactsOfStateMoveTheVersionTheStubProposesAgainst(t *testing.T) {
 		// The exchange is over when it has been decided and when State has
 		// answered every proposal made so far: that is the moment the version
 		// the next swing proposes against is settled.
+		// A package that closes the fight has one thing more to wait for: the
+		// end, which the stub announces after the fact of it (C-05 v1.4 p. 5).
 		waitFor(t, "the exchange to be decided and applied", func() bool {
 			decided := len(ofType(eventsOf(t, bus, eventbus.TopicGameEvents), swarm.TypeCombatDecided))
-			proposed := len(ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed))
-			return decided > before && len(world.AppliedProposals()) >= proposed
+			proposals := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
+			settled := decided > before && len(world.AppliedProposals()) >= len(proposals)
+			if !settled || !closes(t, proposals[len(proposals)-1]) {
+				return settled
+			}
+			return len(ofType(eventsOf(t, bus, eventbus.TopicWorldEvents), swarm.TypeEncounterEnded)) > 0
 		})
 	}
 
@@ -914,7 +918,7 @@ func TestAFactTeachesTheStubAboutAWorldItWasNotSeededWith(t *testing.T) {
 			t.Fatalf("observe %s: %v", e.ID, err)
 		}
 	}
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 
 	if _, open := enc.ActiveEncounter(playerA); !open {
 		t.Error("no encounter was opened against a wolf learned from entity.created")
@@ -927,7 +931,7 @@ func TestAFactTeachesTheStubAboutAWorldItWasNotSeededWith(t *testing.T) {
 // elsewhere cannot pass unnoticed.
 func TestEverythingTheStubPublishesIsAValidEvent(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	swingUntilOver(t, enc, bus)
 
 	got := allEvents(t, bus)
@@ -980,7 +984,7 @@ func TestEverythingTheStubPublishesIsAValidEvent(t *testing.T) {
 // it under the same identifier.
 func TestAPackageRefusedForAVersionConflictIsOfferedAgain(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	// A blow that lands, answered by a bite that misses: the package is about
 	// the wolf and the round it spent, which is what makes the arithmetic of
 	// the retry a thing this test can read.
@@ -1075,7 +1079,7 @@ func TestARetryThatWouldChangeWhoIsStandingIsNotOffered(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			said := &strings.Builder{}
 			enc, bus := fightStubLogging(t, said, tc.world...)
-			act(t, enc, entered(playerA, nameA, regionID, regName))
+			openFight(t, enc, bus)
 			act(t, enc, attackWhere(t, tc.blow))
 			proposal := proposalOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed))
 			ended := len(ofType(eventsOf(t, bus, eventbus.TopicWorldEvents), swarm.TypeEncounterEnded))
@@ -1083,10 +1087,12 @@ func TestARetryThatWouldChangeWhoIsStandingIsNotOffered(t *testing.T) {
 			observe(t, enc, tc.moved)
 			observe(t, enc, refusal(proposal, swarm.ReasonVersionConflict, wolfID))
 
-			if offers := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents),
-				swarm.TypeUpdateProposed); len(offers) != 1 {
+			// Counted under the identifier of the action: a wolf that fell to
+			// somebody else leaves a fight the encounter agent then closes
+			// with a package of its own (C-05 v1.4 p. 6).
+			if offers := offersOf(t, bus, proposal); offers != 1 {
 				t.Fatalf("%d packages: a retry that changes who is standing contradicts the "+
-					"decision it answers for, and is not offered", len(offers))
+					"decision it answers for, and is not offered", offers)
 			}
 			if !strings.Contains(said.String(), "the world moved past the decision") {
 				t.Errorf("the stub dropped the package in silence; the log says:\n%s", said)
@@ -1099,9 +1105,8 @@ func TestARetryThatWouldChangeWhoIsStandingIsNotOffered(t *testing.T) {
 			// The package is let go of rather than kept for the next refusal:
 			// nothing that arrives about it later brings it back.
 			observe(t, enc, refusal(proposal, swarm.ReasonVersionConflict, wolfID))
-			if offers := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents),
-				swarm.TypeUpdateProposed); len(offers) != 1 {
-				t.Errorf("%d packages after a second refusal of a package the stub let go of", len(offers))
+			if offers := offersOf(t, bus, proposal); offers != 1 {
+				t.Errorf("%d packages after a second refusal of a package the stub let go of", offers)
 			}
 		})
 	}
@@ -1122,7 +1127,7 @@ func TestARetryThatWouldChangeWhoIsStandingIsNotOffered(t *testing.T) {
 // a window that has forgotten — finds nothing left to retry.
 func TestARefusalDeliveredAgainAfterTheRetryWentInOffersNothing(t *testing.T) {
 	enc, bus := fightStubWith(t, attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40))
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	act(t, enc, attackWhere(t, func(id string) bool {
 		return tkmech.Verdict(id, 0) == tkmech.VerdictHit && !hits(tkmech.Verdict(id, 2))
 	}))
@@ -1185,7 +1190,7 @@ func TestARefusalDeliveredAgainAfterTheRetryWentInOffersNothing(t *testing.T) {
 // reached.
 func TestARefusedPackageMovedNothingAtAll(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	// An exchange both sides land: the package holds the wolf, the character
 	// and the encounter, and only one of the three is in the conflict.
 	act(t, enc, attackWhere(t, func(id string) bool {
@@ -1229,7 +1234,7 @@ func TestARefusedPackageMovedNothingAtAll(t *testing.T) {
 func TestTheStubGivesUpOnAPackageItKeepsLosingWith(t *testing.T) {
 	said := &strings.Builder{}
 	enc, bus := fightStubLogging(t, said)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	act(t, enc, attack(playerA, nameA, wolfID))
 	first := onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed)
 	proposal := proposalOf(t, first)
@@ -1282,7 +1287,7 @@ func TestARefusalThatIsNotARaceIsNotRetried(t *testing.T) {
 		t.Run(reason, func(t *testing.T) {
 			said := &strings.Builder{}
 			enc, bus := fightStubLogging(t, said)
-			act(t, enc, entered(playerA, nameA, regionID, regName))
+			openFight(t, enc, bus)
 			act(t, enc, attack(playerA, nameA, wolfID))
 			proposal := proposalOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeUpdateProposed))
 
@@ -1305,7 +1310,7 @@ func TestARefusalThatIsNotARaceIsNotRetried(t *testing.T) {
 // answers for them itself (C-02 v1.1).
 func TestARefusalOfSomebodyElsesPackageIsNotTheBusinessOfTheStub(t *testing.T) {
 	enc, bus := fightStub(t)
-	act(t, enc, entered(playerA, nameA, regionID, regName))
+	openFight(t, enc, bus)
 	act(t, enc, attack(playerA, nameA, wolfID))
 
 	observe(t, enc, refusal("gw-7", swarm.ReasonVersionConflict, playerA))
@@ -1338,6 +1343,7 @@ func fightStubWith(t *testing.T, changes ...func(*entity.Entity)) (*swarm.FakeEn
 	if err := enc.Seed(world); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	answeredBy(t, bus, world)
 	return enc, bus
 }
 
@@ -1364,6 +1370,7 @@ func fightStubLogging(t *testing.T, said *strings.Builder,
 	if err := enc.Seed(world); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	answeredBy(t, bus, world)
 	return enc, bus
 }
 
@@ -1589,8 +1596,131 @@ func swingUntilOver(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
 			return
 		}
 		act(t, enc, attack(playerA, nameA, wolfID))
+		answer(t, enc, bus)
 	}
 	t.Fatalf("the fight is still going after twenty exchanges (%d events)", len(allEvents(t, bus)))
+}
+
+// --- State answering the stub, one turn at a time ---
+
+// rig is the State the tests of the stub answer from: FakeState over the world
+// the stub was seeded with, and how far along system_events it has read.
+type rig struct {
+	state *state.FakeState
+	read  int
+}
+
+// rigs is the State of every bus a test lets answer.
+var rigs sync.Map
+
+// answeredBy puts a FakeState over the world onto the bus, for answer.
+func answeredBy(t *testing.T, bus *membus.Bus, world []*entity.Entity) {
+	t.Helper()
+	st, err := state.New(state.Config{Bus: bus, WorldID: worldID})
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if err := st.Seed(world); err != nil {
+		t.Fatalf("seed state: %v", err)
+	}
+	rigs.Store(bus, &rig{state: st})
+	t.Cleanup(func() { rigs.Delete(bus) })
+}
+
+// answer lets State answer everything the stub has proposed so far and hands
+// the stub every fact of it, in the order of system_events — the order a
+// subscription of either would see. What the stub proposes on a fact — a retry,
+// the closure of a fight — is answered too, until nothing is left. It runs on
+// the goroutine of the test, so a test can look at the stub between the moment
+// it proposed and the moment State answered: that moment is what the lifecycle
+// of C-05 v1.4 is about.
+func answer(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
+	t.Helper()
+	held, ok := rigs.Load(bus)
+	if !ok {
+		answeredBy(t, bus, mustFixtures(t))
+		held, _ = rigs.Load(bus)
+	}
+	r := held.(*rig)
+	for {
+		events := eventsOf(t, bus, eventbus.TopicSystemEvents)
+		if r.read >= len(events) {
+			return
+		}
+		ev := events[r.read]
+		r.read++
+		switch ev.Source {
+		case contracts.SourceTestkitSwarm:
+			if err := r.state.Apply(t.Context(), ev); err != nil {
+				t.Fatalf("State on %s: %v", ev.Type, err)
+			}
+		case contracts.SourceTestkitState:
+			observe(t, enc, ev)
+		}
+	}
+}
+
+// openFight walks the character into the forest and lets State create the
+// encounter the stub proposes: from here on the fight is on.
+//
+// A fight that did not open fails the test on the spot: a test of what a fight
+// does would otherwise pass over a fight that never happened (Mi-2 of review
+// #1 of T-419).
+func openFight(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
+	t.Helper()
+	act(t, enc, entered(playerA, nameA, regionID, regName))
+	answer(t, enc, bus)
+	if _, open := enc.ActiveEncounter(playerA); !open {
+		t.Fatalf("the fight of %s did not open; everything after this would test nothing", playerA)
+	}
+}
+
+// stateAnswering runs FakeState over the fixtures on its own subscription, for
+// a stub driven through its subscriptions rather than by hand.
+func stateAnswering(t *testing.T, bus eventbus.Bus) *state.FakeState {
+	t.Helper()
+	world, err := state.New(state.Config{Bus: bus, WorldID: worldID})
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if err := world.Seed(mustFixtures(t)); err != nil {
+		t.Fatalf("seed state: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	if err := world.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("start state: %v", err)
+	}
+	t.Cleanup(func() { cancel(); _ = world.Wait() })
+	return world
+}
+
+// closes says whether a package resolves the encounter it names.
+func closes(t *testing.T, proposal eventbus.Event) bool {
+	t.Helper()
+	for _, set := range changeSets(t, proposal) {
+		if set.Ref().Type != entity.TypeEncounter {
+			continue
+		}
+		for _, op := range set.Ops {
+			if op.Path == entity.AttrState && op.Value == entity.EncounterStateResolved {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// offersOf is how many times a package was offered under one identifier.
+func offersOf(t *testing.T, bus *membus.Bus, proposalID string) int {
+	t.Helper()
+	n := 0
+	for _, ev := range ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed) {
+		if id, _ := ev.Path().GetString("proposal_id"); id == proposalID {
+			n++
+		}
+	}
+	return n
 }
 
 // --- the ownership table (§4.6) ---

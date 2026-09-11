@@ -172,23 +172,31 @@ type FakeNarrator struct {
 	lawsVersion string
 	log         *slog.Logger
 
-	// told is the window of events already answered. Delivery is
-	// at-least-once (C-01), and a look delivered twice is still one look: one
-	// narrative per turn is what C-05 promises the gateway.
+	// answered is the window of events already answered — the two-step
+	// eventbus.Dedup of C-01 v1.4 (ADR-027 p. 3). Delivery is at-least-once
+	// (C-01), and a look delivered twice is still one look: one narrative per
+	// turn is what C-05 promises the gateway.
 	//
-	// An event goes into it only once its answer is out. A publication that
-	// fails leaves the event untold and returns the error, so the bus retries
-	// the handler and, when the failure persists, parks the event in
-	// dead_letters — the failure is seen instead of swallowed.
+	// The narrator asks (Has) before it answers and remembers (Add) only once
+	// its answer is out. A publication that fails leaves the event unanswered
+	// and returns the error, so the bus retries the handler and, when the
+	// failure persists, parks the event in dead_letters — the failure is seen
+	// instead of swallowed. Seen would remember first and lose it.
 	//
 	// The price is a possible duplicate, paid on purpose for a stub: remembering
 	// late trades a silent loss for a narrative that may be told twice under
 	// two different ids. That happens when Publish wrote the narrative and still
-	// answered an error (a lost ack) and the retry publishes it again — Derive
-	// gives every publication a new id, so the gateway cannot fold the two
-	// (probe P4 of review #2 of T-220) — and it would happen if one event were
-	// handled twice at the same time (P5; see the precondition of Narrate).
-	told *window
+	// answered an error (a lost ack) and the retry publishes it again — the
+	// narratives of the stub take their id from the generator, so the gateway
+	// cannot fold the two (probe P4 of review #2 of T-220) — and it would happen
+	// if one event were handled twice at the same time (P5; see the
+	// precondition of Narrate). An id derived from the cause (WithCauseID) is
+	// what closes the first case for the narrator of the swarm (T-229).
+	//
+	// The window is not part of any snapshot: the stub is not a stateful
+	// context of C-14 and has none. A narrator that is one carries IDs in its
+	// snapshot and Restore on recovery (C-14 v1.2 (a)).
+	answered *eventbus.Dedup
 
 	mu    sync.Mutex
 	known map[string]character
@@ -221,7 +229,7 @@ func NewFakeNarrator(bus eventbus.Bus, worldID string) (*FakeNarrator, error) {
 		lawsVersion: DefaultLawsVersion,
 		log: slog.New(slog.NewTextHandler(io.Discard, nil)).
 			With("component", Source, "world_id", worldID),
-		told:      newWindow(eventbus.DefaultDedupCapacity),
+		answered:  eventbus.NewDedup(eventbus.DefaultDedupCapacity),
 		known:     make(map[string]character),
 		foes:      make(map[string]string),
 		exchanges: make(map[string]*exchange),
@@ -329,13 +337,13 @@ func (n *FakeNarrator) Observe(ctx context.Context, ev eventbus.Event) error {
 	if ev.Type != TypeUpdated || p.Entity.Entity.Type != entity.TypePlayer || !diedIn(p.Changed) {
 		return nil
 	}
-	if n.told.has(ev.ID) {
+	if n.answered.Has(ev.ID) {
 		return nil
 	}
 	if err := n.death(ctx, ev, p.Entity); err != nil {
 		return err
 	}
-	n.told.add(ev.ID)
+	n.answered.Add(ev.ID)
 	return nil
 }
 
@@ -391,11 +399,11 @@ func diedIn(changed []entity.Change) bool {
 //
 // The event is remembered as told only once it has been answered. An error is
 // a publication that did not go out, and the bus retries the handler on it
-// (see told).
+// (see answered).
 //
 // Precondition: Narrate is not called concurrently for one event. The window
-// asks and remembers in two steps, and two deliveries of one event racing
-// between them would both publish. membus, kafka and eventbus.Delivery hold it
+// asks (Has) and remembers (Add) in two steps, and two deliveries of one event
+// racing between them would both publish. membus, kafka and eventbus.Delivery hold it
 // today — a subscription hands its topic over one event at a time and retries
 // in sequence — and a caller driving the handler by hand has to hold it too.
 func (n *FakeNarrator) Narrate(ctx context.Context, ev eventbus.Event) error {
@@ -407,7 +415,7 @@ func (n *FakeNarrator) Narrate(ctx context.Context, ev eventbus.Event) error {
 	if !n.serves(ev) {
 		return nil
 	}
-	if n.told.has(ev.ID) {
+	if n.answered.Has(ev.ID) {
 		n.log.Debug("event already told about", "event_id", ev.ID, "type", ev.Type)
 		return nil
 	}
@@ -425,7 +433,7 @@ func (n *FakeNarrator) Narrate(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return err
 	}
-	n.told.add(ev.ID)
+	n.answered.Add(ev.ID)
 	return nil
 }
 
@@ -500,10 +508,11 @@ func (n *FakeNarrator) round(ctx context.Context, ev eventbus.Event) error {
 // recipients are the characters the encounter was opened around — the players
 // of its scope — and never the NPCs it was opened with.
 //
-// It is told when encounter.started arrives, which is before State has said
-// whether it created the encounter at all (C-05 v1.3 p. 4). What that means
-// for a creation State refuses is an open question of the contract, and the
-// stub does not answer it on its own: see README.md of this package.
+// It is told when encounter.started arrives, and that is always an encounter
+// State has created: the event is published only after entity.created of the
+// encounter, and a creation State refuses announces nothing at all (C-05 v1.4
+// p. 4, ADR-026). The fact may still reach a reader of two topics later than
+// the event; it is in the journal all the same.
 func (n *FakeNarrator) worldEvent(ctx context.Context, ev eventbus.Event) error {
 	var p startedPayload
 	if err := decodePayload(ev.Payload, &p); err != nil {
@@ -625,17 +634,24 @@ func (n *FakeNarrator) collect(playerID string, ev eventbus.Event, p decisionPay
 // closesExchange says whether a decision is the last one of its exchange —
 // whether the turn it belongs to can be told now.
 //
-// combat.decided carries no mark that says so, and the answer is read off what
-// it does carry, by the rule every exchange of C-05 follows (combat.decided ×2,
-// design §4.1): a blow that did not kill is answered by the NPC it struck; a
-// flight that failed is answered by a strike out of turn when the rules call
-// for one (free_attack) and somebody is still standing to deal it
-// (living_enemies); an answer is never answered. Nothing here looks at the
+// The publisher says so in exchange.last (C-05 v1.4 p. 7), and when it does,
+// that is the whole answer: the publisher knows the shape of the exchange,
+// while a reader can only guess it, and the guess below is right for exactly
+// one shape — an action answered by one NPC — and would go quietly wrong with
+// several NPCs or in a group.
+//
+// The guess is kept for a publisher that does not fill the field, and only for
+// it. It reads the decision by the rule every exchange of C-05 follows today
+// (combat.decided ×2, design §4.1): a blow that did not kill is answered by the
+// NPC it struck; a flight that failed is answered by a strike out of turn when
+// the rules call for one (free_attack) and somebody is still standing to deal
+// it (living_enemies); an answer is never answered. Nothing here looks at the
 // clock or waits for a quiet moment: the decision itself says whether another
-// one follows. Should the exchange ever grow a third decision, this is the one
-// place that has to learn it — and TestEveryTurnOfTheFightIsToldOnce, which
-// drives the real FakeEncounter, is what goes red.
+// one follows.
 func closesExchange(p decisionPayload) bool {
+	if p.Exchange != nil {
+		return p.Exchange.Last
+	}
 	switch p.Action {
 	case mech.ActionAttack:
 		return p.Outcome.TargetDead
@@ -831,57 +847,6 @@ func (n *FakeNarrator) nameOfKnown(id, fallback string) string {
 	return cmp.Or(fallback, id)
 }
 
-// window remembers the identifiers of the last events the narrator has
-// answered, the oldest forgotten first.
-//
-// It exists next to eventbus.Dedup because the narrator has to ask and to
-// remember in two steps: it may remember an event only once its answer is
-// out, and Dedup.Seen does both at once — which is how a failed publication
-// used to vanish without a trace (Mi-1 of the review of T-220). Nothing slips
-// between the two steps as long as one event is never handled twice at the
-// same time — the precondition of Narrate and Observe, which the
-// subscriptions hold today: a subscription hands its topic over one event at
-// a time, and an identifier belongs to one topic.
-type window struct {
-	mu    sync.Mutex
-	ids   map[string]struct{}
-	order []string
-	next  int
-}
-
-func newWindow(capacity int) *window {
-	return &window{ids: make(map[string]struct{}, capacity), order: make([]string, capacity)}
-}
-
-// has says whether the event has been answered. An empty identifier never has
-// been: an envelope without one is refused by validation, and treating it as
-// answered would make every such envelope a duplicate of the last.
-func (w *window) has(id string) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	_, ok := w.ids[id]
-	return ok
-}
-
-// add remembers an answered event, forgetting the oldest one when the window
-// is full.
-func (w *window) add(id string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if id == "" {
-		return
-	}
-	if _, ok := w.ids[id]; ok {
-		return
-	}
-	if old := w.order[w.next]; old != "" {
-		delete(w.ids, old)
-	}
-	w.order[w.next] = id
-	w.ids[id] = struct{}{}
-	w.next = (w.next + 1) % len(w.order)
-}
-
 // namedRef is the EntityWithName of a payload. The items of acted[] carry an
 // event next to it (2.3.3); the narrator does not read that, and an unknown
 // field is ignored rather than refused, because a payload richer than what a
@@ -933,6 +898,12 @@ type decisionPayload struct {
 		DefenderMax   int `json:"defender_max"`
 	} `json:"hp"`
 	FreeAttack bool `json:"free_attack"`
+	// Exchange is where the publisher says this decision stands in its exchange
+	// (C-05 v1.4 p. 7). It is nil for a publisher that does not fill it.
+	Exchange *struct {
+		Index int  `json:"index"`
+		Last  bool `json:"last"`
+	} `json:"exchange"`
 }
 
 // factPayload is the part of entity.created and entity.updated the narrator

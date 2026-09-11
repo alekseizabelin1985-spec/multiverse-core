@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -75,6 +76,13 @@ const (
 	CauseSpawn  = "spawn"
 	CauseCombat = "combat"
 	CauseFlee   = "flee"
+	// CauseResolve is the cause of the package that closes a fight whose last
+	// NPC fell to somebody else's hand (C-05 v1.4 p. 6). The package resolves
+	// the encounter and nothing else: the death of the NPC is already recorded
+	// by its own fact, and nobody of this fight struck (decision of the
+	// orchestrator on T-419). The ownership row of the encounter at the task
+	// level lists it.
+	CauseResolve = "resolve"
 )
 
 // The reasons of entity.update.rejected (C-02, §4.5). Only one of the five is
@@ -253,8 +261,48 @@ type encounter struct {
 	// ActorFromEntity says the same thing the entity would.
 	lastDamager map[string]string
 
-	round  int
-	active bool
+	round int
+	// scope is the scope the encounter was opened for — the scope of whoever
+	// walked in (C-04). An end the encounter agent reaches on somebody else's
+	// fact carries it explicitly, because the scope that fact brings along is
+	// not the scope of the fight (C-05 v1.4 p. 6).
+	scope eventbus.ScopeRef
+
+	// The lifecycle of the fight is announced only after State has accepted
+	// what the announcement says (C-05 v1.4 p. 4–5, ADR-026):
+	//
+	//   opening — the creation is proposed and entity.created has not come
+	//             back; encounter.started is built and held in opening.
+	//   active  — State created the encounter and encounter.started is out.
+	//   closing — the package that resolves the encounter is on its way, and
+	//             encounter.ended is built and held in closing. The fight is
+	//             still active: State holds it open until the fact.
+	//   over    — the fact of the closing package came back, encounter.ended
+	//             is out and active is false.
+	//
+	// A creation State refuses ends the fight before it began: it leaves
+	// byPlayer, and nothing about it is ever announced.
+	opening *eventbus.Event
+	// openedBy is the proposal that creates the encounter entity — what a
+	// refusal of the creation names.
+	openedBy string
+	active   bool
+	closing  *closure
+	// deferred are the actions of the character that arrived while the
+	// creation or the closing package was on its way. They are answered in the
+	// order they came once State has said whether it went in: an answer worked
+	// out from a view holding a package State has not applied would be silence
+	// in a fight that goes on, or a blow in one that is over (C-05 v1.4 p. 5).
+	// Only a package in flight holds them, so the list lives as long as one
+	// turn of State.
+	deferred []eventbus.Event
+	// downed is the fact that took an NPC of the fight off its feet — the
+	// cause the encounter agent closes the fight on when it was not this fight
+	// that did it (C-05 v1.4 p. 6). orphaned is the fact a closure was already
+	// offered on, so that a closure State keeps turning down is not offered
+	// again and again through the bus.
+	downed   *eventbus.Event
+	orphaned string
 	// pending is the package of the action being answered right now, kept
 	// until State says whether it went in: a fact naming its proposal settles
 	// it (Observe), and so does the stub giving up on it (refused, propose).
@@ -329,6 +377,47 @@ type answer struct {
 	// the view of the stub is put back if the last offer was refused.
 	attempts int
 	undo     []restore
+	// before is participation as it stood before the action. A package State
+	// never applied gives it back, exactly as it gives back hit points: the
+	// damage dealt and the last damager live only in the package and in the
+	// encounter entity (C-05 v1.4 p. 1г).
+	before participation
+	// scope, when set, is the scope the package is published under instead of
+	// the scope of its cause.
+	scope *eventbus.ScopeRef
+}
+
+// options are the options every event of the package is derived with beyond
+// the agent.
+func (a *answer) options() []eventbus.DeriveOption {
+	if a.scope == nil {
+		return nil
+	}
+	return []eventbus.DeriveOption{eventbus.WithScope(a.scope)}
+}
+
+// closure is the end of a fight while the package that resolves it is on its
+// way: the encounter.ended built for it, which the package names in
+// closed_by_event_id, and the proposal whose fact releases it (C-05 v1.4 p. 5).
+type closure struct {
+	ended      eventbus.Event
+	proposalID string
+	reason     string
+}
+
+// participation is the part of a fight a package carries for its fighters and
+// a refused package gives back: each character's record in participants[] and
+// the last damager of each NPC.
+type participation struct {
+	players     []participant
+	lastDamager map[string]string
+}
+
+// exchangeStep is where a decision stands in the exchange that answers one
+// action (combat.decided.exchange, C-05 v1.4 p. 7).
+type exchangeStep struct {
+	index int
+	last  bool
 }
 
 // blow is a strike that landed: the dice are rolled, the decision is published
@@ -515,6 +604,19 @@ func (e *FakeEncounter) Act(ctx context.Context, ev eventbus.Event) error {
 		// the gateway (C-02 v1.1), inside one State refuses it.
 		return nil
 	}
+	// An envelope without an id has no cause to derive the fight from: the
+	// lifecycle takes its ids from the action (WithCauseID), which panics on
+	// it, and a panic in a handler takes down the process with every context
+	// in it (shared/eventbus/README.md, "Id из причины"). Validation on read
+	// keeps such an envelope from getting here; with it off, the action is a
+	// defect of whoever published it. It is logged as an error rather than a
+	// warning because nothing about it is an ordinary turn of the world, and
+	// whoever waits on the action will see nothing but its deadline.
+	if ev.ID == "" {
+		e.log.Error("an action without an id is not answered: it has no cause to derive the fight from",
+			"type", ev.Type)
+		return nil
+	}
 	if world := eventbus.GetWorldIDFromEvent(ev); world != "" && world != e.worldID {
 		e.log.Debug("action of another world passed over",
 			"event_id", ev.ID, "type", ev.Type, "event_world_id", world)
@@ -530,13 +632,34 @@ func (e *FakeEncounter) Act(ctx context.Context, ev eventbus.Event) error {
 		return nil
 	}
 
+	return e.route(ctx, ev)
+}
+
+// route answers an action, or holds it back while the creation or the closing
+// package of the character's fight is on its way (encounter.deferred). It is
+// also how a held action is answered once State has spoken. The caller holds
+// the lock.
+func (e *FakeEncounter) route(ctx context.Context, ev eventbus.Event) error {
+	var p actionPayloadOf
+	if err := decodePayload(ev.Payload, &p); err != nil {
+		e.log.Warn("an action the stub cannot read", "event_id", ev.ID, "err", err)
+		return nil
+	}
+	if p.Entity != nil {
+		if enc := e.byPlayer[p.Entity.Entity.ID]; enc != nil && enc.inFlight() {
+			enc.deferred = append(enc.deferred, ev)
+			e.log.Debug("action deferred until State answers the package of the fight",
+				"event_id", ev.ID, "type", ev.Type, "encounter_id", enc.id)
+			return nil
+		}
+	}
 	switch ev.Type {
 	case TypeEnteredRegion:
-		return e.entered(ctx, ev)
+		return e.entered(ctx, ev, p)
 	case TypeAttacked:
-		return e.attacked(ctx, ev)
+		return e.attacked(ctx, ev, p)
 	default:
-		return e.fled(ctx, ev)
+		return e.fled(ctx, ev, p)
 	}
 }
 
@@ -554,18 +677,13 @@ type actionPayloadOf struct {
 
 // entered opens an encounter when a character walks into a region where
 // something is alive and no fight of theirs is in progress (design §4.1).
-func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
-	var p actionPayloadOf
-	if err := decodePayload(ev.Payload, &p); err != nil {
-		e.log.Warn("an action the stub cannot read", "event_id", ev.ID, "err", err)
-		return nil
-	}
+func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event, p actionPayloadOf) error {
 	if p.Entity == nil || p.Entity.Entity.ID == "" {
 		e.log.Warn("event names no acting entity", "event_id", ev.ID, "type", ev.Type)
 		return nil
 	}
 	playerID := p.Entity.Entity.ID
-	if enc, busy := e.byPlayer[playerID]; busy && enc.active {
+	if enc, busy := e.byPlayer[playerID]; busy && enc.open() {
 		e.log.Debug("already in an encounter", "player_id", playerID, "encounter_id", enc.id)
 		return nil
 	}
@@ -581,9 +699,8 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 		e.log.Warn("entry names no region", "event_id", ev.ID, "player_id", playerID)
 		return nil
 	}
-	npcID, found := e.livingNPCOf(region)
+	npcID, found := e.freeNPCOf(region, playerID)
 	if !found {
-		e.log.Debug("nothing alive in the region", "region_id", region, "player_id", playerID)
 		return nil
 	}
 
@@ -601,7 +718,8 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 		npcs:        []string{npcID},
 		lastDamager: make(map[string]string),
 		round:       1,
-		active:      true,
+		scope:       scope,
+		openedBy:    proposalPrefix + ev.ID,
 	}
 
 	// Opening the encounter is the one act of the stub that belongs to the
@@ -611,8 +729,13 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 	opener := encounterAgent(playerID, AgentLevelDomain)
 
 	// The encounter.started is built before the proposal is published so that
-	// the entity can name the event that opened it: an identifier is assigned
-	// when an event is constructed, not when it is sent (C-01).
+	// the entity can name the event that opened it, and its identifier is
+	// derived from its cause — the entry — and the encounter (C-01 v1.4,
+	// ADR-027 p. 2). The same entry gives the same id on every build: after a
+	// restart the event can be published again under the id opened_by_event_id
+	// names, and a copy that already went out is dropped by id (C-14 v1.2 (b)).
+	// It could not be derived from entity.created: the entity names it before
+	// that fact exists.
 	round := e.rules.Document().Round
 	started := eventbus.Derive(ev, TypeEncounterStarted, Source, map[string]any{
 		"encounter":    refPayload(enc.id, entity.TypeEncounter, ""),
@@ -623,7 +746,7 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 			"timeout":           round.Timeout,
 			"idle_after_missed": round.IdleAfterMissed,
 		},
-	}, eventbus.WithAgent(opener))
+	}, eventbus.WithAgent(opener), eventbus.WithCauseID(enc.id))
 
 	attributes := map[string]any{
 		entity.AttrRegionID:        region,
@@ -636,7 +759,7 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 		entity.AttrNPCs:            []map[string]any{{"npc_id": npcID}},
 	}
 	create := map[string]any{
-		"proposal_id": "prop-" + ev.ID,
+		"proposal_id": enc.openedBy,
 		"entity":      refPayload(enc.id, entity.TypeEncounter, ""),
 		"attributes":  attributes,
 		"cause":       CauseSpawn,
@@ -644,18 +767,19 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 	if _, err := e.publish(ctx, ev, TypeCreateProposed, create, opener); err != nil {
 		return err
 	}
-	if err := e.bus.Publish(ctx, started); err != nil {
-		return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterStarted, err)
-	}
+	// encounter.started waits for entity.created (announce): the encounter is
+	// announced once it exists, and a creation State refuses announces nothing
+	// at all (C-05 v1.4 p. 4, ADR-026).
+	enc.opening = &started
 
 	e.byPlayer[playerID] = enc
 	// The stub folds its own create into its view the way apply folds an
-	// update: every later package of this fight pins the version of the
-	// encounter entity, and a stub that waited for entity.created would send
-	// the first turn under a version it does not know yet.
+	// update, so that the first package of the fight has the version of the
+	// encounter entity to pin. No action of the fight is answered before
+	// entity.created comes back (route), but the view is ready when it does.
 	e.world[enc.id] = entity.New(entity.Ref{ID: enc.id, Type: entity.TypeEncounter},
 		e.worldID, "", attributes, ev.Timestamp)
-	e.log.Info("encounter opened", "encounter_id", enc.id, "player_id", playerID,
+	e.log.Info("encounter proposed", "encounter_id", enc.id, "player_id", playerID,
 		"npc_id", npcID, "region_id", region, "event_id", started.ID)
 	return nil
 }
@@ -663,12 +787,7 @@ func (e *FakeEncounter) entered(ctx context.Context, ev eventbus.Event) error {
 // attacked answers a swing: the rolls, the two decisions of the exchange, one
 // atomic proposal for everything they changed, and the end of the fight when
 // somebody fell (design §4.1).
-func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event) error {
-	var p actionPayloadOf
-	if err := decodePayload(ev.Payload, &p); err != nil {
-		e.log.Warn("an action the stub cannot read", "event_id", ev.ID, "err", err)
-		return nil
-	}
+func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event, p actionPayloadOf) error {
 	enc, playerID, ok := e.fightOf(p.Entity, ev)
 	if !ok {
 		return nil
@@ -683,7 +802,7 @@ func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return err
 	}
-	ans := &answer{cause: ev, causeName: CauseCombat}
+	ans := &answer{cause: ev, causeName: CauseCombat, before: enc.participation()}
 	enc.touched = false
 
 	out, rolls, err := e.mech.Resolve(ev.ID, rollAttack,
@@ -691,7 +810,9 @@ func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return fmt.Errorf("testkit/swarm: resolve attack of %s: %w", playerID, err)
 	}
-	decision, err := e.report(ctx, ev, enc, mech.ActionAttack, playerID, npcID, out, rolls, 0)
+	// A killing blow is the whole exchange; any other is answered by the NPC.
+	decision, err := e.report(ctx, ev, enc, mech.ActionAttack, playerID, npcID, out, rolls, 0,
+		exchangeStep{index: 0, last: out.TargetDead})
 	if err != nil {
 		return err
 	}
@@ -713,7 +834,7 @@ func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event) error {
 			return fmt.Errorf("testkit/swarm: resolve answer of %s: %w", npcID, err)
 		}
 		biteDecision, err := e.report(ctx, ev, enc, mech.ActionNPCAttack, npcID, playerID,
-			bite, biteRolls, 0)
+			bite, biteRolls, 0, exchangeStep{index: 1, last: true})
 		if err != nil {
 			return err
 		}
@@ -734,12 +855,7 @@ func (e *FakeEncounter) attacked(ctx context.Context, ev eventbus.Event) error {
 // fled answers an attempt to walk away: one roll against a threshold that grows
 // with the enemies still standing, and — when it fails and the rules say so —
 // a strike out of turn (rules/dark-forest.yaml flee.on_fail).
-func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event) error {
-	var p actionPayloadOf
-	if err := decodePayload(ev.Payload, &p); err != nil {
-		e.log.Warn("an action the stub cannot read", "event_id", ev.ID, "err", err)
-		return nil
-	}
+func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event, p actionPayloadOf) error {
 	enc, playerID, ok := e.fightOf(p.Entity, ev)
 	if !ok {
 		return nil
@@ -749,6 +865,7 @@ func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return err
 	}
+	ans := &answer{cause: ev, causeName: CauseFlee, before: enc.participation()}
 	enc.touched = false
 
 	living := e.livingCount(enc)
@@ -758,12 +875,16 @@ func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return fmt.Errorf("testkit/swarm: resolve flight of %s: %w", playerID, err)
 	}
-	if _, err := e.report(ctx, ev, enc, mech.ActionFlee, playerID, "", out, rolls, living); err != nil {
+	escaped := out.Success != nil && *out.Success
+	// A flight that failed is answered by a strike out of turn when the rules
+	// call for one and somebody is left standing to deal it; any other flight
+	// is the whole exchange.
+	caught := !escaped && out.FreeAttack && npcID != ""
+	if _, err := e.report(ctx, ev, enc, mech.ActionFlee, playerID, "", out, rolls, living,
+		exchangeStep{index: 0, last: !caught}); err != nil {
 		return err
 	}
 
-	ans := &answer{cause: ev, causeName: CauseFlee}
-	escaped := out.Success != nil && *out.Success
 	if escaped {
 		// A character who got away stands outside the world, where the rules
 		// put them (flee.success_position, DR-19).
@@ -772,14 +893,14 @@ func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event) error {
 	}
 
 	playerDead := false
-	if !escaped && out.FreeAttack && npcID != "" {
+	if caught {
 		bite, biteRolls, err := e.mech.Resolve(ev.ID, rollFreeAttack,
 			mech.Action{Kind: mech.ActionFreeAttack, Actor: npcID, Target: playerID}, actors)
 		if err != nil {
 			return fmt.Errorf("testkit/swarm: resolve free attack of %s: %w", npcID, err)
 		}
 		decision, err := e.report(ctx, ev, enc, mech.ActionFreeAttack, npcID, playerID,
-			bite, biteRolls, 0)
+			bite, biteRolls, 0, exchangeStep{index: 1, last: true})
 		if err != nil {
 			return err
 		}
@@ -805,26 +926,31 @@ func (e *FakeEncounter) fled(ctx context.Context, ev eventbus.Event) error {
 // acted" nor by the threshold of missed turns. When the exchange also ended the
 // fight, the entity is closed in the same package rather than in a second one.
 //
-// encounter.ended is built before the package and published after it, so that
-// closed_by_event_id can name it: an identifier is assigned when an event is
-// constructed, not when it is sent (C-01).
+// encounter.ended is built before the package, so that closed_by_event_id can
+// name it — an identifier is assigned when an event is constructed, not when it
+// is sent (C-01) — and it is published only once the fact of the package comes
+// back (announce). A package State never applies ends nothing: the fight goes
+// on (C-05 v1.4 p. 5, ADR-026).
+//
+// The round is the decision's and is never taken back: combat.decided has
+// published it, and the encounter entity catches up with the next package that
+// goes in, because round_seq is set rather than incremented (C-05 v1.4 p. 1г).
 func (e *FakeEncounter) finish(ctx context.Context, enc *encounter, ans *answer,
 	resolution, killer string) error {
-	var ended eventbus.Event
+	endedBy := ""
 	if resolution != "" {
 		enc.leaveAll()
-		ended = e.endEvent(ans.cause, enc, resolution, killer)
+		ended := e.endEvent(ans.cause, enc, resolution, killer)
+		enc.closing = &closure{ended: ended, proposalID: ans.proposalID(), reason: resolution}
+		endedBy = ended.ID
 	}
-	ans.encOps = e.turnOps(enc, resolution, ended.ID)
+	ans.encOps = e.turnOps(enc, resolution, endedBy)
 	enc.pending = ans
 	if err := e.propose(ctx, enc, ans); err != nil {
 		return err
 	}
-	if resolution == "" {
-		enc.round++
-		return nil
-	}
-	return e.closeFight(ctx, enc, ended, resolution)
+	enc.round++
+	return nil
 }
 
 // strike records a blow that landed. A miss is not recorded at all: it wounds
@@ -948,9 +1074,13 @@ func (e *FakeEncounter) pack(enc *encounter, ans *answer) (pending *changes, dri
 // dice.rolled per roll before combat.decided, which is the order that makes a
 // fight auditable (C-03). It answers the identifier of the combat.decided,
 // which a trophy names as its source (inv-03).
+//
+// step is where the decision stands in its exchange. The stub fills it on every
+// decision (C-05 v1.4 p. 7): it knows the shape of the exchange, which the
+// narrator would otherwise have to guess.
 func (e *FakeEncounter) report(ctx context.Context, cause eventbus.Event, enc *encounter,
 	action, attacker, defender string, out mech.Outcome, rolls []mech.Roll,
-	livingEnemies int) (string, error) {
+	livingEnemies int, step exchangeStep) (string, error) {
 	roller := entity.Ref{ID: attacker, Type: e.typeOf(attacker)}
 	refs := make([]map[string]any, 0, len(rolls))
 	for _, roll := range rolls {
@@ -981,6 +1111,7 @@ func (e *FakeEncounter) report(ctx context.Context, cause eventbus.Event, enc *e
 		"rolls":         refs,
 		"rules_version": e.rules.Version,
 		"phase1_mode":   Phase1Mode,
+		"exchange":      map[string]any{"index": step.index, "last": step.last},
 	}
 	if action == mech.ActionFlee {
 		// A flight resolves against a threshold rather than against a target,
@@ -1089,30 +1220,27 @@ func (e *FakeEncounter) wound(pending *changes, target *entity.Entity, b blow, h
 //
 // A retry the world has moved past is not offered (pack). Working the end of
 // the fight out again instead is not open to the stub: the decisions of the
-// action are published, and they are what the end rests on — encounter.ended
-// of a killing blow has already left, and a blow that did not kill was
-// answered by a bite of the fighter it did not kill. A package that changed who
-// fell would be answering a different action. So the stub gives up on it out
-// loud, exactly as on a race it keeps losing, with the view where the facts
-// put it (refused has rolled the refused attempt back).
+// action are published, and they are what the end rests on — a killing blow is
+// announced in combat.decided.outcome.target_dead, and a blow that did not kill
+// was answered by a bite of the fighter it did not kill. A package that changed
+// who fell would be answering a different action. So the stub gives up on it
+// out loud, exactly as on a race it keeps losing, with the view where the facts
+// put it (refused has rolled the refused attempt back). The end of the fight
+// was never announced — it waits for the fact of this package — so the fight
+// simply goes on (C-05 v1.4 p. 1в).
 func (e *FakeEncounter) propose(ctx context.Context, enc *encounter, ans *answer) error {
 	pending, drift := e.pack(enc, ans)
 	if drift != "" {
 		e.log.Error("the world moved past the decision, the package is not offered again",
 			"proposal_id", ans.proposalID(), "attempts", ans.attempts,
 			"entity_id", drift, "encounter_id", enc.id, "event_id", ans.cause.ID)
-		enc.pending = nil
-		return nil
+		return e.drop(ctx, enc, ans)
 	}
 	sets := pending.sets()
 	if len(sets) == 0 {
 		e.log.Error("an action of the fight changed nothing at all",
 			"event_id", ans.cause.ID, "type", ans.cause.Type)
-		return nil
-	}
-	playerID := ""
-	if p := ans.cause.Path(); p != nil {
-		playerID, _ = p.GetString("entity.entity.id")
+		return e.drop(ctx, enc, ans)
 	}
 	ans.attempts++
 	if _, err := e.publish(ctx, ans.cause, TypeUpdateProposed, map[string]any{
@@ -1120,7 +1248,7 @@ func (e *FakeEncounter) propose(ctx context.Context, enc *encounter, ans *answer
 		"changes":     sets,
 		"atomic":      true,
 		"cause":       ans.causeName,
-	}, encounterAgent(playerID, AgentLevelTask)); err != nil {
+	}, enc.agent(), ans.options()...); err != nil {
 		return err
 	}
 	ans.undo = e.apply(pending)
@@ -1132,7 +1260,7 @@ func (e *FakeEncounter) propose(ctx context.Context, enc *encounter, ans *answer
 // killer is named only when a character landed the blow, which is what the
 // schema allows it for.
 func (e *FakeEncounter) endEvent(cause eventbus.Event, enc *encounter,
-	reason, killer string) eventbus.Event {
+	reason, killer string, opts ...eventbus.DeriveOption) eventbus.Event {
 	payload := map[string]any{
 		"encounter": refPayload(enc.id, entity.TypeEncounter, ""),
 		"reason":    reason,
@@ -1143,20 +1271,226 @@ func (e *FakeEncounter) endEvent(cause eventbus.Event, enc *encounter,
 	if killer != "" {
 		payload["killer"] = e.refOf(killer, entity.TypePlayer)
 	}
+	// The identifier is derived from the cause of the package that closes the
+	// fight and from the encounter (C-01 v1.4, ADR-027 p. 2): the package names
+	// it in closed_by_event_id before its fact exists, and a retry of the same
+	// package, or the same end rebuilt after a restart, gets the same id.
 	return eventbus.Derive(cause, TypeEncounterEnded, Source, payload,
-		eventbus.WithAgent(enc.agent()))
+		append([]eventbus.DeriveOption{eventbus.WithAgent(enc.agent()), eventbus.WithCauseID(enc.id)},
+			opts...)...)
 }
 
-// closeFight sends the end built by endEvent and shuts the fight down.
-func (e *FakeEncounter) closeFight(ctx context.Context, enc *encounter,
-	ended eventbus.Event, reason string) error {
-	if err := e.bus.Publish(ctx, ended); err != nil {
-		return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterEnded, err)
+// --- the lifecycle of a fight after the fact (C-05 v1.4 p. 4–6, ADR-026) ---
+
+// announce publishes the lifecycle event a fact has just made true:
+// encounter.started once State created the encounter, encounter.ended once
+// State applied the package that closes it. An event that would announce what
+// State has not accepted cannot be taken back, so it is not sent before the
+// fact that makes it true.
+//
+// A publication that fails leaves the event held and returns the error: the
+// bus delivers the fact again, and the retry announces the same event under the
+// same identifier. The caller holds the lock.
+func (e *FakeEncounter) announce(ctx context.Context, factType, entityID, proposalID string) error {
+	enc := e.encounterByID(entityID)
+	if enc == nil {
+		return nil
 	}
-	enc.active = false
-	e.log.Info("encounter ended", "encounter_id", enc.id, "reason", reason,
-		"rounds", enc.round, "event_id", ended.ID)
+	switch {
+	case factType == TypeCreated && enc.opening != nil:
+		started := *enc.opening
+		if err := e.bus.Publish(ctx, started); err != nil {
+			return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterStarted, err)
+		}
+		enc.opening, enc.active = nil, true
+		e.log.Info("encounter opened", "encounter_id", enc.id, "event_id", started.ID)
+	case factType == TypeUpdated && enc.closing != nil && proposalID == enc.closing.proposalID:
+		ended := enc.closing.ended
+		if err := e.bus.Publish(ctx, ended); err != nil {
+			return fmt.Errorf("testkit/swarm: publish %s: %w", TypeEncounterEnded, err)
+		}
+		e.log.Info("encounter ended", "encounter_id", enc.id, "reason", enc.closing.reason,
+			"rounds", enc.round, "event_id", ended.ID)
+		enc.closing, enc.active = nil, false
+	}
 	return nil
+}
+
+// drop lets go of a package State will never apply — the stub gave up on it,
+// the world moved past its decision, or State refused it for a reason that is
+// not a race. Participation goes back with it, as the hit points already have
+// (rollback), and a closing package takes its end along: the fight goes on.
+// The round stays where the decision put it (finish).
+//
+// What the fight held back for the package is answered now, and a fight whose
+// last NPC has meanwhile fallen to somebody else is closed (advanceOne). The
+// caller holds the lock.
+func (e *FakeEncounter) drop(ctx context.Context, enc *encounter, ans *answer) error {
+	enc.restore(ans.before)
+	enc.pending = nil
+	if enc.closing != nil && enc.closing.proposalID == ans.proposalID() {
+		enc.closing = nil
+	}
+	if ans.causeName == CauseResolve {
+		// Said once, here, and not on every fact that follows: the fight stays
+		// open over a fallen NPC, and the closure is not offered again on the
+		// same fact (advanceOne), so the actions of the fight go on being
+		// answered rather than waiting for an end that will not come.
+		e.log.Error("the closure of a fight whose NPC fell elsewhere was not applied; "+
+			"the fight stays open and is not closed again on the same fact",
+			"encounter_id", enc.id, "event_id", ans.cause.ID)
+	}
+	return e.advanceOne(ctx, enc)
+}
+
+// advance moves every fight on after a fact: the ones nothing is in flight for
+// any more answer what they held back, and the ones left with nobody to fight
+// are closed. The fights are taken in the order of their characters, so that
+// one scenario publishes the same events in the same order on every run. The
+// caller holds the lock.
+func (e *FakeEncounter) advance(ctx context.Context) error {
+	players := make([]string, 0, len(e.byPlayer))
+	for id := range e.byPlayer {
+		players = append(players, id)
+	}
+	slices.Sort(players)
+	fights := make([]*encounter, 0, len(players))
+	for _, id := range players {
+		fights = append(fights, e.byPlayer[id])
+	}
+	var errs []error
+	for _, enc := range fights {
+		errs = append(errs, e.advanceOne(ctx, enc))
+	}
+	return errors.Join(errs...)
+}
+
+// advanceOne moves one fight on: nothing happens while its creation or its
+// closing package is in flight; an active fight with no package of its own on
+// the way and no NPC left standing is closed by its agent (closeOrphaned) —
+// once per fact that downed the NPC; and otherwise the actions it held back
+// are answered. A closure State turned down is not offered again on the same
+// fact, and the fight then answers its actions as any open fight does: were
+// it to keep choosing the closure, the actions held for it would wait for an
+// end that never comes (Mi-1 of review #1 of T-419, C-05 v1.4 p. 5). The
+// caller holds the lock.
+func (e *FakeEncounter) advanceOne(ctx context.Context, enc *encounter) error {
+	if enc.inFlight() {
+		return nil
+	}
+	if enc.active && enc.pending == nil && enc.downed != nil && e.livingCount(enc) == 0 &&
+		enc.orphaned != enc.downed.ID {
+		return e.closeOrphaned(ctx, enc)
+	}
+	held := enc.deferred
+	enc.deferred = nil
+	var errs []error
+	for _, ev := range held {
+		errs = append(errs, e.route(ctx, ev))
+	}
+	return errors.Join(errs...)
+}
+
+// closeOrphaned closes a fight whose last NPC fell to a hand that is not this
+// fight's (C-05 v1.4 p. 6, variant Б1 of ADR-026). The lifecycle belongs to the
+// encounter agent, so the agent closes it: a package that resolves the
+// encounter entity as npc_dead and takes every character out of the fight, with
+// no trophy, and then — after its fact, like every end — encounter.ended with
+// no killer, because nobody of this fight struck the blow.
+//
+// The cause is somebody else's fact, and the scope it carries is not the scope
+// of the fight, so the package and the end are published under the scope of
+// the encounter: that is how a narrator and a gateway find the players of the
+// fight without participants[] in the event.
+//
+// Today nothing but a defect reaches here: the region GM gives one NPC to one
+// active encounter (p. 6), so the only writer of the health of a wolf is the
+// agent of its fight. When Entity-Actor and the breach of laws arrive
+// (EPIC-006/007), this is the path they take. The caller holds the lock.
+func (e *FakeEncounter) closeOrphaned(ctx context.Context, enc *encounter) error {
+	cause := *enc.downed
+	enc.orphaned = cause.ID
+	scope := enc.scope
+	ans := &answer{cause: cause, causeName: CauseResolve, before: enc.participation(), scope: &scope}
+	enc.touched = false
+	enc.leaveAll()
+	ended := e.endEvent(cause, enc, entity.ResolutionNPCDead, "", eventbus.WithScope(&scope))
+	enc.closing = &closure{ended: ended, proposalID: ans.proposalID(), reason: entity.ResolutionNPCDead}
+	ans.encOps = e.turnOps(enc, entity.ResolutionNPCDead, ended.ID)
+	enc.pending = ans
+	e.log.Warn("the last NPC of the fight fell to somebody else's hand; the encounter agent closes it",
+		"encounter_id", enc.id, "event_id", cause.ID)
+	return e.propose(ctx, enc, ans)
+}
+
+// abandon ends a fight State refused to create. Nothing was announced about it
+// and nothing will be: there is no encounter to tell about (C-05 v1.4 p. 4,
+// variant A1 of ADR-026). The NPC is free again, and the actions held back for
+// the creation are answered as what they now are — actions outside any fight.
+//
+// It is logged as an error: the region GM gives one NPC to one active encounter
+// (p. 6), and with that rule kept a creation State turns down is a defect. The
+// caller holds the lock.
+func (e *FakeEncounter) abandon(ctx context.Context, enc *encounter, reason string) error {
+	e.log.Error("State refused to create the encounter; encounter.started is not published",
+		"encounter_id", enc.id, "proposal_id", enc.openedBy, "reason", reason)
+	enc.opening = nil
+	for id, fight := range e.byPlayer {
+		if fight == enc {
+			delete(e.byPlayer, id)
+		}
+	}
+	delete(e.world, enc.id)
+	return e.advanceOne(ctx, enc)
+}
+
+// encounterByID is the fight whose encounter entity this is. The caller holds
+// the lock.
+func (e *FakeEncounter) encounterByID(id string) *encounter {
+	for _, enc := range e.byPlayer {
+		if enc.id == id {
+			return enc
+		}
+	}
+	return nil
+}
+
+// openingBy is the fight still waiting for the creation this proposal asked
+// for. The caller holds the lock.
+func (e *FakeEncounter) openingBy(proposalID string) *encounter {
+	for _, enc := range e.byPlayer {
+		if enc.opening != nil && enc.openedBy == proposalID {
+			return enc
+		}
+	}
+	return nil
+}
+
+// downedBy remembers the fact that took an NPC of an active fight off its feet,
+// whoever dealt the blow: when it was not this fight, it is the cause the fight
+// is closed on (closeOrphaned). The caller holds the lock.
+//
+// A fact without an id cannot be that cause: the end of the fight takes its id
+// from it (WithCauseID), which panics on it. Such a fact is a defect of the
+// producer that only reaches here with validation on read off; the fight is
+// then not closed on it, and the log says so instead of the fight staying
+// open in silence.
+func (e *FakeEncounter) downedBy(ent *entity.Entity, fact eventbus.Event) {
+	if ent == nil || ent.Type != entity.TypeNPC || !ent.IsTerminal() {
+		return
+	}
+	for _, enc := range e.byPlayer {
+		if !enc.active || !slices.Contains(enc.npcs, ent.ID) {
+			continue
+		}
+		if fact.ID == "" {
+			e.log.Error("a fact without an id downed the NPC of a fight; the fight is not closed on it",
+				"encounter_id", enc.id, "npc_id", ent.ID)
+			continue
+		}
+		cause := fact
+		enc.downed = &cause
+	}
 }
 
 // publish derives an event from the action that caused it and sends it. The
@@ -1164,8 +1498,9 @@ func (e *FakeEncounter) closeFight(ctx context.Context, enc *encounter,
 // (C-01); meta.agent is the swarm agent the act belongs to, which the policies
 // of the swarm topics require and contracts.md §0 requires of a stub.
 func (e *FakeEncounter) publish(ctx context.Context, cause eventbus.Event, typ string,
-	payload map[string]any, agent eventbus.AgentRef) (eventbus.Event, error) {
-	ev := eventbus.Derive(cause, typ, Source, payload, eventbus.WithAgent(agent))
+	payload map[string]any, agent eventbus.AgentRef, opts ...eventbus.DeriveOption) (eventbus.Event, error) {
+	ev := eventbus.Derive(cause, typ, Source, payload,
+		append([]eventbus.DeriveOption{eventbus.WithAgent(agent)}, opts...)...)
 	if err := e.bus.Publish(ctx, ev); err != nil {
 		return ev, fmt.Errorf("testkit/swarm: publish %s: %w", typ, err)
 	}
@@ -1259,7 +1594,11 @@ func (e *FakeEncounter) Observe(ctx context.Context, ev eventbus.Event) error {
 	}
 	e.fold(current, ops, p.Version)
 	e.fold(e.facts[id], ops, p.Version)
-	return nil
+	e.downedBy(current, ev)
+	if err := e.announce(ctx, ev.Type, id, p.ProposalID); err != nil {
+		return err
+	}
+	return e.advance(ctx)
 }
 
 // fold writes one fact into one view of an entity. The version only ever goes
@@ -1296,8 +1635,13 @@ func (e *FakeEncounter) fold(ent *entity.Entity, ops []entity.Op, version int64)
 //
 // unknown_entity, invalid_op, dead_entity and duplicate_entity are not races.
 // Retrying them would turn a defect that shows up once into a defect that
-// shows up three times and then disappears, so they are logged and left alone
-// — waiting to be seen.
+// shows up three times and then disappears, so they are logged and the
+// package is dropped as it is when the stub gives up (drop): State applied
+// nothing of it, and a closing package that hung on for ever would hold every
+// later action of the fight back with it.
+//
+// A refusal of the creation of an encounter is the end of that fight before it
+// began (abandon): encounter.started was never sent and never will be.
 //
 // The offer that follows is the same answer to the same action: the same
 // proposal identifier, one package, recomputed against the world it will now
@@ -1326,29 +1670,35 @@ func (e *FakeEncounter) refused(ctx context.Context, ev eventbus.Event) error {
 	entityID, _ := pa.GetString("entity.entity.id")
 	e.log.Error("a proposal of the stub was refused", "proposal_id", proposal,
 		"reason", reason, "entity_id", entityID, "event_id", ev.ID)
-	if reason != ReasonVersionConflict {
-		return nil
-	}
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if enc := e.openingBy(proposal); enc != nil {
+		return e.abandon(ctx, enc, reason)
+	}
 	enc, ans := e.awaiting(proposal)
 	if ans == nil {
-		e.log.Error("a version conflict on a package the stub is no longer holding",
-			"proposal_id", proposal, "entity_id", entityID)
+		if reason == ReasonVersionConflict {
+			e.log.Error("a version conflict on a package the stub is no longer holding",
+				"proposal_id", proposal, "entity_id", entityID)
+		}
 		return nil
 	}
 	e.rollback(ans)
+	if reason != ReasonVersionConflict {
+		e.log.Error("the package is dropped: a refusal that is not a race is not offered again",
+			"proposal_id", proposal, "reason", reason, "encounter_id", enc.id, "event_id", ans.cause.ID)
+		return e.drop(ctx, enc, ans)
+	}
 	if ans.attempts >= maxProposalAttempts {
 		// The end of the road, and it is said out loud: the action has been
-		// answered by nothing the world kept, and everything the fight decided
-		// on it — the round it spent, the wound it dealt, the end it reached —
-		// is not in State.
+		// answered by nothing the world kept, and what the fight decided on it
+		// — the wound it dealt, the end it reached — is not in State. The
+		// round stays spent: it has been published with the decision.
 		e.log.Error("the stub gave up on a package after losing the version race",
 			"proposal_id", proposal, "attempts", ans.attempts,
 			"entity_id", entityID, "encounter_id", enc.id, "event_id", ans.cause.ID)
-		enc.pending = nil
-		return nil
+		return e.drop(ctx, enc, ans)
 	}
 	e.log.Info("offering the package again after a version conflict",
 		"proposal_id", proposal, "attempt", ans.attempts+1,
@@ -1454,9 +1804,45 @@ func (e *FakeEncounter) rollback(ans *answer) {
 	ans.undo = nil
 }
 
-// livingNPCOf is the first NPC still standing in a region, by identifier so
-// that two runs of one scenario meet the same wolf.
-func (e *FakeEncounter) livingNPCOf(region string) (string, bool) {
+// freeNPCOf is the first NPC of a region that is still standing and is not
+// already held by a fight, by identifier so that two runs of one scenario meet
+// the same wolf.
+//
+// One NPC, one active encounter (data-model.md §3.7, C-05 v1.4 p. 6): the
+// region GM, whose role the stub plays in opening a fight, does not open a
+// second encounter around an NPC that is in one. Two fights over one wolf
+// would give its hit points two writers, which is exactly what made the
+// probes S3 and S4 of review #3 of T-219 reachable. The GM is the only opener
+// in the region, so there is no race to guard against here.
+func (e *FakeEncounter) freeNPCOf(region, playerID string) (string, bool) {
+	living := e.livingNPCsOf(region)
+	if len(living) == 0 {
+		e.log.Debug("nothing alive in the region", "region_id", region, "player_id", playerID)
+		return "", false
+	}
+	for _, id := range living {
+		if !e.engaged(id) {
+			return id, true
+		}
+	}
+	e.log.Info("every NPC of the region is already in an encounter",
+		"region_id", region, "player_id", playerID)
+	return "", false
+}
+
+// engaged says whether an NPC is held by a fight that is being opened or is on.
+// The caller holds the lock.
+func (e *FakeEncounter) engaged(npcID string) bool {
+	for _, enc := range e.byPlayer {
+		if enc.open() && slices.Contains(enc.npcs, npcID) {
+			return true
+		}
+	}
+	return false
+}
+
+// livingNPCsOf is every NPC still standing in a region, sorted by identifier.
+func (e *FakeEncounter) livingNPCsOf(region string) []string {
 	ids := make([]string, 0, 4)
 	for id, ent := range e.world {
 		if ent.Type != entity.TypeNPC || ent.IsTerminal() {
@@ -1469,11 +1855,8 @@ func (e *FakeEncounter) livingNPCOf(region string) (string, bool) {
 		}
 		ids = append(ids, id)
 	}
-	if len(ids) == 0 {
-		return "", false
-	}
 	slices.Sort(ids)
-	return ids[0], true
+	return ids
 }
 
 // fightOf is the encounter an action belongs to, and the character who acted.
@@ -1609,6 +1992,38 @@ func (enc *encounter) leaveAll() {
 		}
 		p.state = entity.ParticipationOutOfCombat
 		enc.touched = true
+	}
+}
+
+// open says whether the fight holds its NPC: it is being created or it is on.
+func (enc *encounter) open() bool { return enc.opening != nil || enc.active }
+
+// inFlight says whether an action of the fight has to wait: its creation or
+// its closing package has not been answered by State yet.
+func (enc *encounter) inFlight() bool { return enc.opening != nil || enc.closing != nil }
+
+// participation is a copy of what the package of the next action may change
+// about the fighters — what a package State never applies gives back.
+func (enc *encounter) participation() participation {
+	players := make([]participant, len(enc.players))
+	for i, p := range enc.players {
+		players[i] = *p
+	}
+	return participation{players: players, lastDamager: maps.Clone(enc.lastDamager)}
+}
+
+// restore puts participation back to what it was before a package State never
+// applied (C-05 v1.4 p. 1г). The characters of a fight do not change while it
+// is on, so the copy lines up with them one for one.
+func (enc *encounter) restore(was participation) {
+	for i, p := range enc.players {
+		if i < len(was.players) {
+			*p = was.players[i]
+		}
+	}
+	enc.lastDamager = maps.Clone(was.lastDamager)
+	if enc.lastDamager == nil {
+		enc.lastDamager = make(map[string]string)
 	}
 }
 

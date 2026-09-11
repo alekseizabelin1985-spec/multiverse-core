@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T17:38:22+03:00",
+  "updatedAt": "2026-09-11T18:02:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1059,11 +1059,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-412",
           "title": "Голый docker compose не читает COMPOSE_ENV_FILES из .env, а документы обещают обратное",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-11T17:40:06+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -1800,7 +1800,7 @@ window.DEVTEAM_STATE =
         },
         {
           "id": "T-230",
-          "title": "R7 · Роль encounter (соло)",
+          "title": "R7a · решение обмена и пакет (роль encounter)",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -2189,15 +2189,117 @@ window.DEVTEAM_STATE =
         {
           "id": "T-419",
           "title": "Двойники по C-05 v1.4: встреча после факта, признак конца обмена, окно нарратора на Dedup",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-11T15:36:52+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-11T18:02:13+03:00",
           "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 109,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 15:36",
+              "to": "11.09 16:13",
+              "duration": "36m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 16:13",
+              "to": "11.09 16:40",
+              "duration": "27m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 16:40",
+              "to": "11.09 16:58",
+              "duration": "18m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "11.09 16:58",
+              "to": "11.09 17:13",
+              "duration": "14m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "11.09 17:13",
+              "to": "11.09 17:20",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 17:56",
+              "to": "11.09 18:02",
+              "duration": "6m"
+            }
+          ],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-419.md"
+        },
+        {
+          "id": "T-421",
+          "title": "R7b · судьба пакета (роль encounter)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-419.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-421.md"
+        },
+        {
+          "id": "T-422",
+          "title": "R7c · жизненный цикл после факта и откладывание",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-422.md"
+        },
+        {
+          "id": "T-423",
+          "title": "R7d · закрытие по чужому факту",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-423.md"
+        },
+        {
+          "id": "T-424",
+          "title": "R10d · сверка встреч при восстановлении",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-424.md"
+        },
+        {
+          "id": "T-427",
+          "title": "Действие до encounter.started: окно до подъёма агента встречи",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-427.md"
         }
       ],
       "defects": [],
@@ -3987,7 +4089,7 @@ window.DEVTEAM_STATE =
       "task": "T-230",
       "action": "нарезка T-230 до подволны 1.10",
       "startedAt": "2026-09-11T17:16:43+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T17:56:00+03:00"
     },
     {
       "role": "system-architect",
@@ -3998,6 +4100,46 @@ window.DEVTEAM_STATE =
       "action": "ревизия 2: подтверждения исполнения волны 1",
       "startedAt": "2026-09-11T17:20:10+03:00",
       "finishedAt": "2026-09-11T17:38:22+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-412",
+      "action": "голый docker compose и версии образов",
+      "startedAt": "2026-09-11T17:40:06+03:00",
+      "finishedAt": "2026-09-11T17:53:06+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-412",
+      "action": "приёмка по диффу: только документы и комментарии",
+      "startedAt": "2026-09-11T17:53:06+03:00",
+      "finishedAt": "2026-09-11T17:58:43+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-419",
+      "action": "приёмка: сверка итерации 3, мутанты Mi-A",
+      "startedAt": "2026-09-11T17:56:00+03:00",
+      "finishedAt": "2026-09-11T18:02:13+03:00"
+    },
+    {
+      "role": "devops-engineer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-412",
+      "action": "итерация 2: ложные обещания о профиле bot в README и runbook",
+      "startedAt": "2026-09-11T17:58:43+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -6166,6 +6308,60 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Заведена T-426: перехват паники обработчика в eventbus.Delivery"
+    },
+    {
+      "at": "2026-09-11T17:40:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит 866e869: T-425, контракты v0.8, 14 путей документов"
+    },
+    {
+      "at": "2026-09-11T17:40:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-412 начата: голый docker compose и версии образов"
+    },
+    {
+      "at": "2026-09-11T17:53:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-412 готова: путь (б) — стек только через make, причина названа во всех документах"
+    },
+    {
+      "at": "2026-09-11T17:53:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-412 на приёмке у tech-lead#1"
+    },
+    {
+      "at": "2026-09-11T17:56:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "tech-lead",
+      "text": "T-230 нарезана на четыре задачи ≤ M (T-230, T-421…T-423), сверка встреч — T-424"
+    },
+    {
+      "at": "2026-09-11T17:56:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Заведена T-427: вопрос архитектору об окне до encounter.started"
+    },
+    {
+      "at": "2026-09-11T17:56:00+03:00",
+      "initiative": "EPIC-003",
+      "role": "tech-lead",
+      "text": "T-419 на приёмке у tech-lead#2"
+    },
+    {
+      "at": "2026-09-11T17:58:43+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-412 не принята: README и runbook обещают, что голый compose поднимет стек без бота"
+    },
+    {
+      "at": "2026-09-11T17:58:43+03:00",
+      "initiative": "EPIC-001",
+      "role": "devops-engineer",
+      "text": "T-412 итерация 2 начата"
     }
   ],
   "blockers": [],

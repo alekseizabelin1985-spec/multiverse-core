@@ -56,6 +56,9 @@ func TestTheContextRunsAWholeFight(t *testing.T) {
 		t.Errorf("health does not say which task removes the stub: %v", health.Details)
 	}
 
+	// The fight opens only once State has created its encounter (C-05 v1.4
+	// p. 4), and the context mounts no State: the double answers on the bus.
+	stateAnswering(t, bus)
 	if err := bus.Publish(t.Context(), entered(playerA, nameA, regionID, regName)); err != nil {
 		t.Fatalf("publish the entry: %v", err)
 	}

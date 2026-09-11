@@ -1741,3 +1741,281 @@ T-255 срок тестам `serve_test.go` (T-410). В документы T-420
 - `py -m pre_commit run --files <файлы итерации>` — во временном репозитории из экспорта индекса
   плюс мои файлы, состояние до и после совпало.
 - `gitleaks git --staged --redact .` — no leaks found.
+
+## developer#3 · T-419 · двойники по C-05 v1.4, пункты 1–6 · 2026-09-11
+
+Основание: C-05 v1.4 (п. 1г, 1д, 4–7, «Заглушка» — пять расхождений), ADR-026, C-04 v1.3,
+`data-model.md` §3.7. Пункт 7 задачи (окно нарратора на `Dedup.Has`/`Add` из T-417) не делался:
+он идёт отдельной итерацией после приёмки T-417. Своё `window` нарратора оставлено как было.
+
+### Что сделано
+
+`FakeEncounter` (`shared/testkit/swarm/fake_encounter.go`). У встречи четыре фазы:
+- «создаётся» — предложено создание, `encounter.started` построено и держится;
+- «идёт» — пришёл `entity.created`, `encounter.started` опубликовано;
+- «закрывается» — закрывающий пакет в полёте, `encounter.ended` построено и держится;
+- «окончена» — пришёл факт закрывающего пакета, `encounter.ended` опубликовано.
+
+По пунктам:
+1. `encounter.started` публикуется в `announce` по `entity.created` сущности встречи. При отказе
+   в создании (`abandon`) события нет, в лог идёт `Error`, встреча снимается, NPC свободен.
+2. `encounter.ended` публикуется по `entity.updated` сущности встречи под `proposal_id` закрывающего
+   пакета. Пока создание или закрытие в полёте, действия персонажа копятся в `deferred`
+   и решаются в порядке прихода после ответа State (`route`, `advanceOne`). Выброшенный пакет
+   (`drop`) конца не даёт, встреча продолжается.
+3. «Один NPC — одна активная встреча»: `freeNPCOf` не даёт встрече NPC, которого держит
+   создающаяся или идущая встреча.
+4. Б1: факт, сделавший NPC встречи терминальным, запоминается (`downedBy`). Когда у встречи
+   нет своего пакета в полёте и живых NPC не осталось, агент закрывает её сам (`closeOrphaned`).
+   Пакет `cause=death` без трофея: `state=resolved`, `resolution=npc_dead`, участники
+   `out_of_combat`. После факта публикуется `encounter.ended {npc_dead}` без `killer`,
+   пакет и конец идут под scope встречи (`WithScope`).
+5. Откат участия: снимок участия (`participation`: записи участников и `last_damager`)
+   берётся до действия и возвращается в `drop`. Номер раунда не откатывается: `enc.round++`
+   теперь безусловный, в том числе для закрывающего пакета, который потом выбросят.
+6. `combat.decided.exchange{index, last}`. Схема дополнена совместимым опциональным полем
+   (`required: [index, last]`, `additionalProperties: false`), двойник заполняет его всегда.
+   `closesExchange` нарратора берёт `exchange.last`, если поле есть, иначе прежний вывод.
+
+Харнесс `shared/testkit/gateway/harness.go` — совладение, правки поимённо:
+- поле `Harness.endings` и его инициализация: причина конца по id встречи;
+- `Observe`: для `entity.created/updated` сначала `resolutionIn` → `end`, потом `record`.
+  Конец записан раньше, чем факт разбудит ждущее действие, поэтому следующий шаг сценария
+  уже видит бой оконченным;
+- новая функция `resolutionIn`: сущность типа `encounter`, в `changed[]` `state → resolved`,
+  причина — из `resolution`;
+- `opened`: старт, пришедший после конца своей встречи, бой не открывает (`endings`);
+- `closed` сведён к `end(id, reason, correlation)`; `end` не перезаписывает уже окончённый бой.
+
+### Решения по ходу и отклонения
+
+- **Отказ не по гонке теперь выбрасывает пакет** (`unknown_entity`, `invalid_op`, `dead_entity`,
+  `duplicate_entity`): откат представления и `drop`, без повтора. Раньше двойник только писал
+  лог, держал попытку в представлении и `pending`. С закрывающим пакетом это подвесило бы бой
+  навсегда вместе с отложенными действиями. Комментарий `refused` уже обещал «представление там,
+  где его оставили факты»; теперь код ему соответствует.
+- **Откладываются действия и во время создания, а не только закрытия.** Контракт (п. 5) называет
+  закрывающий пакет. Действие до `entity.created` решалось бы во встрече, которой, возможно,
+  не будет: принцип тот же, ADR-026 п. 1.
+- **Причина пакета Б1 — `death`.** Контракт её не называет. Строка владения `task`/`encounter`
+  разрешает `combat|flee|group|death|resolve`; `combat` неверен, потому что этот бой никто
+  не вёл. Вынесено в открытые вопросы.
+- **Id событий жизненного цикла пока из `Derive`, не из причины.** C-05 п. 4–5 требует
+  `WithCauseID` (C-01 v1.4, T-417), T-417 не принята. Порядок публикации это не меняет.
+  Открытый вопрос: переводить ли в итерации пункта 7.
+- `ActiveEncounter`/`ActiveCount` считают бой от `entity.created` до факта закрытия.
+  Создающаяся встреча не считается, закрывающаяся считается: в State она ещё `active`.
+- Б1 не повторяется бесконечно: закрытие по одному и тому же факту предлагается один раз
+  (`orphaned`). Если State его выбросит, будет `Error`, а не цикл через шину.
+
+### Тесты
+
+Новые: `shared/testkit/swarm/fake_encounter_lifecycle_test.go` (по тесту на правило) и
+`shared/testkit/gateway/end_by_fact_test.go` (конец по факту; конец раньше старта).
+Нарратор: `TestATurnClosesOnTheMarkOfItsExchange`.
+
+Прежние тесты. Юнит-тесты двойника гоняли его без State, а встреча теперь открывается только
+по факту. Добавлен синхронный помощник `answer`: `FakeState.Apply` плюс факты в `Observe`
+по порядку `system_events`, на горутине теста. Отдельно:
+- `openFight` вместо голого входа;
+- `swingUntilOver` отвечает после каждого удара;
+- в `TestTheStubAnswersThroughItsSubscriptions` и `TestTheContextRunsAWholeFight` на шину
+  поставлен `FakeState` (`stateAnswering`);
+- `TestEveryTurnOfTheFightIsToldOnce` без правки стал бы проходить вхолостую (бой не открывался,
+  0 ходов на 0 действий), исправлен тем же `openFight`;
+- `TestAWolfKilledElsewhereIsNotAttackedAgain` закреплял прежнее поведение («после чужого
+  убийства ничего не публикуется»). Он снят и заменён `TestAWolfKilledElsewhereClosesTheFightWithoutAKiller`,
+  где проверка «удар по трупу — молчание» сохранена;
+- `TestARetryThatWouldChangeWhoIsStandingIsNotOffered` считает предложения под id действия:
+  в случае «волка убил другой» теперь есть ещё закрытие Б1.
+
+Мутанты — `go test -overlay` из каталога `mktemp -d`, `-timeout 60s`, `-vet=off`, весь пакет.
+Дерево не подменялось, каталог удалён по точному пути.
+
+| # | Правило | Мутант | Итог | Покраснели |
+|---|---|---|---|---|
+| m1 | 1 | `encounter.started` сразу за предложением | убит | `TheEncounterIsAnnouncedOnlyOnceStateCreatedIt`, `ARefusedCreationAnnouncesNothing` |
+| m1b | 1 | отказ в создании не снимает встречу | убит | `ARefusedCreationAnnouncesNothing` |
+| m2 | 2 | `encounter.ended` сразу за пакетом | убит | `TheEndIsAnnouncedOnlyAfterTheFactOfItsPackage`, `ADroppedClosingPackageEndsNothing` |
+| m2b | 2 | действия не откладываются | убит | `AnActionWhileTheClosingPackageIsOnItsWayWaitsForIt`, `ADroppedClosingPackageEndsNothing`, `TheNarratorTellsTheFightsOfTheStand` |
+| m3 | 3 | NPC отдаётся второй встрече | убит | `TwoCharactersDoNotShareOneWolf` |
+| m4 | 4 | нет закрытия Б1 | убит | `AWolfKilledElsewhereClosesTheFightWithoutAKiller` |
+| m4b | 4 | Б1 под scope чужого факта | убит | он же |
+| m4c | 4 | Б1 с `killer` | убит | он же |
+| m5 | 5 | участие не откатывается | убит | `ADroppedAttemptTakesItsParticipationWithIt`, `ADroppedClosingPackageEndsNothing` |
+| m5b | 5 | номер раунда откатывается | убит | те же два |
+| m6 | 6 | `exchange` не заполняется | убит | `EveryDecisionSaysWhereItStandsInItsExchange` |
+| m6b | 6 | нарратор игнорирует `exchange.last` | убит | `ATurnClosesOnTheMarkOfItsExchange` |
+| h1 | харнесс | конец только по `encounter.ended` | убит | `TheFactOfTheEncounterEndsTheFight`, `AnEndHeardBeforeTheStartKeepsTheFightOver` |
+| h2 | харнесс | старт после конца открывает бой | убит | `AnEndHeardBeforeTheStartKeepsTheFightOver` |
+
+Прогоны (дерево включает незакоммиченные правки T-417 в `shared/eventbus` — чужие, не трогались):
+- `go build ./... && go vet ./...` — зелёные; `go test -short -count=1 ./...` — все ok;
+- `go test -tags e2e -count=1 ./test/...` — `test/e2e` ok, `test/fixtures` ok;
+- стенды `-count=20`: `TestTheHarnessAndTheEncounterOfTheSwarmOnOneBus` ok, `TestTheNarratorTellsTheFightsOfTheStand` ok;
+- T-255 в `cmd/multiverse`: `TestTheProcessRunsTheFightsOfIAlpha` PASS (16 боёв; нарративы
+  `entry:32 world_event:16 turn:49 death:1`; концы `npc_dead:15 players_out:1`),
+  `TestTheProcessTellsTheDeathOfACharacter` PASS, `TestTheOtherRefusalsOfTheFakeNameTheFlag` PASS;
+- зонд N-3 «мир без волка» (мёртвый волк в бутстрапе, тест добавлен через `-overlay`): прогон
+  падает с сообщением N-3 «no encounter was opened: …». Сообщение по-прежнему верно: бой
+  падает после таймаута 2 с, а к этому моменту созданная встреча уже была бы объявлена;
+- покрытие `shared/testkit/swarm` — 89,4 % (порог 88,9 %);
+- `golangci-lint run ./...` — 0 issues; `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 схем;
+- `py -m pre_commit run --files <12 своих путей>` — все хуки Passed/Skipped. Хэш
+  `git status --porcelain` вместе с хэшами файлов до и после прогона совпал;
+- `git add` только своих 12 путей; `gitleaks git --staged --redact .` — no leaks found.
+
+### Предложения в бэклог
+
+- Конец `players_out` по `abandoned` последнего игрока (C-04 v1.1): двойник его не делает,
+  в пять расхождений не входит.
+- `api-contracts.md` §2.3.6 — добавить `exchange` (системный аналитик).
+- Нарратор T-233: пропуск в `exchange.index` писать в лог — ради этого индекс и введён.
+- Валидная фикстура `testdata/fixtures/events/combat.decided.v1.valid.json` может нести `exchange`.
+- T-230: ограничить очередь отложенных действий (у двойника она живёт один оборот State).
+
+## developer#3 · T-419 · итерация 2 — пункт 7, решения оркестратора, ревью #1 · 2026-09-11
+
+Основание: сообщение оркестратора (итерация 2), ревью #1 T-419 в `review.md` (Mi-1…Mi-3, N-1), T-417
+принята и закоммичена (`8d33d42`), ADR-027 п. 2–3, C-05 v1.4 п. 4–5, C-14 v1.2.
+
+### Пункт 7 — окно нарратора на `Dedup.Has`/`Add`
+
+`FakeNarrator.told *window` заменён на `answered *eventbus.Dedup`. Порядок в `Narrate` и в пути смерти
+(`Observe`): `Has(ev.ID)` → ответ → при ошибке публикации возврат ошибки без `Add` → `Add(ev.ID)` после
+успеха. Тип `window` и его внутренний тест `window_test.go` удалены; пустой id `Dedup` обрабатывает так же,
+как прежнее окно. Предусловие «не вызывать конкурентно для одного события» осталось в комментарии поля и
+`Narrate`.
+
+Снапшота окна нет: у `FakeNarrator` нет снапшота вообще, он не stateful-контекст C-14 (C-14 v1.2 (а)
+прямо допускает у двойника собственное окно). Рассказчик роя T-229 кладёт окно в снапшот через
+`IDs`/`Restore`. Названо в комментарии поля и в README. Id нарративов двойника по-прежнему из генератора:
+`WithCauseID` для `narrative.output` обязательна для T-229 (ADR-027 п. 2), в эту задачу она не входила.
+
+### `WithCauseID` для жизненного цикла
+
+- `encounter.started`: `Derive(вход, …, WithCauseID(id встречи))`;
+- `encounter.ended`: `Derive(причина пакета, …, WithCauseID(id встречи))`. Причина пакета — действие
+  закрывающего удара или бегства, а для Б1 — чужой факт.
+
+**Отличие от формулировки задания.** В задании сказано «`encounter.started` от факта `entity.created`,
+`encounter.ended` от факта закрывающего пакета». Так нельзя: `opened_by_event_id` уходит в предложении
+создания, а `closed_by_event_id` — в самом закрывающем пакете. Оба пишутся до того, как у State появится
+факт, и id факта ещё неизвестен. C-05 п. 5 и ADR-026 п. 1 это и говорят: событие конца строится до пакета,
+id выводится из причины. «От факта» я прочитал как «публикуется после факта». Это сохранено: события
+по-прежнему уходят только после `entity.created` и факта закрывающего пакета.
+
+Тест `TestTheLifecycleOfAFightKeepsItsIdentifiersAcrossARestart`. Второй свежий `FakeEncounter` («после
+рестарта») на тех же входе и ударе даёт те же id `encounter.started`/`encounter.ended`, и сущность
+называет именно их. Части id закреплены сравнением с `Derive(причина, тип, WithCauseID(id встречи))`.
+
+### Решения оркестратора и замечания ревью #1
+
+- **Б1 — `cause=resolve`** (`CauseResolve`). Строка владения `task`/`encounter` (`combat|flee|group|death|resolve`)
+  разрешает; тест Б1 проверяет литерал `"resolve"`, а не константу — первый прогон мутанта r1 с проверкой
+  через константу выжил, после правки убит.
+- **Mi-1 — исправлено по предложению ревьюера.** В условие `advanceOne` добавлено
+  `&& enc.orphaned != enc.downed.ID`, мёртвая ветка в `closeOrphaned` удалена. `Error` «закрытие не
+  применено, бой остаётся открытым» пишется один раз — в `drop` выброшенного закрытия Б1, — а не на каждом
+  следующем факте. Тест `TestAFightWhoseClosureStateRefusedStillAnswersItsActions` (сценарий P1):
+  отложенное бегство решено ровно раз, закрытие предложено один раз, `Error` в логе.
+- **Mi-2 — исправлено.** `openFight` проваливает тест, если бой не открылся. `TestNothingOpensWhereNothingIsAlive`
+  больше не зовёт `openFight`. Нижние границы:
+  - `TestEveryTurnOfTheFightIsToldOnce` — хотя бы одно действие;
+  - `TestOneEntityOneChangeSet` — хотя бы одно предложение;
+  - `TestAnActionAfterTheFightIsOverIsAnsweredWithSilence` — ровно один конец боя;
+  - `TestARedeliveredActionIsAnsweredOnce` — первая доставка дала события.
+
+  Мутант «встреча никогда не активна» красит все четыре (и ещё 42 теста).
+- **Mi-3 — исправлено.** В `fake_encounter_lifecycle_test.go` добавлены:
+  - `TestTwoCharactersEnteringBeforeTheFirstFightExistsDoNotShareOneWolf` (P4);
+  - `TestAnActionDuringTheCreationIsAnsweredOnceTheFightExists` (P6).
+
+  Мутанты «`engaged` без фазы создания» и «откладывать только на закрытие» теперь убиты юнит-тестами.
+- **N-1 — смягчена формулировка, теста нет.** Тест, отличающий порядок `end`/`record`, недетерминирован:
+  окно гонки — между двумя захватами одного мьютекса в одном вызове `Observe`. Комментарий `harness.go`
+  теперь говорит, что порядок сужает окно, но не закрывает его, и что проскочивший шаг всё равно получит
+  `ErrFightOver`. Поправка к моей записи итерации 1 (сама запись не переписывается): там сказано
+  «следующий шаг сценария уже видит бой оконченным», верно — «как правило видит; в худшем случае получит
+  `ErrFightOver` с приходом конца».
+
+### Мутанты итерации 2
+
+`go test -overlay` из каталога `mktemp -d`, `-timeout 60s`, `-vet=off`, весь пакет `shared/testkit/swarm`.
+Дерево не подменялось, каталог удалён по точному пути.
+
+| # | Пункт | Мутант | Итог | Покраснели |
+|---|---|---|---|---|
+| p7a | 7 | запоминать до публикации (`Seen`) | убит | `APublicationThatAlwaysFailsEndsInDeadLetters`, `APublicationThatFailedOnceIsToldAfterTheRetry`, `ATurnWhosePublicationFailedIsToldFromAllItsDecisions` |
+| p7b | 7 | `Has` не гасит повтор | убит | `AnEventDeliveredTwiceIsToldOnce`, `ATurnWhosePublicationFailedIsToldFromAllItsDecisions` |
+| p7c | 7 | рассказанная смерть не запоминается | убит | `AnEventDeliveredTwiceIsToldOnce`, `ADeathWhosePublicationFailedIsToldOnTheRetry` |
+| c1 | 2 | `encounter.started` без `WithCauseID` | убит | `TheLifecycleOfAFightKeepsItsIdentifiersAcrossARestart` |
+| c2 | 2 | `encounter.ended` без `WithCauseID` | убит | он же |
+| c3 | 2 | `encounter.ended` без части id | убит | он же |
+| r1 | 3 | Б1 с `cause=death` | убит (после правки теста) | `AWolfKilledElsewhereClosesTheFightWithoutAKiller` |
+| mi1 | Mi-1 | закрытие Б1 снова выбирается после отказа | убит | `AFightWhoseClosureStateRefusedStillAnswersItsActions` |
+| mi2 | Mi-2 | встреча никогда не активна | убит | 46 тестов, в том числе все четыре из замечания |
+| mi3a | Mi-3 | `engaged` без фазы создания (MB) | убит | `TwoCharactersEnteringBeforeTheFirstFightExistsDoNotShareOneWolf` |
+| mi3b | Mi-3 | откладывать только на закрытие (MC) | убит | `AnActionDuringTheCreationIsAnsweredOnceTheFightExists`, стенд нарратора |
+
+### Проверки
+
+- `go build ./... && go vet ./...` — зелёные; `go test -short -count=1 ./...` — все ok.
+- `go test -tags e2e -count=1 ./test/...` — `test/e2e` ok, `test/fixtures` ok.
+- Стенды `-count=20`: пары — ok, нарратора — ok.
+- T-255 гонялись в дереве. Незаконченная правка T-414 (developer#1) в `cmd/multiverse` лежит в индексе
+  и собирается (`go vet ./cmd/multiverse/` чистый), изолированная копия не понадобилась.
+  - `TestTheProcessRunsTheFightsOfIAlpha` — PASS: нарративы `entry:32 world_event:16 turn:64 death:5`,
+    концы `npc_dead:11 players_out:5`.
+  - `TestTheProcessTellsTheDeathOfACharacter` и `TestTheOtherRefusalsOfTheFakeNameTheFlag` — PASS.
+  - Распределение исходов сдвинулось против итерации 1: id событий жизненного цикла больше не берутся
+    из генератора, и последовательность id действий, по которой `FixedMechanics` выбирает строку
+    таблицы, сдвинулась. Тест считает нарративы по фактам и от распределения не зависит.
+- Покрытие: `shared/testkit/swarm` — 89,6 % (было 89,4 %), `shared/testkit/gateway` — 92,6 %.
+- `golangci-lint run ./...` — 0 issues; `mvctl contracts check` — 65 типов, 8 топиков, 58 схем.
+
+## developer#3 · T-419 · итерация 3 — Mi-A ревью #2 · 2026-09-11
+
+Основание: ревью #2 T-419 в `review.md` (Mi-A, зонды RF и RG), `shared/eventbus/README.md` («Id из причины»).
+
+### Что изменено
+
+- `shared/testkit/swarm/fake_encounter.go:615` — в `Act`, после фильтра типов и до `acted.Seen`: действие без
+  `id` не отвечается, в лог идёт `Error`. `Error`, а не `Warn`: конверт без `id` — дефект издателя, а не
+  обычный ход мира, и тот, кто ждёт ответа на это действие, увидит только истечение срока.
+- `shared/testkit/swarm/fake_encounter.go:1486` — в `downedBy`: факт без `id` не становится причиной
+  закрытия Б1, в лог идёт `Error`. Бой не закрывается, но это видно в логе. Раньше
+  паники не было только случайно: условие Mi-1 сравнивало `"" != ""`, и бой не закрывался молча.
+- Остальные пути к `Derive` от чужого конверта просмотрены грепом по `shared/testkit/swarm`. `publish` двойника
+  и `publish` нарратора строят id из генератора и от пустой причины не паникуют. Повтор пакета после
+  `version_conflict` строится от уже принятого действия (`ans.cause`), а не от отказа. Единственные
+  вызовы `WithCauseID` — `encounter.started` от действия и `encounter.ended` от действия или от факта Б1 — теперь
+  защищены обеими проверками.
+
+### Тесты
+
+- `TestAnActionWithoutAnIDIsRefusedOutLoud` (зонд RF): вход без `id` и удар без `id` в идущем бою — ни паники, ни
+  событий, `Error` в логе.
+- `TestAFactWithoutAnIDDoesNotCloseTheFight` (зонд RG): смерть волка в факте без `id` — пакета закрытия нет,
+  бой остаётся `active`, `Error` в логе.
+
+### Мутанты
+
+`go test -overlay`, ключ overlay — относительный от корня модуля (`shared/testkit/swarm/fake_encounter.go`),
+каталог из `mktemp -d`, `-timeout 60s`, `-vet=off`. Каталог удалён по точному пути.
+
+| # | Мутант | Итог |
+|---|---|---|
+| m0 | контрольный: синтаксическая ошибка в конце файла | красный — сборка падает, overlay применяется |
+| mA | снята проверка `id` в `Act` | убит: `TestAnActionWithoutAnIDIsRefusedOutLoud`, паника `WithCauseID on "encounter.started"` |
+| mB | снята проверка `id` в `downedBy` | убит: `TestAFactWithoutAnIDDoesNotCloseTheFight` (нет `Error` в логе) |
+
+### Проверки
+
+- `go build ./... && go vet ./...` — зелёные.
+- `go test -short -count=1 ./shared/testkit/... ./cmd/...` — все ok.
+- Стенды `-count=5`: пары — ok, нарратора — ok.
+- T-255: `TestTheProcessRunsTheFightsOfIAlpha`, `TestTheProcessTellsTheDeathOfACharacter`,
+  `TestTheOtherRefusalsOfTheFakeNameTheFlag` — PASS.
+- `golangci-lint run ./...` — 0 issues.
+- Дифф итерации: `fake_encounter.go` +28/−3, `fake_encounter_lifecycle_test.go` +57.

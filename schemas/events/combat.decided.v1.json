@@ -68,7 +68,17 @@
     "rules_version": { "type": "string", "minLength": 1 },
     "phase1_mode": { "type": "string", "enum": ["rules", "llm"] },
     "lod": { "type": "string", "enum": ["disabled", "rule-only", "basic", "full"] },
-    "free_attack": { "type": "boolean" }
+    "free_attack": { "type": "boolean" },
+    "exchange": {
+      "type": "object",
+      "description": "Where this decision stands in the exchange that answers one action (contracts.md C-05 v1.4 p. 7): index counts the decisions of the exchange from 0 (the action of the player is 0, the answer of the creature 1), last marks the one decision after which no other follows. Optional for compatibility; the encounter agent always fills it, exactly one decision of an exchange carries last=true, and the narrator closes a turn on it.",
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "last": { "type": "boolean" }
+      },
+      "required": ["index", "last"],
+      "additionalProperties": false
+    }
   },
   "required": ["encounter", "round", "action", "attacker", "outcome", "rolls", "rules_version", "phase1_mode"],
   "additionalProperties": false

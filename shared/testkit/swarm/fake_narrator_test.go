@@ -466,6 +466,62 @@ func TestATurnIsToldAfterItsLastDecision(t *testing.T) {
 	}
 }
 
+// TestATurnClosesOnTheMarkOfItsExchange is C-05 v1.4 p. 7 on the side of the
+// narrator: a publisher that says where a decision stands in its exchange is
+// taken at its word over the guess from the fields of the decision. Each case
+// is one the guess would get wrong, so a narrator that went on guessing would
+// tell the turn at the wrong decision.
+func TestATurnClosesOnTheMarkOfItsExchange(t *testing.T) {
+	cases := []struct {
+		name      string
+		decisions []map[string]any
+	}{
+		{
+			name: "a blow that did not kill, marked as the whole exchange",
+			decisions: []map[string]any{
+				marked(strike("attack", playerA, wolfID, true, 4, 6), 0, true),
+			},
+		},
+		{
+			name: "a killing blow the publisher says is answered",
+			decisions: []map[string]any{
+				marked(strike("attack", playerA, wolfID, true, 6, 0), 0, false),
+				marked(strike("npc_attack", wolfID, playerA, false, 0, 10), 1, true),
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			n, bus := running(t)
+			cause := attack(playerA, nameA, wolfID)
+			ids := make([]string, 0, len(tc.decisions))
+			for i, payload := range tc.decisions {
+				ev := decided(cause, payload)
+				ids = append(ids, ev.ID)
+				narrate(t, n, ev)
+				want := 0
+				if i == len(tc.decisions)-1 {
+					want = 1
+				}
+				if told := ofKind(narratives(t, bus), swarm.KindTurn); len(told) != want {
+					t.Fatalf("after decision %d of %d: %d turns told, want %d",
+						i+1, len(tc.decisions), len(told), want)
+				}
+			}
+			turn := ofKind(narratives(t, bus), swarm.KindTurn)[0]
+			if on := basedOn(t, turn); !slices.Equal(on, ids) {
+				t.Errorf("the turn is based on %v, want every decision of it %v", on, ids)
+			}
+		})
+	}
+}
+
+// marked is a decision that says where it stands in its exchange.
+func marked(p map[string]any, index int, last bool) map[string]any {
+	p["exchange"] = map[string]any{"index": index, "last": last}
+	return p
+}
+
 // TestEveryTurnOfTheFightIsToldOnce holds the rule of the last decision to the
 // only publisher of combat.decided there is in Phase 1: every action the real
 // FakeEncounter answers is told as exactly one turn, based on exactly the
@@ -502,7 +558,7 @@ func TestEveryTurnOfTheFightIsToldOnce(t *testing.T) {
 			if err != nil {
 				t.Fatalf("narrator: %v", err)
 			}
-			act(t, enc, entered(playerA, nameA, regionID, regName))
+			openFight(t, enc, bus)
 			tc.play(t, enc, bus)
 
 			// Everything the fight published, in the order it was published on
@@ -521,6 +577,9 @@ func TestEveryTurnOfTheFightIsToldOnce(t *testing.T) {
 					actions = append(actions, cause)
 				}
 				byAction[cause] = append(byAction[cause], ev.ID)
+			}
+			if len(actions) == 0 {
+				t.Fatal("the fight answered no action: the test proves nothing")
 			}
 			turns := ofKind(narratives(t, bus), swarm.KindTurn)
 			if len(turns) != len(actions) {

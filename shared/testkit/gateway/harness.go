@@ -158,6 +158,12 @@ type Harness struct {
 	// character. It is what tells an action nobody will ever answer from an
 	// action whose answer is still on its way.
 	fights map[string]*fight
+	// endings is the reason every encounter the harness has seen end ended
+	// with, by encounter. An end can reach the harness before the start does —
+	// the fact of the encounter entity on system_events overtaking
+	// encounter.started on world_events — and a start heard after its end must
+	// not reopen the fight (C-04 v1.3).
+	endings map[string]string
 	// statuses is the last status a fact gave an entity. The harness reads it
 	// for one question only — is this one past acting — so it holds every
 	// status rather than a flag, and answers "unknown" by holding nothing.
@@ -308,6 +314,7 @@ func NewHarness(bus eventbus.Bus, fixtures []*entity.Entity) (*Harness, error) {
 		settled:   make(map[string]string),
 		awaited:   make(map[string]*reaction),
 		fights:    make(map[string]*fight),
+		endings:   make(map[string]string),
 		statuses:  make(map[string]string),
 		changed:   make(chan struct{}),
 	}, nil
@@ -413,6 +420,15 @@ func (h *Harness) Observe(_ context.Context, ev eventbus.Event) error {
 		id, _ := pa.GetString("entity.entity.id")
 		version, _ := pa.GetInt("version")
 		proposal, _ := pa.GetString("proposal_id")
+		// The end of a fight goes in before the fact wakes anybody: the action
+		// the package answered returns on this very fact, and the next step of
+		// a script should find the fight over. The order narrows the window
+		// rather than closing it, and nothing depends on it being closed: a
+		// step that slips through is still woken by end with ErrFightOver
+		// (N-1 of review #1 of T-419).
+		if reason, resolved := resolutionIn(ev); resolved {
+			h.end(id, reason, ev.CorrelationID())
+		}
 		h.record(ev.CorrelationID(), id, int64(version), proposal, "", statusIn(ev))
 	case TypeRejected:
 		proposal, _ := pa.GetString("proposal_id")
@@ -454,8 +470,40 @@ func statusIn(ev eventbus.Event) string {
 	return ""
 }
 
+// resolutionIn reads the end of a fight off a fact: the encounter entity moved
+// to state=resolved, and the reason is the resolution the same fact wrote.
+//
+// For a consumer of state this fact is the end of the encounter, and
+// encounter.ended is the lifecycle event that follows it (C-05 v1.4 p. 5,
+// C-04 v1.3): the end is published only after the fact, so a harness that
+// waited for the event alone would strike its next blow into a fight State
+// has already closed.
+func resolutionIn(ev eventbus.Event) (string, bool) {
+	pa := ev.Path()
+	if kind, _ := pa.GetString("entity.entity.type"); kind != entity.TypeEncounter {
+		return "", false
+	}
+	changed, _ := pa.GetSlice("changed")
+	resolved, reason := false, ""
+	for i := range changed {
+		path, _ := pa.GetString(fmt.Sprintf("changed[%d].path", i))
+		value, _ := pa.GetString(fmt.Sprintf("changed[%d].new", i))
+		switch path {
+		case entity.AttrState:
+			resolved = value == entity.EncounterStateResolved
+		case entity.AttrResolution:
+			reason = value
+		}
+	}
+	if reason == "" {
+		reason = entity.EncounterStateResolved
+	}
+	return reason, resolved
+}
+
 // opened folds encounter.started: from here on the harness knows the
-// characters it names are in a fight, and which one.
+// characters it names are in a fight, and which one — unless the fight has
+// already been heard to end.
 func (h *Harness) opened(ev eventbus.Event) {
 	pa := ev.Path()
 	id, _ := pa.GetString("encounter.entity.id")
@@ -470,7 +518,7 @@ func (h *Harness) opened(ev eventbus.Event) {
 		if !ok || who == "" {
 			continue
 		}
-		h.fights[who] = &fight{id: id}
+		h.fights[who] = &fight{id: id, ended: h.endings[id]}
 		h.log.Info("a character of the harness is in a fight",
 			"encounter_id", id, "player_id", who)
 	}
@@ -492,11 +540,24 @@ func (h *Harness) closed(ev eventbus.Event) {
 	if reason == "" {
 		reason = "unknown"
 	}
+	h.end(id, reason, ev.CorrelationID())
+}
+
+// end is the fight over, from whichever of its two ends arrived first: the fact
+// of the encounter entity or encounter.ended (C-04 v1.3). correlation is the
+// action whose package closed the fight, which is still answered.
+func (h *Harness) end(id, reason, correlation string) {
+	if id == "" {
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if _, heard := h.endings[id]; !heard {
+		h.endings[id] = reason
+	}
 	closed := make(map[string]struct{}, len(h.fights))
 	for who, f := range h.fights {
-		if f.id != id {
+		if f.id != id || f.ended != "" {
 			continue
 		}
 		f.ended = reason
@@ -507,11 +568,11 @@ func (h *Harness) closed(ev eventbus.Event) {
 	}
 	h.log.Info("the fight of the harness is over", "encounter_id", id, "reason", reason)
 	woke := false
-	for correlation, r := range h.awaited {
+	for waiting, r := range h.awaited {
 		if _, fighting := closed[r.player]; !fighting {
 			continue
 		}
-		if correlation == ev.CorrelationID() || r.named != nil {
+		if waiting == correlation || r.named != nil {
 			continue
 		}
 		r.over = reason
