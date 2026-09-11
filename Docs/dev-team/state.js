@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T23:09:34+03:00",
+  "updatedAt": "2026-09-11T23:34:49+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -889,15 +889,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-402",
           "title": "Стендовый замер LLM и заполнение baseline.md",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-11T23:24:51+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-402.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-402.md",
+          "branch": "task/T-402-llm-bench-baseline",
+          "worktree": ".worktrees/T-402"
         },
         {
           "id": "T-403",
@@ -1663,7 +1665,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T22:55:09+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -5043,7 +5045,7 @@ window.DEVTEAM_STATE =
       "task": "T-432",
       "action": "литерал OLLAMA_* отвергается (§16 п. 5)",
       "startedAt": "2026-09-11T22:55:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-11T23:07:40+03:00"
     },
     {
       "instance": "developer#1",
@@ -5073,6 +5075,66 @@ window.DEVTEAM_STATE =
       "task": "T-433",
       "action": "флак fight-NN в стенде Harness + встреча",
       "startedAt": "2026-09-11T23:07:04+03:00",
+      "finishedAt": "2026-09-11T23:20:38+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-432",
+      "action": "итерация 2 по ревью #1 (Mi-1, Mi-2, N-1)",
+      "startedAt": "2026-09-11T23:18:20+03:00",
+      "finishedAt": "2026-09-11T23:24:51+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-432",
+      "action": "ревью #1 литерала OLLAMA_* (восстановлено по журналу)",
+      "startedAt": "2026-09-11T23:07:40+03:00",
+      "finishedAt": "2026-09-11T23:18:20+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-433",
+      "action": "ревью #1 флака fight-NN",
+      "startedAt": "2026-09-11T23:20:38+03:00",
+      "finishedAt": "2026-09-11T23:30:04+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "замер LLM на стенде владельца (E, прогон 1)",
+      "startedAt": "2026-09-11T23:24:51+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-433",
+      "action": "итерация 2: окно гонки в Flee (Mi-1)",
+      "startedAt": "2026-09-11T23:30:04+03:00",
+      "finishedAt": "2026-09-11T23:34:49+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-432",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-11T23:34:49+03:00",
       "finishedAt": null
     }
   ],
@@ -7578,6 +7640,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Дефект T-431: отпечаток индекса в .gitleaksignore сдвинут 511 → 514 — make secrets-scan снова зелёный, коммит 9455016 в эпике"
+    },
+    {
+      "at": "2026-09-11T23:24:51+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-432 итерация 2 готова — ревью #2 в очереди; T-402 начата первой (стенд LLM поднят владельцем сейчас): devops-engineer#1, .worktrees/T-402"
     }
   ],
   "blockers": [],
