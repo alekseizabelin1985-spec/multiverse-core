@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:00:05+03:00",
+  "updatedAt": "2026-09-12T01:10:29+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -737,17 +737,44 @@ window.DEVTEAM_STATE =
         {
           "id": "T-395",
           "title": "Кейс контракта: Close под падающим обработчиком (запись dead letter)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-12T00:33:45+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-12T01:05:26+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 31,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "12.09 00:33",
+              "to": "12.09 00:45",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "12.09 00:45",
+              "to": "12.09 00:53",
+              "duration": "8m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "12.09 00:53",
+              "to": "12.09 01:00",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "12.09 01:00",
+              "to": "12.09 01:05",
+              "duration": "5m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-395.md",
           "branch": "task/T-395-close-under-failing-handler",
-          "worktree": ".worktrees/T-395"
+          "worktree": null,
+          "mergeCommit": "e5e8d7cc4eadefb512d7344c5e5a28821954c47b",
+          "mergedAt": "2026-09-12T01:07:27+03:00"
         },
         {
           "id": "T-396",
@@ -1833,15 +1860,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-434",
           "title": "llm-bench: прогрев через python-помощник (экранирование id-пути), путь матрицы вне репо — имя + sha256, first_call_ms пустой при не-200; паритет .ps1",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-12T01:07:27+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-434-llm-bench-warmup-matrix",
+          "worktree": ".worktrees/T-434"
         },
         {
           "id": "T-435",
@@ -1850,7 +1879,7 @@ window.DEVTEAM_STATE =
           "assignee": "architect#1",
           "startedAt": "2026-09-12T00:38:07+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -1863,6 +1892,45 @@ window.DEVTEAM_STATE =
           "title": "kafka-адаптер: Close не отменяет контекст обработчика (C-01 v1.7, ADR-023 п. 4); якорь в контракт-наборе",
           "status": "todo",
           "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
+        },
+        {
+          "id": "T-437",
+          "title": "llm-server: --alias, пин LLAMACPP_BUILD, сокращение ops/models.txt (из T-435)",
+          "status": "todo",
+          "assignee": "devops-engineer",
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
+        },
+        {
+          "id": "T-438",
+          "title": "Стендовая сессия: контрольный прогон E в ячейке платформы (8192×1, f16, --alias) и три прогона Qwen3.6 (после T-434, T-437; перезапуски — владелец)",
+          "status": "todo",
+          "assignee": "devops-engineer",
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
+        },
+        {
+          "id": "T-439",
+          "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
+          "status": "todo",
+          "assignee": "architect#2",
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
@@ -5498,7 +5566,7 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "ревью решения U-2",
       "startedAt": "2026-09-12T00:54:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T01:07:27+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -5508,6 +5576,26 @@ window.DEVTEAM_STATE =
       "task": "T-395",
       "action": "приёмка кейса Close под падающим обработчиком",
       "startedAt": "2026-09-12T01:00:05+03:00",
+      "finishedAt": "2026-09-12T01:05:26+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-434",
+      "action": "llm-bench: прогрев, путь матрицы, prompt_ms, build_info; паритет .ps1",
+      "startedAt": "2026-09-12T01:07:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-435",
+      "action": "итерация 2 по ревью #1 и ответам владельца",
+      "startedAt": "2026-09-12T01:10:29+03:00",
       "finishedAt": null
     }
   ],
@@ -8067,6 +8155,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Ответы владельца по T-435: прогоны E(контроль)+3×Q36 одной сессией после T-434; порядок E → Qwen3.6 → C → A; нарратив длиннее — через Qwen3.6; KV на :8888 — q4_0. T-395: решения system-architect (C-01 v1.7, T-436), приёмка"
+    },
+    {
+      "at": "2026-09-12T01:07:27+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-395 закоммичена 5a09026 [contract-change], слита в эпик (e5e8d7c). T-435 ревью #1: вернуть (3 Major — от ответов владельца). Заведены T-437, T-438, T-439. T-434 начата"
     }
   ],
   "blockers": [],
