@@ -1,0 +1,14 @@
+# Rule 8: `-` without the colon, with the manifest's default. Compose falls
+# back to it only when OLLAMA_NUM_PARALLEL is unset; the line
+# `OLLAMA_NUM_PARALLEL=` of an .env hands the container an EMPTY value instead
+# of the 1 of infra.go (review #1 T-432, Mi-2; decision of the orchestrator).
+#
+# expect-rule: 8
+# expect-text: ${OLLAMA_NUM_PARALLEL-1} falls back to the default only when OLLAMA_NUM_PARALLEL is unset
+# expect-text: write ${OLLAMA_NUM_PARALLEL:-1}, the default of shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL-1}

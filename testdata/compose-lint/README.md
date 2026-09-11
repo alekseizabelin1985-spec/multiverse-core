@@ -67,6 +67,12 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-ollama-passthrough.yml` | 8 | an `OLLAMA_*` key with no value — the container would run on the image's default, not ours |
 | `bad-ollama-spaced-colon.yml` | 8 | the same with the colons aligned: `OLLAMA_KEEP_ALIVE :` with one space, `OLLAMA_NUM_PARALLEL      :` with several (Ma-1, review #2 N-1) |
 | `bad-ollama-nodefault.yml` | 8 | `${OLLAMA_X}` with no modifier: the container gets an empty value instead of the manifest's (Mi-1) |
+| `bad-ollama-literal.yml` | 8 | an `OLLAMA_*` literal in a mapping, `OLLAMA_NUM_PARALLEL: 4`: `.env` cannot override it; the refusal names `${OLLAMA_X:-<default>}` (contracts.md §16 p. 5, v0.9; T-432) |
+| `bad-ollama-literal-list.yml` | 8 | the same literal as a list item, `- OLLAMA_KV_CACHE_TYPE=q8_0` (T-432) |
+| `bad-ollama-literal-default.yml` | 8 | a literal equal to the manifest's default is refused all the same — variant (b) of T-431, not (c) (T-432) |
+| `bad-ollama-foreign.yml` | 8 | `OLLAMA_NUM_PARALLEL: ${MV_LLM_SLOTS:-1}`: not a literal, but not the one allowed form either — `.env` is ignored the same way (T-432) |
+| `bad-ollama-wrapped.yml` | 8 | its own interpolation with text around it, `"${OLLAMA_KEEP_ALIVE:--1}m"`: `.env` arrives, but not as set; the refusal says the value must be the interpolation alone (T-432 review #1 Mi-1, N-1) |
+| `bad-ollama-plain-dash.yml` | 8 | `${OLLAMA_X-d}` without the colon: an `.env` line `OLLAMA_X=` hands the container an empty value (T-432 review #1 Mi-2) |
 | `bad-comment-in-quotes.yml` | 8 | `${MV_X}` after a `#` inside quotes — text, not a comment, and compose interpolates it (Mi-2) |
 | `bad-comment-in-single-quotes.yml` | 8 | the same inside single quotes; a separate file, since the double-quoted one gives the same refusal (review #2 N-2) |
 | `bad-nodefault-braced.yml` | 8 | `${MV_X}` with no modifier for a variable whose manifest default is not empty: a silent `.env` hands the process an empty value (Mi-2) |
@@ -89,6 +95,7 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `good-comment-after-bare-key.yml` | — | keys with no value followed by a YAML comment, one quoting `${MV_X}` (N-5) |
 | `good-quoted-keys.yml` | — | required credentials under quoted keys and quoted list items (N-3) |
 | `good-ollama-defaults.yml` | — | the `OLLAMA_*` block with the manifest's defaults |
+| `good-ollama-list.yml` | — | the one allowed form as list items, `- OLLAMA_X=${OLLAMA_X:-d}`, and an undeclared `OLLAMA_DEBUG` literal that rule 8 leaves alone (T-432) |
 | `good-spaced-colon.yml` | — | the correct forms with the colons aligned (Ma-1) |
 | `good-compose-project-name.yml` | — | `${COMPOSE_PROJECT_NAME}` with no modifier: compose sets it itself, and the contract holds compose to third-party defaults for `OLLAMA_*` only (Mi-1) |
 | `good-image-pinned.yml` | — | third-party images from the pins of `build/versions.env`, from an anchor and written `image :` (T-429 review #1 Mi-1) |

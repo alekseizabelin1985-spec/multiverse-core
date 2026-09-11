@@ -122,6 +122,7 @@ func Run(t *testing.T, target Target) {
 		{"JournalStopsAtTheEndOfTheJournal", journalStopsAtTheEnd},
 		{"JournalTailFollowsUntilTheContextIsDone", journalTailFollows},
 		{"AGroupResumesFromItsCursor", groupResumesFromItsCursor},
+		{"ANewGroupStartsAtTheFirstOffset", newGroupStartsAtTheFirstOffset},
 		{"DedupDropsTheRepeatedDelivery", dedupDropsTheRepeat},
 		{"TwoStepDedupRemembersOnlyAfterTheSideEffect", twoStepDedupAfterTheSideEffect},
 		{"AnUncommittedEventIsDeliveredAgain", uncommittedIsDeliveredAgain},
@@ -436,6 +437,88 @@ func groupResumesFromItsCursor(t *testing.T, target Target) {
 	if got[0].payloadName() != "after" {
 		t.Fatalf("the resumed subscription received %q, want \"after\": a group starts where it left off, not at the beginning",
 			got[0].payloadName())
+	}
+}
+
+// newGroupStartsAtTheFirstOffset: a consumer group that did not exist when an
+// event was published still gets it, because a new group reads its topic from
+// the first offset, not from the end (C-01 v1.2, ADR-022). It is what lets a
+// consumer announce itself without waiting for its subscription to be live —
+// testkit/state does exactly that — and the reason no interface of the bus has
+// a readiness handshake.
+//
+// "Not from the end" alone is too weak a check: a group that began anywhere
+// between the start of the topic and the events of this case would deliver
+// them just the same, and the cases that publish before they subscribe already
+// catch a group that begins at the end. So the first delivery of the group is
+// compared with where the journal says the topic begins. That makes this the
+// one case that looks behind its own baseline, on purpose.
+func newGroupStartsAtTheFirstOffset(t *testing.T, target Target) {
+	r := newRun(t, target)
+	topic := eventbus.TopicPlayerEvents
+	base := r.end(topic)
+
+	const n = 3
+	for i := range n {
+		r.publish(r.looked(strconv.Itoa(i)))
+	}
+
+	// Where the topic begins is read off the journal rather than written down
+	// as 0: offsets are what the journal half of C-01 defines, and the case
+	// states how the subscription half relates to it.
+	readCtx, cancel := context.WithTimeout(t.Context(), Timeout)
+	defer cancel()
+	begins := int64(-1)
+	if _, err := target.Journal.ReadRange(readCtx, topic, 0, base+n, func(ctx context.Context, _ eventbus.Event) error {
+		if pos, ok := eventbus.PositionFromContext(ctx); ok && begins < 0 {
+			begins = pos.Offset
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("ReadRange of %s from offset 0: %v", topic, err)
+	}
+	if begins < 0 {
+		t.Fatalf("the journal delivered nothing of %s below offset %d, where this case alone published %d events", topic, base+n, n)
+	}
+
+	// The group of this run is new: nothing has subscribed under it, and it is
+	// only named here, after every event of the case is in the topic.
+	var mu sync.Mutex
+	first := int64(-1)
+	var ours []received
+	sub := r.subscribeWith(topic, func(ctx context.Context, ev eventbus.Event) error {
+		pos, ok := eventbus.PositionFromContext(ctx)
+		if !ok {
+			t.Error("the subscription called the handler without a position in the context")
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if first < 0 {
+			first = pos.Offset
+		}
+		if ev.Key() == r.world {
+			ours = append(ours, received{ev: ev, pos: pos})
+		}
+		return nil
+	})
+	defer sub.stop(t)
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(ours) >= n
+	}, fmt.Sprintf("the %d events published before the group existed", n))
+
+	mu.Lock()
+	defer mu.Unlock()
+	if first != begins {
+		t.Fatalf("the new group %s began at offset %d, but %s begins at %d: a new group reads from the first offset",
+			r.group, first, topic, begins)
+	}
+	for i, got := range ours[:n] {
+		if want := strconv.Itoa(i); got.payloadName() != want || got.pos.Offset != base+int64(i) {
+			t.Fatalf("event %d of the case is %q at offset %d, want %q at %d", i, got.payloadName(), got.pos.Offset, want, base+int64(i))
+		}
 	}
 }
 
