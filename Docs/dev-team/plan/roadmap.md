@@ -139,7 +139,7 @@
 | до M0 | — | отзыв ключа `sk-…` из `shared/oracle/README.md` (подтвердить факт отзыва в `journal.md`); отзыв токенов из `.mcp.env` |
 | M0, подволна 0.2 | T-004 (`make minio-image`, `minio --version`, `mc admin info`) | **форк `minio/minio` в аккаунт `alekseizabelin1985-spec`** — до T-004, иначе `MINIO_REPO` не найден; **вывод `llama-server --version`** для пина `LLAMACPP_BUILD` в `build/versions.env` |
 | M0, подволна 0.3 | T-008 (`make up` → `make health`; 8 топиков с retention; профиль `legacy`) | — |
-| M0, подволна 0.4 | T-012 (CI) | **branch protection** на `main` и `integration/mvp-1` (required checks — шесть job'ов), операция в UI GitHub |
+| M0, подволна 0.4 | T-012 (CI) | **branch protection** на `main` и `integration/mvp-1` (required checks — задания workflow `go`; после T-401 их восемь: `unit, integration, e2e, race, contracts, security, compose-lint, image`; какие отмечать обязательными, решает владелец, рекомендация — все, кроме `image`, `infrastructure.md` §3.1), операция в UI GitHub |
 | M0, подволны 0.4–0.5 | **T-013 (F-8)** — матрица замера LLM, 3 прогона, `baseline.md` | запуск `llama-server` по `scripts/llm-server.ps1`, прогон `make bench` вручную (U-12); решение по U-2/U-8 (E → C → A) |
 | M0, 0.5/0.7 | T-014 (`make test-integration` на Docker Desktop), T-019 («запуск за 5 команд» на чистой машине) | — |
 | M1 | T-058 (`mvctl world init --bus kafka` против поднятого `core`), T-057 (integration MinIO) | — |
