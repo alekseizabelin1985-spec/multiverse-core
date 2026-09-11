@@ -56,7 +56,16 @@
 #        declares WITH a default (DeclareExternal in shared/env/infra.go —
 #        OLLAMA_*): compose must repeat that default, and a key with no value
 #        is refused for it, because it would hand the container the image's
-#        own default instead of ours;
+#        own default instead of ours. Nor is anything but its own interpolation
+#        alone allowed for it — a literal (`OLLAMA_X: 4`, `- OLLAMA_X=4`), even
+#        one equal to the default, the text of another variable, or its own
+#        interpolation with text around it: .env could then never set it as
+#        set. Of the interpolations, rule 8 accepts `${OLLAMA_X:-<the default
+#        of infra.go>}` and refuses `${OLLAMA_X-d}`, where a .env line
+#        `OLLAMA_X=` hands the container an empty value; a requirement with
+#        `:?`/`?` is left to rule 7, which does not read the per-profile files
+#        (contracts.md §16 p. 5, v0.9, T-432). An OLLAMA_* that infra.go does
+#        not declare is not this rule's;
 #      - `${MV_X}` and `$MV_X` with no modifier are rejected when the manifest
 #        default is not empty: a silent .env then hands the process an empty
 #        value instead of it (Mi-2). So are `${MV_X:+x}` and `${MV_X+x}`, which
@@ -1255,6 +1264,19 @@ def check(where, ref, whole):
     op = ref.op
     if op.endswith("?"):
         return  # no default at all: rule 7's
+    if op == "-" and not name.startswith("MV_"):
+        # `-` without the colon falls back only when the variable is UNSET: a
+        # `.env` line `OLLAMA_X=` hands the container an empty value instead of
+        # ours (review #1 T-432, Mi-2; decision of the orchestrator). MV_* keep
+        # their old reading — this task does not widen the rule for them.
+        note(
+            8,
+            where,
+            f"{ref.text} falls back to the default only when {name} is unset: a .env "
+            f"line `{name}=` hands the container an EMPTY {name} instead of the default "
+            f"of {source} ({default!r}); " + fix_for(name, default, whole),
+        )
+        return
     if op.endswith("+"):
         note(
             8,
@@ -1368,6 +1390,37 @@ for compose_path, raw in raw_models:
                 f"default of {EXTERNALS} ({external[item.key]!r}); "
                 + fix_for(item.key, external[item.key], True),
             )
+        # A value for it that is anything but its own interpolation: a literal,
+        # even one equal to the manifest's default, or text taken from another
+        # variable. Either way the OLLAMA_X of .env never reaches the container
+        # — the operator tunes it there, and the setting lands nowhere
+        # (contracts.md §16 p. 5, v0.9, T-431 variant (b); the class of T-408).
+        # `$${OLLAMA_X:-d}` is compose's escape, the literal text, and counts as
+        # a literal. The default of the one allowed form is `check`'s business.
+        if item.key is not None and item.value is not None and item.key in external:
+            own = interpolations(item.value)
+            if not (len(own) == 1 and own[0].name == item.key and own[0].text == item.value):
+                mine = next((r for r in own if r.name == item.key), None)
+                lost = (f": .env cannot override it, so the {item.key} an operator sets "
+                        "there never reaches the container, whatever the value")
+                if not own:
+                    what = f"carries the literal {item.value!r}{lost}"
+                elif mine is not None:
+                    # Its own interpolation with text around it (review #1 T-432,
+                    # N-1): the value of .env arrives, but not as it was set.
+                    what = (f"wraps {mine.text} in other text ({item.value!r}): the "
+                            f"{item.key} an operator sets in .env reaches the container "
+                            "with compose's text around it; the value must be the "
+                            "interpolation alone")
+                else:
+                    what = f"takes its value from {item.value!r}, not from {item.key} itself{lost}"
+                note(
+                    8,
+                    where,
+                    f"{item.key} {what} (contracts.md §16 p. 5, v0.9); rule 8 accepts "
+                    f"${{{item.key}:-{external[item.key]}}}, the default of {EXTERNALS} "
+                    "(a requirement with `:?` is rule 7's)",
+                )
         if item.text is None:
             continue
         # `whole`: the interpolation IS the value of an `environment` entry — of

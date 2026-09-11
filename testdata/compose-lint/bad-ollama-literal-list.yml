@@ -1,0 +1,14 @@
+# Rule 8: the same literal as an item of an `environment` list, `- KEY=value`
+# (contracts.md §16 p. 5, v0.9: a mapping and a list alike; T-432). q8_0 is a
+# legitimate setting of §6.4 — and exactly the kind an operator is meant to
+# choose in .env, which this line would silently overrule.
+#
+# expect-rule: 8
+# expect-text: services.ollama.environment[0]: OLLAMA_KV_CACHE_TYPE carries the literal 'q8_0'
+# expect-text: rule 8 accepts ${OLLAMA_KV_CACHE_TYPE:-f16}, the default of shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      - OLLAMA_KV_CACHE_TYPE=q8_0
