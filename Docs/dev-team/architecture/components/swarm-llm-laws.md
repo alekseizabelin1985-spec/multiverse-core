@@ -379,14 +379,17 @@ type AgentInstance struct {
 
 ```
 Route(ev):
-  1. dedup: eventbus.Dedup по ev.ID (production-пакет C-01 v1.1; LRU 10k, сериализуется в снапшот роя) → повтор игнорируется (NFR-013); схема события уже проверена библиотекой при чтении (MV_BUS_VALIDATE_ON_READ) — изм. G2
+  1. dedup: eventbus.Dedup по ev.ID (production-пакет C-01 v1.1; LRU 10k, сериализуется в снапшот роя) → Has(ev.ID): событие, уже доставленное всем получателям, игнорируется (NFR-013); Add — только на шаге 8 (изм. T-431, C-01 v1.6 «посредник доставки»); схема события уже проверена библиотекой при чтении (MV_BUS_VALIDATE_ON_READ) — изм. G2
   2. legacy-фильтр: типы с пометкой deprecated/gm_path=legacy (gm.*, narrative.generate, time.syncTime, player.moved, player.used_skill) → игнор
-  3. проекции: WorldView.Apply(ev) для entity.*; ScopeIndex.Apply(ev) для entity.*/group.*/encounter.*; journal.Observe(ev) (все типы); budget.Observe(ev) для llm.output; presence.Observe(ev) для player.*
+  3. проекции: WorldView.Apply(ev) для entity.*; ScopeIndex.Apply(ev) для entity.*/group.*/encounter.*; journal.Observe(ev) (все типы); budget.Observe(ev) для llm.output; presence.Observe(ev) для player.* — каждая идемпотентна при повторе: WorldView по версии, ScopeIndex как множество, journal/budget/presence по ev.ID (изм. T-431)
   4. спавн: for bp in Match(ev): scope := bindScope(bp, ev); inst, spawned := Lifecycle.Ensure(bp, scope, ev)
-  5. доставка: for inst in Recipients(ev): Pipeline.HandleEvent(inst, ev) — последовательно на агента (per-instance очередь), параллельно между агентами
-  6. tick.fired: если meta.agent.id — живой timer-агент → Pipeline.HandleTick; иначе (replay: агент ещё не восстановлен) → лог handled=true
+  5. доставка: for inst in Recipients(ev): Pipeline.HandleEvent(inst, ev) — последовательно на агента (per-instance очередь), параллельно между агентами; синхронно — Route ждёт ответа всех получателей; ошибка одного не отменяет доставку остальным; Route возвращает шине ошибку первого по порядку Recipients(ev), шаг 8 не выполняется (изм. T-431)
+  6. tick.fired: если meta.agent.id — живой timer-агент → Pipeline.HandleTick (повтор с tick_seq не больше последнего закрытого — выполненного или прерванного tick.aborted — тик не выполняет, лишь допубликовывает неопубликованный tick.aborted; изм. T-431); иначе (replay: агент ещё не восстановлен) → лог handled=true
   7. agent.* в replay: agent.stopped → Lifecycle.stopSilently(id); agent.spawned → Ensure без публикации
+  8. Add(ev.ID) — только если шаги 3–7 прошли без ошибки (изм. T-431). Отмена при остановке — тоже ошибка: окно не пополняется, событие не закоммичено и после рестарта дойдёт до агента
 ```
+
+**Почему `Add` после доставки (изм. T-431; C-01 v1.6, design EPIC-003 §14.5 п. 1).** Раньше шаг 1 запоминал событие до доставки, а окно Router лежит в снапшоте роя. Тогда повтор шины после ошибки агента и повторная доставка после рестарта гасли у Router и до агента не доходили. Двухшаговое окно агента встречи (design §14.1) повтора не видело: ответ не допубликовывался, а в `dead_letters` ничего не попадало.
 
 Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type` (поддерживается glob `player.*` — см. запрос к C-11) **и** `scope_binding` совпадает с `ev.Scope` (`type` ∈ binding.type; `id` равен или `pattern` матчит). `bindScope` для `encounter`: scope события `encounter.started` (scope игрока/группы); для `group-narrator`: `group:{group.entity.id}`; для `personal-gm`: `solo:{entity.entity.id}` — из `entity{player}` события, **не** из `ev.Scope` (в группе `ev.Scope = group:…`, а персональный GM всё равно живёт в `solo:{player_id}`, `data-model.md` §6.2).
 
