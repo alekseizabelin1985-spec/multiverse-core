@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T00:38:07+03:00",
+  "updatedAt": "2026-09-12T01:00:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1857,6 +1857,19 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-435-llm-baseline-decision",
           "worktree": ".worktrees/T-435"
+        },
+        {
+          "id": "T-436",
+          "title": "kafka-адаптер: Close не отменяет контекст обработчика (C-01 v1.7, ADR-023 п. 4); якорь в контракт-наборе",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
         }
       ],
       "defects": [],
@@ -5445,7 +5458,7 @@ window.DEVTEAM_STATE =
       "task": "T-395",
       "action": "кейс контракта «Close под падающим обработчиком»",
       "startedAt": "2026-09-12T00:33:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T00:45:13+03:00"
     },
     {
       "instance": "architect#1",
@@ -5455,6 +5468,46 @@ window.DEVTEAM_STATE =
       "task": "T-435",
       "action": "U-2: базовая конфигурация LLM; Qwen3.6 в матрице",
       "startedAt": "2026-09-12T00:38:07+03:00",
+      "finishedAt": "2026-09-12T00:54:22+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-395",
+      "action": "ревью #1 кейса Close под падающим обработчиком",
+      "startedAt": "2026-09-12T00:45:13+03:00",
+      "finishedAt": "2026-09-12T00:53:25+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-395",
+      "action": "решения: отмена контекста в kafka при Close; M2 на membus",
+      "startedAt": "2026-09-12T00:53:25+03:00",
+      "finishedAt": "2026-09-12T01:00:05+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-435",
+      "action": "ревью решения U-2",
+      "startedAt": "2026-09-12T00:54:22+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-395",
+      "action": "приёмка кейса Close под падающим обработчиком",
+      "startedAt": "2026-09-12T01:00:05+03:00",
       "finishedAt": null
     }
   ],
@@ -8008,6 +8061,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-402 закоммичена 0ecd9ea (secrets-scan зелёный), конфликт tasks.md разрешён через sync, слита в эпик (9e5b9de). T-435 начата (architect#1)"
+    },
+    {
+      "at": "2026-09-12T01:00:05+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Ответы владельца по T-435: прогоны E(контроль)+3×Q36 одной сессией после T-434; порядок E → Qwen3.6 → C → A; нарратив длиннее — через Qwen3.6; KV на :8888 — q4_0. T-395: решения system-architect (C-01 v1.7, T-436), приёмка"
     }
   ],
   "blockers": [],
