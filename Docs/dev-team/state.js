@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T00:23:34+03:00",
+  "updatedAt": "2026-09-12T00:33:45+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -737,15 +737,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-395",
           "title": "Кейс контракта: Close под падающим обработчиком (запись dead letter)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-12T00:33:45+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-395.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-395.md",
+          "branch": "task/T-395-close-under-failing-handler",
+          "worktree": ".worktrees/T-395"
         },
         {
           "id": "T-396",
@@ -968,17 +970,44 @@ window.DEVTEAM_STATE =
         {
           "id": "T-406",
           "title": "Удалить readySubscriber из заглушки состояния, закрепить гарантию первого офсета кейсом контракта",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-12T00:06:30+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-12T00:32:11+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 25,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "12.09 00:06",
+              "to": "12.09 00:17",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "12.09 00:17",
+              "to": "12.09 00:25",
+              "duration": "7m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "12.09 00:25",
+              "to": "12.09 00:27",
+              "duration": "2m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "12.09 00:27",
+              "to": "12.09 00:32",
+              "duration": "4m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-406.md",
           "branch": "task/T-406-drop-ready-subscriber",
-          "worktree": ".worktrees/T-406"
+          "worktree": null,
+          "mergeCommit": "869b8330c748d42f50156430673e43b472c51acd",
+          "mergedAt": "2026-09-12T00:33:45+03:00"
         },
         {
           "id": "T-408",
@@ -5303,7 +5332,7 @@ window.DEVTEAM_STATE =
       "task": "T-406",
       "action": "ревью #1 удаления readySubscriber",
       "startedAt": "2026-09-12T00:17:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T00:25:32+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -5323,6 +5352,46 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "итерация 3: прогон 4 в baseline, три Nit",
       "startedAt": "2026-09-12T00:23:34+03:00",
+      "finishedAt": "2026-09-12T00:29:51+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-406",
+      "action": "итерация 2: три Nit ревью #1",
+      "startedAt": "2026-09-12T00:25:32+03:00",
+      "finishedAt": "2026-09-12T00:27:39+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-406",
+      "action": "приёмка удаления readySubscriber",
+      "startedAt": "2026-09-12T00:27:39+03:00",
+      "finishedAt": "2026-09-12T00:32:11+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "приёмка замера LLM",
+      "startedAt": "2026-09-12T00:29:51+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-395",
+      "action": "кейс контракта «Close под падающим обработчиком»",
+      "startedAt": "2026-09-12T00:33:45+03:00",
       "finishedAt": null
     }
   ],
@@ -7864,6 +7933,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-402 прогон 4 E (после перезапуска владельцем 00:19): phase2 p95 3533 мс — pass; три зачётных прогона (2, 3, 4) — все pass. Заведена T-435 (U-2, architect#1)"
+    },
+    {
+      "at": "2026-09-12T00:33:45+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-406 закоммичена 376d92d [contract-change], слита в эпик (869b833). T-395 начата (developer#1, .worktrees/T-395)"
     }
   ],
   "blockers": [],
