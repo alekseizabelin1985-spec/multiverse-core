@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T00:11:24+03:00",
+  "updatedAt": "2026-09-12T00:23:34+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -893,7 +893,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-11T23:24:51+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -1755,6 +1755,19 @@ window.DEVTEAM_STATE =
           "title": "llm-bench: прогрев через python-помощник (экранирование id-пути), путь матрицы вне репо — имя + sha256, first_call_ms пустой при не-200; паритет .ps1",
           "status": "todo",
           "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks.md"
+        },
+        {
+          "id": "T-435",
+          "title": "U-2: решение по базовой конфигурации LLM по трём зачётным прогонам E; включать ли Qwen3.6-35B-A3B в матрицу",
+          "status": "todo",
+          "assignee": "architect#1",
           "startedAt": null,
           "finishedAt": null,
           "reviewIterations": 0,
@@ -5270,7 +5283,7 @@ window.DEVTEAM_STATE =
       "task": "T-406",
       "action": "удалить readySubscriber, кейс контракта первого офсета",
       "startedAt": "2026-09-12T00:06:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T00:17:52+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -5280,6 +5293,36 @@ window.DEVTEAM_STATE =
       "task": "T-402",
       "action": "итерация 2 по ревью #1 (C-1, M-1, прогоны 2–3 в baseline)",
       "startedAt": "2026-09-12T00:11:24+03:00",
+      "finishedAt": "2026-09-12T00:18:50+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-406",
+      "action": "ревью #1 удаления readySubscriber",
+      "startedAt": "2026-09-12T00:17:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-12T00:18:50+03:00",
+      "finishedAt": "2026-09-12T00:23:34+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-402",
+      "action": "итерация 3: прогон 4 в baseline, три Nit",
+      "startedAt": "2026-09-12T00:23:34+03:00",
       "finishedAt": null
     }
   ],
@@ -7815,6 +7858,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-402 прогон 3 E (после перезапуска сервера владельцем): phase2 p95 2916 мс — pass. Ревью #1 T-402: вернуть (C-1 — абсолютный путь профиля в meta.matrix, M-1 — вывод о роутере как факт) — итерация 2. Заведена T-434"
+    },
+    {
+      "at": "2026-09-12T00:22:26+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-402 прогон 4 E (после перезапуска владельцем 00:19): phase2 p95 3533 мс — pass; три зачётных прогона (2, 3, 4) — все pass. Заведена T-435 (U-2, architect#1)"
     }
   ],
   "blockers": [],
