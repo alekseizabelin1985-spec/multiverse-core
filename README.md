@@ -100,8 +100,9 @@ LLM (`llama-server`) — нативный процесс вне compose: `make u
 ```
 multiverse-core/
 ├── cmd/
-│   ├── multiverse/        # единственный бинарник платформы: serve/health/db,
-│   │                       # флаги --contexts/--mode/--bus/--recording
+│   ├── multiverse/        # единственный бинарник платформы: serve/health/db/version,
+│   │                       # флаги serve --contexts/--mode/--bus/--recording
+│   │                       # (serve можно опустить: `multiverse --contexts=...`)
 │   └── mvctl/              # CLI оператора: contracts, env, storage, privacy, version;
 │                            # world/blueprint/laws/record/golden/llm/memory/report/trace
 │                            # зарезервированы под будущие эпики (см. cmd/mvctl/main.go)

@@ -32,8 +32,8 @@
 multiverse-core/
 ├── go.mod                     # module multiverse-core.io, go 1.26 (без go.work)
 ├── cmd/
-│   ├── multiverse/             # бинарник платформы: serve (--contexts/--mode/--bus/--recording),
-│   │                            # health --url, db backup|check
+│   ├── multiverse/             # бинарник платформы: serve (--contexts/--mode/--bus/--recording;
+│   │                            # то же без подкоманды), health --url, db backup|check, version
 │   └── mvctl/                  # CLI оператора: contracts, env, storage, privacy, version (реализованы);
 │                                # world, blueprint, laws, record, golden, llm, memory, report, trace
 │                                # зарезервированы под будущие эпики (cmd/mvctl/main.go — реестр)
@@ -132,7 +132,8 @@ make secrets-scan               # gitleaks по диапазону ветки + 
 go build ./...                  # весь корневой модуль (без services/*, у них свои go.mod)
 go vet ./...
 go test -short -race ./...
-go run ./cmd/multiverse --contexts=all --bus=memory   # один процесс, шина в памяти, без Docker
+go run ./cmd/multiverse serve --contexts=all --bus=memory   # один процесс, шина в памяти, без Docker
+                                                      # (serve можно опустить: так запускают compose и образ)
 go run ./cmd/mvctl contracts check                    # реестр типов событий без «фантомов»
 ```
 

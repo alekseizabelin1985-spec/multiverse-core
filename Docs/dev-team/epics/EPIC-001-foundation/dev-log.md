@@ -7588,3 +7588,114 @@ D3 — находка прогона. Пока id ставился в литер
   `--build-tags integration` — 0 issues.
 - `pre-commit` в изолированной копии и `gitleaks git --staged --redact .` — итог в карточке, раздел
   «Выполнение (developer) — итерация 2».
+
+## developer#1 · T-414 · «Подкоманда serve: бинарник её не знает, а документы и задания пишут» · 2026-09-11
+
+### 1. Решение: (а) — `serve` явная подкоманда, запуск без подкоманды остаётся её синонимом
+
+Без подкоманды платформу запускают образ (`ENTRYPOINT ["/multiverse"]` + `command: ["--contexts=…"]` у
+`gateway`, `core`, `memory` в compose), `make replay` и `test/e2e`. С подкоманды пишут CLAUDE.md, README,
+AGENTS.md, задания команды и оператор; рядом есть `health`, `db`, `version`. Первую форму нельзя убрать ни
+при (а), ни при (б), так что выбор был только о второй. (б) оставило бы три подкоманды и одну безымянную
+команду, и опечатка `helth` по-прежнему уходила бы в разбор флагов `serve` с ответом `unexpected argument`.
+(а) — правка одного `main.go` без единого сломанного запуска.
+
+### 2. Что сделано
+
+- `cmd/multiverse/main.go`: `run` → `dispatch(args, stdout, stderr, start)`. Нет аргументов или первый
+  начинается с `-` → `serve`; `serve` → тот же `runServe(args[1:])`; `health`, `db`, `version` — как были;
+  прочее слово → код 2, `unknown subcommand "<слово>": expected serve, health, db or version, or the flags
+  of serve without a subcommand`. Перечень — срез `subcommands`, отказ печатает его через `joinOr`.
+- `cmd/multiverse/serve.go`: `runServe` принимает `start startFunc` (в бинарнике — `serve`). Больше ничего.
+- `CLAUDE.md` (карта каталогов, «Прямые команды Go»), `README.md` (карта каталогов).
+- Грэп по дереву (`git grep` без `services/`, журнала и ревью) и по `Docs/ops`, неотслеживаемым `.claude/`
+  и `Docs/user-stories/`: неработающей формы не осталось. Формы в дереве — `multiverse serve …` (CLAUDE.md,
+  README, AGENTS.md), `multiverse --contexts=…` (compose, Makefile, e2e), `multiverse health|db` — все три
+  теперь рабочие. Упоминания в `dev-log.md`, `tasks.md`, `tasks/T-410.md`, `tasks/T-414.md` — записи
+  прошлого, не правились.
+
+### 3. Тесты — `cmd/multiverse/dispatch_test.go`
+
+- `TestServeSubcommandAndTheBareFormAreOneCommand` — 4 случая × 2 написания через `dispatch`; запуск
+  подменён настоящим `process.run` с отменённым контекстом, так что печатается настоящая строка старта.
+  Проверяется источник (`MV_MODE`/`--mode`, `MV_BUS`/`--bus`) и равенство опций двух написаний.
+- `TestServeSubcommandAndTheBareFormRefuseAlike` — одинаковый отказ при `MV_MODE=dry-run`.
+- `TestUnknownSubcommandIsRefusedWithTheKnownOnes` — `helth`, `serves`, `start`: код 2, перечень, без запуска.
+- `TestEveryListedSubcommandIsDispatched` — срез `subcommands` и `switch` согласованы.
+
+### 4. Мутанты
+
+Через `go test -overlay` из каталога `mktemp -d`; дерево не менялось; каталог удалён по точному пути.
+Первый прогон был пустым: ключ overlay с кириллицей испортился при передаче через `python` stdin, все
+мутанты «прошли». Замечено по подозрительно ровному `ok`, ключ собран через `sed`, прогон повторён.
+
+| # | Мутация | Результат |
+|---|---|---|
+| M1 | удалён `case "serve"` | **красный**: `…AreOneCommand`, `…RefuseAlike`, `…EveryListedSubcommandIsDispatched` |
+| M2 | форма без подкоманды не опознаётся (`HasPrefix(args[0], "\x00")`) | **красный**: `…AreOneCommand`, `…RefuseAlike` |
+| M3 | `serve` не снимает своё имя (`runServe(args)`) | **красный**: `…AreOneCommand`, `…RefuseAlike`, `…EveryListed…` |
+| M4 | неизвестное слово уходит в `runServe` (как до задачи) | **красный**: `…UnknownSubcommandIsRefusedWithTheKnownOnes` |
+| M5 | отказ без перечня | **красный**: `…UnknownSubcommand…` |
+| M6 | `serve` убран из `subcommands` | **красный**: `…EveryListedSubcommandIsDispatched` |
+| M7 | форма без подкоманды опознаётся только по `--` | **красный**: `…AreOneCommand` (случай с одним дефисом) |
+| M8 | `serve.go`: `fs.VisitAll` вместо `fs.Visit` (T-408) | **красный**: `…AreOneCommand`, `…RefuseAlike`, `TestModeAndBusComeFromTheManifest` |
+| M9 | пустой список аргументов не ведёт в `serve` | **красный**: `TestRunWithoutContextsFails` |
+
+### 5. Проверки
+
+- `go build ./... && go vet ./...` — зелёные; `gofmt -l cmd/multiverse` — пусто.
+- `go test -short -count=1 ./cmd/...` — ok (7 пакетов). `-race` недоступен (T-401).
+- `go test -tags e2e -count=1 ./test/...` — `test/e2e` ok, `test/fixtures` ok.
+- `golangci-lint run ./cmd/...` — 0 issues.
+- Живой запуск, пять раз на свободных портах 127.0.0.1: `go run ./cmd/multiverse serve --contexts=all
+  --bus=memory`; собранный бинарник с `serve` и без, с перекрытием `MV_MODE=replay` флагом `--mode=live` и
+  без него. Везде `/health` ok по семи контекстам, `multiverse health` — код 0, строка старта называет
+  источник (`live (MV_MODE)`, `live (--mode)`, `replay (MV_MODE)`). Остановлен только свой процесс — слушатель
+  порта сверен по PID, пути exe и командной строке; после остановки порты свободны. `helth` → код 2 с
+  перечнем. Стек владельца и LLM на 8888 не трогались.
+- `pre-commit` и `gitleaks` — итог в карточке T-414, раздел «Выполнение (developer)».
+
+## developer#1 · T-414 · итерация 2 по ревью #1 · 2026-09-11
+
+Ревью #1 — «принять», Nit 3. Оркестратор закрывает N-1 и N-2 в задаче, N-3 (быстрое падение пробы e2e) —
+в T-415.
+
+### 1. Что сделано
+
+- **N-1.** `cmd/multiverse/serve.go`, `parseServe`: лишний аргумент, совпавший со словом из `subcommands`,
+  получает подсказку `the subcommand goes first: multiverse <имя> <flags>`. Другие лишние слова — прежний
+  отказ `unexpected argument`. Причина случая: `flag` останавливается на первом слове, которое не флаг,
+  поэтому подкоманда после флагов попадает в `serve`, а не в `dispatch`.
+- **N-2.** Там же `fs.Usage`: `usage: multiverse [serve] [flags] | health | db | version`, затем флаги
+  `serve`. Перечень строится из `subcommands` без `serve`, второго списка нет.
+- Тесты `cmd/multiverse/dispatch_test.go`: `TestSubcommandAfterTheFlagsIsToldToGoFirst`,
+  `TestHelpNamesEverySubcommand`.
+
+### 2. Мутанты
+
+Изолированная копия: экспорт индекса плюс мои файлы. Ключи overlay — относительные от корня модуля
+(ловушка короткого имени `CD86~1` — ревью #1). Первым шёл контрольный мутант. У каждого мутанта сверено,
+что файл отличается от исходного. Каталог удалён по точному пути.
+
+| # | Мутация (`serve.go`) | Результат |
+|---|---|---|
+| K0 | контроль: синтаксическая ошибка в `func runServe(` | **красный**: `syntax error`, build failed — прогон засчитан |
+| N1a | подсказка убрана | **красный**: `TestSubcommandAfterTheFlagsIsToldToGoFirst` |
+| N1b | подсказка у любого лишнего слова | **красный**: `…ToldToGoFirst` (случай `extra`) |
+| N1c | сравнение с подкомандой никогда не совпадает (`name+"x"`) | **красный**: `…ToldToGoFirst` |
+| N2a | `fs.Usage` не задан | **красный**: `TestHelpNamesEverySubcommand` |
+| N2b | без `PrintDefaults` | **красный**: `…HelpNamesEverySubcommand` (нет флагов `serve`) |
+| N2c | из перечня выпал `version` | **красный**: `…HelpNamesEverySubcommand` |
+| N2d | перечень литералом `"health \| db"` | **красный**: `…HelpNamesEverySubcommand` |
+
+### 3. Проверки
+
+Только в изолированной копии: в рабочем дереве лежит удалённый из индекса
+`shared/testkit/swarm/window_test.go` (T-419), дерево не собирается.
+- `go build ./... && go vet ./...` — зелёные; `go test -short -count=1 ./cmd/...` — ok, 7 пакетов;
+  `go test -tags e2e -count=1 ./test/...` — ok.
+- Первый прогон нашёл `gofmt` в `dispatch_test.go` (выравнивание ключей карты); исправлено `gofmt -w`,
+  прогон повторён — `gofmt -l` пусто, `golangci-lint run ./cmd/...` — 0 issues.
+- Бинарник из копии с `MV_CORE_ADDR=127.0.0.1:0`, `MV_BUS=memory`: `--contexts=all serve` → код 2 с
+  подсказкой, `-h` → код 0 со строкой usage; ни одного старта процесса.
+- `pre-commit` и `gitleaks` — итог в карточке T-414, «Итерация 2».

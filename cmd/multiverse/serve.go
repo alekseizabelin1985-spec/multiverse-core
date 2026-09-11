@@ -45,7 +45,11 @@ type serveOptions struct {
 // again — this time with a warning nobody reads attached to it (T-408).
 const retiredBus = "redpanda"
 
-func runServe(args []string, stdout, stderr io.Writer) int {
+// startFunc runs the process once its options are resolved; serve in the
+// binary, a stand-in in the tests of dispatch.
+type startFunc func(opts serveOptions, stdout, stderr io.Writer) error
+
+func runServe(args []string, stdout, stderr io.Writer, start startFunc) int {
 	opts, err := parseServe(args, stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -54,7 +58,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stderr, "multiverse:", err)
 		return 2
 	}
-	if err := serve(*opts, stdout, stderr); err != nil {
+	if err := start(*opts, stdout, stderr); err != nil {
 		_, _ = fmt.Fprintln(stderr, "multiverse:", err)
 		return 1
 	}
@@ -74,6 +78,20 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 func parseServe(args []string, stderr io.Writer) (*serveOptions, error) {
 	fs := flag.NewFlagSet("multiverse", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	// The help of the bare binary is the help of serve, so it is the one place
+	// an operator who types "multiverse -h" learns that the other subcommands
+	// exist. The list is the one dispatch refuses with, not a copy (T-414).
+	fs.Usage = func() {
+		others := make([]string, 0, len(subcommands))
+		for _, name := range subcommands {
+			if name != "serve" {
+				others = append(others, name)
+			}
+		}
+		_, _ = fmt.Fprintf(fs.Output(), "usage: multiverse [serve] [flags] | %s\n\nflags of serve:\n",
+			strings.Join(others, " | "))
+		fs.PrintDefaults()
+	}
 	contexts := fs.String("contexts", "", "comma separated contexts to run, or \"all\" ("+strings.Join(runtime.Names(), ",")+")")
 	mode := fs.String("mode", env.Mode.String(),
 		joinOr(env.Mode.Enum())+"; overrides "+env.Mode.Name())
@@ -85,6 +103,14 @@ func parseServe(args []string, stderr io.Writer) (*serveOptions, error) {
 		return nil, err
 	}
 	if fs.NArg() > 0 {
+		// Parsing stops at the first word that is not a flag, so a subcommand
+		// written after the flags lands here rather than in dispatch.
+		for _, name := range subcommands {
+			if fs.Arg(0) == name {
+				return nil, fmt.Errorf("unexpected argument %q: the subcommand goes first: multiverse %s <flags>",
+					name, name)
+			}
+		}
 		return nil, fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
 

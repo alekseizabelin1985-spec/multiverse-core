@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-11T16:24:44+03:00",
+  "updatedAt": "2026-09-11T17:14:21+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1085,14 +1085,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-414",
           "title": "Подкоманда serve: бинарник её не знает, а документы и задания пишут",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-11T16:30:44+03:00",
+          "finishedAt": "2026-09-11T17:14:21+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 43,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "11.09 16:30",
+              "to": "11.09 16:42",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "11.09 16:42",
+              "to": "11.09 17:01",
+              "duration": "18m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "11.09 17:01",
+              "to": "11.09 17:09",
+              "duration": "7m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "11.09 17:09",
+              "to": "11.09 17:14",
+              "duration": "5m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-414.md"
         },
         {
@@ -2131,11 +2156,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-419",
           "title": "Двойники по C-05 v1.4: встреча после факта, признак конца обмена, окно нарратора на Dedup",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-11T15:36:52+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3849,6 +3874,76 @@ window.DEVTEAM_STATE =
       "task": "T-419",
       "action": "ревью #1: четыре фазы встречи, отложенные действия, exchange",
       "startedAt": "2026-09-11T16:13:36+03:00",
+      "finishedAt": "2026-09-11T16:40:44+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-414",
+      "action": "подкоманда serve в бинарнике и документах",
+      "startedAt": "2026-09-11T16:30:44+03:00",
+      "finishedAt": "2026-09-11T16:42:38+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 3,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-419",
+      "action": "итерация 2: окно на Dedup, WithCauseID, resolve, замечания ревью #1",
+      "startedAt": "2026-09-11T16:40:44+03:00",
+      "finishedAt": "2026-09-11T16:58:52+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-414",
+      "action": "ревью #1: подкоманда serve и форма без неё",
+      "startedAt": "2026-09-11T16:42:38+03:00",
+      "finishedAt": "2026-09-11T17:01:22+03:00"
+    },
+    {
+      "role": "code-reviewer",
+      "instance": 2,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-419",
+      "action": "ревью #2: окно на Dedup, WithCauseID жизненного цикла, resolve",
+      "startedAt": "2026-09-11T16:58:52+03:00",
+      "finishedAt": "2026-09-11T17:13:49+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-414",
+      "action": "итерация 2: подсказка для флагов перед подкомандой, перечень в -h",
+      "startedAt": "2026-09-11T17:01:22+03:00",
+      "finishedAt": "2026-09-11T17:09:00+03:00"
+    },
+    {
+      "role": "tech-lead",
+      "instance": 1,
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-414",
+      "action": "приёмка: сверка итерации 2, мутанты",
+      "startedAt": "2026-09-11T17:09:00+03:00",
+      "finishedAt": "2026-09-11T17:14:21+03:00"
+    },
+    {
+      "role": "developer",
+      "instance": 3,
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-419",
+      "action": "итерация 3: действие и факт без id не роняют двойник",
+      "startedAt": "2026-09-11T17:13:49+03:00",
       "finishedAt": null
     }
   ],
@@ -5898,6 +5993,90 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "code-reviewer",
       "text": "T-419 на ревью #1 (пункты 1–6)"
+    },
+    {
+      "at": "2026-09-11T16:28:56+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Коммит 8d33d42: T-417 и учёт оркестратора, 47 путей, хуки пройдены; T-419 осталась в индексе"
+    },
+    {
+      "at": "2026-09-11T16:30:44+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-414 начата: подкоманда serve"
+    },
+    {
+      "at": "2026-09-11T16:40:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "T-419 ревью #1 (пункты 1–6): принять (Minor 3, Nit 1)"
+    },
+    {
+      "at": "2026-09-11T16:40:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-419 итерация 2 начата: пункт 7 и замечания ревью"
+    },
+    {
+      "at": "2026-09-11T16:42:38+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-414 готова: serve — подкоманда и синоним формы без неё; неизвестное слово — отказ со списком"
+    },
+    {
+      "at": "2026-09-11T16:42:38+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-414 на ревью #1"
+    },
+    {
+      "at": "2026-09-11T16:58:52+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-419 итерация 2: окно нарратора на Dedup, id жизненного цикла из причины, замечания ревью #1 закрыты"
+    },
+    {
+      "at": "2026-09-11T16:58:52+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "T-419 на ревью #2"
+    },
+    {
+      "at": "2026-09-11T17:01:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "code-reviewer",
+      "text": "T-414 ревью #1: принять (Nit 3); N-1 и N-2 закрываются в задаче"
+    },
+    {
+      "at": "2026-09-11T17:01:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-414 итерация 2 начата"
+    },
+    {
+      "at": "2026-09-11T17:09:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "developer",
+      "text": "T-414 итерация 2: подсказка для подкоманды после флагов, перечень в -h; 8 мутантов"
+    },
+    {
+      "at": "2026-09-11T17:09:00+03:00",
+      "initiative": "EPIC-001",
+      "role": "tech-lead",
+      "text": "T-414 на приёмке у tech-lead#1"
+    },
+    {
+      "at": "2026-09-11T17:13:49+03:00",
+      "initiative": "EPIC-003",
+      "role": "code-reviewer",
+      "text": "T-419 ревью #2: принять (Minor 1 — паника на пустом id)"
+    },
+    {
+      "at": "2026-09-11T17:13:49+03:00",
+      "initiative": "EPIC-003",
+      "role": "developer",
+      "text": "T-419 итерация 3 начата"
     }
   ],
   "blockers": [],
