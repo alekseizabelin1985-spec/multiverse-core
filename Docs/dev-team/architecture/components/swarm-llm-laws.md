@@ -324,7 +324,7 @@ func ContentHash(bp *AgentBlueprint) string
 |---|---|---|---|---|---|---|---|
 | `global-gm` | `global` | `global-dark-forest-world` | `world:{world_id}` | `swarm.Start` — для каждого блупринта `global` с `scope_binding.id` (сущности мира — из фикстур `mvctl world init --fixtures`, не из блупринта — изм. G2) | никогда (`ttl` игнорируется с предупреждением) | tick (60 мин idle) | `basic` → `rule-only` при бюджете |
 | `region-gm` | `domain` | `domain-dark-forest` (по одному на регион) | `region:{region_id}` | `swarm.Start` — для каждого блупринта `domain`; регион и его NPC должны существовать в `WorldView` (фикстуры); при отсутствии сущности региона агент стартует, но `/health degraded {swarm: region_missing}` (изм. G2) | никогда | tick (30 мин idle / 60 с active), обнаружение встреч (rules), респаун по `npc_table` (только респаун — изм. G2), Phase 1 — нет | `basic` → `rule-only` |
-| `encounter` | `task` | `encounter-wolf` | scope игрока/группы (`solo:…`/`group:…`) | `encounter.started` | `encounter.ended` → `agent.child_resolved` + `agent.stopped`; страховочный TTL 30 мин | Phase 1 `rules` | `rule-only` |
+| `encounter` | `task` | `encounter-wolf` | scope игрока/группы (`solo:…`/`group:…`) | **(изм. 2026-09-11, ADR-028)** решение `region-gm` открыть встречу — `Spawner.SpawnChild` до публикации `entity.create.proposed`, фаза «открывается»; триггер `encounter.started` остаётся страховкой (`Ensure` идемпотентен) | `encounter.ended` → `agent.child_resolved` + `agent.stopped`; отказ создания → `agent.stopped reason=error` (ADR-028); страховочный TTL 30 мин | Phase 1 `rules` | `rule-only` |
 | `personal-gm` | `task` | `player-gm` | `solo:{player_id}` (и в группе) | первое `player.*` scope без живого агента | TTL 45 мин от последнего действия игрока; `agent.stopped reason=ttl` | Phase 2 (`turn|entry|death|world_event`) | `basic`; в группе — `rule-only` (только `entry|death`) |
 | `group-narrator` | `task` | `group-narrator` | `group:{group_id}` | `group.created` | `group.disbanded` или TTL 45 мин от последнего действия любого участника | Phase 2 (`round`) | `basic` |
 | (резерв) `guardian-monitor` | `monitor` | — | `world:*` | выключен `SWARM_MONITOR_AGENTS_ENABLED=false` | — | — | — |
@@ -398,7 +398,7 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 |---|---|
 | `global-gm` | `region.*`, `encounter.started/ended`, `npc.spawned` (любой регион мира — «сводка вверх»); `world.laws.changed`; `tick.fired` адресованный; свои `entity.updated(world)` |
 | `region-gm` | `player.entered_region/left_region`, `group.entered_region/left_region` где `target.region == self`; `encounter.*`, `combat.decided`, `npc.*`, `region.*` где `idx.RegionOf(ev.Scope) == self`; `entity.updated` сущностей региона (регион, его NPC, встречи, игроки в регионе); `world.*` (вниз от родителя); `tick.fired` адресованный |
-| `encounter` | `player.attacked/flee_attempted/defended/said/rested`, `round.opened/closed`, `group.left`, `entity.updated` участников и NPC встречи — только при `ev.Scope == inst.Scope` |
+| `encounter` | `player.attacked/flee_attempted/defended/said/rested`, `round.opened/closed`, `group.left`, `entity.updated` участников и NPC встречи — только при `ev.Scope == inst.Scope`; **(изм. 2026-09-11, ADR-028)** `entity.created` своей встречи (по id встречи) и `entity.update.rejected` по `proposal_id` её создания — пока встреча открывается |
 | `personal-gm` | `player.*` где `entity.entity.id == player`; `combat.decided`, `encounter.*`, `round.*`, `group.*`, `player.said` где `ev.Scope == solo:{player}` или `ev.Scope == group:{idx.GroupOf(player)}`; `region.*`, `npc.*` где `idx.RegionOf(solo:{player}) == ev region`; `world.*` мира; `entity.updated(player)` (смерть → `kind: death`) |
 | `group-narrator` | всё, что `encounter` в `group:{id}`, плюс `combat.decided`, `encounter.*`, `group.*`, `region.*`/`npc.*` региона группы, `world.*` |
 
@@ -997,3 +997,16 @@ sequenceDiagram
 | **§14 п. 10** (`config.cloud_enabled`) | Событие публикуется контекстом `llm` **при каждом старте `core`** — и при `MV_LLM_CLOUD_ENABLED=true`, и при `false` — а также при изменении. Прежняя формулировка «только при `true`» отменена: иначе проекция gateway (`worlds[].llm.cloud_enabled`) после рестарта недетерминирована. Payload — булев флаг, без имени провайдера, URL и ключей (SEC-21) | З-3, C-06 v1.1; задача T-212 |
 | **§14** (издатели типов), §4.3/§5.1 (старт роя) | «Тип — владелец схемы; фактические издатели — `Spec.Publishers` реестра» (`contracts.md` v0.4 §0, §16 п. 7); `dice.rolled` (владелец EPIC-002) издают агент встречи и `FakeEncounter`; job `contracts` проверяет `source ∈ Spec.Publishers`. Старт догона: рой **ждёт** `analytics.replay.completed {mode: recovery}` с таймаутом `MV_SWARM_REPLAY_WAIT` (120 с) → `/health degraded {state_replay: missing}`; `testkit/state.FakeState` v0 сигнал публикует | TL2-2, TL2-5, TL2-6; задачи T-215, T-237, EPIC-001 T-006/T-017 |
 | **§13.2** (валидатор, `levels.go`) | В `shared/agent/levels.go` добавляется строка **gateway**: `Character.status: alive → abandoned`, `Group.leader_id` (включая `null`). ~~`levels.go` — истина, `shared/contracts.OwnershipRules` — копия~~ (**отменено 2026-09-11, ADR-025, T-409:** строка gateway живёт только в `shared/contracts/ownership.go`, единственной истине; `levels.go` строки шлюза не держит), правится **тем же PR** (метка `contract-change`, ревью tech-lead#1 + system-architect), тест равенства блокирует merge | TL2-3, З-2, `contracts.md` §16 п. 6; задача T-202 |
+
+---
+
+## Дополнение 2026-09-11 (architect#2): подъём агента встречи и окно его действий
+
+Решения уровня реализации. Полный текст — design EPIC-003 §14, подъём агента — **ADR-028**. Контракты не меняются. В основном тексте документа изменены две строки, обе с пометкой «(изм. 2026-09-11, ADR-028)».
+
+| Раздел | Что изменилось | Основание |
+|---|---|---|
+| **§4.1** (строка `encounter`) | Агента встречи поднимает решение `region-gm` открыть встречу: `Spawner.SpawnChild` вызывается до публикации `entity.create.proposed`, агент стартует в фазе «открывается». Триггер `encounter.started` остаётся страховкой (`Ensure` идемпотентен). Отказ создания → `agent.stopped reason=error` | ADR-028, T-427; задачи T-223, T-225, T-232, T-422 |
+| **§5.2** (строка `encounter`) | Пока встреча открывается, агент видит `entity.created` своей встречи и `entity.update.rejected` по `proposal_id` её создания | ADR-028; задача T-229 |
+| **§5.1**, **§4.3** (дедуп и снапшот агента встречи) | Окно действий агента встречи — `Dedup.Has`/`Add`, не `Seen`. Id всех событий ответа выводятся из причины. Ответ собирается один раз и лежит в слоте экземпляра с курсором публикаций; слот и очередь отложенных действий входят в снапшот роя | design §14.1; задачи T-230, T-421, T-236 |
+| §3 (интерфейсы) | новый интерфейс роли `Spawner{SpawnChild, Alive}`, реализует `Lifecycle` | design §14.2; T-223, T-225 |
