@@ -34,6 +34,17 @@
 # is still curl, so the timings measured are the timings of the same client the
 # platform uses on the stand.
 #
+# What the JSON report carries beyond the CSV (T-434; ops/metrics/README.md §5):
+#   * first_call_ms is EMPTY (null in JSON) when the warm-up call did not get a
+#     200 — a failed call measures the error path, not the cold start (B2);
+#   * meta.matrix / meta.prompts are relative paths inside the repository and
+#     only the file NAME outside it; meta.matrix_sha256 / meta.prompts_sha256
+#     identify the content either way. A report never holds an absolute path;
+#   * requests[].prompt_ms is timings.prompt_ms of the server (null if absent);
+#   * llamacpp_build says where it came from: bNNNN (MV_LLM_BIN --version),
+#     bNNNN(props) (GET /props build_info), or the pin with (pin).
+# The CSV columns did not change: reports of T-402 stay comparable.
+#
 # Usage:
 #   scripts/llm-bench.sh [--configs E,C] [--num-ctx 8192] [--kv-cache f16]
 #                        [--repeats 1] [--placement native] [--limit N]
@@ -162,6 +173,7 @@ write files. Values never contain spaces or newlines, which is what keeps the
 shell side free of quoting games.
 """
 import csv
+import hashlib
 import json
 import os
 import re
@@ -345,6 +357,9 @@ def cmd_parse(argv):
         "completion_tokens": 0,
         "cached_tokens": 0,
         "predicted_ms": 0.0,
+        # Empty, not 0, when the server did not report it: Ollama has no
+        # `timings`, and a zero would read as "the prompt was free".
+        "prompt_ms": "",
         "error": "",
     }
     try:
@@ -374,6 +389,15 @@ def cmd_parse(argv):
     values["completion_tokens"] = int(usage.get("completion_tokens") or 0)
     values["cached_tokens"] = int(details.get("cached_tokens") or 0)
     values["predicted_ms"] = float(timings.get("predicted_ms") or 0.0)
+    # Prompt processing as the server measured it (T-434). Latency minus
+    # predicted_ms is "everything else", and without this number a spike there
+    # could not be split into prompt processing and the rest from the report
+    # alone (baseline.md §2.1, §2.5 of T-402).
+    try:
+        if timings.get("prompt_ms") is not None:
+            values["prompt_ms"] = float(timings["prompt_ms"])
+    except (TypeError, ValueError):
+        pass
 
     choices = payload.get("choices") or []
     content = ""
@@ -407,8 +431,12 @@ def cmd_parse(argv):
 REQUEST_FIELDS = [
     "config", "repeat", "phase", "index", "prompt_id", "http", "latency_ms",
     "ok_json", "cjk", "latin", "lang_pass", "prompt_tokens", "completion_tokens",
-    "cached_tokens", "predicted_ms", "error",
+    "cached_tokens", "predicted_ms", "prompt_ms", "error",
 ]
+
+# Columns of a cell that may legitimately be empty and mean "not measured":
+# they become null in the JSON report, not a string (T-434).
+NULLABLE_CELL = ("first_call_ms",)
 
 
 def read_requests(path):
@@ -513,12 +541,17 @@ def cmd_report(argv):
     for pair in argv[3:]:
         key, _, value = pair.partition("=")
         meta[key] = value
+    if meta.get("first_call_ms") == "":
+        meta["first_call_ms"] = None
 
     cells = []
     with open(cells_path, encoding="utf-8", newline="") as handle:
         for row in csv.DictReader(handle):
             for key, value in list(row.items()):
                 if key in ("phase", "model", "verdict"):
+                    continue
+                if key in NULLABLE_CELL and value == "":
+                    row[key] = None
                     continue
                 try:
                     row[key] = int(value)
@@ -536,6 +569,7 @@ def cmd_report(argv):
             row[key] = int(row[key])
         row["latin"] = float(row["latin"])
         row["predicted_ms"] = float(row["predicted_ms"])
+        row["prompt_ms"] = float(row["prompt_ms"]) if row["prompt_ms"] else None
         requests.append(row)
 
     document = {
@@ -563,6 +597,77 @@ def cmd_models(argv):
             print(name)
 
 
+def cmd_warmup(argv):
+    """The body of the cold first call (B2), written as a file.
+
+    It used to be a bash string with the model id pasted in. llama-server
+    without --alias reports the id as a Windows path, `D:\\Models\\...`, and
+    the unescaped backslashes made the body invalid JSON: every warm-up got a
+    500 and first_call_ms measured the error path (review #1 of T-402). The
+    PowerShell twin builds it with ConvertTo-Json; this is the same thing.
+    """
+    model, out_path = argv[0], argv[1]
+    body = {
+        "model": model,
+        "max_tokens": 1,
+        "stream": False,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "messages": [{"role": "user", "content": "ping"}],
+    }
+    with open(out_path, "w", encoding="utf-8") as out:
+        json.dump(body, out, ensure_ascii=False)
+
+
+def cmd_props(argv):
+    """bNNNN out of `build_info` of GET /props, or nothing.
+
+    llama-server reports e.g. "b10878-4850c7727"; only the build number is
+    kept, the same shape `--version` of the binary yields, so that the column
+    compares with the pin of build/versions.env at a glance. Anything else
+    (an Ollama 404 page, a server without the field) prints nothing and the
+    caller falls back to the pin.
+    """
+    try:
+        with open(argv[0], encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (IOError, ValueError):
+        return
+    info = payload.get("build_info") if isinstance(payload, dict) else None
+    match = re.match(r"\s*b?(\d+)", info) if isinstance(info, str) else None
+    if match:
+        print("b%s" % match.group(1))
+
+
+def cmd_locate(argv):
+    """How a file the report names is written into it: `path=` and `sha256=`.
+
+    Inside the repository — the path relative to its root, as before. Outside
+    it — the file NAME only: the absolute path of a scratch copy is a path of
+    the user's profile, and T-402 put exactly that into two reports meant for
+    the repository (review #1, C-1). The sha256 of the content goes next to it
+    either way, which is also what makes a copy of the matrix checkable.
+    realpath resolves 8.3 short names and symlinks, so C:\\Users\\ABCD~1\\...
+    and the long form of the same directory compare equal.
+    """
+    repo_root, path = argv[0], argv[1]
+    full = os.path.realpath(path)
+    root = os.path.realpath(repo_root)
+    try:
+        inside = os.path.normcase(os.path.commonpath([full, root])) == os.path.normcase(root)
+    except ValueError:  # different drives on Windows
+        inside = False
+    if inside:
+        shown = os.path.relpath(full, root).replace(os.sep, "/")
+    else:
+        shown = os.path.basename(full)
+    digest = hashlib.sha256()
+    with open(full, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 16), b""):
+            digest.update(chunk)
+    print("path=%s" % shown)
+    print("sha256=%s" % digest.hexdigest())
+
+
 COMMANDS = {
     "config": cmd_config,
     "bodies": cmd_bodies,
@@ -570,6 +675,9 @@ COMMANDS = {
     "cell": cmd_cell,
     "report": cmd_report,
     "models": cmd_models,
+    "warmup": cmd_warmup,
+    "props": cmd_props,
+    "locate": cmd_locate,
 }
 
 if __name__ == "__main__":
@@ -582,11 +690,17 @@ py() { python3 "$tmpdir/bench.py" "$@"; }
 
 now_ms() { date +%s%3N 2>/dev/null || date +%s000; }
 
-# The build the numbers belong to (§6.4 rule 5). The running binary is the truth;
-# the pin in build/versions.env is what we fall back to when MV_LLM_BIN is not
-# set, and it is marked as a pin so that a stale pin cannot be read as a fact.
+# The build the numbers belong to (§6.4 rule 5), in order of trust:
+#   1. MV_LLM_BIN --version — the binary itself, printed as bNNNN;
+#   2. GET <base>/props build_info — the RUNNING server, printed as bNNNN(props).
+#      Without it T-402 wrote the pin b10441 into every row while the stand ran
+#      b10840 and then b10878;
+#   3. the pin of build/versions.env, printed with (pin), so that a stale pin
+#      cannot be read as a fact.
+# The suffix is the source. Whether the stand matches the pin is a question of
+# `make llm-health` (T-404 p. 2) and is deliberately not repeated here.
 resolve_build() {
-  local pin actual
+  local base=$1 pin actual
   pin=$(sed -n 's/^[[:space:]]*LLAMACPP_BUILD[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' \
     "$repo_root/build/versions.env" 2>/dev/null | head -n 1)
   if [ -n "${MV_LLM_BIN:-}" ] && [ -x "${MV_LLM_BIN}" ]; then
@@ -594,6 +708,14 @@ resolve_build() {
       sed -n 's/.*build[:[:space:]]*\([0-9]\{1,\}\).*/b\1/p' | head -n 1)
     [ -n "$actual" ] && {
       printf '%s' "$actual"
+      return
+    }
+  fi
+  rm -f "$tmpdir/props.json"
+  if llm_curl -o "$tmpdir/props.json" --max-time 5 "$base/props" >/dev/null 2>&1; then
+    actual=$(py props "$tmpdir/props.json") || actual=''
+    [ -n "$actual" ] && {
+      printf '%s(props)' "$actual"
       return
     }
   fi
@@ -620,8 +742,18 @@ requests_csv="$tmpdir/requests.csv"
 # every reader of the documented prefix working.
 echo 'config,provider,placement,model,phase,num_ctx,kv_cache,n,first_call_ms,p50_ms,p95_ms,prompt_tok,completion_tok,cached_tok,tps,valid_json_ratio,cjk_ratio,latin_ratio,lang_pass_ratio,vram_used_mb,llamacpp_build,verdict,repeat,started_at' >"$csv"
 
-build=$(resolve_build)
-printf 'bench: build %s, prompts %s, matrix %s\n' "$build" "$prompts" "$matrix" >&2
+printf 'bench: prompts %s, matrix %s\n' "$prompts" "$matrix" >&2
+
+# How the two input files are named in the report (T-434): relative inside the
+# repository, the bare file name outside it, and the sha256 of the content
+# always. Resolved once — the files do not change during a run.
+for input in matrix prompts; do
+  py locate "$repo_root" "${!input}" >"$tmpdir/locate.env" ||
+    die "internal: could not describe the $input file ${!input}"
+  while IFS='=' read -r key value; do
+    printf -v "${input}_$key" '%s' "$value"
+  done <"$tmpdir/locate.env"
+done
 
 rows_written=0
 
@@ -694,7 +826,12 @@ for config in "${config_list[@]}"; do
   llm_curl -o "$tmpdir/models.json" --max-time 10 "$base/v1/models" >/dev/null 2>&1 || true
   py models "$tmpdir/models.json" >"$tmpdir/models.txt" || : >"$tmpdir/models.txt"
 
-  first_call=0
+  # Per configuration, after the gate: /props belongs to the server of THIS
+  # configuration, and C / A may be another process than E.
+  build=$(resolve_build "$base")
+  printf 'bench: %s build %s\n' "$config" "$build" >&2
+
+  first_call=''
   vram=$(read_vram)
 
   for repeat in $(seq 1 "$repeats"); do
@@ -702,6 +839,13 @@ for config in "${config_list[@]}"; do
     # The first request after a start allocates the compute buffers and warms
     # the CUDA kernels; folding it into the percentiles would make every run
     # depend on how long ago the server came up.
+    #
+    # The body is built by the JSON helper, never by the shell: a model id is a
+    # Windows path on a llama-server without --alias, and pasted into a string
+    # its backslashes made the body invalid JSON — the server answered 500 and
+    # the "cold call" was the error path (T-402, review #1; T-434).
+    py warmup "$narrative_model" "$tmpdir/warmup.json" ||
+      die "internal: the warm-up body could not be built"
     first_start=$(now_ms)
     # llm_curl, not curl: the key travels in a curl config on stdin instead of
     # the argument list, where every process on the machine can read it (SEC-22,
@@ -710,9 +854,15 @@ for config in "${config_list[@]}"; do
     first_code=$(llm_curl -o "$tmpdir/first.json" -w '%{http_code}' --max-time 120 \
       -X POST "$base/v1/chat/completions" \
       -H 'Content-Type: application/json; charset=utf-8' \
-      --data-binary "{\"model\":\"$narrative_model\",\"max_tokens\":1,\"stream\":false,\"chat_template_kwargs\":{\"enable_thinking\":false},\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}]}" 2>/dev/null) || first_code=000
+      --data-binary "@$tmpdir/warmup.json" 2>/dev/null) || first_code=000
     first_call=$(($(now_ms) - first_start))
-    [ "$first_code" = "200" ] || printf 'bench: warm-up call answered %s (first_call_ms is still recorded)\n' "$first_code" >&2
+    # Only a 200 is a cold call. Anything else measured how fast the server
+    # refuses, so the number is not written at all — an empty first_call_ms in
+    # the CSV, null in the JSON — rather than written and explained elsewhere.
+    if [ "$first_code" != "200" ]; then
+      first_call=''
+      printf 'bench: warm-up call answered %s — first_call_ms left empty, the cold call was not measured\n' "$first_code" >&2
+    fi
 
     for phase in tick phase2 phase2-group3; do
       case "$phase" in
@@ -758,7 +908,7 @@ for config in "${config_list[@]}"; do
           --data-binary "@$bodies_dir/body-$idx.json" 2>/dev/null) || http=000
         latency=$(($(now_ms) - start))
 
-        unset ok_json cjk latin lang_pass prompt_tokens completion_tokens cached_tokens predicted_ms error
+        unset ok_json cjk latin lang_pass prompt_tokens completion_tokens cached_tokens predicted_ms prompt_ms error
         py parse "$tmpdir/resp.json" "$latin_max" "${text_paths:-}" >"$tmpdir/parsed.env" ||
           die "internal: the answer parser failed on $prompt_id"
         while IFS='=' read -r key value; do
@@ -766,10 +916,10 @@ for config in "${config_list[@]}"; do
         done <"$tmpdir/parsed.env"
         [ "$http" = "200" ] || error="http_$http"
 
-        printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
+        printf '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' \
           "$config" "$repeat" "$phase" "$idx" "$prompt_id" "$http" "$latency" \
           "$ok_json" "$cjk" "$latin" "$lang_pass" "$prompt_tokens" \
-          "$completion_tokens" "$cached_tokens" "$predicted_ms" "$error" \
+          "$completion_tokens" "$cached_tokens" "$predicted_ms" "$prompt_ms" "$error" \
           >>"$requests_csv"
         printf '.' >&2
       done <"$tmpdir/index.txt"
@@ -831,7 +981,8 @@ for config in "${config_list[@]}"; do
     "kv_cache=$kv_cache" "llamacpp_build=$build" "vram_used_mb=${vram:-}" \
     "first_call_ms=$first_call" "n_per_cell=$cell_n" "repeats=$repeats" \
     "runs_required=${runs_required:-3}" "started_at=$started_at" \
-    "matrix=${matrix#"$repo_root/"}" "prompts=${prompts#"$repo_root/"}" \
+    "matrix=$matrix_path" "matrix_sha256=$matrix_sha256" \
+    "prompts=$prompts_path" "prompts_sha256=$prompts_sha256" \
     "script=scripts/llm-bench.sh"
   printf 'bench: %s\n' "${report#"$repo_root/"}" >&2
 done
