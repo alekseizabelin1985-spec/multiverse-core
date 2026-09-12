@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T02:48:21+03:00",
+  "updatedAt": "2026-09-13T02:56:55+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5744,7 +5744,7 @@ window.DEVTEAM_STATE =
       "task": "T-436",
       "action": "kafka: Close не отменяет контекст обработчика; якорь (возобновлено)",
       "startedAt": "2026-09-13T02:44:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T02:48:58+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -5754,6 +5754,26 @@ window.DEVTEAM_STATE =
       "task": "T-437",
       "action": "--alias в llm-server, пин LLAMACPP_BUILD, ops/models.txt",
       "startedAt": "2026-09-13T02:48:21+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-436",
+      "action": "ревью #1 исправления kafka Close",
+      "startedAt": "2026-09-13T02:48:58+03:00",
+      "finishedAt": "2026-09-13T02:56:55+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-436",
+      "action": "итерация 2: комментарии N-1, N-2",
+      "startedAt": "2026-09-13T02:56:55+03:00",
       "finishedAt": null
     }
   ],
