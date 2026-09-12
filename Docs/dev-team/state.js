@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-12T01:45:31+03:00",
+  "updatedAt": "2026-09-13T02:48:21+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1860,17 +1860,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-434",
           "title": "llm-bench: прогрев через python-помощник (экранирование id-пути), путь матрицы вне репо — имя + sha256, first_call_ms пустой при не-200; паритет .ps1",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-12T01:07:27+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T02:47:06+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 45,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "12.09 01:07",
+              "to": "12.09 01:33",
+              "duration": "26m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "12.09 01:33",
+              "to": "12.09 01:45",
+              "duration": "11m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "12.09 01:45",
+              "to": "13.09 02:47",
+              "duration": "25h 1m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-434-llm-bench-warmup-matrix",
-          "worktree": ".worktrees/T-434"
+          "worktree": null,
+          "mergeCommit": "225f68b3234a0c4c3376afa25548b17f853945fc",
+          "mergedAt": "2026-09-13T02:48:21+03:00",
+          "timeNote": "из учёта вычтен перерыв сессии оркестратора 2026-09-12T01:50 → 2026-09-13T02:44 (1494 мин)"
         },
         {
           "id": "T-435",
@@ -1944,15 +1966,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-437",
           "title": "llm-server: --alias, пин LLAMACPP_BUILD, сокращение ops/models.txt (из T-435)",
-          "status": "todo",
-          "assignee": "devops-engineer",
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-13T02:48:21+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-437-llm-server-alias",
+          "worktree": ".worktrees/T-437"
         },
         {
           "id": "T-438",
@@ -5698,9 +5722,9 @@ window.DEVTEAM_STATE =
       "team": "TEAM-1",
       "initiative": "EPIC-001",
       "task": "T-436",
-      "action": "kafka: Close не отменяет контекст обработчика; якорь",
+      "action": "kafka: Close не отменяет контекст обработчика; якорь (прервано: сессия оркестратора завершилась; конец — оценка)",
       "startedAt": "2026-09-12T01:44:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-12T01:50:00+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -5710,6 +5734,26 @@ window.DEVTEAM_STATE =
       "task": "T-434",
       "action": "приёмка исправлений llm-bench",
       "startedAt": "2026-09-12T01:45:31+03:00",
+      "finishedAt": "2026-09-13T02:47:06+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-436",
+      "action": "kafka: Close не отменяет контекст обработчика; якорь (возобновлено)",
+      "startedAt": "2026-09-13T02:44:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-437",
+      "action": "--alias в llm-server, пин LLAMACPP_BUILD, ops/models.txt",
+      "startedAt": "2026-09-13T02:48:21+03:00",
       "finishedAt": null
     }
   ],
@@ -8281,6 +8325,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-435 закоммичена f93b3a7, слита в эпик (a6ed215) — решение U-2 в эпике. T-436 начата (developer#1). Заведена T-440 (редакционно: overview.md §18.1, владение infrastructure.md)"
+    },
+    {
+      "at": "2026-09-13T02:48:21+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-434 закоммичена eb5ea38, слита в эпик (225f68b). T-437 начата (devops-engineer#1). Учёт времени поправлен на перерыв сессии"
     }
   ],
   "blockers": [],
