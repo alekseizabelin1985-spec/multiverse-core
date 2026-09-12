@@ -71,6 +71,23 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Numbers are rendered by the INVARIANT culture, not by the culture of the
+# machine. On a ru-RU Windows [double]66.7 renders as "66,7", and this script
+# joins the columns of the CSV with a comma: tps = 66,7 made the row 25 columns
+# wide, so verdict, repeat and started_at were read one column to the left of
+# where they are, while the bash twin wrote 66.7 on the same input (found by the
+# parity run of T-434; the owner's machine is ru-RU and `make bench` prefers
+# pwsh when it is in PATH).
+#
+# This line is the SECOND of two defences and on its own it changes nothing
+# today: every number that reaches the CSV or the table goes through
+# Format-BenchNumber, which names the invariant culture itself (a mutant that
+# deletes this line leaves both outputs correct, while a mutant that deletes the
+# formatting breaks them). It is kept for the number that will one day be
+# printed without that helper. The UI culture is set in
+# scripts/lib/LlmEndpoint.psm1 for another reason — English messages.
+[Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]::InvariantCulture
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
 # The address of the endpoint is derived in one place for the whole project -
@@ -98,6 +115,34 @@ Import-Module $llmModule -Force
 function Resolve-RepoPath([string]$Path) {
   if ([IO.Path]::IsPathRooted($Path)) { return $Path }
   return (Join-Path $repoRoot $Path)
+}
+
+function Get-ReportPath([string]$Path) {
+  <#
+    How a file the report names is written into it (T-434), the same rule as
+    `locate` of the bash twin: inside the repository — the path relative to its
+    root, as before; outside it — the file NAME only, because the absolute path
+    of a scratch copy is a path of the user's profile, and T-402 put exactly
+    that into two reports meant for the repository (review #1, C-1). The sha256
+    of the content goes next to it either way, which is also what makes a copy
+    of the matrix checkable.
+  #>
+  $full = [IO.Path]::GetFullPath($Path)
+  $root = [IO.Path]::GetFullPath($repoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) +
+          [IO.Path]::DirectorySeparatorChar
+  # Ordinal, and case-insensitive only where the file system is: every other
+  # comparison of this project is ordinal for the reason the module header of
+  # scripts/lib/LlmEndpoint.psm1 gives.
+  $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+  if ($full.StartsWith($root, $comparison)) {
+    $shown = [IO.Path]::GetRelativePath($root, $full).Replace('\', '/')
+  } else {
+    $shown = [IO.Path]::GetFileName($full)
+  }
+  return [ordered]@{
+    Path   = $shown
+    Sha256 = (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant()
+  }
 }
 
 function Stop-Bench([string]$Message) {
@@ -181,10 +226,27 @@ function Get-Percentile([int[]]$Sorted, [double]$Fraction) {
   return $Sorted[$index]
 }
 
-function Get-LlamaBuild {
-  # The build the numbers belong to (§6.4 rule 5). The running binary is the
-  # truth; the pin is the fallback and is marked as a pin, so that a stale pin
-  # cannot be read as a fact.
+function Format-BenchNumber([double]$Value) {
+  <#
+    A number as the bash twin writes it: a fixed point, at least one digit after
+    it, the rest as they come — `1.0`, `0.0`, `0.034`, `66.7`, `200.0`. Python
+    prints a rounded float exactly that way, and the two CSVs are supposed to be
+    the same file. .NET prints [math]::Round(1.0, 3) as "1", which is where the
+    two started to differ once the separator was fixed.
+  #>
+  return $Value.ToString('0.0###', [Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Get-LlamaBuild([string]$Base) {
+  # The build the numbers belong to (§6.4 rule 5), in order of trust:
+  #   1. MV_LLM_BIN --version — the binary itself, printed as bNNNN;
+  #   2. GET <base>/props build_info — the RUNNING server, printed as
+  #      bNNNN(props). Without it T-402 wrote the pin b10441 into every row
+  #      while the stand ran b10840 and then b10878;
+  #   3. the pin of build/versions.env, printed with (pin), so that a stale pin
+  #      cannot be read as a fact.
+  # The suffix is the source. Whether the stand matches the pin is a question of
+  # `make llm-health` (T-404 p. 2) and is deliberately not repeated here.
   $versionsFile = Join-Path $repoRoot 'build/versions.env'
   $pin = ''
   if (Test-Path $versionsFile) {
@@ -199,6 +261,24 @@ function Get-LlamaBuild {
       if ($match.Success) { return "b$($match.Groups[1].Value)" }
     } catch {
       # A binary that cannot be asked is not a reason to abandon the run.
+    }
+  }
+  if ($Base) {
+    try {
+      $props = Invoke-RestMethod -Uri "$Base/props" -Headers (Get-LlmHeaders) -TimeoutSec 5 `
+        -NoProxy -SkipHeaderValidation
+      $info = ''
+      if ($props -and $props.PSObject.Properties['build_info']) {
+        $info = [string]$props.PSObject.Properties['build_info'].Value
+      }
+      # Only the build number is kept, the same shape `--version` yields, so
+      # that the column compares with the pin at a glance: llama-server reports
+      # e.g. "b10878-4850c7727".
+      $match = [regex]::Match($info, '^\s*b?(\d+)')
+      if ($match.Success) { return "b$($match.Groups[1].Value)(props)" }
+    } catch {
+      # An endpoint without /props (Ollama, a cloud vendor) is measurable; the
+      # pin below is then the only thing that can be said about the build.
     }
   }
   if ($pin) { return "$pin(pin)" }
@@ -235,8 +315,12 @@ $csvHeader = 'config,provider,placement,model,phase,num_ctx,kv_cache,n,first_cal
 # ends it with LF. A byte comparison of two stands failed on that alone.
 [IO.File]::WriteAllText($csvPath, "$csvHeader`n", [Text.UTF8Encoding]::new($false))
 
-$build = Get-LlamaBuild
-Write-Host "bench: build $build, prompts $promptsPath, matrix $matrixPath"
+Write-Host "bench: prompts $promptsPath, matrix $matrixPath"
+
+# How the two input files are named in the report (T-434). Resolved once — the
+# files do not change during a run.
+$matrixRef = Get-ReportPath $matrixPath
+$promptsRef = Get-ReportPath $promptsPath
 
 $thresholds = $matrixDoc.thresholds
 $request = $matrixDoc.request
@@ -327,11 +411,16 @@ foreach ($configName in $Configs) {
     $models = @()
   }
 
+  # Per configuration, after the gate: /props belongs to the server of THIS
+  # configuration, and C / A may be another process than E.
+  $build = Get-LlamaBuild $base
+  Write-Host "bench: $configName build $build"
+
   $vram = Get-VramUsedMb
   $configRows = 0
   $requestLog = [Collections.Generic.List[object]]::new()
   $cellLog = [Collections.Generic.List[object]]::new()
-  $firstCall = 0
+  $firstCall = $null
 
   foreach ($repeat in 1..$Repeats) {
     # --- B2: the cold first call, kept out of p50/p95 -------------------------
@@ -362,8 +451,13 @@ foreach ($configName in $Configs) {
       $warmCode = '000'
     }
     $firstCall = [int]$watch.ElapsedMilliseconds
+    # Only a 200 is a cold call. Anything else measured how fast the server
+    # refuses, so the number is not written at all — an empty first_call_ms in
+    # the CSV, null in the JSON — rather than written and explained elsewhere
+    # (T-402 review #1; the sentence is the same in the bash twin).
     if ($warmCode -ne '200') {
-      Write-Host "bench: warm-up call answered $warmCode (first_call_ms is still recorded)"
+      $firstCall = $null
+      [Console]::Error.WriteLine("bench: warm-up call answered $warmCode — first_call_ms left empty, the cold call was not measured")
     }
 
     foreach ($phase in @('tick', 'phase2', 'phase2-group3')) {
@@ -395,7 +489,12 @@ foreach ($configName in $Configs) {
       $okJson = 0; $cjkHits = 0; $latinSum = 0.0; $langPass = 0
       $promptTok = 0; $completionTok = 0; $cachedTok = 0; $predictedMs = 0.0; $errors = 0
 
+      # The position of the prompt inside the cell, 1-based: the bash twin
+      # writes it into requests[] as `index`, and the two reports are supposed
+      # to carry the same fields.
+      $index = 0
       foreach ($prompt in $cellPrompts) {
+        $index++
         $body = [ordered]@{
           model            = $model
           stream           = $false
@@ -440,6 +539,9 @@ foreach ($configName in $Configs) {
 
         $recordError = ''
         $rowPromptTok = 0; $rowCompletionTok = 0; $rowCachedTok = 0; $rowPredicted = 0.0
+        # Empty, not 0, when the server did not report it: Ollama has no
+        # `timings`, and a zero would read as "the prompt was free".
+        $rowPromptMs = $null
         $rowOkJson = 0; $rowCjk = 0; $rowLatin = 0.0; $rowLangPass = 0
 
         if ($status -ne 200 -or $null -eq $answer) {
@@ -450,7 +552,14 @@ foreach ($configName in $Configs) {
           $rowPromptTok = [int](Get-Prop $usage 'prompt_tokens' 0)
           $rowCompletionTok = [int](Get-Prop $usage 'completion_tokens' 0)
           $rowCachedTok = [int](Get-Prop (Get-Prop $usage 'prompt_tokens_details' $null) 'cached_tokens' 0)
-          $rowPredicted = [double](Get-Prop (Get-Prop $answer 'timings' $null) 'predicted_ms' 0)
+          $timings = Get-Prop $answer 'timings' $null
+          $rowPredicted = [double](Get-Prop $timings 'predicted_ms' 0)
+          # Prompt processing as the server measured it (T-434). Latency minus
+          # predicted_ms is "everything else", and without this number a spike
+          # there could not be split into prompt processing and the rest from
+          # the report alone (baseline.md §2.1, §2.5 of T-402).
+          $rawPromptMs = Get-Prop $timings 'prompt_ms' $null
+          if ($null -ne $rawPromptMs) { $rowPromptMs = [double]$rawPromptMs }
           $choices = @(Get-Prop $answer 'choices' @())
           if ($choices.Count -gt 0) {
             $content = [string](Get-Prop (Get-Prop $choices[0] 'message' $null) 'content' '')
@@ -497,6 +606,7 @@ foreach ($configName in $Configs) {
             config            = $configName
             repeat            = $repeat
             phase             = $phase
+            index             = $index
             prompt_id         = $prompt.id
             http              = $status
             latency_ms        = $latency
@@ -508,6 +618,7 @@ foreach ($configName in $Configs) {
             completion_tokens = $rowCompletionTok
             cached_tokens     = $rowCachedTok
             predicted_ms      = $rowPredicted
+            prompt_ms         = $rowPromptMs
             error             = $recordError
           })
         Write-Host '.' -NoNewline
@@ -528,6 +639,10 @@ foreach ($configName in $Configs) {
       # clock of the client also contains prompt processing and the HTTP hop,
       # and mixing the two makes runs incomparable.
       $tps = if ($predictedMs -gt 0) { [math]::Round($completionTok / ($predictedMs / 1000.0), 1) } else { 0 }
+      # The CSV text of tps: a bare `0` exactly when the server reported no
+      # timings (Ollama), a fixed-point number otherwise — the two cases the
+      # bash twin distinguishes as an int and a float.
+      $tpsText = if ($predictedMs -gt 0) { Format-BenchNumber $tps } else { '0' }
       $validJsonRatio = [math]::Round($okJson / $n, 3)
       $cjkRatio = [math]::Round($cjkHits / $n, 3)
       $latinRatio = [math]::Round($latinSum / $n, 3)
@@ -544,11 +659,15 @@ foreach ($configName in $Configs) {
         if ($advisory) { $verdict += '*' }
       }
 
+      # Every fractional column goes through Format-BenchNumber: the CSV is the
+      # file two implementations are supposed to write identically, and a
+      # number is where they used to stop doing that.
       $row = @(
         $configName, $cfg.provider, $Placement, $model, $phase, $NumCtx, $KvCache,
-        $n, $firstCall, $p50, $p95, $promptTok, $completionTok, $cachedTok, $tps,
-        $validJsonRatio, $cjkRatio, $latinRatio, $langPassRatio, $vram, $build,
-        $verdict, $repeat, $startedAt
+        $n, $firstCall, $p50, $p95, $promptTok, $completionTok, $cachedTok, $tpsText,
+        (Format-BenchNumber $validJsonRatio), (Format-BenchNumber $cjkRatio),
+        (Format-BenchNumber $latinRatio), (Format-BenchNumber $langPassRatio),
+        $vram, $build, $verdict, $repeat, $startedAt
       ) -join ','
       [IO.File]::AppendAllText($csvPath, "$row`n", [Text.UTF8Encoding]::new($false))
       $cellLog.Add([ordered]@{
@@ -583,7 +702,9 @@ foreach ($configName in $Configs) {
       # slots were reset between calls — a reason for a slow p95 that has
       # nothing to do with the model (§6.3).
       $cacheShare = if ($promptTok -gt 0) { [math]::Round($cachedTok / $promptTok, 2) } else { 0 }
-      Write-Row $configName $phase $n $p50 $p95 $tps $validJsonRatio $langPassRatio $cacheShare $verdict
+      $cacheShareText = if ($promptTok -gt 0) { Format-BenchNumber $cacheShare } else { '0' }
+      Write-Row $configName $phase $n $p50 $p95 $tpsText (Format-BenchNumber $validJsonRatio) `
+        (Format-BenchNumber $langPassRatio) $cacheShareText $verdict
       $rowsWritten++
       $configRows++
     }
@@ -617,8 +738,10 @@ foreach ($configName in $Configs) {
       repeats        = $Repeats
       runs_required  = $runsRequired
       started_at     = $startedAt
-      matrix         = $Matrix
-      prompts        = $Prompts
+      matrix         = $matrixRef.Path
+      matrix_sha256  = $matrixRef.Sha256
+      prompts        = $promptsRef.Path
+      prompts_sha256 = $promptsRef.Sha256
       script         = 'scripts/llm-bench.ps1'
     }
     cells        = $cellLog
