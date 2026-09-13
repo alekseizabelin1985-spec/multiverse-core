@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T00:48:44+03:00",
+  "updatedAt": "2026-09-14T00:57:32+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4614,7 +4614,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#1",
           "startedAt": "2026-09-13T23:34:13+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.7",
           "spentMinutes": 0,
@@ -10536,6 +10536,26 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "Ревью #2 outbox",
       "startedAt": "2026-09-14T00:48:44+03:00",
+      "finishedAt": "2026-09-14T00:57:32+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "Приёмка outbox и доставок",
+      "startedAt": "2026-09-14T00:57:32+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "Отметка владельца T-307",
+      "startedAt": "2026-09-14T00:57:32+03:00",
       "finishedAt": null
     }
   ],
@@ -14583,6 +14603,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-307 · итерация 2 (developer#1): Ma-1 — адресаты хода только уникальные игроки со связкой, при нуле ход завершается сразу (3 теста, turns_failed = 0); Mi-1 — ci-harness получает доставки telegram (403 без допуска); Mi-2 поля нарратива в доставке; N-2 тест Expire; N-3 новый лизинг не начинается посл"
+    },
+    {
+      "at": "2026-09-14T00:57:32+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 · ревью #2 (TEAM-3/code-reviewer#2): принять — 0/0/0/2. Ma-1 (адресаты со связкой, ход без адресатов), Mi-1 (ci-harness), Mi-2, N-2, N-3 закрыты; мутанты R2-2…R2-5 красные. N-4 окно timeout у игрока, сделавшего /forget посреди хода — только аналитика; N-5 смысл recipients_count не записан. Рис"
     }
   ],
   "blockers": [],
