@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:07:57+03:00",
+  "updatedAt": "2026-09-13T23:14:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2929,7 +2929,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
@@ -3224,6 +3224,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-471.md"
+        },
+        {
+          "id": "T-472",
+          "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-472.md"
         }
       ],
       "defects": [],
@@ -10393,7 +10406,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Итерация 4: условия system-architect У-1/У-2",
       "startedAt": "2026-09-13T23:06:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:14:13+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10403,6 +10416,16 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "contracts.md v0.15",
       "startedAt": "2026-09-13T23:07:57+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Приёмка T-056 и отметка по FakeEncounter",
+      "startedAt": "2026-09-13T23:14:13+03:00",
       "finishedAt": null
     }
   ],
@@ -14342,6 +14365,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-470 начата (system-architect#1): contracts.md v0.15 — C-01 v1.11 (решение А5 по T-458), C-02 v1.8, C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), сужение пометки C-15/ADR-005 до llm-bench и строк успеха llm-server (T-468); КД State §4, data-model §3.3, ADR-001; попутно — соль в законно п"
+    },
+    {
+      "at": "2026-09-13T23:14:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · итерация 4 (developer#2): У-1 — ключ-целое (inventory.0) и индекс длиннее 9 цифр отвергаются, зонд подтвердил дефект shared/entity (remove inventory.0 ломает хэш после догона — закрыт на входе State); У-2 — все скаляры data-model §3 в списке, тест по типам; Mi-8 и N-4 закрыты; мутанты U1a/U1"
     }
   ],
   "blockers": [],
