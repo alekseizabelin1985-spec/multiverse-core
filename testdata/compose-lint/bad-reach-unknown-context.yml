@@ -1,0 +1,41 @@
+# Rule 9 and a context the rule does not know (T-469 review #1 Mi-2): a typo in
+# --contexts passes every other check and stops the process only when its
+# container starts. The service passes every variable of the process and of
+# the gateway, so the one refusal is the unknown name.
+#
+# expect-rule: 9
+# expect-text: gateway: --contexts=gateway,gatewya names the context 'gatewya', which rule 9 does not know
+services:
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    command: ["--contexts=gateway,gatewya"]
+    environment:
+      MV_ENV: ${MV_ENV:-dev}
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+      MV_MODE: ${MV_MODE:-live}
+      MV_BUS: ${MV_BUS:-kafka}
+      MV_BUS_VALIDATE_ON_READ: ${MV_BUS_VALIDATE_ON_READ:-true}
+      MV_KAFKA_BROKERS: ${MV_KAFKA_BROKERS:-127.0.0.1:19092}
+      MV_CORE_ADDR: ":8090"
+      MV_CORE_ADMIN_CLIENTS:
+      MV_MINIO_ENDPOINT: ${MV_MINIO_ENDPOINT:-127.0.0.1:9000}
+      MV_MINIO_ACCESS_KEY: ${MV_MINIO_ACCESS_KEY:?set MV_MINIO_ACCESS_KEY in .env}
+      MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
+      MV_MINIO_USE_SSL: ${MV_MINIO_USE_SSL:-false}
+      MV_WORLD_ID: ${MV_WORLD_ID:-dark-forest-world}
+      MV_GATEWAY_DATA_DIR: ${MV_GATEWAY_DATA_DIR:-/data}
+      MV_GATEWAY_CLIENT_IDS:
+      MV_GATEWAY_ACTOR_KIND_CLIENTS:
+      MV_CORE_URL: ${MV_CORE_URL:-http://127.0.0.1:8090}
+      MV_GM_PATH: ${MV_GM_PATH:-agent}
+      MV_GATEWAY_RATE_ACTIONS_PER_MIN: ${MV_GATEWAY_RATE_ACTIONS_PER_MIN:-30}
+      MV_GATEWAY_RATE_ACTIONS_BURST: ${MV_GATEWAY_RATE_ACTIONS_BURST:-5}
+      MV_GATEWAY_INPUT_FILTER: ${MV_GATEWAY_INPUT_FILTER:-noop}
+      MV_GATEWAY_SESSION_IDLE: ${MV_GATEWAY_SESSION_IDLE:-30m}
+      MV_GATEWAY_TURN_TIMEOUT: ${MV_GATEWAY_TURN_TIMEOUT:-60s}
+      MV_GATEWAY_CHARACTER_WAIT: ${MV_GATEWAY_CHARACTER_WAIT:-2s}
+      MV_GATEWAY_CHARACTER_DEADLINE: ${MV_GATEWAY_CHARACTER_DEADLINE:-60s}
+      MV_GATEWAY_DELIVERY_LEASE: ${MV_GATEWAY_DELIVERY_LEASE:-30s}
+      MV_GATEWAY_DELIVERY_TTL: ${MV_GATEWAY_DELIVERY_TTL:-24h}
+      MV_GATEWAY_ENCOUNTER_GRACE: ${MV_GATEWAY_ENCOUNTER_GRACE:-10s}
