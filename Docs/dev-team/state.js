@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:26:53+03:00",
+  "updatedAt": "2026-09-13T19:31:47+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2582,7 +2582,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9719,7 +9719,7 @@ window.DEVTEAM_STATE =
       "task": "T-461",
       "action": "Ревью #1 правила depguard бота",
       "startedAt": "2026-09-13T19:24:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:31:47+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9739,6 +9739,16 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Ревью безопасности #2 текста FR-009",
       "startedAt": "2026-09-13T19:26:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-461",
+      "action": "Приёмка T-461 и индекс EPIC-001 (T-460, T-463)",
+      "startedAt": "2026-09-13T19:31:47+03:00",
       "finishedAt": null
     }
   ],
@@ -13216,6 +13226,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-318 · итерация 2 (business-analyst#1): внесены M-1 (строка о резервных копиях +30 дней), Mi-1 (псевдоним при создании персонажа, даты в связке — расширено last_seen_at/created_at), Mi-2 (прежние тексты уходят облаку после включения, /forget их у провайдера не удаляет); NoticeText ~2327 знаков; 21 "
+    },
+    {
+      "at": "2026-09-13T19:31:47+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-461 · ревью #1 (TEAM-1/code-reviewer#1): принять — 0/0/0/2. Текст правила байт в байт, существующие правила не ослаблены; 12 мутантов по ожиданию. N-1 тесты бота доходят до шины через shared/testkit/* (вопрос system-architect до T-315), N-2 надуманный путь internal/<x>/cmd/telegram-bot. Бэклог sys"
     }
   ],
   "blockers": [],
