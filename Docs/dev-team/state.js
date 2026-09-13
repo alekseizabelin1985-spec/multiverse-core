@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:43:23+03:00",
+  "updatedAt": "2026-09-13T18:50:09+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2809,14 +2809,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-055",
           "title": "state — конвейер предложение → факт, источники в serve.go",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T16:20:10+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T18:50:09+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
-          "spentMinutes": 0,
+          "spentMinutes": 143,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-055.md",
           "branch": "task/T-055-state-pipeline",
@@ -9460,7 +9460,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Приёмка T-310 ядро бота",
       "startedAt": "2026-09-13T18:26:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:50:09+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -9490,7 +9490,7 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Ревью #2 T-451",
       "startedAt": "2026-09-13T18:31:48+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:50:09+03:00"
     },
     {
       "instance": "business-analyst#1",
@@ -9510,7 +9510,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Отметка владельца cmd/multiverse, vars.go, .env.example",
       "startedAt": "2026-09-13T18:33:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:50:09+03:00"
     },
     {
       "instance": "developer#1",
@@ -9540,6 +9540,36 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Вычитка текста уведомления FR-009",
       "startedAt": "2026-09-13T18:43:23+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Отметка владельца и правило depguard cmd-telegram-bot",
+      "startedAt": "2026-09-13T18:50:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-451",
+      "action": "Приёмка T-451",
+      "startedAt": "2026-09-13T18:50:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Постановка T-458",
+      "startedAt": "2026-09-13T18:50:09+03:00",
       "finishedAt": null
     }
   ],
@@ -12879,6 +12909,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Решения оркестратора по вопросам T-318: Р-2 — /forget работает на любом шаге онбординга и удаляет pending_consent (иначе отказавшийся не может удалить свой ID; правка КД §10.3 и DoD T-311); Р-3 — на отказ короткий ответ, полное уведомление при следующей игровой команде (US-008/UC-001 E1; подтверждае"
+    },
+    {
+      "at": "2026-09-13T18:50:09+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 · отметка tech-lead#1: есть. Раскладка T-446 соблюдена, MV_STATE_WORLDS в реестре и .env.example, рецепт finish проверен настоящим слиянием. Замечания вне задачи: О-1 core в docker-compose.yml не передаёт MV_STATE_WORLDS (бэклог EPIC-001), О-2 MV_STATE_WORLDS и MV_WORLD_ID в infrastructure.md "
+    },
+    {
+      "at": "2026-09-13T18:50:09+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-451 · ревью #2 (TEAM-2/code-reviewer#1): принять — 0/0/1/1. Утечек нет на 30 входах, Go и bash совпали; обход shared/env в addressFrom манифест не ломает. Mi-R2-1 граница поиска % не закреплена тестом; N-R2-1 два пограничных случая; LogValue печатает хост при userinfo — не блокер. Приёмка — TEAM-2"
+    },
+    {
+      "at": "2026-09-13T18:50:09+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 принята TEAM-3/tech-lead#3: группа — бот молчит (US-008/FR-131); Mi-4 — отдельный best-effort отправитель отказов (1 попытка, таймаут 5 с), общий бюджет «Доступ по приглашению» 10 ответов/60 с на бот; N-7/N-8 закрыты; 15 мутантов красные, покрытие бота 93–100 %. Итераций ревью — 2. Решение орк"
+    },
+    {
+      "at": "2026-09-13T18:50:09+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · постановка: TEAM-1/tech-lead#2 пишет раздел tasks.md и карточку (ветка task/T-458-session-recording от a037efb)."
     }
   ],
   "blockers": [],
