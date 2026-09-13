@@ -107,6 +107,20 @@ var mutants = []mutant{
 	// the scenarios have to see it by their Absent, not by a divergence alone.
 	{id: "M28", title: "LlmEndpoint.psm1: the refusals before the check of the @ print user:pass@ again (T-450 review #2 Mi-R2-1)",
 		file: "scripts/lib/LlmEndpoint.psm1", anchor: `    $shown = "${shownScheme}…@" + $shownRest.Substring($shownRest.LastIndexOf('@', [StringComparison]::Ordinal) + 1)`, replace: `    $shown = $unqueried`, run: "^H6[1-6]$"},
+	// T-463: the judge prints a value with an @ whole again, and names its host —
+	// in each half on its own, so that the Absent of the scenarios, not only a
+	// divergence of the halves, has to see it.
+	{id: "M29", title: "llm-endpoint.sh: the sentences of llm_endpoint_judge print a value with an @ and its host again (T-463)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: `  *@*) masked=1 ;;`, replace: `  *@*) masked=0 ;;`, run: "^H(67|68|69|70)$"},
+	{id: "M30", title: "LlmEndpoint.psm1: the sentences of Set-LlmEndpointClass print a value with an @ and its host again (T-463)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `  $masked = $Endpoint.Raw.Contains('@', [StringComparison]::Ordinal)`, replace: `  $masked = $false`, run: "^H(67|68|69|70)$"},
+	// T-463 review #1 Ma-1: the refusal of up "refusing to start a second
+	// server" prints the probe — the host and the path of a value with an @ —
+	// again, in each half on its own.
+	{id: "M31", title: "llm-server.sh: the refusal of a second server prints the probe of a value with an @ again (T-463 review #1 Ma-1)",
+		file: "scripts/llm-server.sh", anchor: `    *@*)`, replace: `    *@*@*)`, run: "^U19$"},
+	{id: "M32", title: "llm-server.ps1: the refusal of a second server prints the probe of a value with an @ again (T-463 review #1 Ma-1)",
+		file: "scripts/llm-server.ps1", anchor: `      if ($ep.Raw.Contains('@', [StringComparison]::Ordinal)) {`, replace: `      if ($false) {`, run: "^U19$"},
 }
 
 func runMutants(opt options) int {

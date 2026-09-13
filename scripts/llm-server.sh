@@ -523,7 +523,17 @@ up)
     # owner's stand llama-server is started by hand and ops/llm-server.pid does
     # not exist, so `make llm-up` used to start a SECOND server on a taken port
     # and then report the stranger's 200 as its own success (review M-6).
-    llm_fail "llm: $LLM_EP_PROBE$LLM_HEALTH_VIA already answers $LLM_HEALTH_CODE and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it"
+    # An @ anywhere in the value may end a password with a bare / in it, and
+    # the probe carries the host and the path of the value: then the refusal
+    # names the variable, not the address (C-15 v1.5, T-463 review #1 Ma-1).
+    case "$LLM_EP_RAW" in
+    *@*)
+      llm_fail "llm: the address of $LLM_EP_VAR ($LLM_EP_SCHEME://…) already answers $LLM_HEALTH_CODE at $LLM_HEALTH_VIA and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      ;;
+    *)
+      llm_fail "llm: $LLM_EP_PROBE$LLM_HEALTH_VIA already answers $LLM_HEALTH_CODE and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it"
+      ;;
+    esac
     exit 1
   fi
 

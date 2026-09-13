@@ -1,0 +1,28 @@
+# Rule 6: an @ after the first / of an address the rule calls the cloud.
+# llm_parse_url accepts http://fakepw.example/x@10.0.0.5:8080 — the host is
+# fakepw.example, a name with a dot, and /x@10.0.0.5:8080 is the path — and the
+# rule refuses it as the cloud. That sentence belongs to rule 6 and not to the
+# judge, and it named the host: what stands in front of the @ may be the head of
+# a password with a bare / in it, so the refusal names no host and prints no
+# value (C-15 v1.5, T-463 review #1 Ma-1). fakepw is a fake password; the second
+# value is the same one in mixed case, which the parser lower-cases into the host.
+#
+# expect-rule: 6
+# expect-text: core: MV_LLM_URL points at a host which is not a local address
+# expect-text: gm: MV_OLLAMA_URL points at a host which is not a local address
+# expect-text: the value and its host are not printed: the value holds an @
+# expect-absent: fakepw
+# expect-absent: 10.0.0.5
+# expect-absent: /x@
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: http://fakepw.example/x@10.0.0.5:8080
+  gm:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: HTTPS://FakePW.Example/x@10.0.0.5:8080

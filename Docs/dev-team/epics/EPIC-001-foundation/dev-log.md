@@ -8822,3 +8822,51 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
   - Копия EPIC-004 с новым конфигом: `./...` и `./cmd/telegram-bot/... ./internal/...` — 0 issues; мутант `shared/eventbus` и мутант `internal/gateway/links` — по одной находке `cmd-telegram-bot`; контроль `internal/gateway/client` — 0.
   - После мутантов `gate.go` и `.golangci.yml` копии возвращены и сверены `cmp`, `git status` копии пуст; `git worktree remove` по точному пути, `git worktree prune`.
 - Не коммитил.
+
+<!-- dev-log T-463 -->
+## devops-engineer#1 · T-463 · срок архивов бэкапа 30 дней и маскировка значения в отказах LLM-скриптов · 2026-09-13
+
+Ветка `task/T-463-backup-retention-endpoint-mask`, Opus. Части (а) и (б); (в) — в T-464. Таблица прогонов — карточка `tasks/T-463.md`.
+- **Что сделано.**
+  - (а) `scripts/backup-prune.sh`: удаление строго старше 30 суток по штампу в имени, иначе по mtime; `minio-*.tgz`, `redpanda-*.tgz` и их строки `SHA256SUMS`, `links/links-*.db.age`, `links/gateway-*.db`. Каждый файл — `rm -f -- <путь>`, ссылки и чужие подкаталоги не трогаются. Цели `backup-prune`, `backup-prune-test`, `backup-prune-mutants`; `backup` вызывает очистку, `ci` и задание CI `scripts-parity` — тест. Runbook, раздел 4: срок, формат имён, `schtasks /Create … /SC DAILY`, `/Query`, признаки невыполнения. `infrastructure.md` §5.6 — только срок и очистка, с пометкой.
+  - (б) `llm_endpoint_judge` и `Set-LlmEndpointClass`: при `@` в значении четыре фразы печатают только схему и не называют хост. Стенд: `AbsentFold`, `H67`–`H71`, мутанты `M29`/`M30`. `compose-lint --fixtures`: `# expect-absent:` и фикстура `bad-llm-url-at-after-path`.
+- **Решения по ходу.**
+  - Одна реализация очистки, на bash; `--dir` обязателен; `--log` для задания Планировщика.
+  - Ветка «прочий invalid» (`malformed`) недостижима — сценария нет, держит P01. В `H70` после `@` стоит `10.0.0.5`: фраза any-address сама советует `127.0.0.1`.
+  - Случай символьных ссылок и мутанты P08/P10 на Windows без Developer Mode — SKIPPED, выполняются в CI на Linux.
+- **Проверки.** `make scripts-parity` — 112 passed (K01/K02 прежние); `make parity-mutants` — 31 мутант, M00 первым, M29/M30 KILLED, rc=0; `make compose-lint` — ok, fixtures 59 bad/11 good; `make backup-prune-test` — ok (1 skipped); `make backup-prune-mutants` — ok; `go build/vet`, `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok, 27 пакетов; `gitleaks dir` по копии изменённых файлов — no leaks.
+- Для system-architect: ~~снять «Код расходится» в C-15 v1.5 и ADR-005 после слияния~~ — сужено при приёмке (вариант (б), см. запись приёмки ниже); четыре расхождения §5.6 — в карточке.
+- Не коммитил.
+
+<!-- dev-log T-463 iteration 2 -->
+## devops-engineer#1 · T-463 · итерация 2: хост не называется ни в одном отказе при `@`, строже `--dir`, штамп из будущего · 2026-09-13
+
+Ветка `task/T-463-backup-retention-endpoint-mask`, Opus. Основание — ревью #1 (0/1/5/6) и решения оркестратора. Таблица прогонов — карточка `tasks/T-463.md`, «Итерация 2».
+- **Что сделано.**
+  - Ma-1: облачный отказ правила 6 `compose-lint` при `@` в значении не называет хост (флаг маски — седьмое поле вердикта), фикстура `bad-llm-url-at-cloud` с `expect-absent`. Отказ `up` «refusing to start a second server» в `llm-server.sh`/`.ps1` при `@` называет переменную вместо пробы; сценарий `U19`, мутанты `M31`/`M32`. Мутанты маски `compose-lint` — вручную в копии.
+  - Mi-2: `backup-prune.sh` отвергает относительный `--dir`, корень диска и путь без компонента со словом `backup` — до обращения к диску и после `pwd -P`.
+  - Mi-3: штамп позже «сейчас» больше чем на сутки не доверяется — возраст по mtime, `WARNING` в выводе.
+  - Mi-4: очистка в `make backup` нефатальна (`|| echo WARNING`); в runbook строки восстановления — архив старше 30 дней держать вне `$BACKUP_DIR`.
+  - Mi-5: случай `stuck` (отказ `rm` через подмену, строка `SHA256SUMS` остаётся, код 1); флаг `--require-links`; в CI — шаг `make backup-prune-mutants`, оба шага очистки с `if: ${{ !cancelled() }}`.
+  - N-1 — случай `gap` (время в разрыве перевода часов), N-2 — `10#` для `--now @…`, N-3 — junction для `links/` на Windows, N-4 и N-6 — строки runbook.
+- **Решения по ходу.**
+  - «Компонент `backup*`» понят как «компонент содержит `backup`»: иначе отвергался бы каталог по умолчанию `multiverse-backups`.
+  - Тест запускает скрипт из временного каталога: относительный `--dir` у мутанта не должен разрешаться от корня репозитория, где есть `backups/`.
+  - Мутант R2 (без проверки штампа туда-обратно) выживает и дальше: GNU date сам отвергает время в разрыве. Проверка признана защитной.
+  - Junction в Git Bash — только с `MSYS2_ARG_CONV_EXCL='*'`, иначе `/J` превращается в путь.
+- **Проверки.** `make scripts-parity` — 111 сценариев, 113 passed, 2 known-failing (прежние); `make parity-mutants` — 33 мутанта, M00 первым, M31/M32 KILLED (U19), rc=0; `make compose-lint` — ok, fixtures 60 bad/11 good; `make backup-prune-test` — ok (1 part skipped: ссылка на файл; links/ — через junction); `make backup-prune-mutants` — 17, P00 первым, P08 и P11–P16 KILLED, P10 SKIPPED, rc=0; `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok, 27 пакетов.
+- Для system-architect: ~~после слияния снять «Код расходится» в C-15 v1.5 и ADR-005~~ — сужено при приёмке (вариант (б), см. запись приёмки ниже). Ma-1 закрыт. Mi-1 — в T-468.
+- Не коммитил.
+
+<!-- dev-log T-463 acceptance -->
+## tech-lead#1 · T-463 · приёмка: Ma-2 по варианту (б), N-7 и N-8, T-468 · 2026-09-13
+
+Рабочая папка `.worktrees/T-463`, Opus. Подробности и таблица прогонов — карточка `tasks/T-463.md`, «Приёмка (tech-lead)».
+- **Решение.** Принята после ревью #2 (0/1/0/2), итераций ревью — 2.
+- **Ma-2 (решение оркестратора, вариант (б)).** Код `llm-bench` не менялся. Строка для system-architect сужена в карточке, DoD 11 и двух записях выше. Пометку «Код расходится» в C-15 v1.5 и ADR-005 не снимать, а сузить до трёх отказов `llm-bench` (`llm-bench.sh:844-846`, `llm-bench.ps1:478-482`) и строк успеха и `health` `llm-server`. Вся маскировка вывода скриптов — T-468 (`todo`, карточка и раздел в `tasks.md`), после ответа system-architect об охвате C-15.
+- **N-7.** `backup-prune.sh`: mtime впереди больше чем на сутки — `WARNING … its mtime is more than a day ahead of now`, файл остаётся. Случай `mixed` дополнен (`minio-ahead.tgz`, `redpanda-ahead.tgz`, итог `9 removed, 11 kept`), мутанты P17/P18, runbook, раздел 4.
+- **N-8.** Комментарий `--fixtures` в `compose-lint.sh` приведён к факту; поведение не менялось.
+- **DoD 4.** Мутанты очистки — только в CI, в `make ci` их нет; `make ci` дольше не стал.
+- **Проверки.** `bash -n` — ok; `make backup-prune-test` — ok (1 part skipped); `make backup-prune-mutants` — 19, P00 первым, P17/P18 KILLED, P10 SKIPPED, rc=0; `make scripts-parity` — 113 passed, 2 known-failing; `make compose-lint` — ok, fixtures 60/11; `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok.
+- **Слияние с `3e3c95b`.** Конфликт только дописывания в конец `dev-log.md` и `review.md`; `tasks.md` и `runbook.md` — чисто, остальные файлы на кончике не менялись.
+- Не коммитил.
