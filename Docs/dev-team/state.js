@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:05:27+03:00",
+  "updatedAt": "2026-09-13T22:14:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2890,7 +2890,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
@@ -10141,7 +10141,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Итерация 2: каждому набору ответ, канонический путь",
       "startedAt": "2026-09-13T22:05:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:14:27+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -10171,6 +10171,16 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Ревью #1 документации",
       "startedAt": "2026-09-13T22:05:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Ревью #2",
+      "startedAt": "2026-09-13T22:14:27+03:00",
       "finishedAt": null
     }
   ],
@@ -13972,6 +13982,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-311 выполнена TEAM-3/developer#2: render (notice.go из T-318, справка, ошибки §10.5, клавиатуры, доставка с пометкой ИИ/шаблона и разбиением по 4096), flow (FSM с TTL 15 мин и кэшем 1 ч на shared/clock, согласие только кнопкой после отправки уведомления, Р-2 A, Р-3 A, Mi-5, /forget confirm без Res"
+    },
+    {
+      "at": "2026-09-13T22:14:27+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · итерация 2 (developer#2): Ma-1 каждый оставшийся набор неатомарного пакета отвергается под своей сущностью (ветка i<0), фильтр по Ref.ID убран; Ma-2 неканонический путь — invalid_op на шаге 1; Mi-1 rest по сущности до операций; Mi-2/Mi-3 тесты; Mi-4 страж oneStateOverTheWorld в стенде (R7 кр"
     }
   ],
   "blockers": [],
