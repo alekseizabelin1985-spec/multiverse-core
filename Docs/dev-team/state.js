@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:10:24+03:00",
+  "updatedAt": "2026-09-14T02:17:28+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2990,7 +2990,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-057",
           "title": "state — objStore, интенты, снапшоты, latest.json",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -4738,14 +4738,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-316",
           "title": "Integration-тесты consumer на Redpanda",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
-          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T02:17:28+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.10",
-          "spentMinutes": 0,
+          "spentMinutes": 53,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-316.md"
         },
@@ -4998,6 +4998,12 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-467.md"
+        },
+        {
+          "id": "T-473",
+          "title": "Переподписка consumer шлюза после сбоя брокера",
+          "status": "todo",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md"
         }
       ],
       "defects": [],
@@ -10686,7 +10692,7 @@ window.DEVTEAM_STATE =
       "task": "T-316",
       "action": "Приёмка T-316, заведение T-473",
       "startedAt": "2026-09-14T01:59:20+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:17:28+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10696,7 +10702,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Решения по пяти вопросам T-057",
       "startedAt": "2026-09-14T01:59:20+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:17:28+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -10706,7 +10712,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Ревью #1: objstore, интенты, снапшоты",
       "startedAt": "2026-09-14T01:59:20+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:17:28+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -10756,6 +10762,16 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Итерация 2: И2-1…И2-5 по решениям architect#3",
       "startedAt": "2026-09-14T02:10:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "Итерация 2: решения архитектора и ревью #1",
+      "startedAt": "2026-09-14T02:17:28+03:00",
       "finishedAt": null
     }
   ],
@@ -14935,6 +14951,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-309 · решения architect#3: MV_GATEWAY_REPLAY_WAIT не вводится (пункт DoD снят); projection=stale снимается по snapshot.created component=state; core_admin — с T-356; форма /health плоская (уровень КД); сверка хеша в работе не нужна в I1; снапшоты шлюза в replay не пишутся (NFR-061); мир без laws_v"
+    },
+    {
+      "at": "2026-09-14T02:17:28+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-316 принята TEAM-3/tech-lead#3: DoD выполнен, Mi-1/N-1…N-3 закрыты, Mi-2 принят с пометкой (расчёт вместо замера; замер зависшего брокера — в T-473). Заведена T-473 «Переподписка consumer шлюза после сбоя брокера» (M, I1-α, после T-309). Индекс 0.1.10. Итераций ревью — 1. Коммит 8e87e66, ветка зап"
+    },
+    {
+      "at": "2026-09-14T02:17:28+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 · решения system-architect#1: КД §9 приведён к коду (повтор до Stop, publish_failed, досылка), поле /health publish_attempts_failed, §4.4 приведён к фикстуре seq 0, синхронный снапшот принят (дополнение ADR-011), мир без latest.json — T-059 (§18); отступления MV_SNAPSHOT_EVERY_FACTS, маршрут в"
+    },
+    {
+      "at": "2026-09-14T02:17:28+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по T-057: Mi-1 — срок снапшота при Stop в бюджете StopTimeout; Mi-2 — принято по §18; досылка запрещена, пока есть интент того же proposal_id; Mi-3 — брать cause/конверт из записанного объекта, если есть, иначе вопрос к T-059; Mi-4 и N-1, N-2 — исправить. Итерация 2 — developer#"
     }
   ],
   "blockers": [],
