@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:06:20+03:00",
+  "updatedAt": "2026-09-13T18:10:39+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2535,7 +2535,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-456",
           "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/system-architect#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -2561,6 +2561,19 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks/T-457.md",
           "branch": "task/T-457-architect-decisions-queue",
           "worktree": ".worktrees/T-457"
+        },
+        {
+          "id": "T-460",
+          "title": "eventbus.Permanent и Policy.World (C-01 v1.10) с contract-тестом на обе шины (после T-456)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-460.md"
         }
       ],
       "defects": [],
@@ -9265,7 +9278,7 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "C-08 и КД шлюза",
       "startedAt": "2026-09-13T17:34:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:10:39+03:00"
     },
     {
       "instance": "architect#2",
@@ -9365,6 +9378,16 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Приёмка T-304 readmodel и consumer",
       "startedAt": "2026-09-13T18:06:20+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-456",
+      "action": "Ревью #1: contracts v0.14, C-08, КД шлюза",
+      "startedAt": "2026-09-13T18:10:39+03:00",
       "finishedAt": null
     }
   ],
@@ -12566,6 +12589,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-304 · итерация 2 (TEAM-3/developer#1): Mi-1 v1.5 честно описана, сверка хеша — только v1.6 (DoD T-309); Mi-2 закрыт документом (переход уникален в пределах процесса) + DoD T-307/T-351 — таблица переходов требует решения architect#3 и ломает тесты T-302; Mi-3…Mi-5 тесты; Mi-6 неверная настройка Min"
+    },
+    {
+      "at": "2026-09-13T18:10:39+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-456 выполнена system-architect#1: contracts.md v0.14 — C-08 v1.5 (503 forget_incomplete по коду T-303; клиент сам не повторяет; ответ ForgetIncomplete в OpenAPI строкой DoD), C-02 v1.6 сверен с T-448 (+порядок элемента предка, пометка «в develop — с контрольного слияния EPIC-002»), C-02 v1.7 (worl"
+    },
+    {
+      "at": "2026-09-13T18:10:39+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-460 (EPIC-001, contract-change, XS–S, после приёмки T-456): eventbus.Permanent (окончательная ошибка обработчика — сразу в dead_letters) и Policy.World (WorldRequired при Publish) в shared/eventbus + contract-тест на membus и kafka; строки реестра для типов предложений — T-056 после неё. "
     }
   ],
   "blockers": [],
