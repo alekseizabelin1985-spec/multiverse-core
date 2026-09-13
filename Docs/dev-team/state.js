@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:00:54+03:00",
+  "updatedAt": "2026-09-13T16:02:07+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4367,7 +4367,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -8839,7 +8839,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Ревью #2: итерация 2 links/HTTP",
       "startedAt": "2026-09-13T15:38:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:02:07+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8909,6 +8909,26 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Приёмка T-455 compose-lint без окружения CI",
       "startedAt": "2026-09-13T16:00:54+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Приёмка T-303 links и HTTP",
+      "startedAt": "2026-09-13T16:02:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Отметка владельца EPIC-001: Dockerfile, cmd, runbook",
+      "startedAt": "2026-09-13T16:02:07+03:00",
       "finishedAt": null
     }
   ],
@@ -11786,6 +11806,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-448 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/2. Ma-1 и пп. 1–6 решения архитектора закрыты; строгий MarshalJSON не задевает другие эпики (никто не собирает Change вручную); симуляции синхронизации EPIC-003/004 зелёные. Mi-3 тест null в changedPayload двойника, Mi-4 устаревшая строка ка"
+    },
+    {
+      "at": "2026-09-13T16:02:07+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · ревью #2 (TEAM-3/code-reviewer#1): принять — 0/0/1/3. M-1 (чтением: /data nonroot 0700, наследование пустым томом; runbook), все условия архитектора по 503, Mi-1…Mi-6, K1–K4 закрыты. R2-Mi-1 повтор каскада по link_id без теста (мутант R1 зелёный); R2-N-2 общий ответ Unavailable в OpenAPI (→ "
     }
   ],
   "blockers": [],
