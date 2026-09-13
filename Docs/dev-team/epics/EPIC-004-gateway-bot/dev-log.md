@@ -291,6 +291,61 @@
 - **Проверки.** `go build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl env check`, `contracts check`, `make test` — зелёные. Мутанты R2, R3, R6–R9 ревьюера и 9 новых прогнаны в копиях дерева: контрольный зелёный, остальные красные. Копии удалены по точным путям.
 - Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
 
+### developer#2 · T-311 · `flow` и `render` · 2026-09-13
+
+Ветка `task/T-311-bot-flow-render` от ce7b35a (кончик эпика с T-310, T-318, правилом depguard `cmd-telegram-bot`, contracts v0.14). Подробности — раздел «Выполнение (developer)» в `tasks/T-311.md`. Статус — `review`.
+
+- **Сделано.**
+  - `cmd/telegram-bot/internal/render`: `notice.go` — четыре константы T-318 §1, перенесены программой, 2 341 символ; `help.go`; тексты онбординга и `/forget`; `ErrorText` по кодам КД §10.5; клавиатуры; `Delivery` с пометками нарратива и нарезкой больше 4 096 единиц UTF-16.
+  - `cmd/telegram-bot/internal/flow`: FSM онбординга, TTL 15 мин на `shared/clock`; кэш `chat_id → player_id` на 1 ч; игровые команды с `action_key`; `/forget` на любом шаге; `Reset`, `StepOf`.
+  - `internal/gateway/client`: `forget_incomplete` не повторяется, `APIError.RetryAfter`, doc `ForgetResult` без совета про `Resolve` (C-08 v1.5, T-456).
+  - `sender.ReplyPolicy` (M-2 ревью T-310).
+  - `access/gate_test.go` на `client.New` (ревью T-310).
+- **Решения.**
+  - Согласие ставится только кнопкой в `awaiting_consent`, а этот шаг — только после успешной отправки уведомления.
+  - После `consent` — повторный `resolve`.
+  - Отметка `forget_incomplete` по чату различает «конец того же забвения» и «нечего удалять».
+  - Golden-тексты — литералы в тестах; полный текст уведомления — длина и SHA-256.
+  - Мутанты текста из DoD — постоянный тест.
+- **Отклонения.**
+  - Р-2 A, Р-3 A, Mi-5 против КД §10.3 — по решениям оркестратора.
+  - Свободный текст в `ready` → список команд по US-008, а не `say` по КД.
+  - Клиент не повторяет `forget_incomplete` — по C-08 v1.5, а не по строке DoD из приёмки T-303.
+  - TTL — константы, без переменных окружения.
+  - Облако (T-320) и `/group` (T-353) не делались.
+- **Мутанты.** Копия в scratch, без `-overlay`, контрольный первым. 15 мутантов `flow`, `render`, клиента и `sender`: 14 красных. M4a выжил в первом проходе — тест усилен шлюзом и отправителем, не смотрящими на `ctx`, теперь красный. Выжил M4b: проверка `ctx` в `reply` дублирует `Handle` и `fail`. Копия и скрипты удалены по точным путям.
+- **Проверки.**
+  - `go build ./... && go vet ./...` — 0.
+  - `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/...` — ok; `updates` запустился напрямую, без `Access is denied`.
+  - `golangci-lint run ./...` — 0 issues.
+  - `mvctl env check` — 0.
+  - `make test` — exit 0, без `-race` (нет cgo); покрытие `flow` 87,1 %, `render` 92,1 %.
+- **Открытые вопросы.** КД §10.3 «текст → say» против US-008. Одна функция правила имени для бота и T-306. Строка DoD о повторе `forget_incomplete` клиентом.
+- Telegram API, Docker, стенд `:8888`, `.env` не трогал. `shared/*`, `.golangci.yml`, `go.mod`, контракты и КД не менял. Не коммитил.
+
+## tech-writer#1 · T-317 · README gateway и бота, runbook «ротация токена», сверка `.env.example` · 2026-09-13
+
+*В паре с developer#2 (занят T-311); вопросы к нему — в отчёте.*
+
+- `internal/gateway/README.md`: назначение, состав пакетов, таблица статуса реализации по коду дерева (T-301…T-305 сделаны, T-306…T-309 и `shared/testkit/gateway` — ещё нет), как поднять локально (`--contexts=all --bus=memory` или `--contexts=gateway` на kafka; `--bus=memory` требует `--contexts=all` — проверено по `cmd/multiverse/main_test.go`), режимы `live`/`replay` по факту кода (`context.go`: в `replay` выключены лимитер и фоновая уборка; полное дочитывание журнала и переключение в `live` — ещё T-309), переменные `MV_GATEWAY_*`/`MV_WORLD_ID`/`MV_MINIO_*`, состав `/health`, таблица из 4 маршрутов, реально смонтированных `GatewayRouter` (`resolveLink`, `consentLink`, `forgetLink`, `postAction` — по `api/router.go`), порядок middleware по `api/middleware.go`.
+- `cmd/telegram-bot/README.md`: явно зафиксировано, что `main.go` в дереве нет (T-312 не выполнена) — собрать и запустить бинарник сейчас нельзя; таблица готовых пакетов (T-310) и отсутствующих (`flow`/`render` — T-311, `deliver`/`main` — T-312). Получение токена у `@BotFather`, `/setjoingroups` → Disable, allow-list (fail-closed), профиль compose `bot` (обе формы запуска из `Docs/ops/runbook.md`), переменные `MV_TELEGRAM_*` (включая несвязанные с compose `MV_TELEGRAM_ACTION_KEY_SALT`/`MV_TELEGRAM_COMMANDS_PER_MIN` — открытый пункт T-463 части «в»), таблица кодов выхода `updates.ExitCode` (0/1/3) с разбором `409 Conflict`, раздел «Данные игроков» — правила оператора У-1, У-2, У-4, У-5 из карточки T-318 (профили `memory`/`legacy`, копии `gateway-data`, срок хранения копий и архивов ≤ 30 дней — T-463 ещё `todo`, `mvctl report` — после T-131/T-132). Оба README получили пункт о публикации портов только на `127.0.0.1` (правило 2 `compose-lint`, SEC-13).
+- `Docs/ops/runbook.md` §6 переписан: явная пометка текущего статуса (T-312 не выполнена), процедура ротации токена по шагам (`@BotFather` → `/revoke`/`/token` → `.env` → `make up PROFILES=...,bot` или прямой `docker compose -f … -f docker-compose.bot.yml up -d telegram-bot` → проверка отсутствия токена в `logs --tail=50` → проверка webhook при подозрении на `409`), чек-лист, правила оператора У-1/У-2/У-4/У-5 (ссылка на README и карточку T-318), правила из приёмки T-310 (`/setjoingroups` Disable, потеря одного обновления при `SIGTERM`, лимиты отказов и `bot_denied_total`). Только раздел §6 — секции 1–5, 7, 8 не трогал.
+- Сверка `.env.example` ↔ `shared/env/vars.go` для `MV_GATEWAY_*` и `MV_TELEGRAM_*`: расхождений нет, все объявленные переменные обеих групп присутствуют в примере с тем же именем; `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код возврата 0. Разница дефолтов `MV_TELEGRAM_GATEWAY_URL` (`http://127.0.0.1:8088` в манифесте и `http://gateway:8088` в `.env.example`) — не расхождение: пример держит адрес имени сервиса compose, манифест — адрес процесса на хосте.
+- Не трогал: код, `.env.example`, `contracts.md`, `tasks.md` эпика, `.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/`. Docker и стенд LLM `:8888` не трогал, `.env` и «— копия.env» не открывал. Не коммитил.
+- Открытые вопросы — оркестратору (см. отчёт): (1) правка `CLAUDE.md` — строка статуса `cmd/telegram-bot` без `main.go`, предложением, не сделано; (2) T-463 часть «в» (`MV_TELEGRAM_ACTION_KEY_SALT`/`MV_TELEGRAM_COMMANDS_PER_MIN` не переданы в `docker-compose.bot.yml`) и часть «а» (ротация архивов/копий ≤ 30 дней) — обе ещё `todo`, runbook и README ссылаются на них как на условие, а не как на факт.
+
+### tech-writer#1 · T-317 · итерация 2 по ревью #1 (Ma-1, Ma-2, Mi-1…Mi-11, N-1…N-8) · 2026-09-13
+
+Ветка `task/T-317-gateway-bot-docs`, папка `.worktrees/T-317`. Статус — `review`. Подробности — карточка `tasks/T-317.md`, раздел «Итерация 2».
+
+- **Ma-1.** `internal/gateway/README.md`: `/health.links_store`/`gateway_store` описаны как «всегда `ok`, пока контекст запущен» (реальная проверка БД — T-309, component §11.4), по `context.go:460-461`; уточнено, что `bus` появляется в ответе только со значением `fail`.
+- **Ma-2.** `cmd/telegram-bot/README.md` и `Docs/ops/runbook.md` §6: проверка webhook переписана на новый токен, ввод через `read -rs`/`Read-Host -AsSecureString`, `curl -K -` (stdin, без токена в URL/argv/истории); шаг «проверить старым токеном» убран; добавлен запрет выкладывать вывод `docker compose config`/`docker inspect telegram-bot`.
+- **Mi-1…Mi-11.** По тексту ревью, каждый факт сверен с кодом: описание `/forget` (сжатие в том же вызове, `Retry-After: 5`, порядок снятия отметки — `links/forget.go`, `handlers/links.go`, `store/retention.go`); `shared/testkit/gateway` убран из таблицы «отсутствует»; `export MV_GATEWAY_DATA_DIR=...` перед командами запуска; правило depguard `cmd-telegram-bot` вместо «правило не принято»; вводная бота приведена к КД §2; пример `PROFILES=memory,bot` дополнен условием У-2; `COMPOSE_ENV_FILES` перед прямыми командами `docker compose`; проверка присутствия сервисов через `docker ps --filter label=...` (список дополнен `memory`, `narrative-orchestrator`); чек-лист ротации — на `make health` вместо несуществующей команды бинарника; дублирующий хвост §6 убран, предупреждение `PROFILES=` перенесено в шаг 3; шаг 2 и чек-лист дополнены обновлением копий `.env` вне репозитория. Mi-11 — сухой прогон runbook §6 и открытый пункт согласования с devops зафиксированы в карточке.
+- **N-1…N-8.** Проверка токена в логе бота — по всему логу (`grep -cE`), не по хвосту; формулировка `/revoke` нейтрализована; путь `api/gateway.openapi.yaml` уточнён («в корне репозитория») и дополнен задачами I2; добавлено исключение Windows для прав каталога и исправлен порядок PRAGMA (`incremental_vacuum` + `wal_checkpoint(TRUNCATE)`); формулировки без обращения к автору и без «трекера задачи»/несуществующего «отчёта задачи»; добавлены кликабельные ссылки на карточку T-318 (оба README, runbook) и на КД `gateway-and-bot.md` (runbook); поле «Ветка» карточки приведено к фактическому имени; фраза У-1 про хранение записей в бэкапах игры добавлена в оба места.
+- **Передано, не вносил сам:** строки для `CLAUDE.md` (карта каталогов, «Статус кода») и предложения по DoD T-311/T-312 из рекомендаций ревьюера — записаны в карточке, раздел «Передать»; код, `.env.example`, `CLAUDE.md`, `contracts.md`, `tasks.md` эпика не трогал.
+- **Проверки.** `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код 0. Относительные ссылки в правленых файлах проверены отдельным скриптом в scratch (файл, указанный оркестратором, отсутствовал; написал свой, прогнал, удалил по точному пути) — все ссылки резолвятся.
+- Docker и стенд LLM `:8888` не трогал, `.env` и «— копия.env» не открывал. Не коммитил, не делал `git add`.
+
 ## developer#1 · T-306 · `characters`, `GET /v1/worlds`, `GET /v1/players/{id}`, `session` + `turns`, аналитика C-10 · 2026-09-13
 
 Ветка `task/T-306-characters-sessions`, папка `.worktrees/T-306`. Статус — `review`. Подробности, итог по DoD, мутанты и вопросы — карточка `tasks/T-306.md`, раздел «Выполнение (developer)». Не коммитил.
