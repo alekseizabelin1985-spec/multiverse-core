@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:31:48+03:00",
+  "updatedAt": "2026-09-13T18:33:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4636,9 +4636,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-318",
           "title": "Текст уведомления FR-009 (BA + tech-writer)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "business-analyst#1",
+          "startedAt": "2026-09-13T18:33:01+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -9491,6 +9491,16 @@ window.DEVTEAM_STATE =
       "action": "Ревью #2 T-451",
       "startedAt": "2026-09-13T18:31:48+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "business-analyst#1",
+      "role": "business-analyst",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Текст уведомления FR-009",
+      "startedAt": "2026-09-13T18:33:01+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -12781,6 +12791,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решение оркестратора по вопросу T-451: addressFrom оставить до правки shared/env; в бэклог EPIC-001 — rawFrom снимает по краям только ASCII-пробелы, затем addressFrom заменить на StringFrom. Строки таблицы local-endpoints.tsv и класс invalid «вне печатаемого ASCII» переданы system-architect в T-456 "
+    },
+    {
+      "at": "2026-09-13T18:33:01+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 начата: текст уведомления FR-009 (/start) — business-analyst#1 (TEAM-3), затем вычитка tech-writer и ревью security-engineer (SEC-26), приёмка tech-lead#3. Задача без зависимостей, разблокирует T-311; ветка task/T-318-fr009-notice-text от epic/EPIC-004 (карточка и prd.md «Формулировка»)."
     }
   ],
   "blockers": [],
