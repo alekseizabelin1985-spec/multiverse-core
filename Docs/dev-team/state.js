@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T13:15:30+03:00",
+  "updatedAt": "2026-09-13T13:34:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1095,14 +1095,51 @@ window.DEVTEAM_STATE =
         {
           "id": "T-405",
           "title": "Стенд паритета двух реализаций скриптов — в репозиторий и в CI",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T10:43:38+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:17:50+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 154,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:43",
+              "to": "13.09 11:39",
+              "duration": "56m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 11:39",
+              "to": "13.09 11:55",
+              "duration": "16m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 11:55",
+              "to": "13.09 12:31",
+              "duration": "36m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 12:31",
+              "to": "13.09 12:50",
+              "duration": "19m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "13.09 12:50",
+              "to": "13.09 13:02",
+              "duration": "11m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:02",
+              "to": "13.09 13:17",
+              "duration": "15m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-405.md"
         },
         {
@@ -2301,6 +2338,49 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks/T-446.md",
           "branch": null,
           "worktree": null
+        },
+        {
+          "id": "T-449",
+          "title": "Документы по решениям system-architect: C-03 v1.3 (T-053), тексты T-050, правило «локальный адрес» (ADR-005/C-15), направление зависимостей internal/llm (ADR-001), limit_money (C-07)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-449.md"
+        },
+        {
+          "id": "T-450",
+          "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
+          "status": "in-progress",
+          "assignee": "TEAM-1/devops-engineer#2",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-450.md",
+          "branch": "task/T-450-local-endpoint-table",
+          "worktree": ".worktrees/T-450"
+        },
+        {
+          "id": "T-453",
+          "title": "Ложное срабатывание gitleaks в эталоне .env.example без построчного отпечатка; go.yml запускается на develop (devops, XS)",
+          "status": "in-progress",
+          "assignee": "TEAM-1/devops-engineer#1",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-453.md",
+          "branch": "task/T-453-gitleaks-env-example-ci-develop",
+          "worktree": ".worktrees/T-453"
         }
       ],
       "defects": [],
@@ -2373,14 +2453,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-050",
           "title": "shared/entity — сверка и добор, StatusTransitionAllowed(x,x) по C-02 v1.4",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T12:09:07+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:21:23+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 62,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:28",
+              "duration": "18m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:28",
+              "to": "13.09 12:40",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:40",
+              "to": "13.09 12:57",
+              "duration": "16m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 12:57",
+              "to": "13.09 13:12",
+              "duration": "15m"
+            }
+          ],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-050.md",
           "branch": "task/T-050-entity-reconcile",
           "worktree": ".worktrees/T-050"
@@ -2487,16 +2592,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-060",
           "title": "internal/replay — EventClock, NullTimers, Recording, сборка в serve.go",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T13:16:34+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-002-state-mechanics/tasks/T-060.md"
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-060.md",
+          "branch": "task/T-060-replay-eventclock",
+          "worktree": ".worktrees/T-060"
         },
         {
           "id": "T-057",
@@ -2697,16 +2804,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-448",
           "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#3",
+          "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md"
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md",
+          "branch": "task/T-448-changed-form-proposal-id",
+          "worktree": ".worktrees/T-448"
         }
       ],
       "defects": [],
@@ -2816,14 +2925,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-206",
           "title": "B1 · Типы шлюза, конфигурация, реестр провайдеров, таблица цен",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T12:34:45+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:26:57+03:00",
+          "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 52,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:43",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:43",
+              "to": "13.09 12:58",
+              "duration": "14m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:58",
+              "to": "13.09 13:15",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:15",
+              "to": "13.09 13:26",
+              "duration": "11m"
+            }
+          ],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-206.md",
           "branch": "task/T-206-llm-gateway-types",
           "worktree": ".worktrees/T-206",
@@ -3801,6 +3935,34 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-447.md"
+        },
+        {
+          "id": "T-451",
+          "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-451.md"
+        },
+        {
+          "id": "T-452",
+          "title": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие комментарии T-053, remove без value при отсутствующем new (XS, до T-062)",
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#2",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-452.md",
+          "branch": "task/T-452-fake-encounter-fallen-character",
+          "worktree": ".worktrees/T-452"
         }
       ],
       "defects": [],
@@ -3839,14 +4001,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-301",
           "title": "OpenAPI, DTO, таблица кодов, клиент gateway",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T12:09:07+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:23:28+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 74,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:37",
+              "duration": "28m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:37",
+              "to": "13.09 12:54",
+              "duration": "17m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:54",
+              "to": "13.09 13:12",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:12",
+              "to": "13.09 13:23",
+              "duration": "11m"
+            }
+          ],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-301.md",
           "branch": "task/T-301-openapi-dto-client",
           "worktree": ".worktrees/T-301"
@@ -3894,16 +4081,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-303.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-303.md",
+          "branch": "task/T-303-links-http-layer",
+          "worktree": ".worktrees/T-303"
         },
         {
           "id": "T-304",
@@ -7618,7 +7807,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "T-201 shared/agent v2",
       "startedAt": "2026-09-13T12:52:40+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:30:46+03:00"
     },
     {
       "instance": "developer#1",
@@ -7668,7 +7857,7 @@ window.DEVTEAM_STATE =
       "task": "T-206",
       "action": "итерация 2 T-206: Secret, гейт, цены",
       "startedAt": "2026-09-13T12:58:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:15:53+03:00"
     },
     {
       "instance": "developer#2",
@@ -7688,7 +7877,7 @@ window.DEVTEAM_STATE =
       "task": "T-405",
       "action": "приёмка T-405 (TEAM-1)",
       "startedAt": "2026-09-13T13:02:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:17:50+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -7708,7 +7897,7 @@ window.DEVTEAM_STATE =
       "task": "T-053",
       "action": "ревью #1 T-053 (TEAM-1)",
       "startedAt": "2026-09-13T13:07:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:30:46+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -7718,7 +7907,7 @@ window.DEVTEAM_STATE =
       "task": "T-301",
       "action": "приёмка T-301 (TEAM-3)",
       "startedAt": "2026-09-13T13:12:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:23:28+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -7728,7 +7917,7 @@ window.DEVTEAM_STATE =
       "task": "T-444",
       "action": "ревью #2 T-444 (TEAM-1)",
       "startedAt": "2026-09-13T13:12:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:30:46+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -7738,7 +7927,7 @@ window.DEVTEAM_STATE =
       "task": "PROJECT",
       "action": "пакет решений: T-050, T-053, T-206, T-448",
       "startedAt": "2026-09-13T13:12:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:30:46+03:00"
     },
     {
       "instance": "developer#3",
@@ -7748,6 +7937,126 @@ window.DEVTEAM_STATE =
       "task": "T-445",
       "action": "итерация 2 T-445: depguard (б), $ в правилах",
       "startedAt": "2026-09-13T13:15:30+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "приёмка T-206 (TEAM-2)",
+      "startedAt": "2026-09-13T13:15:53+03:00",
+      "finishedAt": "2026-09-13T13:26:57+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "T-060 internal/replay: EventClock, NullTimers, Recording",
+      "startedAt": "2026-09-13T13:16:34+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "итерация 3 T-444: Minor/Nit",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": "2026-09-13T13:34:03+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "ревью #1 T-201 (TEAM-2)",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "приёмка T-445",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "итерация 2 T-053: C-03 v1.3",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "Ложное срабатывание gitleaks в эталоне .env.example без построчного от",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#2",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.t",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие к",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Форма changed[] для append и remove, согласованная с правилом догона §",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "links и каркас HTTP-слоя, регистрация контекста gateway",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "приёмка T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T13:34:03+03:00",
       "finishedAt": null
     }
   ],
