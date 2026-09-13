@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T00:22:22+03:00",
+  "updatedAt": "2026-09-14T00:39:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4610,11 +4610,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-307",
           "title": "outbox, long-poll доставок, consumer боя и нарратива",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T23:34:13+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.7",
           "spentMinutes": 0,
@@ -10516,6 +10516,16 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "Ревью #1 outbox и доставок",
       "startedAt": "2026-09-14T00:22:22+03:00",
+      "finishedAt": "2026-09-14T00:39:52+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "Итерация 2: адресаты без связки, ci-harness",
+      "startedAt": "2026-09-14T00:39:52+03:00",
       "finishedAt": null
     }
   ],
@@ -14551,6 +14561,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по вопросам T-307: доставки получает и ci-harness (условно, подтверждение system-architect в ревью T-308); аналитика «со сроком» до ответа system-architect; доставка без адресатов со связкой — доставлена (ход ok/degraded); лизинг outbox в replay работает, long-poll по настенным "
+    },
+    {
+      "at": "2026-09-14T00:39:52+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 · ревью #1 (TEAM-3/code-reviewer#2): вернуть — 0/1/2/3. Outbox верен: без потерь и дублей сверх at-least-once, long-poll без удержания соединения, совместим с клиентом и ботом. Ma-1 решение 3 не реализовано — адресат без связки (dropped) и повторённый адресат оставляют ход в timeout. Mi-1 ci-h"
     }
   ],
   "blockers": [],
