@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:50:27+03:00",
+  "updatedAt": "2026-09-13T17:53:58+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4227,7 +4227,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-451",
           "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -9255,7 +9255,7 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Go-правило локального адреса",
       "startedAt": "2026-09-13T17:34:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:53:58+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -9325,6 +9325,16 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Ревью #2: повтор публикации и publish_failed",
       "startedAt": "2026-09-13T17:50:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-451",
+      "action": "Ревью #1: Go-гейт локального адреса",
+      "startedAt": "2026-09-13T17:53:58+03:00",
       "finishedAt": null
     }
   ],
@@ -12496,6 +12506,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-055 · итерация 2 (TEAM-1/developer#3): Ma-1 по решению Б+А — повтор публикации тех же байтов (100 мс → 5 с на Deps.Timers, /health degraded), при Stop — мир publish_failed без записи в память и без dead_letters; остановка мира переживает повторный Start; отказ без типа сущности публикуется без ent"
+    },
+    {
+      "at": "2026-09-13T17:53:58+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-451 выполнена TEAM-2/developer#1: гейт облака internal/llm даёт на каждую строку local-endpoints.tsv (121) и endpointStandCases (2) тот же класс — третий тест паритета (IsLocalEndpoint, LoadConfig с гейтом, Config вручную); точка у IPv4 и однословного имени не снимается; порт обязателен у любого l"
     }
   ],
   "blockers": [],
