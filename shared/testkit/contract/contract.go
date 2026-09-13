@@ -77,6 +77,12 @@ type Target struct {
 	// can still be read through the target after its Close: true for a broker,
 	// false for membus, whose spare has a log of its own that goes with it.
 	Spare func() (bus eventbus.Bus, shared bool, err error)
+	// Stalled builds a bus of the same implementation whose retry pauses
+	// never end: a backoff of StalledBackoff on manual timers that nobody
+	// advances. A handler error that is retried hangs there, so whatever such a
+	// bus parks it parked without a pause — which is what C-01 v1.10 promises
+	// a permanent error, and what a backoff of zero pauses cannot show.
+	Stalled func() (StalledBus, error)
 	// Close closes the bus under test. The case that uses it runs last and
 	// nothing runs after it, so a target that must survive the suite may leave
 	// it nil and skip that case.
@@ -85,6 +91,27 @@ type Target struct {
 	// publish latency is only meaningful there — in process it measures a
 	// slice append.
 	Live bool
+}
+
+// StalledBackoff returns the backoff of Target.Stalled: as many retries as the
+// contract gives, each one pause long enough that no case outlives it even on
+// real timers. Every call builds a new slice, so that a target or a case that
+// changes the one it got cannot shorten the pauses of another (review #1 of
+// T-460, N-1).
+func StalledBackoff() []time.Duration {
+	return []time.Duration{time.Hour, time.Hour, time.Hour}
+}
+
+// StalledBus is the bus Target.Stalled builds, with what a case needs to read
+// back what it did.
+type StalledBus struct {
+	Bus     eventbus.Bus
+	Journal eventbus.Journal
+	// DeadLetters reads what this bus parked. For a broker it is the one
+	// dead_letters of the broker; for membus the log of the stalled bus.
+	DeadLetters func(ctx context.Context) ([]eventbus.DeadLetter, error)
+	// Release closes the bus.
+	Release func()
 }
 
 // Timeout is how long a case waits for an event to come back. Nothing waits
@@ -117,6 +144,9 @@ func Run(t *testing.T, target Target) {
 	if target.Spare == nil {
 		t.Fatal("contract: the target must provide Spare")
 	}
+	if target.Stalled == nil {
+		t.Fatal("contract: the target must provide Stalled")
+	}
 
 	cases := []struct {
 		name string
@@ -141,6 +171,8 @@ func Run(t *testing.T, target Target) {
 		{"UndecodableMessageGoesToDeadLetters", undecodableGoesToDeadLetters},
 		{"RetriesThenDeadLetterAndTheStreamMovesOn", retriesThenDeadLetter},
 		{"AHandlerPanicIsParkedWithoutRetry", handlerPanicIsParkedWithoutRetry},
+		{"APermanentErrorIsParkedAtOnceWithoutAPause", permanentErrorIsParkedAtOnce},
+		{"APermanentErrorUnderCancellationIsDeliveredAgain", permanentErrorUnderCancellationIsDeliveredAgain},
 		{"CloseUnderAFailingHandlerIsAnOrderlyStop", closeUnderAFailingHandler},
 		{"SubscribeReturnsNilOnAnOrderlyStop", subscribeReturnsNilOnStop},
 		{"PublishOfOneEventIsNotBatched", publishOfOneEventIsNotBatched},
@@ -1030,6 +1062,205 @@ func handlerPanicIsParkedWithoutRetry(t *testing.T, target Target) {
 		return false
 	}, "the dead letter the journal parked")
 	checkPanicLetter(t, fromJournal, panicValue)
+}
+
+// permanentErrorIsParkedAtOnce: a handler that marks its error with
+// eventbus.Permanent is not retried (C-01 v1.10). The event is parked after
+// the one call — attempts 1, the text of the cause — and the stream moves on,
+// on a subscription and in the journal alike.
+//
+// The case runs on the stalled bus, whose retry pauses never end: a permanent
+// error taken for an ordinary one would wait there for its first retry, and
+// the event after it would never be handled. A backoff of zero pauses would
+// let that retry through at once and only the count of calls would tell. The
+// last step makes sure the bus really stalls, or the case would prove nothing
+// about the pause.
+func permanentErrorIsParkedAtOnce(t *testing.T, target Target) {
+	r := newRun(t, target)
+	stalled, err := target.Stalled()
+	if err != nil {
+		t.Fatalf("build the stalled bus: %v", err)
+	}
+	defer stalled.Release()
+
+	topic := eventbus.TopicPlayerEvents
+	base, err := stalled.Journal.End(t.Context(), topic)
+	if err != nil {
+		t.Fatalf("End(%s) on the stalled bus: %v", topic, err)
+	}
+
+	poison := r.looked("permanent")
+	good := r.looked("after the permanent error")
+	cause := errors.New("contract: the event breaks its contract and no retry mends it")
+
+	var calls atomic.Int64
+	handled := make(chan struct{}, 1)
+	sub := r.subscribeOn(stalled.Bus, topic, func(_ context.Context, ev eventbus.Event) error {
+		switch ev.ID {
+		case poison.ID:
+			calls.Add(1)
+			return eventbus.Permanent(cause)
+		case good.ID:
+			select {
+			case handled <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	})
+	defer sub.stop(t)
+
+	for _, ev := range []eventbus.Event{poison, good} {
+		if err := stalled.Bus.Publish(t.Context(), ev); err != nil {
+			t.Fatalf("publish on the stalled bus: %v", err)
+		}
+	}
+
+	select {
+	case <-handled:
+	case <-testkit.After(Timeout):
+		t.Fatalf("the event after the permanent error was not handled within %s: the permanent error waited for a retry", Timeout)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Errorf("the handler was called %d times on the event it failed permanently, want 1", got)
+	}
+	var fromSubscription eventbus.DeadLetter
+	waitFor(t, func() bool {
+		fromSubscription = findLetter(t, stalled.DeadLetters, func(dl eventbus.DeadLetter) bool {
+			return dl.Consumer == r.group && dl.Original.ID == poison.ID
+		})
+		return fromSubscription.Original.ID != ""
+	}, "the dead letter the subscription parked")
+	checkPermanentLetter(t, fromSubscription, cause)
+
+	// The journal parks it the same way, under a consumer of its own.
+	var journalCalls atomic.Int64
+	readCtx, cancel := context.WithTimeout(t.Context(), Timeout)
+	defer cancel()
+	next, err := stalled.Journal.ReadRange(readCtx, topic, base, base+2,
+		func(_ context.Context, ev eventbus.Event) error {
+			if ev.ID == poison.ID {
+				journalCalls.Add(1)
+				return eventbus.Permanent(cause)
+			}
+			return nil
+		})
+	if err != nil || next != base+2 {
+		t.Fatalf("ReadRange over the event failed permanently = (%d, %v), want (%d, nil)", next, err, base+2)
+	}
+	if got := journalCalls.Load(); got != 1 {
+		t.Errorf("the journal called the handler %d times on the event it failed permanently, want 1", got)
+	}
+	var fromJournal eventbus.DeadLetter
+	waitFor(t, func() bool {
+		fromJournal = findLetter(t, stalled.DeadLetters, func(dl eventbus.DeadLetter) bool {
+			return dl.Consumer != r.group && dl.Original.ID == poison.ID
+		})
+		return fromJournal.Original.ID != ""
+	}, "the dead letter the journal parked")
+	checkPermanentLetter(t, fromJournal, cause)
+
+	checkItStalls(t, r, stalled, poison)
+}
+
+// checkItStalls shows that an ordinary error on the stalled bus is not retried
+// within the time the case watches it, so that the permanent error parked at
+// once there cannot be put down to a bus that does not pause.
+func checkItStalls(t *testing.T, r *run, stalled StalledBus, ev eventbus.Event) {
+	t.Helper()
+	const watch = 300 * time.Millisecond
+	var calls atomic.Int64
+	group := r.group + "-ordinary"
+	sub := r.subscribeOnGroup(stalled.Bus, eventbus.TopicPlayerEvents, group, func(_ context.Context, got eventbus.Event) error {
+		if got.ID != ev.ID {
+			return nil
+		}
+		calls.Add(1)
+		return errors.New("contract: an ordinary error waits for its retry")
+	})
+	defer sub.stop(t)
+
+	waitFor(t, func() bool { return calls.Load() >= 1 }, "the first call of the ordinary error on the stalled bus")
+	time.Sleep(watch)
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("an ordinary error on the stalled bus was called %d times within %s, want 1: the bus does not stall, and the permanent case proves nothing about the pause", got, watch)
+	}
+}
+
+// permanentErrorUnderCancellationIsDeliveredAgain: under a cancelled context
+// a permanent error is not parked (C-01 v1.10). The subscription is stopping,
+// and a process that is stopping cannot tell a bad event from one it did not
+// finish — State leaves a proposal whose facts did not go out uncommitted on
+// Stop, and the next process sends them. So the event stays uncommitted: no
+// dead letter, and the next subscription of the group gets it again.
+func permanentErrorUnderCancellationIsDeliveredAgain(t *testing.T, target Target) {
+	r := newRun(t, target)
+	ev := r.looked("permanent under cancellation")
+	deadline := testkit.Wall().Now().Add(2 * Timeout)
+
+	reached := make(chan struct{}, 1)
+	first := r.subscribeWith(eventbus.TopicPlayerEvents, func(ctx context.Context, got eventbus.Event) error {
+		if got.ID != ev.ID {
+			return nil
+		}
+		select {
+		case reached <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		return eventbus.Permanent(errors.New("contract: a permanent error returned while the subscription stops"))
+	})
+	r.publish(ev)
+	select {
+	case <-reached:
+	case <-testkit.After(deadline.Sub(testkit.Wall().Now())):
+		first.stop(t)
+		t.Fatalf("the first subscription did not receive the event within %s", 2*Timeout)
+	}
+	// stop returns once Subscribe has, and Deliver writes a dead letter before
+	// it returns, so a letter parked under the cancellation is already there to
+	// be read.
+	first.stop(t)
+
+	parked := findLetter(t, target.DeadLetters, func(dl eventbus.DeadLetter) bool {
+		return dl.Consumer == r.group && dl.Original.ID == ev.ID
+	})
+	if parked.Original.ID != "" {
+		t.Fatalf("the permanent error under a cancelled context was parked (attempts %d, %q): the event must stay uncommitted and come again",
+			parked.Attempts, parked.Error)
+	}
+
+	second := r.subscribe(eventbus.TopicPlayerEvents)
+	defer second.stop(t)
+	got := second.waitUntil(t, deadline, 1)
+	if got[0].ev.ID != ev.ID {
+		t.Fatalf("the next subscription of the group received %q, want the event failed under the cancellation %q again", got[0].ev.ID, ev.ID)
+	}
+}
+
+// findLetter returns the first dead letter that matches, or a zero one.
+func findLetter(t *testing.T, read func(context.Context) ([]eventbus.DeadLetter, error), match func(eventbus.DeadLetter) bool) eventbus.DeadLetter {
+	t.Helper()
+	letters, err := read(t.Context())
+	if err != nil {
+		t.Fatalf("read dead letters: %v", err)
+	}
+	for _, dl := range letters {
+		if match(dl) {
+			return dl
+		}
+	}
+	return eventbus.DeadLetter{}
+}
+
+func checkPermanentLetter(t *testing.T, dl eventbus.DeadLetter, cause error) {
+	t.Helper()
+	if dl.Attempts != 1 {
+		t.Errorf("dead letter of %s has Attempts = %d, want 1: a permanent error is not retried", dl.Consumer, dl.Attempts)
+	}
+	if dl.Error != cause.Error() {
+		t.Errorf("dead letter of %s says %q, want the text of the cause %q", dl.Consumer, dl.Error, cause.Error())
+	}
 }
 
 func checkPanicLetter(t *testing.T, dl eventbus.DeadLetter, panicValue string) {
