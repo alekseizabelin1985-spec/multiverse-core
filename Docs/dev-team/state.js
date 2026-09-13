@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:12:01+03:00",
+  "updatedAt": "2026-09-13T16:12:20+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8913,7 +8913,7 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Приёмка T-455 compose-lint без окружения CI",
       "startedAt": "2026-09-13T16:00:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:12:20+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -11876,6 +11876,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-454 · ревью #1 (TEAM-1/code-reviewer#3): принять — 0/0/1/3. Все 12 отчётов DATA RACE CI — consumer_test.go, исправлено; канал opened без дедлока; обёртка learning верна (мутанты R2/R5/R6/R8 красные, предохранитель 10 с с понятной диагностикой); с T-446 текстовых конфликтов нет. Mi-1 ожидание learn"
+    },
+    {
+      "at": "2026-09-13T16:12:20+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 принята tech-lead#1: Mi-1 (форма KEY: value в declared_names, проверено пробой и мутантом), N-1 (тексты приведены к факту), N-2 (одна переменная default_env_files) закрыты при приёмке; прогоны в окружении как в CI — ok. Слияние ждёт T-450 (итерация 2); после слияния T-450 синхронизировать T-45"
     }
   ],
   "blockers": [],
