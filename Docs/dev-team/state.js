@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:52:44+03:00",
+  "updatedAt": "2026-09-13T16:53:29+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3136,7 +3136,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T16:03:58+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9041,7 +9041,7 @@ window.DEVTEAM_STATE =
       "task": "T-202",
       "action": "Ревью #1: levels и валидатор блупринтов",
       "startedAt": "2026-09-13T16:37:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:53:29+03:00"
     },
     {
       "instance": "developer#1",
@@ -9101,6 +9101,16 @@ window.DEVTEAM_STATE =
       "task": "T-210",
       "action": "Приёмка T-210 бюджет LLM",
       "startedAt": "2026-09-13T16:52:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "Приёмка T-202 валидатор блупринтов",
+      "startedAt": "2026-09-13T16:53:29+03:00",
       "finishedAt": null
     }
   ],
@@ -12122,6 +12132,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-210 · ревью #1 (TEAM-2/code-reviewer#2): принять — 0/0/6/4. Суммирование фона, B=0/N=0, идемпотентность и форма отказа верны; утечки памяти нет. Mi-1 время причины ослабляет N/мин (вопрос called_at в C-07); Mi-2 Allow до цикла попыток против каждой попытки (US-012); Mi-3 условие одного воркера тол"
+    },
+    {
+      "at": "2026-09-13T16:53:29+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 · ревью #1 (TEAM-2/code-reviewer#1): принять — 0/0/2/4. Отклонения исполнителя признаны корректными (белые списки из api-contracts §2.4, laws_ref ↔ файл по КД §12.2, 7а, одна ошибка при чужой роли); белые списки и владение не обходятся; тест корпуса сравнивает полный список находок. Mi-1 не пр"
     }
   ],
   "blockers": [],
