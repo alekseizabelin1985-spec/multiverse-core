@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:22:08+03:00",
+  "updatedAt": "2026-09-13T15:25:54+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8643,6 +8643,26 @@ window.DEVTEAM_STATE =
       "action": "Ревью #2: итерация 2 runtime/раскладка",
       "startedAt": "2026-09-13T15:01:32+03:00",
       "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "CI: гонка testkit/state и флак fight-05 (возобновление)",
+      "startedAt": "2026-09-13T15:25:54+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Итерация 2 (возобновление): /data, 503 с условиями",
+      "startedAt": "2026-09-13T15:25:54+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -11429,6 +11449,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Лимит сессии API (HTTP 429, сброс 15:20 МСК): восемь агентов прерваны — приёмки T-201, T-054, T-449; итерации T-303 и T-439 (ADR-029); T-454; ревью T-455 и T-446 #2. Незаконченные правки остаются незакоммиченными в .worktrees/T-303, T-439, T-454 (и, возможно, записи приёмок в T-201/T-054/T-449) — пр"
+    },
+    {
+      "at": "2026-09-13T15:25:54+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пауза снята пользователем («Возобновляем»). Работа идёт при parallelism 2/2/2: TEAM-1 — T-454 (CI: гонка testkit/state и флак fight-05, возобновление), TEAM-3 — T-303 итерация 2 (возобновление). Очередь TEAM-1: приёмки T-449 и T-054, ревью #2 T-448, ревью T-455 и #2 T-446, итерация 2 T-450; TEAM-2 ("
     }
   ],
   "blockers": [],
