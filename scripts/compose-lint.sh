@@ -1046,13 +1046,20 @@ for name, svc in sorted(services.items()):
 # --------------------------------------------------------------------------
 # Rule 3 — no default credentials
 # --------------------------------------------------------------------------
+# `MV_.*_SALT`: MV_TELEGRAM_ACTION_KEY_SALT is a Secret() of the manifest whose
+# name ends past `_KEY`, and a literal salt in compose passed every rule until
+# it was named here (T-464).
 SECRET_KEY = re.compile(
     r"^(MINIO_ROOT_USER|MINIO_ROOT_PASSWORD|NEO4J_AUTH|NEO4J_PASSWORD"
-    r"|MV_.*_KEY|MV_.*_PASSWORD|MV_TELEGRAM_BOT_TOKEN)$"
+    r"|MV_.*_KEY|MV_.*_PASSWORD|MV_.*_SALT|MV_TELEGRAM_BOT_TOKEN)$"
 )
 # The ones the stack must refuse to start without: they need `${VAR:?}`, not a
-# default. MV_LLM_API_KEY and MV_ANTHROPIC_API_KEY are absent on purpose — an
-# empty cloud key is the normal, local case.
+# default. The secrets that are legitimately empty are absent on purpose, and
+# for them the advice is `${VAR:-}`, their manifest's empty default: an empty
+# MV_LLM_API_KEY or MV_ANTHROPIC_API_KEY is the normal, local case, and an
+# empty MV_TELEGRAM_ACTION_KEY_SALT derives the HMAC key of action_key from
+# the token (ADR-018, T-310). A `:?` on any of them would stop a stack that is
+# right to start (T-464 review #1 Mi-1, N-1).
 MUST_BE_REQUIRED = {
     "MINIO_ROOT_USER",
     "MINIO_ROOT_PASSWORD",
@@ -1063,6 +1070,24 @@ MUST_BE_REQUIRED = {
     "MV_NEO4J_PASSWORD",
     "MV_TELEGRAM_BOT_TOKEN",
 }
+# What a refusal prints in place of a value that belongs to a secret: the value
+# sits in the file under review, but not in the log of CI (C-15 v1.5 "a refusal
+# does not print the value"; T-464 review #1 N-2). Rule 8 uses it as well.
+WITHHELD = "<withheld>"
+
+
+def is_secret(name):
+    return bool(name) and SECRET_KEY.match(name) is not None
+
+
+def advice(key):
+    """The form rule 3 asks a secret to take instead of what it found."""
+    if key in MUST_BE_REQUIRED:
+        return f"use ${{{key}:?...}}"
+    return (f"use ${{{key}:-}}: an optional secret, empty by the manifest's "
+            "default (rule 8), and no `:?`, which would stop a stack that is "
+            "right to start")
+
 
 # Credentials as written, in every file and wherever they sit. Layout is not
 # part of the rule — `environment` may be a mapping or a list, a key may be
@@ -1091,9 +1116,9 @@ for compose_path, raw in raw_models:
         # text, which is a default credential like any other.
         refs = [r for r in interpolations(value) if r.name]
         if not refs:
-            note(3, where, f"{key} carries the literal {value!r}; use ${{{key}:?...}}")
+            note(3, where, f"{key} carries the literal {WITHHELD}; {advice(key)}")
         elif key in MUST_BE_REQUIRED and not any(r.op == ":?" for r in refs):
-            note(3, where, f"{key} has a default ({value!r}); a missing credential must "
+            note(3, where, f"{key} has a default ({WITHHELD}); a missing credential must "
                            "stop the stack, so it needs ${VAR:?}")
 flush()
 
@@ -1383,15 +1408,24 @@ def fix_for(name, default, whole):
             f"${{{name}:-{default}}}, or require it with ${{{name}:?...}}")
 
 
-def check(where, ref, whole):
+def check(where, ref, whole, hidden=False):
+    # `hidden`: the interpolation is the value of a secret's key, or of a
+    # secret's own interpolation around it — then no refusal prints what was
+    # written (WITHHELD of rule 3; T-464 review #1 N-2).
+    hidden = hidden or is_secret(ref.name)
     # Not inside the message of `:?`/`?`: compose evaluates it only on its way
     # to a refusal, so nothing in it reaches a container (see walk).
     if not ref.op.endswith("?"):
         for inner in ref.inner:
-            check(where, inner, False)
+            check(where, inner, False, hidden)
     name = ref.name
     if name is None:
         return
+
+    def shown(text):
+        return WITHHELD if hidden else repr(text)
+
+    written = f"${{{name}{ref.op}{WITHHELD}}}" if hidden and ref.arg else ref.text
     if name.startswith("MV_"):
         if unknown(where, name):
             return
@@ -1411,7 +1445,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{ref.text} falls back to the default only when {name} is unset: a .env "
+            f"{written} falls back to the default only when {name} is unset: a .env "
             f"line `{name}=` hands the container an EMPTY {name} instead of the default "
             f"of {source} ({default!r}); " + fix_for(name, default, whole),
         )
@@ -1420,7 +1454,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{ref.text} hands the process compose's own text when {name} "
+            f"{written} hands the process compose's own text when {name} "
             "is set and an EMPTY value when .env is silent - never the operator's "
             f"value and never the default of {source} (T-411 review #2 N-6); "
             + fix_for(name, default, whole),
@@ -1433,7 +1467,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{ref.text} has no default: when .env is silent the container "
+                f"{written} has no default: when .env is silent the container "
                 f"gets an EMPTY {name} instead of the default of {source} ({default!r}); "
                 + fix_for(name, default, whole),
             )
@@ -1441,7 +1475,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{ref.text} has neither a default nor `:?`: when .env is "
+                f"{written} has neither a default nor `:?`: when .env is "
                 f"silent the process gets an EMPTY {name}, not the default of {source} "
                 f"({default!r}), and shared/env reads set-to-empty as a value - for an "
                 "allow-list that is nobody (T-411 review #1 Mi-2); "
@@ -1453,7 +1487,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} falls back to another variable here ({value!r}), and "
+            f"{name} falls back to another variable here ({shown(value)}), and "
             f"{source} declares {default!r}: one value with two sources by "
             "construction (T-411 review #1 N-1); " + fix_for(name, default, whole),
         )
@@ -1464,7 +1498,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source} - two sources of one value (contracts.md §16 p. 5); "
             + fix_for(name, default, whole),
         )
@@ -1476,7 +1510,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{name} defaults to {value!r} here; {misshapen[0]!r} does not "
+                f"{name} defaults to {shown(value)} here; {shown(misshapen[0])} does not "
                 f"have the same shape as the manifest's default {default!r} ({want}) - "
                 "a network address may name a service of this network, but in the "
                 "shape the process reads (contracts.md §16 p. 5)",
@@ -1485,8 +1519,8 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{name} defaults to {value!r} here and to {default!r} in "
-                f"{source}; {foreign[0]!r} is not a service of this compose network, so "
+                f"{name} defaults to {shown(value)} here and to {default!r} in "
+                f"{source}; {shown(foreign[0])} is not a service of this compose network, so "
                 "it is a second, invented source of the value (T-411). Every item "
                 "must name a service of this file",
             )
@@ -1494,7 +1528,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source}; it is {NOT_NETWORK_ADDRESSES[name]}, and contracts.md §16 "
             "p. 5 keeps it out of the set of network addresses; "
             + fix_for(name, default, whole),
@@ -1509,7 +1543,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source} - two sources of one value (T-411); {name} is not in the "
             "explicit set of network addresses, the only variables compose may "
             "point at a service of its own network; "
@@ -1570,7 +1604,8 @@ for compose_path, raw in raw_models:
         in_env = item.parent.endswith(".environment") or (
             item.parent.startswith("x-") and "." not in item.parent and "[" not in item.parent)
         for ref in interpolations(item.text):
-            check(where, ref, whole=in_env and item.value is not None and ref.text == item.value)
+            check(where, ref, whole=in_env and item.value is not None and ref.text == item.value,
+                  hidden=is_secret(item.key))
 flush()
 
 # --------------------------------------------------------------------------

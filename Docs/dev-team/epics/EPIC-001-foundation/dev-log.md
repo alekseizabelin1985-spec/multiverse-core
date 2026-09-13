@@ -8891,6 +8891,37 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Слияние с `3e3c95b`.** Конфликт только дописывания в конец `dev-log.md` и `review.md`; `tasks.md` и `runbook.md` — чисто, остальные файлы на кончике не менялись.
 - Не коммитил.
 
+<!-- dev-log T-464 -->
+## devops-engineer#1 · T-464 · `MV_STATE_WORLDS` и `MV_TELEGRAM_*` в compose · 2026-09-13
+
+Ветка `task/T-464-compose-env-passthrough` от `epic/EPIC-001-foundation` (`55ec4c4`), Opus. Часть (в) T-463. Таблицы прогонов и мутантов — карточка `tasks/T-464.md`.
+- **Что сделано.**
+  - `docker-compose.yml`, `core`: `MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest-world}` (О-1 T-055).
+  - `docker-compose.bot.yml`, `telegram-bot`: `MV_TELEGRAM_ACTION_KEY_SALT: ${MV_TELEGRAM_ACTION_KEY_SALT:-}` и `MV_TELEGRAM_COMMANDS_PER_MIN: ${MV_TELEGRAM_COMMANDS_PER_MIN:-20}` (замечание 1 T-310).
+  - `compose-lint`, правило 3: `MV_.*_SALT` в `SECRET_KEY` — литерал соли проходил все правила.
+  - Фикстуры: `bad-default-state-worlds` (8), `bad-secret-salt-literal` (3), `good-state-and-bot-passthrough`; строки в `README.md`.
+- **Решения по ходу.**
+  - Соль — `${VAR:-}`, а не ключ без значения: правило 3 §3.1.1 оставляет ключ без значения обязательным секретам, та же форма у `MV_LLM_API_KEY`; для `config.Load` формы равносильны.
+  - Эталон §4.2 не менялся (решение оркестратора); отставание на 7 имён — вопрос system-architect.
+  - Правка правила 3 — сверх буквы поручения; откатывается вместе со своей фикстурой, если ревью сочтёт её лишней.
+- **Проверки.** `make compose-lint` — ok, 15 сервисов, 3 файла, 8 правил; fixtures 62 bad/12 good. `bash -n` — ok. `mvctl env check` — 74 переменные, exit 0. Модель `docker compose config` с пробным env-файлом: три ключа доходят со значением пробы, без строки и с пустой строкой — умолчание манифеста; на файлах `HEAD` — ABSENT; печатались только ключи. Мутанты K0 (контрольный), K1, K2, R1, R2 — как ожидалось. `gitleaks dir --redact` по копиям — no leaks, контроль — 1 находка. Go не менялся, `golangci-lint` не нужен.
+- Для system-architect: `MV_STATE_WORLDS` ↔ `MV_WORLD_ID` (О-2 T-055); отставание эталона §4.2.
+- Не коммитил.
+
+## tech-lead#1 · T-464 · приёмка: Mi-1, N-1, N-2 закрыты, T-469 · 2026-09-13
+
+Рабочая папка `.worktrees/T-464`, Opus. Подробности, таблицы мутантов и прогонов — карточка `tasks/T-464.md`, «Приёмка (tech-lead)».
+- **Решение.** Принята после ревью #1 (0/0/1/2), итераций ревью — 1. DoD 1–6 подтверждены.
+- **Mi-1.** `scripts/compose-lint.sh`, правило 3: `advice(key)`. Обязательным секретам линтер советует `${KEY:?...}`, остальным — `${KEY:-}` без `:?`. В `bad-secret-salt-literal.yml` добавлены `expect-text` с советом и `expect-absent` со старым.
+- **N-1.** Комментарий `MUST_BE_REQUIRED` перечисляет законно пустые секреты: `MV_LLM_API_KEY`, `MV_ANTHROPIC_API_KEY`, `MV_TELEGRAM_ACTION_KEY_SALT`.
+- **N-2.** Сделано здесь, в T-468 не выносилось: `WITHHELD = "<withheld>"`, `is_secret`. Правило 3 не печатает литерал и умолчание. У `check` правила 8 параметр `hidden` (по имени подстановки, вложенности и ключу-секрету). Фикстуры: `bad-secret-number` изменена, новые `bad-default-secret-withheld` (8) и `bad-secret-required-default` (3), все с `expect-absent`; строки в `README.md`.
+- **Мутанты.** B0; K0 первым; M1–M7 — KILLED. Копия `t464acc-mut` удалена по точному пути.
+- **Проверки.** `bash -n` — ok; `make compose-lint` — ok, 15 сервисов, 8 правил, fixtures 64 bad/12 good; `mvctl env check` — 74, exit 0; `gitleaks dir --redact` по копии изменённых при приёмке файлов — no leaks.
+- **Слияние с `55ec4c4`.** Кончик равен базе ветки: `merge-file` по `compose-lint.sh`, `README.md` фикстур, `tasks.md` — 0 конфликтов, результат равен рабочей копии. Правила T-463 (маска правила 6, комментарий `--fixtures`) не тронуты.
+- **Для system-architect**: `MV_STATE_WORLDS` и `MV_WORLD_ID` (рекомендация — независимые, проверка при старте); эталон §4.2 отстаёт на 7 имён (отдельная правка по T-453 и `make secrets-scan`); соль в перечне законно пустых секретов §3.1.1 и `<withheld>` в тексте правил 3 и 8.
+- **`tasks.md` 0.1.4.** Разделы T-464 (`done`) и T-469 (`todo`, карточка `tasks/T-469.md`): `MV_GATEWAY_*` T-305/T-306 и `MV_ANTHROPIC_API_KEY` в compose, проверка «переменная контекста доходит до сервиса» (`contract-change`), правило формы передачи. При приёмке найдено: `gateway` читает `MV_GM_PATH`, compose передаёт его только `core` — в DoD 3 T-469.
+- Не коммитил.
+
 <!-- dev-log T-470 -->
 ## system-architect#1 · T-470 · `contracts.md` v0.15: C-01 v1.11, C-02 v1.8, C-03 v1.4, C-14 v1.3, C-15 v1.6; КД State, `data-model.md` §3.3, ADR-001, ADR-005 · 2026-09-13
 
