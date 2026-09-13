@@ -1724,3 +1724,300 @@ Id строится до пакета и называется в `opened_by_even
 1. T-229: применить `WithCauseID` к `narrative.output` (у двойника id нарративов по-прежнему из генератора —
    названо автором) и проверку `ev.ID != ""` до неё в каждом обработчике, выводящем id из причины.
 2. T-230: взять проверку пустого `id` из исправления Mi-A в образец агента встречи.
+
+## T-214 + T-215 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-2)
+
+### Границы ревью
+
+Код влит в `epic/EPIC-001-foundation` коммитом `3c628cb` (вместе с T-219, T-400, T-408). Читалось
+дерево ветки эпика на `acd653c`: `schemas/events/*.v1.json` 27 типов части 1 и части 2,
+`testdata/fixtures/events/*` (54 файла и README), `test/fixtures/events_test.go`,
+`shared/contracts/{registry.go,contracts.go,blockv_test.go}`,
+`cmd/mvctl/internal/contracts/check.go` (правила «в» и «г»). После `3c628cb` эти файлы меняли
+только T-419 (`combat.decided.v1.json`, поле `exchange`) и T-418 (путь импорта `membus`).
+
+Основание: `tasks.md` v0.2.5, разделы T-214 и T-215; `contracts.md` v0.10 (C-01 v1.7, C-05 v1.6,
+C-06 v1.1, C-07 v1.2, C-12, C-15 v1.1, §0, §16); `api-contracts.md` §2.2, §2.3.6–§2.3.16;
+`data-model.md` §7.2; записи dev-log T-214 и T-215; журнал 2026-09-10 и 2026-09-11; ревью T-009
+(`epics/EPIC-001-foundation/review.md`, Mi-2, Mi-5, Mi-7 и бэклог п. 4).
+
+**Процесс.** Отдельной ветки задачи не было: волна 1 шла в ветке эпика, а «ранний merge в
+`integration/mvp-1`» заменён порядком задач (журнал 2026-09-11, решение оркестратора). Артефакты и
+код попали в один сборный коммит оркестратора. Замечанием это не считаю: так было решено до
+перехода на плагин 0.6.0.
+
+**Метод.** Кроме тестов дерева, собран временный зонд вне репозитория: `contracts.Validate` на
+реестре ветки. Он напечатал точную причину отказа каждой невалидной фикстуры и проверил
+граничные документы (см. «Что проверено экспериментом»). Зонд удалён, дерево не менялось.
+
+### Вердикт
+
+- **T-214 — ПРИНЯТЬ.** Critical 0, Major 0, Minor 3, Nit 3.
+- **T-215 — ВЕРНУТЬ.** Critical 0, Major 1, Minor 3, Nit 2.
+
+Minor Mi-3 и Mi-5 общие для обеих задач.
+
+Работа сделана честно и проверяемо. Обе постановки описывали уже сделанное волной 0, и
+исполнитель это установил замером, а не на веру. Реальный объём — фикстуры и сверка. Тест
+читает невалидную фикстуру дважды: со строгой проверкой при чтении и через `Lenient()`. Так
+отказ схемы отличим от потери события, это сильная сторона. Конверт строится из реестра, а не
+из копии контракта. Найденный дефект `parse.reasoning_len` настоящий: без поля шлюз по C-15 не
+смог бы опубликовать запись.
+
+T-215 возвращаю из-за Ma-1. Схема записи модели не требует тех полей, ради которых топик
+`llm_records` существует. Пункт был адресован этой задаче и остался без решения.
+
+### Замечания по серьёзности
+
+#### Major
+
+**Ma-1 (T-215). `schemas/events/llm.output.v1.json:32, 48, 91–112` — условная обязательность
+`response_raw`, `filter` и `error` не выражена.**
+
+Что требуют документы:
+- C-07 и `api-contracts.md` §2.3.10: `response_raw` обязателен, кроме `quarantined` и
+  `filter_error`;
+- `data-model.md` §7.2: `filter` — «при тексте», `error{}` — «при `error`».
+
+В схеме все три поля просто опциональны, условие есть только в сторону запрета (`if/then` на
+`quarantined|filter_error`). Зонд: `validation_status` ∈ `valid|partially_rejected|invalid` без
+`response_raw` и без `filter` → `OK`; `error` без `error{}` → `OK`.
+
+Чем это опасно: такую запись `providers/recorded` не воспроизведёт. Replay сессии узнает об этом
+только на прогоне (`ErrIncompleteRecord`), а не при публикации. Сужать схему дешевле всего сейчас,
+пока издателя (T-211) нет. Тем же доводом оркестратор обосновал `pattern` у `provider`
+(журнал 2026-09-11).
+
+Пункт прямо передан T-214/T-215: ревью T-009, Mi-2 (`epics/EPIC-001-foundation/review.md:2096–2107`)
+и бэклог п. 4 (`:2234`), журнал 2026-09-10 («Mi-2 … в ревизии владельцев (T-052, T-214/T-215,
+T-301)»). В dev-log T-215 его нет ни как сделанного, ни как отклонённого. Сам исполнитель вынес
+половину пункта (`error{}` при `error`) в открытые вопросы (dev-log §8 п. 5).
+
+*Правка (вариант а, предпочтительный):* заменить одиночный `if/then` на `allOf` из трёх условий:
+- `validation_status ∈ valid|partially_rejected|invalid` → `required: [response_raw]`;
+- `validation_status ∈ valid|partially_rejected|quarantined|filter_error` → `required: [filter]`.
+  При `invalid` фильтр мог не выполняться (`schema_invalid`, `language`);
+- `validation_status = error` → `required: [error]`;
+- существующий запрет `response_raw` при `quarantined|filter_error` сохранить.
+
+Добавить отрицательные случаи в `shared/contracts/blockv_test.go` (`TestBlockVPayloadRejects`):
+`valid` без `response_raw`, `error` без `error{}`. Изменение — сужение без издателей: уведомить
+system-architect по §16 п. 1 и дописать строку в историю C-07.
+
+*Вариант б:* если tech-lead#2 решит держать условие в шлюзе, а не в схеме, — записать решение в
+dev-log, добавить в DoD T-211 свойство-тест «`response_raw` есть при `valid|partially_rejected|invalid`»
+и отметить в C-07. Молча оставить нельзя.
+
+#### Minor
+
+**Mi-1 (T-215). `schemas/events/llm.output.rejected.v1.json:53` — условия §2.3.10 и C-07 не
+выражены.**
+
+Что говорят документы:
+- «`budget_exceeded` — `llm.output.rejected` без `llm.output`», «при `budget_exceeded`
+  `llm_output` отсутствует»;
+- `budget{}` описан именно для этой причины, `entity` — для `unknown_entity`.
+
+Зонд: `reason=budget_exceeded` с `llm_output` и без `budget{}` → `OK`. Отчёт, который ищет
+запись по `llm_output.event.id`, получит ссылку на вызов, которого не было.
+
+*Правка:* `allOf` с двумя условиями:
+- `reason=budget_exceeded` → `not: required [llm_output]` и `required: [budget]`;
+- `reason=unknown_entity` → `required: [entity]`, если tech-lead#2 согласен.
+
+Плюс отрицательный случай в `blockv_test.go`.
+
+**Mi-2 (T-215). `schemas/events/llm.output.v1.json:10`, `config.cloud_enabled.v1.json:12` —
+`pattern` на имя провайдера ничем не закреплён.**
+
+Шаблон `^[a-z][a-z0-9_]{0,31}$` добавил оркестратор при сборке `3c628cb` (журнал 2026-09-11:
+«проверено — пять имён проходят, оба вида адреса отвергаются»). Это была ручная проверка. В
+`*_test.go` дерева нет ни одного документа с адресом в `provider`
+(`grep provider` по `shared/`, `test/`, `cmd/`): удаление шаблона оставит всё зелёным. Зонд
+подтверждает, что шаблон работает: `http://127.0.0.1:8888`, `openai_compat?key=sk-123` и
+`OpenAI` отвергаются, `openai_compat|ollama|anthropic|recorded|fake` проходят.
+
+*Правка:* два отрицательных случая в `TestBlockVPayloadRejects` («адрес в `llm.output.provider`»,
+«адрес в `config.cloud_enabled.provider`») и один положительный цикл по пяти именам.
+
+**Mi-3 (T-214, T-215). Дублирование проверок словарей и расхождение следа решения.**
+
+(а) `test/fixtures/events_test.go:347–391` (`validationStatuses`, `rejectionReasons`,
+`TestValidationStatusIsTheSixValuesOfTheDecision`, `TestRejectionReasonsAreOneDictionary`)
+повторяет `shared/contracts/blockv_test.go:420–450` (`TestValidationStatusEnum`,
+`TestRejectionReasonEnum`). Там уже есть и шесть статусов, и десять причин, и равенство
+`reasons[]` с `reason`. Утверждение dev-log T-215 §1 п. 1 («седьмое значение в enum прошло бы
+мимо всех фикстур дерева») не учитывает эти тесты волны 0. Перечень из десяти причин живёт в
+двух Go-файлах и двух схемах.
+
+(б) dev-log T-215 §5 п. 2 и §8 п. 1 утверждают, что `pattern` не ставился и решение за
+архитектором. В дереве шаблон есть (Mi-2). При этом DoD T-215 (`tasks.md:250`) требует
+«`config.cloud_enabled` — схема без изменений». Сужение оправдано: контракт C-06 уже говорил
+«только имя». Но след противоречив, а в C-06 и C-07 правки нет.
+
+*Правка:*
+- удалить из `events_test.go` два дублирующих теста и списки, оставив
+  `TestRejectionReasonsMatchTheGuardianPackage` (эталон он и так читает из схемы, строка 428;
+  в тексте пропуска можно печатать `schemaEnum(...)`);
+- оркестратору — отметка в dev-log T-215 «pattern внесён оркестратором, журнал 2026-09-11»,
+  строка в историю C-06/C-07 и уведомление system-architect (§16 п. 1).
+
+**Mi-4 (T-214). `testdata/fixtures/events/combat.decided.v1.valid.json` — нет `exchange{index, last}`.**
+
+C-05 v1.4 п. 7 (после `3c628cb`): «настоящий агент встречи заполняет поле всегда». README фикстур
+называет валидную фикстуру «формой, которую издатель обязан произвести». T-419 поменял схему, но
+не фикстуру, и теперь образцовая форма отстаёт от контракта. Сама схема верна: зонд —
+`exchange{index:0,last:false}` → `OK`, `exchange{index:0}` → «missing property 'last'».
+
+*Правка:* добавить `"exchange": { "index": 0, "last": false }` в валидную фикстуру. Это одна
+строка, её можно внести попутно в ближайшей задаче EPIC-003, которая трогает `combat.decided`.
+
+**Mi-5 (T-214, T-215). Остальные пункты ревью T-009, адресованные T-214/T-215, без решения.**
+
+Бэклог п. 4 и журнал 2026-09-10 передали владельцу, кроме Mi-2 (см. Ma-1):
+- **Mi-5 T-009:** правило копии `scope` в payload. `tick.*`, `agent.spawned` и
+  `agent.spawn_rejected` несут опциональный `scope`. У `encounter.*` его нет при
+  `additionalProperties: false`, хотя `api-contracts.md:421` перечисляет `scope` в payload
+  встречи. C-05 v1.4 п. 6 с тех пор закрепил для `encounter.ended` scope конверта. Направление
+  понятно, но текст §2.3.7 его не отражает.
+- **Mi-7 T-009:** форма `{event:{id,type?}}` продублирована во всех шести схемах, три раза в
+  `narrative.output.v1.json:27–92`.
+- Словарь `tick.aborted.reason` остался свободной строкой без записи решения.
+
+Mi-6 T-009 (отрицательная фикстура `combat.decided`) закрыт. N-4 T-009 закрыт текстом C-05 v1.4
+п. 1г: номер раунда соло публикуется.
+
+*Правка:* одной записью в dev-log EPIC-003 принять или отклонить каждый пункт. По Mi-5 — просьба
+system-analyst убрать `scope` из перечня payload в §2.3.7. По Mi-7 — локальный `$defs.EventRef` в
+`narrative.output.v1.json`; общий `EventRef` в `_common.json` — бэклог system-architect.
+
+#### Nit
+
+**N-1 (T-215). `test/fixtures/events_test.go:416–427`** — тест-заглушка считает причиной отказа
+любой строковый литерал в `internal/llm/guardian/reasons.go`. Первое же сообщение об ошибке или
+`String()` в этом файле разбудит его красным без реального расхождения. Ограничение описано в
+комментарии (строки 400–404), но T-217 о нём не узнает. *Правка:* строка в DoD T-217 («reasons.go
+содержит только словарь, либо тест сравнивает константы именованного типа»), либо уже сейчас
+брать только `ValueSpec` с типом `Reason`.
+
+**N-2 (T-214). `test/fixtures/events_test.go:274–281`** — конверт всех типов роя строится с
+`meta.agent{level: task, blueprint: encounter-wolf}`, в том числе для `tick.fired` и `world.*`.
+По §2.3.8 там уровень `global|domain`. Сегодня политика уровень не читает, ложного прохода нет.
+Если проверка уровня появится, все фикстуры мира покраснеют. *Правка:* уровень и блупринт из
+`payload.agent`, если он есть, иначе по таблице «топик/префикс → уровень».
+
+**N-3 (T-214). `shared/contracts/registry.go:131–136`** — у `llm.output` и `llm.output.rejected`
+в `Consumers` нет `SourceLLM` (`core/llm`). При этом записи читает провайдер `recorded` (T-207)
+в контексте `llm`, а §2.2 называет потребителем «replay (`recorded`-провайдер), страж (аудит)».
+Поле сегодня служит документом и проверкой «≥ 1 потребитель», поведение не меняется.
+*Правка:* добавить `SourceLLM` в оба списка.
+
+**N-4 (T-214).** Обе валидные фикстуры `encounter.ended` несут `killer`. Путь C-05 v1.4 п. 6
+(«без `killer`, схема это допускает») виден только зондом: `OK`. Можно не добавлять, пары на тип
+достаточно. Упоминаю, чтобы при переходе к правилу «пара на каждый путь» он не потерялся.
+
+**N-5 (T-215). dev-log T-215 §2** — «КД §8.3 называет девять» причин деградации. В
+`components/swarm-llm-laws.md:504` их восемь, и в описании `narrative.output.fallback_reason`
+восемь. Расхождение только в тексте журнала.
+
+### Что проверено экспериментом
+
+| Проверка | Результат |
+|---|---|
+| `go -C <эпик> run ./cmd/mvctl contracts check` | `65 types, 8 topics, 58 schema files checked`, код 0 |
+| `go test -short -count=1 ./shared/contracts/... ./test/fixtures/...` | оба `ok` |
+| `golangci-lint run ./test/... ./shared/contracts/...` | `0 issues` |
+| Причина отказа каждой из 27 невалидных фикстур (`contracts.Validate`) | все 27 — `ErrInvalidPayload`, ровно одно нарушение, и оно совпадает с таблицей README: `lod_allowed`, `content_hash` числом, `action: rest`, `enabled: "false"`, `incident.text`, `rejected_unknown_entity`, `recipients: []`, `deadline_at` без времени (`AssertFormat` включён, `contracts.go:45`) и т. д. |
+| `validation_status` ∈ `budget_exceeded`, `rejected_language` | отвергнуты |
+| `quarantined` / `filter_error` с `response_raw` / без | отвергнут / принят (оба статуса) |
+| `valid`, `partially_rejected`, `invalid` без `response_raw` и `filter` | **приняты** → Ma-1 |
+| `error` без `error{}` | **принят** → Ma-1 |
+| `llm.output.rejected` `budget_exceeded` с `llm_output`, без `budget{}` | **принят** → Mi-1 |
+| `provider` = пять имён / URL / URL с ключом / `OpenAI` | приняты / отвергнуты все три |
+| `parse.reasoning_text` (текст рассуждения) | отвергнут: места под текст нет |
+| `combat.decided.exchange` полный / без `last`; бегство без `defender`/`hp` | принят / отвергнут; принято |
+| `encounter.ended npc_dead` без `killer` (C-05 п. 6) | принят |
+| `config.cloud_enabled` с `allow_external_players` (имя C-06) / `external_players_ack` (имя §2.3.16) | отвергнут / принят → открытый вопрос |
+| `narrative.output` без `laws_version` (C-12: 100 %) | отвергнут |
+| `meta.actor_kind=operator` у `llm.output` | отвергнут конвертом (`_envelope.json`) |
+
+Политика `meta.agent` проверяется шиной (`delivery.go:158`), а не `contracts.Validate`. Её держат
+`TestSwarmTopicsDemandAnAgent` (`blockv_test.go:470`) и правило «г» `checkPolicies`. Мутации
+реестра из dev-log T-215 §1 п. 6 этим подтверждаются по чтению кода и поштучно не
+перезапускались.
+
+### Сверка реестра с §0 и §2.2
+
+Топики совпадают у всех 27 типов:
+- `combat.decided` → `game_events`;
+- `encounter.*`, `world.*`, `region.*`, `npc.*`, `world.laws.changed`, `world.law_breach.*` → `world_events`;
+- `tick.*`, `agent.*`, `content.incident.recorded`, `config.cloud_enabled` → `system_events`;
+- `llm.*` → `llm_records`;
+- `narrative.output` → `narrative_output`.
+
+Издатели:
+- `encounter.started` — `core/swarm` и `testkit/swarm` (§0 v0.4);
+- `llm.output` — `core/llm` и `testkit/swarm` (`RecordingWriter`);
+- `world.laws.changed` — `mvctl` и `core/laws`;
+- `config.cloud_enabled` — `core/llm`.
+
+Политики: `SwarmPolicy` (агент обязателен) — у типов роя, `llm_records` и `narrative_output`;
+без агента — `world.laws.changed`, `world.law_breach.*` и `config.cloud_enabled`, как в C-01 и
+в ревью T-009 Mi-3. `world.law_breach.*` помечены `reserved(...)` (§16 п. 4, C-12). Замечание по
+потребителям — только N-3.
+
+### Изменения контрактов после `3c628cb`
+
+| Контракт | Затрагивает схемы T-214/T-215? |
+|---|---|
+| C-01 v1.5–v1.7 (id из причины, паника в `Delivery`/`Stop`, посредник, `Close`) | нет: Go-API и поведение шины |
+| C-05 v1.4 п. 7 `exchange` | схема обновлена T-419; фикстура — нет (Mi-4) |
+| C-05 v1.4 п. 6 `encounter.ended` без `killer`, scope конверта | схема допускает; текст §2.3.7 — Mi-5 |
+| C-05 v1.5, v1.6 | «Схемы без изменений» в истории самого контракта; `resolve` — enum `entity.*.proposed`, не эти задачи |
+| C-06 v1.1 `allow_external_players?` | расхождение с `external_players_ack` по-прежнему в v0.10 (`contracts.md:466`) → открытый вопрос |
+
+### DoD T-214
+
+| Пункт | Статус |
+|---|---|
+| `mvctl contracts check` зелёный; тип → топик по §0; `world.law_breach.*` — исключение «без издателя» | выполнен |
+| Валидная и невалидная фикстура на каждый тип; `MV_BUS_VALIDATE_ON_READ` отклоняет невалидную | выполнен: 22 типа, 66 подтестов, отказ и проход через `Lenient()` |
+| Слито в `integration/mvp-1` до T-219/T-220 и до I1-α | закрыт решением оркестратора: порядок в ветке эпика вместо раннего merge |
+| Общий DoD: тесты, линтер, приватность | выполнен (тесты и линтер перезапущены; `privacy scan` — по dev-log, не перезапускался) |
+
+### DoD T-215
+
+| Пункт | Статус |
+|---|---|
+| `reason` enum равен `guardian/reasons.go` (при отсутствии пакета — TODO-тест) | выполнен: пропускаемый тест включится сам; хрупкость — N-1 |
+| `validation_status` ровно 6 значений; отрицательный тест на `rejected_*` и `budget_exceeded`; `reasons[]` опционален | выполнен (`blockv_test.go:243–280`, `:423`); дубль — Mi-3 |
+| `config.cloud_enabled` — схема без изменений; семантика C-06 v1.1 передана T-212 | формально нарушен: `pattern` добавлен (оправдан, но без теста и следа — Mi-2, Mi-3); семантика передана |
+| Слито в `integration/mvp-1` | закрыт решением оркестратора |
+| Схема соответствует C-07 и §2.3.10 (общий DoD «поведение соответствует контракту») | **нет** — Ma-1 |
+
+### Открытые вопросы
+
+1. **system-architect:** имя третьего поля `config.cloud_enabled`. C-06 v1.1 (`contracts.md:466`)
+   называет `allow_external_players?`, а §2.3.16 и схема — `external_players_ack`. Схема
+   отвергает имя контракта. Вопрос поднят в T-215 (dev-log §8 п. 4) и через три ревизии
+   контрактов не закрыт.
+2. **system-architect:** кодировка `content_hash` (hex или base64) — открыта с T-214
+   (dev-log §7 п. 1). Нужна до T-201 (`ContentHash`), затем `pattern` в две схемы.
+3. **system-architect:** пометка «дополнено ADR-017 доп. 1» в ADR-016 п. 2–3 (dev-log T-215 §8 п. 3).
+
+### Предложения в бэклог
+
+1. `EventRef` в `_common.json` (system-architect, после MVP-1) — продолжение Mi-7 T-009.
+2. Правило «пара фикстур у каждого незадеприкейченного типа реестра» — отдельной задачей после
+   фикстур EPIC-002 и EPIC-004 (dev-log T-214 §7 п. 2).
+3. Словари `tick.aborted.reason` и `narrative.output.fallback_reason` — сужение до enum в задачах,
+   которые закрепят их в коде (T-223/T-229), совместимое изменение по §16 п. 1.
+4. Фикстуры `agent.id` привести к детерминированной форме после R3 (dev-log T-214 §7 п. 3).
+5. DoD T-211: `llm.output.error.message` строится через редактор секретов `shared/logging`, а не
+   из `err.Error()` провайдера (журнал 2026-09-11).
+
+### Статус замечаний на 2026-09-13
+
+- Ma-1 (T-215), Mi-1, Mi-2 — закрываются задачей T-445 (EPIC-001): условные схемы `llm.output` и `llm.output.rejected`, `pattern` у `provider` с тестами.
+- Открытый вопрос 1 — решён system-architect (ревизия 4): выбрано поле `external_players_ack`.
+- Открытый вопрос 2 — решён: кодировка `content_hash` — `sha256:<64 hex>`.
