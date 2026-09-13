@@ -8580,6 +8580,17 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Бэклог.** `.git-blame-ignore-revs` — строкой бэклога в разделе T-444 `tasks.md`. Разделитель `prompt_hash` — решение «пробел», строкой DoD T-218 с golden-значением. `ReasonLevelViolation` двойника — строкой DoD T-056.
 - **Проверки.** CRLF и отсутствие NUL — в скрипте правки до записи и после, `sed -i` не использовался. `gitleaks dir --redact -c .gitleaks.toml` по 13 файлам — 0 находок. КД роя не менялся (строка 521, inline `gitleaks:allow` на месте).
 - Не коммитил.
+<!-- dev-log T-453 -->
+## devops-engineer#1 · T-453 · gitleaks: эталон `.env.example` без построчного отпечатка; CI на `develop` · 2026-09-13
+
+Ветка `task/T-453-gitleaks-env-example-ci-develop` (от эпика `ab6cb1d`), TEAM-1, Opus. Подробности — карточка `tasks/T-453.md`.
+- **Находка.** После знака равенства `generic-api-key` пропускает до пяти пробельных символов, включая перевод строки. Следующая строка вида `ИМЯ=значение` (`[\w.=-]{10,}`) становится «секретом». Строка, начинающаяся с `#`, в захват не входит. Пустая строка не спасает: при CRLF это 4 символа.
+- **Правка.** Комментарий `MV_LLM_NUM_CTX` перенесён на строку над переменной, в `.env.example` и в эталоне §4.2 одинаково. Ещё две пары того же вида (`MV_MINIO_SECRET_KEY` → `MV_MINIO_USE_SSL`, `MV_NEO4J_PASSWORD` → `MV_EMBED_MODEL`) проходили только за счёт стоп-слов: мутант с переименованными строками даёт 2 находки. Над обеими переменными поставлен комментарий. Правило записано в §4.1 п. 5.
+- **`.gitleaksignore`.** Снят построчный отпечаток `…:549`. Строка коммита `f8759b0…:520` сохранена (её добавил оркестратор, `1a45b03` в эпике), комментарий к ней самостоятельный.
+- **CI.** `develop` добавлен в `push` и `pull_request` `go.yml`; §3.1 приведён к `go.yml`. `qwen-*` не трогались: проверок, которые не приходят на `develop`, там нет.
+- **`BASE`.** `?= develop`; цель отказывает, если `BASE` не коммит (на неразрешимом диапазоне gitleaks выходит с 0). CI цель не вызывает. Диапазон `integration/mvp-1..HEAD` содержал коммит T-399, и с прежним умолчанием цель была красной.
+- **Прогоны.** `gitleaks dir` по трём копиям в scratch (изменённые файлы; без `.gitleaksignore`; все отслеживаемые файлы с содержимым рабочей копии) — no leaks, контрольный мутант — 1 находка. `compose-lint` и `--fixtures` — ok. `mvctl env check` — ok. Эталон ↔ файл: 60 переменных, 7 `[required]`. YAML `go.yml` — ok. `make ci BASE=develop` — rc=0: lint 0 issues; test ok; test-race SKIPPED (нет cgo); contracts 65 типов; env 67 переменных; secrets-scan no leaks; privacy-scan ok; govulncheck 0 затрагивающих; compose-lint ok; scripts-parity 97 PASS / 0 FAIL / 2 KNOWN-FAILING; test-e2e ok.
+- Не коммитил.
 <!-- dev-log T-449 -->
 ## system-architect#1 · T-449 · Документы по решениям system-architect (ревизия 4, продолжение) · 2026-09-13
 
