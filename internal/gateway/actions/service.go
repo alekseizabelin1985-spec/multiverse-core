@@ -14,6 +14,7 @@ import (
 	"multiverse-core.io/internal/gateway/api"
 	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/shared/clock"
+	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
 )
 
@@ -163,9 +164,17 @@ func (s *Service) Submit(ctx context.Context, c Command) Answer {
 	}
 
 	turn := turnOf(c, v.Character, now)
+	turn.TargetID, turn.TargetType = targetOf(v)
+	if v.Rule.Text {
+		turn.TextLen = utf8.RuneCountInString(text)
+	}
 	ref, err := s.cfg.Turns.Begin(ctx, turn)
 	if err != nil {
-		return s.failed(ctx, c, api.CodeInternal, err)
+		code := api.CodeInternal
+		if errors.Is(err, ErrBusUnavailable) {
+			code = api.CodeBusUnavailable
+		}
+		return s.failed(ctx, c, code, err)
 	}
 	b := &batch{turn: turn, ref: ref, expires: now.Add(s.cfg.KeyTTL)}
 	if s.cfg.GMPath == eventbus.GMPathLegacy {
@@ -350,11 +359,22 @@ func replay(s Stored) Answer {
 // turnOf is the turn of an action of a character; the character is the zero
 // value when the projection does not know it, and the turn has no scope.
 func turnOf(c Command, ch readmodel.CharacterState, now time.Time) Turn {
-	t := Turn{WorldID: ch.WorldID, PlayerID: c.PlayerID, Type: c.Type, ActorKind: c.ActorKind, At: now}
+	t := Turn{WorldID: ch.WorldID, PlayerID: c.PlayerID, Name: ch.Name, Type: c.Type, ActorKind: c.ActorKind, At: now}
 	if ch.ID != "" {
 		t.Scope = *scopeOf(ch)
 	}
 	return t
+}
+
+// targetOf is the entity a validated action aims at, as its event names it.
+func targetOf(v Validated) (id, typ string) {
+	switch {
+	case v.NPC != nil && v.Command.Type == api.ActionAttack:
+		return v.NPC.ID, entity.TypeNPC
+	case v.Region != nil && (v.Command.Type == api.ActionEnter || v.Command.Type == api.ActionLeave):
+		return v.Region.ID, entity.TypeRegion
+	}
+	return "", ""
 }
 
 // lock takes the lock of one player and returns its release; the entry goes
