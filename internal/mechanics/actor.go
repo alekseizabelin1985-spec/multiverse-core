@@ -27,8 +27,11 @@ func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error) {
 		return nil, fmt.Errorf("mechanics: entity %s is a %s: only a player or an npc fights", e.ID, e.Type)
 	}
 
-	a := &Actor{ID: e.ID, Type: e.Type}
-	var ok bool
+	a := &Actor{ID: e.ID, Type: e.Type, Version: e.Version}
+	var (
+		ok  bool
+		err error
+	)
 	if a.HP, ok = e.HP(); !ok {
 		return nil, missingAttr(e, entity.AttrHP)
 	}
@@ -41,14 +44,23 @@ func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error) {
 	if a.Def, ok = e.Def(); !ok {
 		return nil, missingAttr(e, entity.AttrDef)
 	}
-	if a.Dmg, ok = e.Dmg(); !ok {
-		return nil, missingAttr(e, entity.AttrDmg)
+	if a.Dmg, err = dmgOf(e); err != nil {
+		return nil, err
 	}
 	if a.Status, ok = e.Status(); !ok {
 		return nil, missingAttr(e, entity.AttrStatus)
 	}
 	// A flee bonus is optional: an actor without one does not run away.
 	a.Flee, _ = e.Flee()
+	if e.Type == entity.TypeNPC {
+		// Required like the numbers are (data-model.md §3.4): an NPC without a
+		// kind would fall without the trophy of its kind, and nothing would
+		// notice. A kind the rules give no loot table is legal — it simply
+		// leaves nothing behind.
+		if a.Kind, ok = e.Kind(); !ok || a.Kind == "" {
+			return nil, missingAttr(e, entity.AttrKind)
+		}
+	}
 
 	if enc == nil {
 		return a, nil
@@ -82,6 +94,32 @@ func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error) {
 		}
 	}
 	return a, nil
+}
+
+// dmgOf reads the damage of a fighter, which is dice and only dice.
+//
+// data-model.md §3.3 types the combat stats together as "int / formula", and a
+// flat number would read naturally for dmg. It is refused on purpose (T-053,
+// the backlog item of T-050): the grammar of the rules has no flat damage — a
+// dice expression needs at least one die of two sides (§5.3) — and widening the
+// grammar is a task with a review of its own (ADR-012 p. 2). A number is
+// therefore named as what it is rather than reported as a missing attribute,
+// and an expression that does not parse is refused here, where the defect of
+// whoever created the entity is visible, rather than in the middle of a fight.
+func dmgOf(e *entity.Entity) (string, error) {
+	raw, present := e.Attr(entity.AttrDmg)
+	if !present {
+		return "", missingAttr(e, entity.AttrDmg)
+	}
+	text, isText := raw.(string)
+	if !isText {
+		return "", fmt.Errorf("mechanics: %s %s: %s is %v, not a dice expression: damage is rolled, never a flat number",
+			e.Type, e.ID, entity.AttrDmg, raw)
+	}
+	if _, err := ParseDice(text); err != nil {
+		return "", fmt.Errorf("mechanics: %s %s: %s: %w", e.Type, e.ID, entity.AttrDmg, err)
+	}
+	return text, nil
 }
 
 func missingAttr(e *entity.Entity, attr string) error {

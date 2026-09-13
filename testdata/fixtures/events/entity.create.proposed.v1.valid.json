@@ -1,0 +1,18 @@
+{
+  "proposal_id": "01JG0000000000000000000020",
+  "entity": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "attributes": {
+    "hp": 10,
+    "hp_max": 10,
+    "atk": 2,
+    "def": 12,
+    "dmg": "d6",
+    "flee": "2",
+    "status": "alive",
+    "position": "outside:dark-forest-world",
+    "scope": { "id": "player-A", "type": "solo" },
+    "actor_kind": "ci",
+    "inventory": []
+  },
+  "cause": "create"
+}

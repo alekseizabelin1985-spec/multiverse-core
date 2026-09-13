@@ -1,0 +1,11 @@
+{
+  "roll": {
+    "index": 0,
+    "formula": "d20+2",
+    "seed": 17918835045097094771,
+    "result": 17,
+    "natural": 15
+  },
+  "purpose": "hit",
+  "roller": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" }
+}

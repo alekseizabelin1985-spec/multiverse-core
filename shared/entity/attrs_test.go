@@ -1,6 +1,9 @@
 package entity_test
 
 import (
+	"math"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -426,5 +429,129 @@ func TestAttributesThatOnlyHadANameBefore(t *testing.T) {
 	spawned, err = empty.SpawnedBy()
 	if err != nil || spawned != (entity.SpawnSource{}) {
 		t.Fatalf("SpawnedBy = %+v, %v; want the zero value for an authored NPC", spawned, err)
+	}
+}
+
+// T-050. The rules document writes flee as a number (flee: 2) and the fixtures
+// as text ("2"); data-model.md §3.3 calls it a modifier like atk. A getter that
+// read text alone answered "no flee" for a character created from the rules,
+// and the mechanics took that for a character who does not run.
+//
+// Iteration 2 (review #1, Mi-2): a flee that is there and is not a whole number
+// is a defect, and it must fail as loudly as the text "abc" does — present, and
+// unreadable as an integer by the reader of internal/mechanics — rather than
+// pass for a character without the bonus.
+func TestFleeReadsEveryShapeTheWritersUse(t *testing.T) {
+	tests := []struct {
+		name   string
+		value  any
+		want   string
+		wantOK bool
+		defect bool
+	}{
+		{name: "signed text of the fixtures", value: "+2", want: "+2", wantOK: true},
+		{name: "plain text", value: "2", want: "2", wantOK: true},
+		{name: "number built in Go from the rules", value: 2, want: "2", wantOK: true},
+		{name: "number read off the wire", value: float64(2), want: "2", wantOK: true},
+		{name: "negative number read off the wire", value: float64(-1), want: "-1", wantOK: true},
+		{name: "negative number built in Go", value: int8(-3), want: "-3", wantOK: true},
+		{name: "null of the wolf that does not run", value: nil, wantOK: false},
+		{name: "text that is not a number", value: "abc", want: "abc", wantOK: true, defect: true},
+		{name: "fraction", value: 2.5, want: "2.5", wantOK: true, defect: true},
+		{name: "fraction of a float32", value: float32(0.1), want: "0.1", wantOK: true, defect: true},
+		{name: "boolean", value: true, want: "true", wantOK: true, defect: true},
+		{name: "past the range of int64", value: uint64(math.MaxUint64), want: "18446744073709551615", wantOK: true, defect: true},
+		{name: "an object", value: map[string]any{"bonus": 2}, want: `{"bonus":2}`, wantOK: true, defect: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			e := player(t)
+			e.Attributes[entity.AttrFlee] = test.value
+			flee, ok := e.Flee()
+			if ok != test.wantOK || flee != test.want {
+				t.Fatalf("Flee = %q, %v; want %q, %v", flee, ok, test.want, test.wantOK)
+			}
+			// The reader of internal/mechanics (parseInt): a sign, then an
+			// integer. A defect is unreadable by it, like "abc"; everything
+			// else reads.
+			_, err := strconv.Atoi(strings.TrimPrefix(flee, "+"))
+			if ok && test.defect == (err == nil) {
+				t.Fatalf("Flee = %q: readable as an integer = %v, want %v", flee, err == nil, !test.defect)
+			}
+		})
+	}
+
+	absent := player(t)
+	delete(absent.Attributes, entity.AttrFlee)
+	if _, ok := absent.Flee(); ok {
+		t.Fatal("Flee reports a value on a character without one")
+	}
+}
+
+// T-050. The membership attributes of data-model.md §3.3, §3.6 and §3.7 that
+// had getters and no test: which group and which encounter a character is in,
+// and where a group and an encounter stand.
+func TestMembershipAttributes(t *testing.T) {
+	e := player(t)
+	if _, ok := e.GroupID(); ok {
+		t.Fatal("GroupID reports a group for a solo character")
+	}
+	if _, ok := e.EncounterID(); ok {
+		t.Fatal("EncounterID reports an encounter for a character out of one")
+	}
+	e.Attributes[entity.AttrGroupID] = "group-1"
+	e.Attributes[entity.AttrEncounterID] = "enc-1"
+	if id, ok := e.GroupID(); !ok || id != "group-1" {
+		t.Fatalf("GroupID = %q, %v; want group-1", id, ok)
+	}
+	if id, ok := e.EncounterID(); !ok || id != "enc-1" {
+		t.Fatalf("EncounterID = %q, %v; want enc-1", id, ok)
+	}
+
+	group := entity.New(entity.Ref{ID: "group-1", Type: entity.TypeGroup}, "dark-forest-world", "", map[string]any{
+		entity.AttrScope:       "group:group-1",
+		entity.AttrPosition:    "dark-forest-01",
+		entity.AttrEncounterID: "enc-1",
+	}, proposedAt)
+	if scope, ok := group.Scope(); !ok || scope != (eventbus.ScopeRef{ID: "group-1", Type: "group"}) {
+		t.Fatalf("Scope = %+v, %v; want group:group-1", scope, ok)
+	}
+	if position, ok := group.Position(); !ok || position != "dark-forest-01" {
+		t.Fatalf("Position = %q, %v", position, ok)
+	}
+	if id, ok := group.EncounterID(); !ok || id != "enc-1" {
+		t.Fatalf("EncounterID = %q, %v", id, ok)
+	}
+
+	encounter := entity.New(entity.Ref{ID: "enc-1", Type: entity.TypeEncounter}, "dark-forest-world", "", map[string]any{
+		entity.AttrRegionID: "dark-forest-01",
+		entity.AttrScope:    map[string]any{"id": "group-1", "type": "group"},
+	}, proposedAt)
+	if region, ok := encounter.RegionID(); !ok || region != "dark-forest-01" {
+		t.Fatalf("RegionID = %q, %v", region, ok)
+	}
+	if scope, ok := encounter.Scope(); !ok || scope != (eventbus.ScopeRef{ID: "group-1", Type: "group"}) {
+		t.Fatalf("Scope = %+v, %v; want the scope the encounter was opened for", scope, ok)
+	}
+}
+
+// T-050. last_background_event_at (data-model.md §3.2) had a name and no
+// getter.
+func TestLastBackgroundEventAt(t *testing.T) {
+	region := entity.New(entity.Ref{ID: "dark-forest-01", Type: entity.TypeRegion}, "dark-forest-world", "", map[string]any{
+		entity.AttrLastBackgroundEventAt: "2026-09-09T13:15:00+03:00",
+	}, proposedAt)
+	at, ok := region.LastBackgroundEventAt()
+	if !ok || !at.Equal(proposedAt) || at.Location() != time.UTC {
+		t.Fatalf("LastBackgroundEventAt = %v, %v; want %v in UTC", at, ok, proposedAt)
+	}
+
+	region.Attributes[entity.AttrLastBackgroundEventAt] = "after the last storm"
+	if _, ok := region.LastBackgroundEventAt(); ok {
+		t.Fatal("LastBackgroundEventAt read a timestamp out of prose")
+	}
+	delete(region.Attributes, entity.AttrLastBackgroundEventAt)
+	if _, ok := region.LastBackgroundEventAt(); ok {
+		t.Fatal("LastBackgroundEventAt reports a value on a region without one")
 	}
 }
