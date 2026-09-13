@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:16:53+03:00",
+  "updatedAt": "2026-09-13T14:22:33+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2434,14 +2434,33 @@ window.DEVTEAM_STATE =
         {
           "id": "T-453",
           "title": "Ложное срабатывание gitleaks в эталоне .env.example без построчного отпечатка; go.yml запускается на develop (devops, XS)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/devops-engineer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:22:33+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 48,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:31",
+              "to": "13.09 13:48",
+              "duration": "17m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:48",
+              "to": "13.09 14:02",
+              "duration": "14m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 14:02",
+              "to": "13.09 14:19",
+              "duration": "17m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-453.md",
           "branch": "task/T-453-gitleaks-env-example-ci-develop",
           "worktree": ".worktrees/T-453"
@@ -2948,7 +2967,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T12:52:40+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 2,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8279,7 +8298,7 @@ window.DEVTEAM_STATE =
       "task": "T-453",
       "action": "приёмка T-453 с правкой Minor/Nit",
       "startedAt": "2026-09-13T14:02:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:22:33+03:00"
     },
     {
       "instance": "developer#1",
@@ -8319,7 +8338,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "ревью #2 T-201 (TEAM-2)",
       "startedAt": "2026-09-13T14:08:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:22:33+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8369,6 +8388,16 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Ревью #1: links и HTTP-слой gateway",
       "startedAt": "2026-09-13T14:16:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Итерация 3: хеш дат и ключей, кириллица в плейсхолдерах",
+      "startedAt": "2026-09-13T14:22:33+03:00",
       "finishedAt": null
     }
   ],
@@ -11000,6 +11029,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "2026-09-13 · EPIC-004 · T-303 выполнена TEAM-3/developer#1: internal/gateway/links (resolve/consent/forget с хуками до DELETE и CompactLinks до ответа; байтов внешнего ID нет в -wal/-shm), обработчики в новом пакете internal/gateway/handlers (api импортирует бот — без драйвера SQLite), цепочка mid"
+    },
+    {
+      "at": "2026-09-13T14:22:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-453 принята tech-lead#1: Mi-1/Mi-2/N-1/N-2 закрыты при приёмке (шапка go.yml — обязательные проверки только main и integration/mvp-1, CI на develop; полный список слов generic-api-key по исходнику gitleaks v8.30.1 в §4.1 п. 5; рецепт слияния .gitleaksignore; предупреждение make secrets-scan о пуст"
+    },
+    {
+      "at": "2026-09-13T14:22:33+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · ревью #2 (TEAM-2/code-reviewer#1): вернуть — 0/1/2/2. Ma-1 закрыт, но хеш через reflect пишет time.Time как {} — разные даты YAML дают один content_hash (обход контроля подмены блупринта T-26). Mi-5 нестроковый ключ совпадает со строковым «int:1»; Mi-6 SuspiciousPlaceholders не видит кирилли"
     }
   ],
   "blockers": [],
