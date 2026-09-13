@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:24:06+03:00",
+  "updatedAt": "2026-09-13T16:24:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3275,16 +3275,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-210",
           "title": "B5a · Бюджет вызовов LLM",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#3",
+          "startedAt": "2026-09-13T16:24:50+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md",
-          "subwave": "C"
+          "subwave": "C",
+          "branch": "task/T-210-llm-budget",
+          "worktree": ".worktrees/T-210"
         },
         {
           "id": "T-211",
@@ -8996,6 +8998,16 @@ window.DEVTEAM_STATE =
       "action": "Повторная отметка владельца: В-1, В-2",
       "startedAt": "2026-09-13T16:20:50+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-210",
+      "action": "Бюджет вызовов LLM",
+      "startedAt": "2026-09-13T16:24:50+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -11950,6 +11962,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние D (постоянное разрешение): epic/EPIC-001-foundation → develop (a7a8fc6), состав — T-449, T-446. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с незакоммиченными файлами владельца нет, ветка эпика сохранена. Синхронизация develop → EPIC-003 (2ad8d4f), EPIC-0"
+    },
+    {
+      "at": "2026-09-13T16:24:50+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-210 (TEAM-2/developer#3, S, подволна C): бюджет вызовов LLM internal/llm/budget.go — зависимость T-206 слита; счётчик провайдера — локальная заглушка теста до слияния T-207."
     }
   ],
   "blockers": [],
