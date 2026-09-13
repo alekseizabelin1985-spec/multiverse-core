@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:26:52+03:00",
+  "updatedAt": "2026-09-13T18:29:43+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4293,7 +4293,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9440,7 +9440,7 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Ревью #2: распределение T-211/T-212/T-213",
       "startedAt": "2026-09-13T18:20:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:29:43+03:00"
     },
     {
       "instance": "developer#1",
@@ -9470,6 +9470,16 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Итерация 2: дедлайны C-01, Permanent",
       "startedAt": "2026-09-13T18:26:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-459",
+      "action": "Приёмка T-459 документы EPIC-003",
+      "startedAt": "2026-09-13T18:29:43+03:00",
       "finishedAt": null
     }
   ],
@@ -12743,6 +12753,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-456 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/2/3/6. C-08 v1.5, КД шлюза, C-02 v1.6/v1.7, C-07 v1.6, C-15 v1.5 сверены с кодом. Ma-1 в C-01 v1.8 остались старые дедлайны маршрутов (противоречат КД §5.1 п. 8); Ma-2 Permanent при отменённом контексте и Permanent(ErrWorldStopped) ломают T-055 "
+    },
+    {
+      "at": "2026-09-13T18:29:43+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-459 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/2/3. Распределение T-211 (E) ← T-212 (F) ← T-213 (G) без циклов; called_at согласован с C-07 v1.6 и replay C-01 v1.9. Mi-4 «Файлы» T-212/T-213 неполны; Mi-5 нулевой called_at проходит схему и выпадает из окна бюджета; N-6 C-07 называет T-211 в"
     }
   ],
   "blockers": [],
