@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:51:46+03:00",
+  "updatedAt": "2026-09-13T22:52:25+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2604,7 +2604,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-464",
           "title": "Devops: MV_STATE_WORLDS и MV_TELEGRAM_* в docker-compose (после T-055 и T-310 в develop, до T-390)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T22:40:47+03:00",
           "finishedAt": null,
@@ -10274,7 +10274,7 @@ window.DEVTEAM_STATE =
       "task": "T-464",
       "action": "Переменные в compose",
       "startedAt": "2026-09-13T22:40:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:52:25+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -10314,6 +10314,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Отметка владельца T-056",
       "startedAt": "2026-09-13T22:51:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-464",
+      "action": "Ревью #1 compose",
+      "startedAt": "2026-09-13T22:52:25+03:00",
       "finishedAt": null
     }
   ],
@@ -14211,6 +14221,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-056 · ревью #3 (TEAM-1/code-reviewer#3): принять — 0/0/2/1. Ma-3 (скаляры после ApplyOps, путь ниже скаляра), Mi-6 (строгий страж, K4/K5 красные, 60/60 прогонов стенда), N-3 закрыты. Mi-7 список scalarAttributes неполон (World/Region/Group/Encounter, region_id NPC) и тип значения в корне не провер"
+    },
+    {
+      "at": "2026-09-13T22:52:25+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-464 выполнена TEAM-1/devops-engineer#1: MV_STATE_WORLDS у core, MV_TELEGRAM_ACTION_KEY_SALT (${VAR:-}) и MV_TELEGRAM_COMMANDS_PER_MIN у бота с умолчаниями манифеста; дыра правила 3 compose-lint — соль литералом проходила, добавлен шаблон MV_.*_SALT; фикстуры 62 bad / 12 good; docker compose config"
     }
   ],
   "blockers": [],
