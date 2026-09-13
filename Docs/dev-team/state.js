@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:26:24+03:00",
+  "updatedAt": "2026-09-13T15:36:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2404,14 +2404,51 @@ window.DEVTEAM_STATE =
         {
           "id": "T-449",
           "title": "Документы по решениям system-architect: C-03 v1.3 (T-053), тексты T-050, правило «локальный адрес» (ADR-005/C-15), направление зависимостей internal/llm (ADR-001), limit_money (C-07)",
-          "status": "review",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T13:49:33+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T15:36:06+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 101,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:49",
+              "to": "13.09 14:00",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью #1",
+              "from": "13.09 14:00",
+              "to": "13.09 14:16",
+              "duration": "16m"
+            },
+            {
+              "stage": "Итерация 2",
+              "from": "13.09 14:16",
+              "to": "13.09 14:45",
+              "duration": "29m"
+            },
+            {
+              "stage": "Ревью #2",
+              "from": "13.09 14:45",
+              "to": "13.09 15:01",
+              "duration": "16m"
+            },
+            {
+              "stage": "Приёмка (прервана)",
+              "from": "13.09 15:01",
+              "to": "13.09 15:22",
+              "duration": "21m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 15:26",
+              "to": "13.09 15:34",
+              "duration": "8m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-449.md",
           "branch": "task/T-449-docs-architect-decisions",
           "worktree": ".worktrees/T-449"
@@ -2497,7 +2534,7 @@ window.DEVTEAM_STATE =
         },
         {
           "id": "T-456",
-          "title": "C-08 v1.4: 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll (system-architect, после T-449)",
+          "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -8672,7 +8709,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "Приёмка T-449 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:36:06+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8732,6 +8769,16 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Итерация 2: ADR-029 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Ревью #1: compose-lint без окружения CI",
+      "startedAt": "2026-09-13T15:36:06+03:00",
       "finishedAt": null
     }
   ],
@@ -11531,6 +11578,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Пользователь: «Лимит 5 часовой обновился», «Агентов возвращаем». Parallelism 3/3/9 (не 12: при 12 одновременных лимит сессии прервал восемь агентов разом). Запускаются: приёмки T-449 (tech-lead#1), T-054 (TEAM-1/tech-lead#2), T-201 (TEAM-2/tech-lead#2); ревью #2 T-448 (code-reviewer#2) и #2 T-446 (c"
+    },
+    {
+      "at": "2026-09-13T15:36:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 принята tech-lead#1 (возобновлённая приёмка): DoD 1–5 выполнен, C-03 v1.3 сверен с кодом EPIC-002 24f1baf, правило C-15 = ADR-005 побайтно; R2-Mi-1/R2-Mi-2/Nit ревью #2 внесены в новый раздел T-456 tasks.md (номер записи C-08, ожидаемо v1.5, выбирает system-architect: v1.4 уже занят T-444). Ко"
     }
   ],
   "blockers": [],
