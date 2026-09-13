@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:39:15+03:00",
+  "updatedAt": "2026-09-13T15:48:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2548,15 +2548,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-457.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-457.md",
+          "branch": "task/T-457-architect-decisions-queue",
+          "worktree": ".worktrees/T-457"
         }
       ],
       "defects": [],
@@ -2751,15 +2753,40 @@ window.DEVTEAM_STATE =
         {
           "id": "T-054",
           "title": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#1",
           "startedAt": "2026-09-13T14:03:36+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T15:48:01+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 92,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 14:03",
+              "to": "13.09 14:39",
+              "duration": "36m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 14:39",
+              "to": "13.09 14:56",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка (прервана)",
+              "from": "13.09 14:56",
+              "to": "13.09 15:22",
+              "duration": "26m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 15:26",
+              "to": "13.09 15:39",
+              "duration": "13m"
+            }
+          ],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-054.md",
           "branch": "task/T-054-solo-invariants",
           "worktree": ".worktrees/T-054"
@@ -8732,7 +8759,7 @@ window.DEVTEAM_STATE =
       "task": "T-054",
       "action": "Приёмка T-054 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:48:01+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8822,6 +8849,16 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Отметка владельца: .golangci.yml и архив",
       "startedAt": "2026-09-13T15:39:15+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Решения: ADR-029/C-07 ref, В1–В4 T-054, вопросы T-060",
+      "startedAt": "2026-09-13T15:48:01+03:00",
       "finishedAt": null
     }
   ],
@@ -11651,6 +11688,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-201 принята TEAM-2/tech-lead#2 (возобновлённая приёмка): DoD 5/5 и общий DoD §1, make test — ok, shared/agent 93,3 %; N-3/N-4 закрыты тестами (мутанты M16/M9/M10 убиты); пробы слияния с кончиком эпика — .golangci.yml и tasks.md без конфликта, dev-log/review — appendtail. Бэклог разнесён в T-202, T"
+    },
+    {
+      "at": "2026-09-13T15:48:01+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 принята TEAM-1/tech-lead#2 (возобновлённая приёмка): Minor-3 (player/npc без hp — нарушение inv-02) и Nit-2 (все терминальные статусы inv-09) закрыты при приёмке, 7 мутантов красные; Minor-1/Minor-2 — вопросы В1–В4 к system-architect (T-457), строки DoD в T-056 (dead_entity для dead/abandoned/"
+    },
+    {
+      "at": "2026-09-13T15:48:01+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Начата T-457 (system-architect#1): очередь решений — ADR-029 (поправки ADR-016/017, C-07 поле ref), В1–В4 из T-054, три вопроса T-060 (replay), N Qwen3.6 в ADR-005."
     }
   ],
   "blockers": [],
