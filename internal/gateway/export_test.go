@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"multiverse-core.io/internal/gateway/actions"
 	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/shared/objstore"
 )
@@ -41,6 +42,21 @@ func ReadModel(c *Context) *readmodel.Model {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.model
+}
+
+// Limiter is the rate limit of a started context; nil in replay.
+func Limiter(c *Context) *actions.Limiter {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.limiter
+}
+
+// PendingActions is the number of half published actions a started context
+// holds in memory.
+func PendingActions(c *Context) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.service.Pending()
 }
 
 // SetStartBudgets shortens the budgets of the load of the snapshot and of the

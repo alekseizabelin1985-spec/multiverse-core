@@ -201,3 +201,27 @@
 - **Отклонения.** Mi-2 — вариант 2 вместо предпочтительного первого (причины выше). Новые экспортируемые имена `readmodel`: `MarkLoadFailed`, `Reason*`, `ErrWaiterUsed`; `gateway`: `SnapshotLoadBudget`, `CatchUpBudget` — вопрос architect#3 по §6.
 - **Проверки.** См. карточку: build/vet, `go test -short ./...`, e2e, `golangci-lint`, `mvctl contracts check`, `mvctl env check`, `make test`; мутанты R1–R4 ревьюера и новые — в копии дерева, контрольный первым, копия удалена по точному пути.
 - Файлы EPIC-001, `shared/*`, миграции и тесты T-302 не менялись. Интеграционные тесты, Docker, стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
+
+<!-- dev-log T-305 -->
+## developer#1 · T-305 · `actions`: валидация, идемпотентность, лимит, `InputFilter`, публикация `player.*` · 2026-09-13
+
+Ветка `task/T-305-actions`, папка `.worktrees/T-305`. Статус — `review`. Подробности, пункты DoD и таблица мутантов — карточка `tasks/T-305.md`, раздел «Выполнение».
+
+- **Что сделано.** Пакет `internal/gateway/actions` (`Validate` по §1.4 в порядке КД §5.4, `BuildPlayerEvent`/`BuildPositionProposal`/`BuildRestProposal`/`BuildGMCreated`, `Keys` над `idempotency_keys`, `Limiter`, `InputFilter`/`NoopFilter`, `Turns` + `MemoryTurns`, `Service.Submit`/`FilterText`); обработчик `POST /v1/players/{player_id}/actions`; подключение в контексте (настройки до открытия БД, лимитер только в live, уборка ключей и лимитера sweeper'ом); `readmodel.Encounter.TaskAgentID`/`CreatedAt`; переменные `MV_GATEWAY_RATE_ACTIONS_PER_MIN`, `…_BURST`, `MV_GATEWAY_INPUT_FILTER`, `MV_GATEWAY_ENCOUNTER_GRACE`. OpenAPI: `postAction`, `replayClock` (тег `process`, T-457), `ForgetIncomplete` (дополнение оркестратора по T-456, C-08 v1.5).
+- **Решения по ходу.** Лимит — GCRA + журнал минуты (иначе 35 действий в первую минуту). `gm.created` — по решению system-architect (C-04 v1.4), первым в очереди публикаций. `group.*` — `501` до T-352, не сохраняется. Фильтр: `blocked` → `text_invalid`, ошибка → `422` без текста ошибки в журнале. Сессия и ход — точка вставки T-306.
+- **Отклонения.** Лимит не «чистый» token bucket; метка удаления в EPIC-003 I2 — английским комментарием; `Turn` в БД не пишется (T-306); правка `shared/env/vars.go` и `.env.example` (EPIC-001, мягкий режим).
+- **Проверки.** `go build`/`vet` (и `-tags e2e`), `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl contracts check`, `env check`, `privacy scan testdata/`, `make test` — зелёные; мутанты M0–M22 в копии дерева, контрольный зелёный, остальные красные; копия удалена по точному пути.
+- Интеграционные тесты, Docker, стенд `:8888` не трогал, `.env` не открывал, файлы T-310 не менял. Не коммитил.
+
+<!-- dev-log T-305 i2 -->
+## developer#1 · T-305 · итерация 2: замечания ревью #1 (Ma-1, Mi-1…Mi-5, N-1…N-3, N-5) · 2026-09-13
+
+Ветка `task/T-305-actions`, папка `.worktrees/T-305`. Статус — `review`. Подробности, таблица мутантов и оценка остаточного риска — карточка `tasks/T-305.md`, раздел «Итерация 2».
+
+- **Ma-1.** Пакет событий действия (`gm.created` при `legacy`, `player.*`, предложение) строится один раз. Если публикация падает на любом событии, пакет остаётся в памяти сервиса по `(player_id, action_key)`, начиная с упавшего события. Повтор ключа публикует остаток с теми же id и байтами, затем записывает ход и ключ; второго `player.*` нет. После взятия блокировки игрока решение идёт на `context.WithoutCancel` со сроком `api.RequestTimeout` через `clock.Timers`. Уход клиента не рвёт пакет и не оставляет `202` без ключа. Пакеты в памяти ограничены (`DefaultPendingLimit = 4096`, у самого близкого к истечению — вытеснение с предупреждением в журнале). Срок жизни — `store.KeyTTL`; уборка — sweeper контекста (`SweepPending`). Контракт не менялся: `503` по-прежнему значит «ключ не записан».
+- **N-5.** Ожидание блокировки игрока прерывается контекстом запроса → `503 bus_unavailable` вместо `500`.
+- **Mi-1…Mi-5.** Тесты: `X-Actor-Kind: ci` через HTTP до записи шины и `sim` у всех событий пакета; `character_dead` для `abandoned`; тело повтора `4xx` целиком, вместе с `details`; округление `Retry-After` вверх при дробном ожидании; замена фильтра на недопустимый текст → `text_invalid`; уборка лимитера и пакетов sweeper'ом.
+- **Nit.** N-1 — doc `FilterText`. N-2 — встреча без `created_at` не считается недоступной; отрицательный `MV_GATEWAY_ENCOUNTER_GRACE` — ошибка старта. N-3 — нечисловой лимит даёт одну ошибку. N-4 и отступление 5 не менялись: они в бэклоге к architect#3.
+- **Остаточный риск.** Перезапуск процесса между публикациями пакета теряет пакет в памяти, и повтор публикует действие заново с новым id. Закреплено тестом `TestARestartBetweenPublicationsBuildsTheActionAgain`. Оценка риска — в карточке. Правило для КД §5.5 вносит architect#3.
+- **Проверки.** `go build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl env check`, `contracts check`, `make test` — зелёные. Мутанты R2, R3, R6–R9 ревьюера и 9 новых прогнаны в копиях дерева: контрольный зелёный, остальные красные. Копии удалены по точным путям.
+- Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал. Не коммитил.

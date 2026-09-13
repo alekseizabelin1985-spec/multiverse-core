@@ -144,6 +144,7 @@ var wantOperations = []operation{
 	{Method: "GET", Path: "/v1/admin/agents", OperationID: "adminAgents"},
 	{Method: "GET", Path: "/v1/admin/llm/usage", OperationID: "adminLlmUsage"},
 	{Method: "GET", Path: "/v1/admin/sessions", OperationID: "adminSessions"},
+	{Method: "POST", Path: "/v1/admin/replay/clock", OperationID: "replayClock"},
 	{Method: "GET", Path: "/health", OperationID: "health"},
 }
 
@@ -238,7 +239,6 @@ func TestOpenAPIAdminSectionIsReservedForT239(t *testing.T) {
 // the list can only shrink, and when it is empty the route table equals the
 // spec.
 var notYetMounted = map[string]string{
-	"postAction":       "T-305",
 	"listWorlds":       "T-306",
 	"createCharacter":  "T-306",
 	"getPlayer":        "T-306",
@@ -254,9 +254,91 @@ var notYetMounted = map[string]string{
 	"adminLlmUsage":    "T-356",
 }
 
-// servedByProcess are operations of the process HTTP server (shared/runtime):
-// the gateway must never mount them, the mux would panic on the duplicate.
-var servedByProcess = []string{"health"}
+// servedByProcess are operations of the process HTTP server (shared/runtime,
+// cmd/multiverse): the gateway must never mount them, the mux would panic on
+// the duplicate. replayClock exists in --mode=replay only and is mounted by
+// cmd/multiverse (C-01 v1.9, EPIC-002 T-458).
+var servedByProcess = []string{"health", "replayClock"}
+
+// The operations of the process are exactly those tagged process, and none of
+// them is a reserved operation of the admin proxy: the proxy of the gateway to
+// core does not pass them (C-01 v1.9).
+func TestOpenAPIProcessOperationsAreTaggedProcess(t *testing.T) {
+	doc := loadSpec(t)
+	var tagged []string
+	for _, op := range operations(t, doc) {
+		tags := stringList(t, op.Node, "tags")
+		if !slices.Contains(tags, "process") {
+			continue
+		}
+		tagged = append(tagged, op.OperationID)
+		if len(tags) != 1 {
+			t.Errorf("%s: tags %v, a process operation carries the tag process alone", op.OperationID, tags)
+		}
+		if _, reserved := op.Node["x-reserved"]; reserved {
+			t.Errorf("%s: a process operation is not a reserved operation of the admin proxy", op.OperationID)
+		}
+	}
+	equalSets(t, "operations tagged process vs servedByProcess", tagged, servedByProcess)
+}
+
+// The route of the clock of a replay answers what C-01 v1.9 and v1.11 list:
+// 204, 400 and 409 clock_behind with a body of the form Error, 405 of the mux
+// of the process and 404 in live mode, where it does not exist, both without a
+// schema of the body.
+func TestOpenAPIReplayClockAnswersOfC01(t *testing.T) {
+	doc := loadSpec(t)
+	op := mapping(t, doc, "paths", "/v1/admin/replay/clock", "post")
+	var codes []string
+	for code := range mapping(t, op, "responses") {
+		codes = append(codes, code)
+	}
+	equalSets(t, "responses of replayClock", codes, []string{"204", "400", "403", "404", "405", "409"})
+	if d, _ := at(t, op, "responses", "409", "description").(string); !strings.Contains(d, "clock_behind") {
+		t.Errorf("replayClock 409 = %q, want it to name clock_behind", d)
+	}
+	for status, code := range map[string]string{"400": "invalid_body", "409": "clock_behind"} {
+		if got := at(t, op, "responses", status, "content", "application/json", "schema", "$ref"); got != "#/components/schemas/Error" {
+			t.Errorf("replayClock %s body is %v, want the form Error (C-01 v1.11)", status, got)
+		}
+		if got := at(t, op, "responses", status, "content", "application/json", "example", "error", "code"); got != code {
+			t.Errorf("replayClock %s example code = %v, want %s", status, got, code)
+		}
+	}
+	for _, status := range []string{"404", "405"} {
+		if _, has := mapping(t, op, "responses", status)["content"]; has {
+			t.Errorf("replayClock %s has a schema of its body; C-01 v1.11 specifies the status only", status)
+		}
+	}
+	if got := stringList(t, op, "requestBody", "content", "application/json", "schema", "required"); !slices.Equal(got, []string{"at"}) {
+		t.Errorf("replayClock body requires %v, want [at]", got)
+	}
+}
+
+// forget_incomplete travels in a response of its own with Retry-After, under
+// the 503 of both /forget operations; the general Unavailable has no
+// Retry-After (C-08 v1.5).
+func TestOpenAPIForgetIncompleteIsAResponseOfItsOwn(t *testing.T) {
+	doc := loadSpec(t)
+	for _, id := range []string{"forgetLink", "adminForgetLink"} {
+		var op operation
+		for _, o := range operations(t, doc) {
+			if o.OperationID == id {
+				op = o
+			}
+		}
+		if got := at(t, op.Node, "responses", "503", "$ref"); got != "#/components/responses/ForgetIncomplete" {
+			t.Errorf("%s: 503 is %v, want ForgetIncomplete", id, got)
+		}
+	}
+	if got := stringList(t, doc, "components", "responses", "ForgetIncomplete", "x-error-codes"); !slices.Equal(got, []string{api.CodeForgetIncomplete}) {
+		t.Errorf("ForgetIncomplete codes = %v", got)
+	}
+	mapping(t, doc, "components", "responses", "ForgetIncomplete", "headers", "Retry-After")
+	if _, has := mapping(t, doc, "components", "responses", "Unavailable")["headers"]; has {
+		t.Error("Unavailable carries headers; Retry-After belongs to ForgetIncomplete alone")
+	}
+}
 
 // namedHandler is a stub whose identity tells which Handlers field it came from.
 type namedHandler string
@@ -375,6 +457,7 @@ var statusOfResponse = map[string]int{
 	"InternalError":       500,
 	"NotImplemented":      501,
 	"Unavailable":         503,
+	"ForgetIncomplete":    503,
 }
 
 var snakeCase = regexp.MustCompile(`^[a-z]+(_[a-z]+)*$`)

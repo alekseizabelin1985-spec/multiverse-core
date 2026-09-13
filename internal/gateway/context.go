@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"multiverse-core.io/internal/gateway/actions"
 	"multiverse-core.io/internal/gateway/api"
 	"multiverse-core.io/internal/gateway/consumer"
 	"multiverse-core.io/internal/gateway/handlers"
@@ -28,6 +29,7 @@ import (
 	"multiverse-core.io/internal/gateway/store"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 )
@@ -64,6 +66,7 @@ type Context struct {
 	// before the process server serves (api.Config).
 	httpCfg *api.Config
 	links   *handlers.Links
+	actions *handlers.Actions
 
 	mu        sync.Mutex
 	started   bool
@@ -73,6 +76,9 @@ type Context struct {
 	store     *links.SQLite
 	model     *readmodel.Model
 	consumer  *consumer.Dispatcher
+	keys      *actions.Keys
+	service   *actions.Service
+	limiter   *actions.Limiter
 	log       *slog.Logger
 	stopLoop  context.CancelFunc
 	loopDone  chan struct{}
@@ -82,7 +88,7 @@ type Context struct {
 // environment. The variables are read in Start, not here: a factory runs when
 // serve builds the contexts, and an error belongs to the start of the process.
 func New(src env.Source) *Context {
-	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{},
+	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{}, actions: &handlers.Actions{},
 		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
 }
 
@@ -104,6 +110,7 @@ func (c *Context) Routes(mux *http.ServeMux) {
 		ResolveLink: http.HandlerFunc(c.links.Resolve),
 		ConsentLink: http.HandlerFunc(c.links.Consent),
 		ForgetLink:  http.HandlerFunc(c.links.Forget),
+		PostAction:  http.HandlerFunc(c.actions.Post),
 	})
 	router.Mount(mux, api.Chain(c.httpCfg)...)
 }
@@ -129,6 +136,12 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		return errors.New("gateway: Deps.Clock, Timers, IDs, Log, Bus and Journal are required")
 	}
 	dir, err := store.DataDir(c.src)
+	if err != nil {
+		return err
+	}
+	// The settings of actions are read before a file is opened: a start that
+	// fails on one of them must not leave the databases half open.
+	settings, err := c.actionSettings()
 	if err != nil {
 		return err
 	}
@@ -186,6 +199,26 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		Log:        log,
 	}
 	*c.links = handlers.Links{Store: linkStore, Clock: deps.Clock}
+	keys := actions.NewKeys(gatewayDB, store.KeyTTL)
+	service, err := actions.New(actions.Config{
+		Bus: deps.Bus, Model: model, Keys: keys, Filter: settings.filter, FilterName: settings.filterName,
+		Turns: actions.NewMemoryTurns(), Clock: deps.Clock, Timers: deps.Timers, Log: log,
+		GMPath: settings.gmPath, Grace: settings.grace, KeyTTL: store.KeyTTL,
+	})
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), dispatcher.Stop(ctx), gatewayDB.Close(), linksDB.Close())
+	}
+	*c.actions = handlers.Actions{Service: service}
+	c.keys, c.service = keys, service
+	// The rate limit is a limit of live players; a replay feeds recorded
+	// actions as fast as the harness sends them (component §5.1 p. 6).
+	if deps.Mode != runtime.ModeReplay {
+		limiter, err := actions.NewLimiter(deps.Clock, settings.perMinute, settings.burst)
+		if err != nil {
+			return errors.Join(fmt.Errorf("gateway: %w", err), dispatcher.Stop(ctx), gatewayDB.Close(), linksDB.Close())
+		}
+		c.httpCfg.Limiter, c.limiter = limiter, limiter
+	}
 
 	c.linksDB, c.gatewayDB, c.store, c.log, c.mode = linksDB, gatewayDB, linkStore, log, deps.Mode
 	c.model, c.consumer = model, dispatcher
@@ -197,6 +230,49 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		go c.sweep(loopCtx, deps.Clock, deps.Timers, c.loopDone)
 	}
 	return nil
+}
+
+// actionSettings are the variables of actions (component §11.3).
+type actionSettings struct {
+	filter           actions.InputFilter
+	filterName       string
+	perMinute, burst int
+	grace            time.Duration
+	gmPath           string
+}
+
+func (c *Context) actionSettings() (actionSettings, error) {
+	s := actionSettings{filterName: env.GatewayInputFilter.StringFrom(c.src), gmPath: env.GMPath.StringFrom(c.src)}
+	var errs []error
+	var err error
+	if s.filter, err = actions.FilterFor(s.filterName); err != nil {
+		errs = append(errs, fmt.Errorf("%s: %w", env.GatewayInputFilter.Name(), err))
+	}
+	// A value that does not parse is one error, not also "below 1".
+	for _, limit := range []struct {
+		dst      *int
+		variable env.Var
+	}{{&s.perMinute, env.GatewayRateActionsPerMin}, {&s.burst, env.GatewayRateActionsBurst}} {
+		switch *limit.dst, err = limit.variable.IntFrom(c.src); {
+		case err != nil:
+			errs = append(errs, err)
+		case *limit.dst < 1:
+			errs = append(errs, fmt.Errorf("%s must be at least 1", limit.variable.Name()))
+		}
+	}
+	switch s.grace, err = env.GatewayEncounterGrace.DurationFrom(c.src); {
+	case err != nil:
+		errs = append(errs, err)
+	case s.grace < 0:
+		errs = append(errs, fmt.Errorf("%s must not be negative", env.GatewayEncounterGrace.Name()))
+	}
+	if s.gmPath != eventbus.GMPathAgent && s.gmPath != eventbus.GMPathLegacy {
+		errs = append(errs, fmt.Errorf("%s is %s or %s", env.GMPath.Name(), eventbus.GMPathAgent, eventbus.GMPathLegacy))
+	}
+	if len(errs) > 0 {
+		return actionSettings{}, fmt.Errorf("gateway: %w", errors.Join(errs...))
+	}
+	return s, nil
 }
 
 // loadProjection loads the snapshot of State into model and returns its cursor;
@@ -277,15 +353,20 @@ func openDatabases(ctx context.Context, dir string) (*sql.DB, *sql.DB, error) {
 }
 
 // sweep runs the housekeeping: every store.SweepInterval the expired character
-// requests and the old marks of processed events go and a pending compaction
-// is retried, and
-// every store.LinksCompactInterval links.db is compacted as the safety net of
-// /forget (ADR-019 addendum p. 1). Errors are logged; the next tick repeats.
+// requests, the old marks of processed events, the expired answers to actions
+// and the half published actions whose key expired go and a pending compaction
+// is retried; every
+// actions.LimiterSweepInterval the rate limit forgets the players who stopped
+// acting; and every store.LinksCompactInterval links.db is compacted as the
+// safety net of /forget (ADR-019 addendum p. 1). Errors are logged; the next
+// tick repeats.
 func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timers, done chan<- struct{}) {
 	defer close(done)
 	sweep, compact := timers.Every(store.SweepInterval), timers.Every(store.LinksCompactInterval)
+	limits := timers.Every(actions.LimiterSweepInterval)
 	defer sweep.Stop()
 	defer compact.Stop()
+	defer limits.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,6 +379,12 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 			if err := c.consumer.Sweep(ctx, now); err != nil && ctx.Err() == nil {
 				c.log.Error("processed events sweep", slog.String("error", err.Error()))
 			}
+			if err := c.keys.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("action keys sweep", slog.String("error", err.Error()))
+			}
+			c.service.SweepPending(now)
+		case <-limits.C():
+			c.limiter.Sweep(clk.Now())
 		case <-compact.C():
 			if err := c.store.Compact(ctx); err != nil && ctx.Err() == nil {
 				c.log.Error("links compaction", slog.String("error", err.Error()))

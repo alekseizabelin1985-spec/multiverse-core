@@ -51,7 +51,9 @@ tags:
       (MV_CORE_URL, C-06). The operations are specified by EPIC-003 T-239
       through a change to this file reviewed by EPIC-004.
   - name: process
-    description: Endpoints of the process HTTP server (shared/runtime, C-01 v1.7), not of the gateway context.
+    description: |
+      Endpoints of the process HTTP server (shared/runtime, cmd/multiverse; C-01 v1.7, v1.9), not of the gateway
+      context: the gateway does not mount them, and its proxy of /v1/admin/* to core does not pass them.
 
 paths:
   /v1/links/resolve:
@@ -128,7 +130,10 @@ paths:
         a living character gets status=abandoned (and a new leader or none for
         its group), group.left {cause: forget}; the active session ends with
         end_reason=forget; the link is deleted physically. A step that fails
-        stops the cascade before the deletion, so a repeat runs it again.
+        stops the cascade before the deletion, so a repeat runs it again: the
+        answer is 500 internal, and from T-355, when the bus fails, 503
+        bus_unavailable (some steps may have run, the link stays, a repeat is
+        safe).
 
         What is deleted (SEC-26, threat-model §4.8): the row of the link — the
         external ID, player_id, world_id, the times of the notice, the consent
@@ -161,8 +166,9 @@ paths:
         pending, every /forget answers 503 forget_incomplete, the repeats of the
         same account and the /forget of other accounts, with or without a link;
         the call that finishes the wipe answers as usual. The answer carries
-        Retry-After; the client repeats, and a 200 {deleted: false} after a 503
-        is the end of the same /forget, not "nothing to delete". The gateway
+        Retry-After: the caller repeats not earlier than Retry-After, and the
+        reference client does not repeat it by itself; a 200 {deleted: false}
+        after a 503 is the end of the same /forget, not "nothing to delete". The gateway
         also finishes the wipe itself: its sweeper retries every minute, and
         every start of the gateway compacts the file of links.
       x-nolog: true
@@ -183,7 +189,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
-        '503': { $ref: '#/components/responses/Unavailable' }
+        '503': { $ref: '#/components/responses/ForgetIncomplete' }
 
   /v1/admin/links/{player_id}:
     delete:
@@ -203,6 +209,7 @@ paths:
               schema: { $ref: '#/components/schemas/ForgetResponse' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/ForgetIncomplete' }
 
   /v1/worlds:
     get:
@@ -285,12 +292,44 @@ paths:
       tags: [actions]
       summary: Send an action
       description: |
-        202 after validation and the broker acknowledgement (C-08: p95 <= 300 ms).
+        202 after validation and the broker acknowledgement, and nothing else is
+        waited for (C-08: p95 <= 300 ms): the result of the action comes as
+        deliveries. correlation_id is the id of the published player.* event.
         group.* answers 200 with the group when the fact arrives within
-        MV_GATEWAY_FACT_WAIT, otherwise 202 with status=pending. A repeat of
-        action_key returns the first answer, 4xx included; 503 means the action
-        was not accepted and the key was not stored. For a group move no_leader
-        is checked before not_leader (C-04 v1.3).
+        MV_GATEWAY_FACT_WAIT, otherwise 202 with status=pending; until the
+        groups of increment I2 (T-352) it answers 501 not_implemented.
+
+        Idempotency (C-08): the answer is kept under (player_id, action_key) for
+        24 hours. A repeat of action_key returns the first answer (the same
+        correlation_id, or the same 4xx) and publishes nothing. 503
+        bus_unavailable means the action was not accepted and the key was not
+        stored: the client repeats with the same key. A request without
+        action_key, or with one longer than 64 bytes, is 400 invalid_request
+        and is not kept.
+
+        Checks, in this order; the first that fails is the answer (component
+        gateway-and-bot.md section 5.4): player_not_found; character_dead (also
+        for abandoned); unknown_action; invalid_request (a target or a text the
+        type does not take, or a missing one), text_invalid (say: 1..500
+        characters after trim, no control characters), unknown_target (no
+        entity has that id); for a group move no_leader, then not_leader (I2,
+        C-04 v1.3); in_encounter (enter, leave, rest, group.join),
+        not_in_encounter (attack, flee, defend), target_dead (attack),
+        encounter_unavailable (the encounter has had no task agent for longer
+        than MV_GATEWAY_ENCOUNTER_GRACE); not_in_region (leave outside every
+        region), unknown_target (a region of another world, an NPC outside the
+        encounter); already_acted (a round of a group scope, I2).
+
+        The text of say goes through the input filter first (FR-056): the bus
+        gets the text the filter returns; a failure of the filter is 422
+        filter_error, a text it blocks is 400 text_invalid. enter and leave
+        propose the position of the character only, rest proposes hp = hp_max
+        (C-02, C-04 v1.2).
+
+        Rate limit (SEC-11): MV_GATEWAY_RATE_ACTIONS_PER_MIN actions (30) in any
+        minute and MV_GATEWAY_RATE_ACTIONS_BURST (5) in a row per player_id;
+        over it, 429 rate_limited with Retry-After, before any other check and
+        without keeping an answer. There is no limit in replay mode.
       x-idempotency: action_key
       parameters:
         - $ref: '#/components/parameters/ActorKind'
@@ -322,6 +361,7 @@ paths:
         '422': { $ref: '#/components/responses/UnprocessableEntity' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '501': { $ref: '#/components/responses/NotImplemented' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/groups/{group_id}:
@@ -481,6 +521,59 @@ paths:
         default:
           description: Reserved; the answer of core is specified by EPIC-003 T-239.
 
+  /v1/admin/replay/clock:
+    post:
+      operationId: replayClock
+      tags: [process]
+      summary: Set the clock of the roots of a replay (--mode=replay only)
+      description: |
+        A route of the process, not of a context (C-01 v1.9): cmd/multiverse mounts it on the HTTP server of the
+        process only in --mode=replay, and in live mode it does not exist (404). It is not in the admin section:
+        admin is the proxy of the gateway to core, and that proxy does not pass this path. Access is that of the
+        other /v1/admin/* routes of the process: X-Client-Id listed in MV_CORE_ADMIN_CLIENTS (ADR-009 p. 9, C-06).
+
+        Before each input of a scenario the harness sends the time of that input; the process calls
+        EventClock.Advance(at), which compares at with the time of the clock and moves the clock under one lock.
+        NewRoot stamps the roots built afterwards, the player.* events the gateway publishes for the inputs, with
+        that time. The harness calls the process that runs the gateway context, and waits for the answer to an
+        input before the next call.
+
+        at earlier than the clock is 409 clock_behind, and the clock does not move: it never goes back. at equal to
+        the clock is 204. at missing or not RFC 3339 is 400. The roots of the inputs of a recording do not
+        decrease; a decreasing one is a defect of the recording, which the harness reports before its first call.
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                at: { type: string, format: date-time, description: 'The time of the next input, RFC 3339.' }
+              required: [at]
+      responses:
+        '204':
+          description: The clock is at the time of at.
+        '400':
+          description: invalid_body; at is missing or is not RFC 3339. The machine sign is code, message is a diagnostic in English; details are not sent (C-01 v1.11).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: { code: invalid_body, message: 'replay: the body is not {"at": "<RFC 3339>"}' } }
+        '403':
+          description: X-Client-Id is not listed in MV_CORE_ADMIN_CLIENTS.
+        '404':
+          description: The process runs in live mode, where the route does not exist. Status only; the body is not specified.
+        '405':
+          description: A method other than POST. The mux of the process answers with Allow POST before the check of access, also without X-Client-Id; the body is not specified (C-01 v1.11).
+        '409':
+          description: clock_behind; at is earlier than the clock, and the clock did not move. The machine sign is code, message is a diagnostic in English (C-01 v1.11).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: { code: clock_behind, message: 'replay: clock behind: 2026-09-13T12:00:00Z is before the clock at 2026-09-13T12:00:05Z' } }
+
   /health:
     get:
       operationId: health
@@ -567,6 +660,9 @@ components:
       schema: { type: string }
     RetryAfter:
       description: Seconds until the next action is accepted.
+      schema: { type: integer, minimum: 1 }
+    ForgetRetryAfter:
+      description: Seconds before the caller repeats /forget; the busy timeout of the file of links, 5.
       schema: { type: integer, minimum: 1 }
 
   # x-error-codes lists the codes a response carries; every code of
@@ -662,18 +758,24 @@ components:
     Unavailable:
       description: |
         A dependency is down; the action is not accepted and action_key is not stored, the client repeats with the same key.
-        Codes: bus_unavailable, state_unavailable, forget_incomplete (DELETE /v1/links: the link is deleted, the wipe
-        from the file of links is not confirmed; the data is not reported as gone, the client repeats /forget after
-        Retry-After, see forgetLink).
-      x-error-codes: [bus_unavailable, state_unavailable, forget_incomplete]
-      headers:
-        Retry-After:
-          description: Sent with forget_incomplete only; seconds before the client repeats /forget.
-          schema: { type: integer, minimum: 1 }
+        Codes: bus_unavailable, state_unavailable. The answer carries no Retry-After (C-08 v1.5).
+      x-error-codes: [bus_unavailable, state_unavailable]
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: { code: bus_unavailable, message: 'Сервис временно недоступен, повторите.' } }
+    ForgetIncomplete:
+      description: |
+        /forget only (forgetLink, adminForgetLink; C-08 v1.5). Codes: forget_incomplete. The link is deleted, but the
+        wipe of its bytes from the file of links is not confirmed; the data must not be reported as gone. The caller
+        repeats /forget not earlier than Retry-After; the reference client does not repeat it by itself.
+      x-error-codes: [forget_incomplete]
+      headers:
+        Retry-After: { $ref: '#/components/headers/ForgetRetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: forget_incomplete, message: 'Удаление не завершено, повторите /forget.' } }
 
   schemas:
     Error:
