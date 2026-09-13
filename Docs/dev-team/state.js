@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T01:55:22+03:00",
+  "updatedAt": "2026-09-14T01:59:20+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2990,11 +2990,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-057",
           "title": "state — objStore, интенты, снапшоты, latest.json",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -4738,11 +4738,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-316",
           "title": "Integration-тесты consumer на Redpanda",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.10",
           "spentMinutes": 0,
@@ -10566,7 +10566,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "objStore, интенты, снапшоты",
       "startedAt": "2026-09-14T01:18:17+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:59:20+03:00"
     },
     {
       "instance": "developer#1",
@@ -10646,7 +10646,7 @@ window.DEVTEAM_STATE =
       "task": "T-316",
       "action": "Итерация 2 по ревью #1",
       "startedAt": "2026-09-14T01:55:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:59:20+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10676,6 +10676,46 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Решения по восьми вопросам T-309",
       "startedAt": "2026-09-14T01:55:22+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-316",
+      "action": "Приёмка T-316, заведение T-473",
+      "startedAt": "2026-09-14T01:59:20+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "Решения по пяти вопросам T-057",
+      "startedAt": "2026-09-14T01:59:20+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "Ревью #1: objstore, интенты, снапшоты",
+      "startedAt": "2026-09-14T01:59:20+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-469",
+      "action": "Итерация 2: шесть переменных и замечания ревью",
+      "startedAt": "2026-09-14T01:59:20+03:00",
       "finishedAt": null
     }
   ],
@@ -14807,6 +14847,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Контрольное слияние M (EPIC-004 → develop): make ci BASE=develop — lint, test, contracts, secrets-scan, privacy-scan, vuln, compose-lint зелёные; scripts-parity дважды упал на таймаутах разных сценариев под нагрузкой (U16; H47–H49), EPIC-004 скрипты LLM не меняет; все четыре сценария поодиночке PASS"
+    },
+    {
+      "at": "2026-09-14T01:59:20+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние M (постоянное разрешение): epic/EPIC-004-gateway-bot → develop (c015797) — T-306, T-307, T-311, T-312, T-317. make ci BASE=develop: всё зелёное, кроме scripts-parity под нагрузкой пяти агентов (таймауты U16, H47–H49 в разных прогонах); EPIC-004 скрипты LLM не меняет; полный scrip"
+    },
+    {
+      "at": "2026-09-14T01:59:20+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-469: EPIC-001 слит в ветку задачи поверх незакоммиченных правок (gitflow sync отказывает при грязном дереве; пересечений нет) — e9c9ce9. Итерация 2 devops-engineer#1: шесть переменных T-306/T-307, Mi-1…Mi-3, N-1, N-2 ревью #1."
+    },
+    {
+      "at": "2026-09-14T01:59:20+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 выполнена TEAM-1/developer#2: запись сущностей в objstore до факта, интенты атомарных пакетов, повтор ×3 и persist_failed, снапшоты по счёту фактов/Stop/Context.Snapshot (5 последних, окно 1000 proposal_id), досылка факта после рестарта под первым id; WorldRequired у snapshot.created в registr"
+    },
+    {
+      "at": "2026-09-14T01:59:20+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-316 · итерация 2 (developer#2): Mi-1 шаг 8 по d.Err() и ошибке чтения, событие в каждом из четырёх топиков; Mi-2 расчёт помечен; N-1…N-3. Интеграционный прогон — 39,8 с, PASS, контейнеры убраны. Приёмка — tech-lead#3; он же заводит T-473 «Переподписка consumer шлюза после сбоя брокера» (counters.t"
     }
   ],
   "blockers": [],
