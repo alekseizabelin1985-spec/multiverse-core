@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T01:39:16+03:00",
+  "updatedAt": "2026-09-14T01:42:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4738,11 +4738,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-316",
           "title": "Integration-тесты consumer на Redpanda",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.10",
           "spentMinutes": 0,
@@ -10596,7 +10596,7 @@ window.DEVTEAM_STATE =
       "task": "T-316",
       "action": "Интеграция consumer на Redpanda",
       "startedAt": "2026-09-14T01:18:17+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:42:52+03:00"
     },
     {
       "instance": "developer#3",
@@ -10626,6 +10626,16 @@ window.DEVTEAM_STATE =
       "task": "T-469",
       "action": "Ревью #1: переменные в compose, правило 9",
       "startedAt": "2026-09-14T01:39:16+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-316",
+      "action": "Ревью #1: consumer на Redpanda",
+      "startedAt": "2026-09-14T01:42:52+03:00",
       "finishedAt": null
     }
   ],
@@ -14715,6 +14725,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-469 выполнена devops-engineer#1: в compose шлюзу переданы MV_GM_PATH и четыре MV_GATEWAY_* из T-305, сервису core — MV_ANTHROPIC_API_KEY и MV_OLLAMA_URL (${VAR:-}); MV_CORE_ADMIN_CLIENTS перенесён в x-platform-env. Правило 9 compose-lint: переменная доходит до сервиса, где запущен её читатель (таб"
+    },
+    {
+      "at": "2026-09-14T01:42:52+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-316 выполнена TEAM-3/developer#2: integration-тесты consumer на Redpanda — догон и Journal.End паритетно с membus, порядок и дубль, рестарт группы, dead_letters (attempts=4), outbox при остановленном брокере (503 bus_unavailable, откат пакета, повторная выдача по лизингу, после возврата брокера ро"
+    },
+    {
+      "at": "2026-09-14T01:42:52+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Находки T-316 и решения оркестратора: (1) Dispatcher не переподписывается после сбоя брокера — шлюз глух до перезапуска процесса; исправление — отдельная задача EPIC-004 в internal/gateway/consumer (переподписка с backoff, /health восстанавливается), приоритет I1-α; публичный API shared/eventbus не "
     }
   ],
   "blockers": [],
