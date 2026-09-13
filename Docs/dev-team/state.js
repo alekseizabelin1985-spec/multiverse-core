@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:59:03+03:00",
+  "updatedAt": "2026-09-14T00:07:28+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -10506,7 +10506,7 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "Приёмка contracts v0.15",
       "startedAt": "2026-09-13T23:59:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T00:07:28+03:00"
     }
   ],
   "events": [
@@ -14523,6 +14523,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-470 · ревью #2 (code-reviewer#1): принять — 0/0/1/1. Ma-1 (§3 совпадает с кодом кроме name/last_session_ended_at, которые вносит приёмка T-056), Mi-1 пометки у rest и system сверены с кодом, регрессии нет (C-15 = ADR-005, infrastructure одна строка). Mi-3 источник скаляров без §3.5 Item; N-5 приме"
+    },
+    {
+      "at": "2026-09-14T00:07:28+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 принята tech-lead#1: Mi-3 источник скаляров — таблицы сущностей §3 без §3.5 Item; N-5 пометка у примера отдыха; строки T-468/T-469 в индексе EPIC-001 v0.1.5; строки для EPIC-002/EPIC-003 — в карточке. Условие слияния: после появления name и last_session_ended_at в scalarAttributes T-056 (правк"
     }
   ],
   "blockers": [],
