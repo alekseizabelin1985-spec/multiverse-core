@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:39:15+03:00",
+  "updatedAt": "2026-09-13T14:39:39+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3235,11 +3235,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-214",
           "title": "Схемы событий части 1: рой, тики, мир, регион, NPC, законы",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-10T22:49:35+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:39:39+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 103,
           "timeLog": [
@@ -3255,11 +3255,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-215",
           "title": "Схемы событий части 2: LLM и нарратив",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-10T22:49:35+03:00",
-          "finishedAt": "2026-09-11T01:32:58+03:00",
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:39:39+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 59,
           "timeLog": [
@@ -8499,7 +8499,7 @@ window.DEVTEAM_STATE =
       "task": "T-214",
       "action": "Приёмка T-214 и T-215 (схемы EPIC-003)",
       "startedAt": "2026-09-13T14:35:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:39:39+03:00"
     },
     {
       "instance": "developer#2",
@@ -11236,6 +11236,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-201 · итерация 3 (TEAM-2/developer#1): Ma-2 даты с меткой time:<RFC3339> (одна дата в разной записи — один хеш; отступление: другое смещение — другой хеш), неэкспортируемые поля внутри any — ошибка; Mi-5 ключи с меткой типа; Mi-6 кириллица и комбинируемые знаки; N-1 числа по значению; N-2 fence. 2"
+    },
+    {
+      "at": "2026-09-13T14:39:39+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-214 и T-215 приняты tech-lead#2 в дереве эпика (fd52e31): contracts check 65/8/58, тесты contracts и fixtures, golangci-lint — зелёные. T-215 Ma-1/Mi-1 закрыты T-445 (условная обязательность llm.output/llm.output.rejected с тестами); открытые Minor/Nit разнесены в DoD T-211/T-217/T-230 и новый §13"
     }
   ],
   "blockers": [],
