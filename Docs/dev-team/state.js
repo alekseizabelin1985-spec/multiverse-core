@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:42:44+03:00",
+  "updatedAt": "2026-09-13T22:50:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4630,9 +4630,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-312",
           "title": "Бот: deliver, main, подкоманда health",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-13T22:50:37+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4700,14 +4700,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-317",
           "title": "README gateway и бота, runbook §6, .env.example",
-          "status": "review",
+          "status": "done",
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T22:50:37+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.7",
-          "spentMinutes": 0,
+          "spentMinutes": 65,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-317.md"
         },
@@ -10264,7 +10264,7 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Приёмка документации",
       "startedAt": "2026-09-13T22:40:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:50:37+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -10284,6 +10284,16 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Ревью #1 персонажей, сессий, ходов",
       "startedAt": "2026-09-13T22:42:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-312",
+      "action": "deliver и main бота",
+      "startedAt": "2026-09-13T22:50:37+03:00",
       "finishedAt": null
     }
   ],
@@ -14163,6 +14173,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по вопросам T-306: события C-10 на шине несут только обязательные поля схемы с идентификаторами (вариант а) — R2-M-1 A относится к файлам ops/metrics в Git, обезличивание при записи отчёта (DoD T-131/T-132); фикстура аналитики в internal/gateway/testdata/analytics принимается; с"
+    },
+    {
+      "at": "2026-09-13T22:50:37+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-317 принята TEAM-3/tech-lead#3: Mi-12 готовые команды проверки webhook для Git Bash и PowerShell (curl.exe -K - через stdin, SecureString), Mi-13 порядок шагов runbook §6 (webhook до перезапуска), N-9 шаблон grep ловит голый токен, N-10 полные пути; README бота приведён к факту после T-311; живая "
+    },
+    {
+      "at": "2026-09-13T22:50:37+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-312 начата (TEAM-3/developer#2): deliver (long-poll → send → ack) и main бота; строки DoD приёмок T-310/T-311/T-317 (best-effort отправитель отказов, короткий таймаут клиента для flow, логгер поверх privacy, ValidCharacterName, README и runbook)."
     }
   ],
   "blockers": [],
