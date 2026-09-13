@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:22:47+03:00",
+  "updatedAt": "2026-09-13T17:32:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2548,13 +2548,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "review",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:32:24+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 103,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-457.md",
           "branch": "task/T-457-architect-decisions-queue",
@@ -3246,13 +3246,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T16:10:55+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:32:24+03:00",
           "reviewIterations": 2,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 79,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md",
           "subwave": "B",
@@ -9206,7 +9206,7 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Приёмка T-207 провайдеры fake и recorded",
       "startedAt": "2026-09-13T17:21:31+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:32:24+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9216,7 +9216,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Приёмка T-457 решения архитектора",
       "startedAt": "2026-09-13T17:22:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:32:24+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -12349,6 +12349,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-310 выполнена TEAM-3/developer#2: cmd/telegram-bot/internal/{privacy,config,updates,sender,commands,access}, зависимость github.com/go-telegram/bot v1.25.0 (ADR-018), MV_TELEGRAM_ACTION_KEY_SALT и MV_TELEGRAM_COMMANDS_PER_MIN (vars.go/.env.example — мягкий режим). 52 мутанта, покрытие 93–100 %. Бл"
+    },
+    {
+      "at": "2026-09-13T17:32:24+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 принята TEAM-2/tech-lead#2: DoD выполнен, отклонение по чтению записей принято по решению T-457; Nit ревью #2 закрыт; строки DoD в T-212 (удаление WithCall, ключ из Request, попытка 2 в replay, адаптер Source над shared/recording) и T-221. Коммит 6b09954; конфликт версии и changelog tasks.md ("
+    },
+    {
+      "at": "2026-09-13T17:32:24+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 принята tech-lead#1: закрытие R2-Mi-1…R2-Mi-3 и Nit сверено по тексту, git grep «C-07 v1.4» — только денежный лимит и история; раздел T-456 дополнен (v0.14/C-15 v1.5, символы хоста и userinfo из T-450, вопрос llm.output.called_at). Коммит f33517a; конфликт хвоста tasks.md. Слита в epic/EPIC-00"
     }
   ],
   "blockers": [],
