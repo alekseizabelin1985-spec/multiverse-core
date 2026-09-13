@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:33:49+03:00",
+  "updatedAt": "2026-09-13T18:40:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2535,7 +2535,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-456",
           "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/system-architect#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -3176,9 +3176,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-203",
           "title": "A3 · Пять блупринтов MVP-1 и схемы schemas/agent/",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T18:40:06+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
@@ -4289,13 +4289,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-459",
           "title": "Документы EPIC-003 под C-07 v1.5 и решения T-457: ADR-029 принято, КД роя §9.1/§9.2/§13.4, DoD T-203/T-211/T-212/T-213, ответы по валидатору T-202 (architect#2)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T17:34:53+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T18:40:06+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 63,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-459.md",
           "branch": "task/T-459-docs-call-labels-c07",
@@ -9470,7 +9470,7 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Итерация 2: дедлайны C-01, Permanent",
       "startedAt": "2026-09-13T18:26:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:40:06+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9480,7 +9480,7 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Приёмка T-459 документы EPIC-003",
       "startedAt": "2026-09-13T18:29:43+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:40:06+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9510,6 +9510,26 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Отметка владельца cmd/multiverse, vars.go, .env.example",
       "startedAt": "2026-09-13T18:33:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-203",
+      "action": "Пять блупринтов MVP-1 и schemas/agent",
+      "startedAt": "2026-09-13T18:40:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-456",
+      "action": "Ревью #2 contracts v0.14",
+      "startedAt": "2026-09-13T18:40:06+03:00",
       "finishedAt": null
     }
   ],
@@ -12819,6 +12839,24 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Бэклог из приёмки T-055 для system-architect/EPIC-001: sentinel ошибки схемы при Publish (ErrInvalidPayload → publish_rejected); подписка/партиция system_events на мир для процессов с несколькими мирами."
+    },
+    {
+      "at": "2026-09-13T18:40:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-459 принята TEAM-2/tech-lead#2: Mi-4 (Файлы T-212/T-213), Mi-5 (нулевой called_at — ошибка Recorder, уточняется T-456), N-7 (старт T-212 после T-458 в develop), N-8 (КД §2/§3/§9.3 заменой трёх строк, :521 цела); бэклог ревью в T-237/T-213/T-211. Итераций ревью — 2. Коммит 5c65cc2; при finish конфл"
+    },
+    {
+      "at": "2026-09-13T18:40:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 начата (TEAM-2/developer#1): пять блупринтов MVP-1 и schemas/agent — зависимости T-201/T-202/T-214/T-439 выполнены; разблокирует T-209, T-222, T-204."
+    },
+    {
+      "at": "2026-09-13T18:40:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-456 · итерация 2 (system-architect#1): Ma-1 — таймауты маршрута по КД §5.1 п. 8 (10/10, long-poll wait+5≤30/0, admin 35/35); Ma-2 — Permanent только дефект события, отменённый контекст не паркуется, publish_failed и мир, остановленный паникой, — обычная ошибка (довод: после рестарта предложение ре"
     }
   ],
   "blockers": [],
