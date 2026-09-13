@@ -22,7 +22,7 @@ func TestAnOperationValueChangedAfterPlanningChangesNothing(t *testing.T) {
 	if err := store.Put(world, e); err != nil {
 		t.Fatal(err)
 	}
-	a, err := NewApplier(ApplierConfig{WorldID: world, Store: store, Publisher: discard{}})
+	a, err := NewApplier(ApplierConfig{WorldID: world, Store: store, Publisher: discard{}, WithoutOwnership: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestAnOperationValueChangedAfterPlanningChangesNothing(t *testing.T) {
 		Ops:    []entity.Op{{Op: entity.OpSet, Path: "gear", Value: gear}},
 	}
 
-	plan, refusal := a.plan(set)
+	plan, refusal := a.plan(&Proposal{Cause: "move"}, set)
 	if refusal != nil {
 		t.Fatalf("plan refused: %+v", refusal)
 	}
