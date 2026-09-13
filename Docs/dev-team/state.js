@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:23:08+03:00",
+  "updatedAt": "2026-09-13T22:27:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2903,11 +2903,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -10194,7 +10194,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Ревью #2",
       "startedAt": "2026-09-13T22:14:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:27:44+03:00"
     },
     {
       "instance": "tech-writer#1",
@@ -10224,6 +10224,16 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Приёмка T-463 (вариант б)",
       "startedAt": "2026-09-13T22:23:08+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Итерация 3: скаляры после ApplyOps, строгий страж",
+      "startedAt": "2026-09-13T22:27:44+03:00",
       "finishedAt": null
     }
   ],
@@ -14049,6 +14059,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-463 · ревью #2 (TEAM-1/code-reviewer#1): вернуть — 0/1/0/2. Ma-1, Mi-2…Mi-5, N-1…N-6 закрыты (--dir против junction, .., UNC; мутанты R0–R4 и P13/P14/P16 убиты). Ma-2: отказы llm-bench при @ печатают хост и значение. Решение оркестратора: вариант (б) — объём T-463 не расширять, пометку «Код расход"
+    },
+    {
+      "at": "2026-09-13T22:27:44+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · ревью #2 (TEAM-1/code-reviewer#3): вернуть — 0/1/1/1. Все замечания ревью #1 закрыты; слияние fake_encounter с EPIC-003 — 0 конфликтов, слитое дерево зелёное. Ma-3: канонический дочерний путь под скаляром (status.x, hp.x) превращает скаляр в объект и обходит проверку статуса и потолок hp_max"
     }
   ],
   "blockers": [],
