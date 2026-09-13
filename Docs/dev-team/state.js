@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:32:24+03:00",
+  "updatedAt": "2026-09-13T17:34:53+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2535,15 +2535,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-456",
           "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/system-architect#1",
+          "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-456.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-456.md",
+          "branch": "task/T-456-c08-forget-incomplete",
+          "worktree": ".worktrees/T-456"
         },
         {
           "id": "T-457",
@@ -4225,15 +4227,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-451",
           "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#1",
+          "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-451.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-451.md",
+          "branch": "task/T-451-local-endpoint-go",
+          "worktree": ".worktrees/T-451"
         },
         {
           "id": "T-452",
@@ -4268,6 +4272,21 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-452.md",
           "branch": "task/T-452-fake-encounter-fallen-character",
           "worktree": ".worktrees/T-452"
+        },
+        {
+          "id": "T-459",
+          "title": "Документы EPIC-003 под C-07 v1.5 и решения T-457: ADR-029 принято, КД роя §9.1/§9.2/§13.4, DoD T-203/T-211/T-212/T-213, ответы по валидатору T-202 (architect#2)",
+          "status": "in-progress",
+          "assignee": "TEAM-2/architect#2",
+          "startedAt": "2026-09-13T17:34:53+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-459.md",
+          "branch": "task/T-459-docs-call-labels-c07",
+          "worktree": ".worktrees/T-459"
         }
       ],
       "defects": [],
@@ -9227,6 +9246,36 @@ window.DEVTEAM_STATE =
       "action": "Ревью #1: ядро бота",
       "startedAt": "2026-09-13T17:22:47+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-451",
+      "action": "Go-правило локального адреса",
+      "startedAt": "2026-09-13T17:34:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-456",
+      "action": "C-08 и КД шлюза",
+      "startedAt": "2026-09-13T17:34:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-459",
+      "action": "Документы EPIC-003 под C-07 v1.5",
+      "startedAt": "2026-09-13T17:34:53+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -12361,6 +12410,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-457 принята tech-lead#1: закрытие R2-Mi-1…R2-Mi-3 и Nit сверено по тексту, git grep «C-07 v1.4» — только денежный лимит и история; раздел T-456 дополнен (v0.14/C-15 v1.5, символы хоста и userinfo из T-450, вопрос llm.output.called_at). Коммит f33517a; конфликт хвоста tasks.md. Слита в epic/EPIC-00"
+    },
+    {
+      "at": "2026-09-13T17:34:53+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Синхронизация develop (E) → EPIC-003 (49d1c6e), EPIC-004 (fd2af99) без конфликтов. Начаты: T-451 (TEAM-2/developer#1, EPIC-003: Go-правило «локальный адрес» по таблице T-450), T-456 (system-architect#1, EPIC-001: C-08 forget_incomplete, КД шлюза по коду T-303, дедлайн long-poll, замечания T-449/T-45"
     }
   ],
   "blockers": [],
