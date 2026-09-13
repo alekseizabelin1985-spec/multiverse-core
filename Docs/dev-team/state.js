@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:34:13+03:00",
+  "updatedAt": "2026-09-13T23:34:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2629,11 +2629,11 @@ window.DEVTEAM_STATE =
         },
         {
           "id": "T-466",
-          "title": "C-01 v1.11 по решению А5 (ReadJournal не двигает часы) и КД State §6.1/§6.2: shared/recording, Advance, форма тела маршрута часов",
-          "status": "todo",
+          "title": "C-01 v1.11 по решению А5 (ReadJournal не двигает часы) и КД State §6.1/§6.2: shared/recording, Advance, форма тела маршрута часов — покрыта T-470",
+          "status": "done",
           "assignee": null,
           "startedAt": null,
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T23:34:59+03:00",
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
@@ -2669,7 +2669,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-470",
           "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T23:07:57+03:00",
           "finishedAt": null,
@@ -10416,7 +10416,7 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "contracts.md v0.15",
       "startedAt": "2026-09-13T23:07:57+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:34:59+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10456,6 +10456,16 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "outbox, deliveries, consumer",
       "startedAt": "2026-09-13T23:34:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-470",
+      "action": "Ревью #1 contracts v0.15",
+      "startedAt": "2026-09-13T23:34:59+03:00",
       "finishedAt": null
     }
   ],
@@ -14431,6 +14441,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-307 начата (TEAM-3/developer#1): outbox (store/lease/ack/render/sweeper), long-poll deliveries, consumer combat.decided/narrative.output; строки DoD приёмок T-305/T-306 (rejected по движению и отдыху, OnDelivered один раз, recipients=0, аналитика вне долгой транзакции, перенос фикстуры, README шлю"
+    },
+    {
+      "at": "2026-09-13T23:34:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 выполнена system-architect#1: contracts.md v0.15 — C-01 v1.11 (А5), C-02 v1.8 (грамматика пути под canonicalPath T-056, типы скаляров, rest, дедуп, system), C-03 v1.4, C-05 v1.8a (смерть персонажа без died_at), C-14 v1.3, C-15 v1.6 (@ в любом месте значения — invalid; правило печати на весь вы"
+    },
+    {
+      "at": "2026-09-13T23:34:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по итогам T-470: T-466 закрывается как покрытая T-470 (C-01 v1.11 и КД State §6.1/§6.2); объём T-468 сокращается — значение с @ получает отказ (invalid), нужны отказ, три строки таблицы и стенд паритета; Go-часть «@ — invalid» в IsLocalEndpoint — XS-задача EPIC-003 (номер при ст"
     }
   ],
   "blockers": [],
