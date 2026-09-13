@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T00:57:32+03:00",
+  "updatedAt": "2026-09-14T01:18:17+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2656,9 +2656,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-469",
           "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -2669,13 +2669,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-470",
           "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
-          "status": "review",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T23:07:57+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T01:18:17+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 101,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-470.md"
         }
@@ -2929,14 +2929,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T01:18:17+03:00",
           "reviewIterations": 3,
           "wave": 1,
           "subwave": "1.4",
-          "spentMinutes": 0,
+          "spentMinutes": 259,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-056.md"
         },
@@ -2990,9 +2990,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-057",
           "title": "state — objStore, интенты, снапшоты, latest.json",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -3215,9 +3215,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-471",
           "title": "Законы мира в процессе: rules/dark-forest.yaml и Config.Invariants в contexts_state.go; норма rest hp == hp_max и строка system по C-02 v1.8 (после T-470, T-056)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4610,23 +4610,23 @@ window.DEVTEAM_STATE =
         {
           "id": "T-307",
           "title": "outbox, long-poll доставок, consumer боя и нарратива",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T23:34:13+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T01:18:17+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.7",
-          "spentMinutes": 0,
+          "spentMinutes": 99,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-307.md"
         },
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4638,9 +4638,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4738,9 +4738,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-316",
           "title": "Integration-тесты consumer на Redpanda",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10426,7 +10426,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Приёмка T-056 и отметка по FakeEncounter",
       "startedAt": "2026-09-13T23:14:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:18:17+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10546,7 +10546,7 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "Приёмка outbox и доставок",
       "startedAt": "2026-09-14T00:57:32+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:18:17+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10556,6 +10556,66 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "Отметка владельца T-307",
       "startedAt": "2026-09-14T00:57:32+03:00",
+      "finishedAt": "2026-09-14T01:18:17+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "objStore, интенты, снапшоты",
+      "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "FakeGateway и HTTP-обвязка",
+      "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Снапшот шлюза и полный /health",
+      "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-316",
+      "action": "Интеграция consumer на Redpanda",
+      "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-471",
+      "action": "Законы мира в процессе",
+      "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-469",
+      "action": "Переменные шлюза в compose",
+      "startedAt": "2026-09-14T01:18:17+03:00",
       "finishedAt": null
     }
   ],
@@ -14609,6 +14669,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-307 · ревью #2 (TEAM-3/code-reviewer#2): принять — 0/0/0/2. Ma-1 (адресаты со связкой, ход без адресатов), Mi-1 (ci-harness), Mi-2, N-2, N-3 закрыты; мутанты R2-2…R2-5 красные. N-4 окно timeout у игрока, сделавшего /forget посреди хода — только аналитика; N-5 смысл recipients_count не записан. Рис"
+    },
+    {
+      "at": "2026-09-14T01:18:17+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 принята TEAM-1/tech-lead#2 (и отметка владельца shared/testkit/swarm EPIC-003: fake_encounter.go побайтно с кончиком, рецепт слияния верен); name и last_session_ended_at добавлены в scalarAttributes; индекс v0.1.5 с разделами T-471/T-472. Итераций ревью — 3. Коммит 528bde0, ветка запушена, кон"
+    },
+    {
+      "at": "2026-09-14T01:18:17+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 слита: коммит 3dfc794, ветка запушена, конфликт версии tasks.md (0.1.4/0.1.5) разрешён sync, слита в epic/EPIC-001-foundation (4e11e98). T-466 закрыта как покрытая."
+    },
+    {
+      "at": "2026-09-14T01:18:17+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 принята TEAM-3/tech-lead#3 и отметка tech-lead#1 (MV_GATEWAY_DELIVERY_LEASE/TTL, перенос фикстуры): N-4 в DoD T-355, запрет харнесса против шлюза с ботом в README, DoD T-308/T-309/T-315/T-316/T-353, бэклог З-12…З-15; индекс 0.1.9. Итераций ревью — 2. Коммит 3bee078, ветка запушена, конфликт ве"
+    },
+    {
+      "at": "2026-09-14T01:18:17+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольные слияния K и L (постоянное разрешение): epic/EPIC-001-foundation → develop (T-463, T-464, T-470), epic/EPIC-002-state-mechanics → develop (T-056). make ci BASE=develop — rc=0 у обоих, secrets-scan чист, пересечений с файлами владельца нет; develop 25c500a собирается, тесты state/multivers"
+    },
+    {
+      "at": "2026-09-14T01:18:17+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Запущены: T-308 (FakeGateway и HTTP-обвязка, TEAM-3/developer#1), T-309 (снапшот шлюза, live/replay, полный /health, TEAM-3/developer#3), T-316 (интеграция consumer на Redpanda, TEAM-3/developer#2, строго по одному прогону testcontainers), T-471 (законы мира в процессе, rest и строка system, TEAM-1/"
     }
   ],
   "blockers": [],
