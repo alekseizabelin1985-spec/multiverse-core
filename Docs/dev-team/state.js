@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T01:59:20+03:00",
+  "updatedAt": "2026-09-14T02:09:21+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2656,11 +2656,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-469",
           "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3219,7 +3219,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -10666,7 +10666,7 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Ревью #1: законы в процессе, rest",
       "startedAt": "2026-09-14T01:55:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:09:21+03:00"
     },
     {
       "instance": "architect#3",
@@ -10716,6 +10716,26 @@ window.DEVTEAM_STATE =
       "task": "T-469",
       "action": "Итерация 2: шесть переменных и замечания ревью",
       "startedAt": "2026-09-14T01:59:20+03:00",
+      "finishedAt": "2026-09-14T02:09:21+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-469",
+      "action": "Приёмка T-469",
+      "startedAt": "2026-09-14T02:09:21+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-471",
+      "action": "Приёмка T-471 и отметка владельца EPIC-003",
+      "startedAt": "2026-09-14T02:09:21+03:00",
       "finishedAt": null
     }
   ],
@@ -14871,6 +14891,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-316 · итерация 2 (developer#2): Mi-1 шаг 8 по d.Err() и ошибке чтения, событие в каждом из четырёх топиков; Mi-2 расчёт помечен; N-1…N-3. Интеграционный прогон — 39,8 с, PASS, контейнеры убраны. Приёмка — tech-lead#3; он же заводит T-473 «Переподписка consumer шлюза после сбоя брокера» (counters.t"
+    },
+    {
+      "at": "2026-09-14T02:09:21+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-471 · ревью #1 (code-reviewer#1): принять — 0/0/2/0. Порядок проверок rest совпадает с C-02 v1.8 п. 3, смена ожиданий строк T-056 следует из контракта; Mi-1 MV_RULES_PATH не передана core в compose; Mi-2 устаревшие тексты «rules/ нет в образе». Итерация 2 (developer#3): оба закрыты, правка текста "
+    },
+    {
+      "at": "2026-09-14T02:09:21+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-469 · итерация 2 (devops-engineer#1): шесть переменных T-306/T-307 в gateway и READERS, десять MV_GATEWAY_* в .github/ci.env; Mi-1 мёртвая ветка env_file удалена (+ good-фикстура), Mi-2 фикстуры --contexts=all и неизвестного контекста, Mi-3 фикстура литерала MV_ANTHROPIC_API_KEY, N-1 Makefile «nin"
     }
   ],
   "blockers": [],
