@@ -18,6 +18,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"time"
 
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/entity"
@@ -193,6 +194,12 @@ type Encounter struct {
 	Resolution   string
 	RoundSeq     int
 	Round        *RoundParams
+	// TaskAgentID is the task agent running the encounter; empty until the
+	// swarm has spawned one (UC-007 E1, encounter_unavailable).
+	TaskAgentID string
+	// CreatedAt is the time of the proposal that created the entity; zero
+	// while only the start is known.
+	CreatedAt time.Time
 }
 
 // Open says whether the encounter still takes actions: announced or active.

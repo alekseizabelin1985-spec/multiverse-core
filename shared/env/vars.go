@@ -103,6 +103,16 @@ var (
 		"clients allowed to send X-Actor-Kind ci or sim")
 	CoreURL = Declare("MV_CORE_URL", "http://127.0.0.1:8090",
 		"core address the gateway proxies /v1/admin/* to (D-7)")
+	GatewayRateActionsPerMin = Declare("MV_GATEWAY_RATE_ACTIONS_PER_MIN", "30",
+		"actions a player may send in any minute (SEC-11); the 31st of the default answers 429", IsInt())
+	GatewayRateActionsBurst = Declare("MV_GATEWAY_RATE_ACTIONS_BURST", "5",
+		"actions a player may send in a row before the per-minute rate applies (SEC-11)", IsInt())
+	GatewayInputFilter = Declare("MV_GATEWAY_INPUT_FILTER", "noop",
+		"input filter of the texts of players (FR-056); MVP-1 has only noop, any other value fails the start",
+		OneOf("noop"))
+	GatewayEncounterGrace = Declare("MV_GATEWAY_ENCOUNTER_GRACE", "10s",
+		"how long an active encounter may run without its task agent before its actions answer encounter_unavailable",
+		IsDuration())
 
 	// --- core -------------------------------------------------------------
 

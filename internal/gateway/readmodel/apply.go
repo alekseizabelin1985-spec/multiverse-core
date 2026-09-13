@@ -447,7 +447,8 @@ func (m *Model) encounterOf(id string) (Encounter, bool) {
 // mergeEntity lays what the entity says over what the start said: the entity
 // is the fact of State, the start only its announcement.
 func (m *Model) mergeEntity(enc *Encounter, e *entity.Entity) {
-	enc.WorldID, enc.Version = e.WorldID, e.Version
+	enc.WorldID, enc.Version, enc.CreatedAt = e.WorldID, e.Version, e.CreatedAt
+	enc.TaskAgentID, _ = e.TaskAgentID()
 	if region, ok := e.RegionID(); ok {
 		enc.RegionID = region
 	}

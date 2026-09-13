@@ -55,6 +55,7 @@ type Handlers struct {
 	ResolveLink http.Handler
 	ConsentLink http.Handler
 	ForgetLink  http.Handler
+	PostAction  http.Handler
 }
 
 // GatewayRouter is the route table of the gateway context: the one
@@ -66,6 +67,7 @@ func GatewayRouter(h Handlers) *Router {
 	r.Handle("resolveLink", http.MethodPost, "/v1/links/resolve", h.ResolveLink)
 	r.Handle("consentLink", http.MethodPost, "/v1/links/consent", h.ConsentLink)
 	r.Handle("forgetLink", http.MethodDelete, "/v1/links", h.ForgetLink)
+	r.Handle("postAction", http.MethodPost, "/v1/players/{player_id}/actions", h.PostAction)
 	return r
 }
 
