@@ -11,15 +11,15 @@ import (
 	"multiverse-core.io/shared/objstore"
 )
 
-// Component is the value of the component field of a snapshot: the stub writes
+// Component is the value of the component field of a snapshot: the double writes
 // the snapshot of State and nothing else (C-14 v1.1).
 const Component = "state"
 
 // Writer identifies who wrote a pointer. The real State writes
-// core/state@host:pid; the stub says plainly that it is the stub.
+// core/state@host:pid; the double says plainly that it is the double.
 const Writer = Source + "@fake:0"
 
-// The reasons a snapshot is taken (§4.9). The stub does not take one on a
+// The reasons a snapshot is taken (§4.9). The double does not take one on a
 // timer or on a shutdown — a test asks for one — so bootstrap and admin are
 // what it normally carries.
 const (
@@ -97,7 +97,7 @@ func SnapshotKey(takenAt time.Time, seq int64) string {
 // object — which is what makes the result verifiable by a consumer that
 // recomputes them itself.
 //
-// What the stub does not do: it does not publish snapshot.created. The
+// What the double does not do: it does not publish snapshot.created. The
 // registry lists state, swarm and gateway as the publishers of that type and
 // not testkit/state (contracts.md §0), and a stub that published a type it is
 // not a publisher of would fail the contracts job instead of standing in for
@@ -110,21 +110,26 @@ func (s *FakeState) Snapshot(ctx context.Context, reason string) (Pointer, error
 		reason = ReasonAdmin
 	}
 
+	// The world, the window and the cursor are read between two decisions, so
+	// that they describe one moment of the world.
+	s.deciding.Lock()
+	entities := s.All()
+	proposals := s.AppliedProposals()
 	s.mu.Lock()
-	entities := s.snapshotOrder()
 	seq := s.seq
 	s.seq++
+	cursor := s.cursor
+	s.mu.Unlock()
+	s.deciding.Unlock()
 	meta := SnapshotMeta{
 		Seq:           seq,
-		Cursor:        map[string]int64{"system_events": s.cursor},
-		LawsVersion:   s.lawsVersion(),
+		Cursor:        map[string]int64{"system_events": cursor},
+		LawsVersion:   lawsVersion(entities, s.worldID),
 		RulesVersion:  s.rules,
 		StateHash:     entity.StateHash(entities),
 		EntitiesCount: len(entities),
 		Reason:        reason,
 	}
-	proposals := s.applied.IDs()
-	s.mu.Unlock()
 
 	meta.TakenAt = s.clock.Now().UTC()
 	meta.ID = fmt.Sprintf("%s:%s:%06d", Component, s.worldID, seq)
@@ -178,12 +183,13 @@ func (s *FakeState) Snapshot(ctx context.Context, reason string) (Pointer, error
 }
 
 // lawsVersion reads the laws the world is running under off the world entity,
-// which is where they live (data-model.md §3.1). The caller holds the lock.
-func (s *FakeState) lawsVersion() string {
-	world, ok := s.entities[s.worldID]
-	if !ok {
-		return ""
+// which is where they live (data-model.md §3.1).
+func lawsVersion(entities []*entity.Entity, worldID string) string {
+	for _, e := range entities {
+		if e.ID == worldID {
+			version, _ := e.LawsVersion()
+			return version
+		}
 	}
-	version, _ := world.LawsVersion()
-	return version
+	return ""
 }

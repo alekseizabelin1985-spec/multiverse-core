@@ -29,8 +29,8 @@ import (
 // handed the world as it was. Everything here is therefore a property of one
 // state of the world, looked at from the touched entities outwards, and never a
 // property of a transition: "dead -> alive" and "a corpse is not changed" are
-// decided by State against the entity before the change (§4.5 p. 5, dead_entity
-// and law_violation inv-09), where the old status is still at hand.
+// decided by State against the entity before the change (§4.5 p. 5,
+// dead_entity), where the old status is still at hand.
 //
 // Why from the touched entities outwards and not the whole world: a proposal is
 // answered for what it does. A break some earlier change left behind is a
@@ -104,6 +104,16 @@ func InvariantIDs() []string {
 // has to be idle, out of the fight or marked dead there. An NPC has no such
 // mark, and a fight that goes on over a dead one would offer a corpse to strike.
 //
+// A terminal character still taking part breaks the law only when the same
+// package touches the character (C-05 v1.8 p. 9 (b)). A /forget changes the
+// character, not the encounter, and arrives on its own time: a package of the
+// encounter built before its fact and touching only the encounter — "both
+// missed" — is not refused for a participation the agent has not rewritten
+// yet, and in a group that package is the whole round of the others. A death,
+// by contrast, comes in the package that caused it, and that package is held.
+// The participation nobody rewrote is the audit's (mvctl report --audit touches
+// every entity).
+//
 // Why only the encounters that are touched. A death that comes from outside a
 // fight — a /forget of a character in the middle of it (C-04 v1.1), an NPC
 // killed by another hand (C-05 v1.4 p. 6) — changes the fighter and not the
@@ -136,7 +146,7 @@ func checkDeadDoesNotAct(v StateView, touched []string) []Violation {
 			}
 		}
 		for _, p := range participants {
-			if !isTerminal(v, p.PlayerID) || !takesPart(p.State) {
+			if !isTerminal(v, p.PlayerID) || !takesPart(p.State) || !slices.Contains(touched, p.PlayerID) {
 				continue
 			}
 			out = append(out, violation(InvDeadDoesNotAct, p.PlayerID,

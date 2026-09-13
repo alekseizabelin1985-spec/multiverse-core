@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state"
 	"multiverse-core.io/internal/state/memstore"
 	"multiverse-core.io/shared/clock"
@@ -93,15 +94,31 @@ type fixture struct {
 
 // newFixture builds the Applier of the world with deterministic sources, so
 // that ids and timestamps of the proposals are the same on every run.
+//
+// The pipeline tests of T-055 run it without the ownership check: what they
+// pin — versions, atomic packages, the attempts to publish — does not depend on
+// who proposes. The checks of T-056 run on newOwnedFixture, and the context
+// always enforces ownership.
 func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	return fixtureWith(t, state.ApplierConfig{WithoutOwnership: true})
+}
+
+// newOwnedFixture is the Applier as State runs it: the ownership table and the
+// norms over it in force, and the laws given.
+func newOwnedFixture(t *testing.T, laws ...mechanics.Invariant) *fixture {
+	t.Helper()
+	return fixtureWith(t, state.ApplierConfig{Invariants: laws})
+}
+
+func fixtureWith(t *testing.T, cfg state.ApplierConfig) *fixture {
 	t.Helper()
 	sources := testkit.Deterministic(t, "t055")
 	eventbus.SetRegistry(contracts.Default())
 	f := &fixture{store: memstore.New(), journal: &journal{}, log: &lockedBuffer{}, clock: sources.Clock}
-	applier, err := state.NewApplier(state.ApplierConfig{
-		WorldID: world, Store: f.store, Publisher: f.journal, Timers: sources.Timers,
-		Log: slog.New(slog.NewJSONHandler(f.log, &slog.HandlerOptions{Level: slog.LevelDebug})),
-	})
+	cfg.WorldID, cfg.Store, cfg.Publisher, cfg.Timers = world, f.store, f.journal, sources.Timers
+	cfg.Log = slog.New(slog.NewJSONHandler(f.log, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	applier, err := state.NewApplier(cfg)
 	if err != nil {
 		t.Fatalf("NewApplier: %v", err)
 	}
@@ -194,9 +211,18 @@ func op(kind entity.OpKind, path string, value any) entity.Op {
 	return entity.Op{Op: kind, Path: path, Value: value}
 }
 
-// update is entity.update.proposed as the gateway publishes it, with the change
-// sets encoded the way they travel.
+// update is entity.update.proposed as the author publishes it through mvctl,
+// with the change sets encoded the way they travel. The author may change
+// anything with cause=author (§4.6), so a test that is not about ownership
+// passes that cause through a context that enforces it.
 func update(t *testing.T, proposalID, cause string, atomic bool, sets ...entity.ChangeSet) eventbus.Event {
+	t.Helper()
+	return proposed(t, author, proposalID, cause, atomic, sets...)
+}
+
+// proposed is the same proposal published by a proposer of the ownership
+// table.
+func proposed(t *testing.T, by proposer, proposalID, cause string, atomic bool, sets ...entity.ChangeSet) eventbus.Event {
 	t.Helper()
 	payload := map[string]any{
 		"proposal_id": proposalID,
@@ -204,19 +230,46 @@ func update(t *testing.T, proposalID, cause string, atomic bool, sets ...entity.
 		"atomic":      atomic,
 		"cause":       cause,
 	}
-	return eventbus.NewRoot(state.TypeUpdateProposed, contracts.SourceGateway, world, nil,
-		eventbus.ActorCI, payload)
+	var opts []eventbus.DeriveOption
+	if by.level != "" {
+		opts = append(opts, eventbus.WithAgent(eventbus.AgentRef{ID: "agent:" + by.level, Level: by.level, Blueprint: "test"}))
+	}
+	return eventbus.NewRoot(state.TypeUpdateProposed, by.source, world, nil, eventbus.ActorCI, payload, opts...)
 }
 
+// create is entity.create.proposed as the bootstrap of a world publishes it
+// (source mvctl, cause init, proposer author; §4.10).
 func create(proposalID string, r entity.Ref, name string, attrs map[string]any) eventbus.Event {
-	return eventbus.NewRoot(state.TypeCreateProposed, contracts.SourceGateway, world, nil,
+	return createdBy(author, proposalID, "init", r, name, attrs)
+}
+
+func createdBy(by proposer, proposalID, cause string, r entity.Ref, name string, attrs map[string]any) eventbus.Event {
+	var opts []eventbus.DeriveOption
+	if by.level != "" {
+		opts = append(opts, eventbus.WithAgent(eventbus.AgentRef{ID: "agent:" + by.level, Level: by.level, Blueprint: "test"}))
+	}
+	return eventbus.NewRoot(state.TypeCreateProposed, by.source, world, nil,
 		eventbus.ActorCI, map[string]any{
 			"proposal_id": proposalID,
 			"entity":      map[string]any{"entity": map[string]any{"id": r.ID, "type": r.Type}, "name": name},
 			"attributes":  attrs,
-			"cause":       "create",
-		})
+			"cause":       cause,
+		}, opts...)
 }
+
+// proposer is who publishes a proposal of a test: a source and, for an agent,
+// its level.
+type proposer struct {
+	source string
+	level  string
+}
+
+var (
+	author  = proposer{source: contracts.SourceMvctl}
+	gateway = proposer{source: contracts.SourceGateway}
+)
+
+func agentOf(level string) proposer { return proposer{source: contracts.SourceSwarm, level: level} }
 
 // wire is a value as a subscriber holds it: encoded and decoded, every number a
 // float64.

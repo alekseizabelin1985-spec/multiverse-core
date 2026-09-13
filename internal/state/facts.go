@@ -9,10 +9,7 @@ import (
 // entity.update.rejected.reason (C-02 v1.4).
 type Reason string
 
-// The reasons of C-02. T-055 answers with the four the pipeline itself decides
-// — an entity that is not there, a version that moved, an operation that does
-// not apply, an identifier already taken; level_violation, law_violation and
-// dead_entity are the checks of T-056.
+// The seven reasons of C-02, every one of which State answers with.
 const (
 	ReasonVersionConflict Reason = "version_conflict"
 	ReasonUnknownEntity   Reason = "unknown_entity"
@@ -24,11 +21,13 @@ const (
 )
 
 // Rejection is one refusal of a proposal (§4.1): the reason, the entity it is
-// about when there is one, and the numbers that explain a version conflict.
+// about when there is one, the numbers that explain a version conflict and the
+// law that answered a law_violation.
 type Rejection struct {
 	Reason                         Reason
 	Ref                            *entity.Ref
 	ExpectedVersion, ActualVersion *int64
+	InvariantID                    string
 }
 
 // The id of every event State answers a proposal with is derived from the
@@ -96,6 +95,9 @@ func rejectedFact(cause eventbus.Event, source, proposalID string, r Rejection) 
 	}
 	if r.ActualVersion != nil {
 		details["actual_version"] = *r.ActualVersion
+	}
+	if r.InvariantID != "" {
+		details["invariant_id"] = r.InvariantID
 	}
 	if len(details) > 0 {
 		payload["details"] = details

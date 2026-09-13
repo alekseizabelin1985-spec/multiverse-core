@@ -4,10 +4,10 @@
 // entity.updated or entity.update.rejected (C-02).
 //
 // T-055 is the pipeline: the working set in memory (memstore), the Applier and
-// its versions, one worker per world, and the context the process runs.
-// Ownership, invariants, the terminal status and deduplication by last_change
-// are T-056; the object store, intents and snapshots T-057; recovery, the
-// state section of /health and the admin route T-059.
+// its versions, one worker per world, and the context the process runs. T-056
+// adds ownership, the laws of the world, the terminal status and deduplication
+// by last_change; the object store, intents and snapshots are T-057; recovery,
+// the state section of /health and the admin route T-059.
 package state
 
 import (
@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state/memstore"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/entity"
@@ -58,6 +59,10 @@ type Config struct {
 	// state-and-mechanics.md §6.2; review #2 of T-055, Mi-5). A test passes
 	// manual timers here.
 	Timers clock.Timers
+	// Invariants are the laws every world of the context is held to (§4.5
+	// p. 8), from the rule set of the process (mechanics.Rules.Invariants);
+	// nil checks none.
+	Invariants []mechanics.Invariant
 }
 
 // Context is State as a context of the process (runtime.Context).
@@ -88,10 +93,13 @@ type Context struct {
 }
 
 // New builds the context. Nothing is read and nothing is published until Start.
-func New(cfg Config) *Context {
+func New(cfg Config) *Context { return newOver(cfg, memstore.New()) }
+
+// newOver builds the context over a working set that already holds worlds.
+func newOver(cfg Config, store *memstore.Store) *Context {
 	return &Context{
 		cfg:       cfg,
-		store:     memstore.New(),
+		store:     store,
 		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		delivered: eventbus.NewDedup(cfg.DedupCapacity),
 	}
@@ -156,6 +164,7 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 			applier, err = NewApplier(ApplierConfig{
 				WorldID: world, Store: c.store, Publisher: deps.Bus,
 				DedupCapacity: c.cfg.DedupCapacity, Timers: timers, Log: log,
+				Invariants: c.cfg.Invariants,
 			})
 			if err != nil {
 				return err

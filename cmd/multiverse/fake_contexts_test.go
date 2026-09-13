@@ -16,13 +16,13 @@ import (
 	"testing"
 	"time"
 
+	internalstate "multiverse-core.io/internal/state"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
-	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
@@ -306,10 +306,10 @@ const (
 // TestTheProcessRunsTheFightsOfIAlpha is I1-α told through cmd/multiverse and
 // not through a test of the package: the contexts are the ones the hook
 // registers, built by runtime.New as serve builds them, and they run through
-// process.run on the bus --bus=memory opens. On that bus, and on nothing the
-// process owns, stand the two doubles of the parts the binary does not have
-// yet — FakeState for the context state, which is still a stub, and the
-// harness of the gateway.
+// process.run on the bus --bus=memory opens. The context state of the process
+// is internal/state and serves the world of the fixtures (T-056); on the bus,
+// and on nothing the process owns, stands the one double of a part the binary
+// does not have yet — the harness of the gateway.
 //
 // The world comes over the bus, the way mvctl world init will bring it
 // (state-and-mechanics.md §4.10): the hook gives the fake no fixtures, so a
@@ -417,11 +417,9 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	// directory, as for `go run ./cmd/multiverse` from the root of the tree.
 	t.Chdir(filepath.Join("..", ".."))
 	t.Setenv(env.SwarmFake.Name(), "true")
-	// The world of the fixtures belongs to FakeState of the stand, so the
-	// context state of the process serves another one: two States answering
-	// one proposal would publish every fact twice. The stand moves onto the
-	// real State when T-056 replaces FakeState.
-	t.Setenv(env.StateWorlds.Name(), "world-of-no-stand")
+	// The world of the fixtures is served by the context state of the process
+	// itself (T-056): MV_STATE_WORLDS keeps its default, the world of the
+	// fixtures, and no double of State stands beside it.
 
 	fixtures, err := state.LoadFixtures(filepath.Join("testdata", "fixtures"))
 	if err != nil {
@@ -434,13 +432,16 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	if err != nil {
 		t.Fatalf("New(all): %v", err)
 	}
+	stateOfTheProcess := stateOf(t, contexts)
 	fake, ok := swarmsOf(contexts)[0].(flagged)
 	if !ok {
 		t.Fatalf("the hook built %T under %s=true", swarmsOf(contexts)[0], env.SwarmFake.Name())
 	}
 
 	doubles, cancelDoubles := context.WithCancel(context.Background())
-	stand := &stand{}
+	stand := &stand{world: func(id string) (*entity.Entity, bool) {
+		return stateOfTheProcess.Get(stateOfTheProcessWorld(fixtures), id)
+	}}
 	t.Cleanup(func() { cancelDoubles(); stand.wait() })
 	// open runs on the goroutine of process.run; the channel hands the watched
 	// transport over to the test explicitly instead of through a variable both
@@ -527,7 +528,7 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	}
 	want[swarm.KindWorldEvent] = len(started)
 	const player = standPlayer
-	if who, ok := stand.world.Get(player); ok {
+	if who, ok := stand.world(player); ok {
 		if status, _ := who.Status(); status == entity.StatusDead {
 			want[swarm.KindDeath] = 1
 		}
@@ -562,6 +563,7 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 		}
 	}
 	onlyRetriedRefusals(t, eventsOn(t, bus, eventbus.TopicSystemEvents))
+	oneStateOverTheWorld(t, eventsOn(t, bus, eventbus.TopicSystemEvents))
 	if letters, err := bus.DeadLetters(); err != nil || len(letters) != 0 {
 		t.Errorf("dead letters: %v (err %v), want none", letters, err)
 	}
@@ -576,7 +578,7 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	// so that id is what is awaited.
 	ending := ""
 	encounterID, _ := started[0].Path().GetString("encounter.entity.id")
-	if closed, ok := stand.world.Get(encounterID); ok {
+	if closed, ok := stand.world(encounterID); ok {
 		if endedBy, _ := closed.Attributes[entity.AttrClosedByEventID].(string); endedBy != "" {
 			waitUntil(t, "encounter.ended "+endedBy+" announced after its fact", func() bool {
 				for _, ev := range eventsOfType(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded) {
@@ -602,42 +604,52 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	return have, ending
 }
 
-// stand is what the test puts on the bus of the process: the double of State
-// with the world bootstrapped into it, and the harness of the gateway. The
-// process owns and closes the bus; the stand only stops its own subscriptions.
+// stand is what the test puts on the bus of the process: the world
+// bootstrapped through the context state of the process, and the harness of
+// the gateway. The process owns and closes the bus; the stand only stops its
+// own subscriptions.
 type stand struct {
-	bus     eventbus.Bus
-	world   *state.FakeState
+	bus eventbus.Bus
+	// world reads an entity of the world as the State of the process decided
+	// it.
+	world   func(id string) (*entity.Entity, bool)
 	harness *gateway.Harness
 	// created is every entity bootstrap had State create: what the fake has to
 	// have learnt before a character enters.
 	created []string
 }
 
-// bootstrap starts FakeState on the bus and creates the world, the region and
-// the wolf of the fixtures through entity.create.proposed, as mvctl world init
-// does (source mvctl, actor system, cause init; state-and-mechanics.md §4.10).
-// It runs inside openBus, off the goroutine of the test, so it reports instead
-// of failing the test.
-func (s *stand) bootstrap(ctx context.Context, bus eventbus.Bus, fixtures []*entity.Entity) error {
-	s.bus = bus
-	world := ""
-	for _, e := range fixtures {
-		if e.Type == entity.TypeWorld {
-			world = e.ID
+// stateOf is the context state runtime.New built, the one that serves the
+// world of the fixtures.
+func stateOf(t *testing.T, contexts []runtime.Context) *internalstate.Context {
+	t.Helper()
+	for _, c := range contexts {
+		if st, ok := c.(*internalstate.Context); ok {
+			return st
 		}
 	}
-	st, err := state.New(state.Config{
-		Bus: bus, Store: objstore.NewMemoryWithClock(clock.NewManual(testkit.Epoch)),
-		WorldID: world, RulesVersion: "0.1",
-	})
-	if err != nil {
-		return err
+	t.Fatalf("runtime.New(all) built no context of internal/state")
+	return nil
+}
+
+func stateOfTheProcessWorld(fixtures []*entity.Entity) string {
+	for _, e := range fixtures {
+		if e.Type == entity.TypeWorld {
+			return e.ID
+		}
 	}
-	s.world = st
-	if err := st.Start(ctx); err != nil {
-		return err
-	}
+	return ""
+}
+
+// bootstrap creates the world, the region and the wolf of the fixtures through
+// entity.create.proposed, as mvctl world init does (source mvctl, actor system,
+// cause init; state-and-mechanics.md §4.10). It runs inside openBus, before the
+// contexts start, so it only publishes: the context state reads the proposals
+// from the first offset once it starts (C-01 v1.2), and the stand waits for the
+// facts through learning. It reports instead of failing the test.
+func (s *stand) bootstrap(ctx context.Context, bus eventbus.Bus, fixtures []*entity.Entity) error {
+	s.bus = bus
+	world := stateOfTheProcessWorld(fixtures)
 	var created []string
 	for _, e := range fixtures {
 		if e.Type == entity.TypePlayer {
@@ -655,29 +667,50 @@ func (s *stand) bootstrap(ctx context.Context, bus eventbus.Bus, fixtures []*ent
 		}
 		created = append(created, e.ID)
 	}
-	deadline := testkit.After(10 * time.Second)
-	for _, id := range created {
-		for {
-			if _, ok := st.Get(id); ok {
-				break
-			}
-			select {
-			case <-deadline:
-				return fmt.Errorf("bootstrap: State never created %s", id)
-			case <-clock.RealTimers{}.After(time.Millisecond).C():
-			}
-		}
-	}
 	s.created = created
 	return nil
 }
 
 func (s *stand) wait() {
-	if s.world != nil {
-		_ = s.world.Wait()
-	}
 	if s.harness != nil {
 		_ = s.harness.Wait()
+	}
+}
+
+// oneStateOverTheWorld is the guard of "one State per world" on the stand
+// (review #1 of T-056, Mi-4; strict since review #2, Mi-6): every fact is
+// published by the State of the process, one version of one entity is announced
+// by one event, and no event is published twice. A second State over the world
+// of the fixtures — a double beside the process, or a second internal/state —
+// answers every proposal again, under its own source or under the very ids of
+// the first, which State derives from the proposal. A fact with an empty
+// changed[] announces no version (C-02) and is held to its id alone.
+func oneStateOverTheWorld(t *testing.T, facts []eventbus.Event) {
+	t.Helper()
+	announced := make(map[string]string)
+	published := make(map[string]bool)
+	for _, ev := range facts {
+		if ev.Type != state.TypeCreated && ev.Type != state.TypeUpdated {
+			continue
+		}
+		id, _ := ev.Path().GetString("entity.entity.id")
+		version, _ := ev.Path().GetInt("version")
+		if ev.Source != contracts.SourceState {
+			t.Errorf("%s of %s v%d is published by %q, want only the State of the process (%s)",
+				ev.Type, id, version, ev.Source, contracts.SourceState)
+		}
+		if published[ev.ID] {
+			t.Errorf("%s of %s v%d is published twice under %s: two States answer one world", ev.Type, id, version, ev.ID)
+		}
+		published[ev.ID] = true
+		if changed, ok := ev.Path().GetSlice("changed"); ok && len(changed) == 0 {
+			continue
+		}
+		key := fmt.Sprintf("%s v%d", id, version)
+		if first, seen := announced[key]; seen {
+			t.Errorf("%s is announced twice, by %s and %s: two States answer one world", key, first, ev.ID)
+		}
+		announced[key] = ev.ID
 	}
 }
 

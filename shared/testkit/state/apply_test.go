@@ -46,10 +46,10 @@ func factsOf(t *testing.T, bus busReader) []eventbus.Event {
 
 // --- the matrix of refusals ---
 
-// TestRejectionMatrix walks the five reasons the stub can produce. They are
-// the whole matrix of v0: level_violation needs the ownership table and
-// law_violation the invariants, and the stub has neither, so a proposal that
-// only those two would refuse is applied here (design.md §5).
+// TestRejectionMatrix walks the reasons the double answers without the laws of
+// the world; level_violation of the transition into abandoned and law_violation
+// have tests of their own below. The ownership table is not the double's
+// (package doc), so a proposal that only the table would refuse is applied here.
 func TestRejectionMatrix(t *testing.T) {
 	t.Run(state.ReasonUnknownEntity, func(t *testing.T) {
 		fake, bus, _ := world(t)
@@ -197,13 +197,13 @@ func TestForgetOverADeadCharacterIsRefused(t *testing.T) {
 
 // TestAbandonedNeedsTheCauseOfForget covers the other half of the rule C-02
 // v1.2 and З-2 give the transition alive -> abandoned: it is the /forget of the
-// gateway, and nothing else ends a living character that way. A swarm that
-// proposes it after a fight would pass on a stub that only looked at the
-// status and fail against the real State — the divergence a stub exists to
-// prevent.
+// gateway, and nothing else ends a living character that way. The pair
+// "status, not forget" is not the proposer's to write, so it is level_violation
+// (C-02 v1.5; the stand-in of T-017 answered invalid_op, "Код расходится").
 //
 // The status the matrix does not know at all (data-model.md §3.3, checked
-// through entity.StatusTransitionAllowed) is refused by the same rule.
+// through entity.StatusTransitionAllowed) stays invalid_op: it is a move no
+// proposer could make.
 func TestAbandonedNeedsTheCauseOfForget(t *testing.T) {
 	t.Run("abandoned with another cause", func(t *testing.T) {
 		fake, bus, _ := world(t)
@@ -211,7 +211,7 @@ func TestAbandonedNeedsTheCauseOfForget(t *testing.T) {
 			changeSet(playerRef(playerA), "Вася", versionOf(t, fake, playerA),
 				entity.Op{Op: entity.OpSet, Path: entity.AttrStatus, Value: entity.StatusAbandoned})))
 
-		assertRefusal(t, bus, "prop-abandon-combat", state.ReasonInvalidOp, playerA, nil)
+		assertRefusal(t, bus, "prop-abandon-combat", state.ReasonLevelViolation, playerA, nil)
 		if facts := factsOf(t, bus); len(facts) != 0 {
 			t.Errorf("%d facts: a character was abandoned by a fight", len(facts))
 		}
@@ -734,22 +734,98 @@ func overTheBus(t *testing.T, ev eventbus.Event) eventbus.Event {
 	return ev
 }
 
-// TestWithInvariantsIsANoOp states the gap out loud (design.md §5): the flag
-// exists so that a caller can ask, and asking changes nothing until EPIC-002
-// writes the checks (T-054).
-func TestWithInvariantsIsANoOp(t *testing.T) {
+// TestWithInvariantsHoldsTheLawsOfTheWorld: with WithInvariants a character
+// sent somewhere the world does not know breaks inv-10 (one entity, one
+// position) and is refused law_violation naming the law; nothing is published
+// but the refusal and the version does not move. Without it the same proposal
+// is applied: the double checks the laws only when a test asks.
+func TestWithInvariantsHoldsTheLawsOfTheWorld(t *testing.T) {
+	nowhere := func(fake *state.FakeState) eventbus.Event {
+		return proposal("prop-nowhere", "move", true,
+			changeSet(playerRef(playerA), "Вася", versionOf(t, fake, playerA),
+				entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: "nowhere-at-all"}))
+	}
+
+	t.Run("with invariants", func(t *testing.T) {
+		fake, bus, _ := world(t)
+		fake.WithInvariants()
+		before := versionOf(t, fake, playerA)
+
+		apply(t, fake, nowhere(fake))
+
+		assertRefusal(t, bus, "prop-nowhere", state.ReasonLawViolation, playerA, nil)
+		if law, _ := refusalsOf(t, bus)[0].Path().GetString("details.invariant_id"); law != "inv-10" {
+			t.Errorf("details.invariant_id %q, want inv-10", law)
+		}
+		if facts := factsOf(t, bus); len(facts) != 0 {
+			t.Errorf("%d facts from a proposal that breaks a law", len(facts))
+		}
+		if v := versionOf(t, fake, playerA); *v != *before {
+			t.Errorf("version %d, want %d", *v, *before)
+		}
+	})
+
+	t.Run("without", func(t *testing.T) {
+		fake, bus, _ := world(t)
+		apply(t, fake, nowhere(fake))
+		if refusals := refusalsOf(t, bus); len(refusals) != 0 {
+			t.Errorf("%d refusals: the laws were checked without WithInvariants", len(refusals))
+		}
+		if position, _ := mustGet(t, fake, playerA).Position(); position != "nowhere-at-all" {
+			t.Errorf("position %q, want the proposal applied", position)
+		}
+	})
+}
+
+// TestAProposalWithoutAWorldIsPassedOver: a proposal whose envelope names no
+// world is neither applied nor refused (C-02 v1.7). The stand-in of T-017
+// applied it to its own world; the registry refuses such a proposal on Publish
+// now, so it reaches the double only by a direct call.
+func TestAProposalWithoutAWorldIsPassedOver(t *testing.T) {
 	fake, bus, _ := world(t)
-	fake.WithInvariants()
-
-	// inv-02 holds hit points inside [0, hp_max]; the operations themselves
-	// clamp, so what an invariant would have to catch is something else
-	// entirely — here, a character sent somewhere the region does not know.
-	apply(t, fake, proposal("prop-nowhere", "move", true,
+	before := fake.StateHash()
+	ev := proposal("prop-worldless", "combat", true,
 		changeSet(playerRef(playerA), "Вася", versionOf(t, fake, playerA),
-			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: "nowhere-at-all"})))
+			entity.Op{Op: entity.OpInc, Path: entity.AttrHP, Value: -1}))
+	ev.World = nil
 
-	if refusals := refusalsOf(t, bus); len(refusals) != 0 {
-		t.Errorf("%d refusals: the stub checked a law it does not have", len(refusals))
+	apply(t, fake, ev)
+
+	if all := events(t, bus, eventbus.TopicSystemEvents); len(all) != 0 {
+		t.Errorf("%d events published for a proposal without a world", len(all))
+	}
+	if fake.StateHash() != before {
+		t.Error("the world moved under a proposal without a world")
+	}
+	if err := bus.Publish(context.Background(), ev); err == nil {
+		t.Error("the bus published a proposal without a world: the policy of the registry is not WorldRequired")
+	}
+}
+
+// TestBatchSizeIsTheNumberApplied: last_change.batch_size of a non-atomic
+// package is the number of change sets applied, as in State (§4.5 p. 9); the
+// stand-in of T-017 wrote the number proposed (N-3 of review #1 of T-055).
+func TestBatchSizeIsTheNumberApplied(t *testing.T) {
+	fake, bus, _ := world(t)
+	stale := int64(99)
+
+	apply(t, fake, proposal("prop-four", "move", false,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID}),
+		changeSet(playerRef("player-B"), "Лена", &stale,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID}),
+		changeSet(playerRef("player-C"), "", nil,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID}),
+		changeSet(playerRef("player-Z"), "", nil,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID})))
+
+	if facts, refusals := len(factsOf(t, bus)), len(refusalsOf(t, bus)); facts != 2 || refusals != 2 {
+		t.Fatalf("%d facts and %d refusals, want two of each", facts, refusals)
+	}
+	for _, id := range []string{playerA, "player-C"} {
+		if batch := mustGet(t, fake, id).LastChange.BatchSize; batch != 2 {
+			t.Errorf("%s last_change.batch_size = %d, want 2 applied of the 4 proposed", id, batch)
+		}
 	}
 }
 
