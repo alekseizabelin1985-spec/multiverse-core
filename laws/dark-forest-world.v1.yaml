@@ -1,0 +1,30 @@
+# The laws of dark-forest-world, version v1 (ADR-008, C-12, swarm-llm-laws.md §12.1).
+#
+# This file is the only place the text of a law lives. The logic of the
+# invariants inv-01…inv-10 lives in internal/mechanics/invariants.go under the
+# same identifiers; the check of an invariant names the key its implementation
+# is registered under (swarm-llm-laws.md §10.4). inv-11 is enforced by the
+# guardian of the LLM gateway, not by mechanics, so its key is its own.
+#
+# A new version is a new file, dark-forest-world.v2.yaml with based_on: v1,
+# announced with mvctl laws bump. This file is never edited in place once the
+# world has run under it: the laws_version of every record points at it.
+version: v1
+world_id: dark-forest-world
+status: approved
+created_by: author
+created_at: 2026-09-09T00:00:00Z
+laws:
+  - { id: inv-01, kind: invariant, check: inv-01, text: "Мёртвая сущность не действует и не выбирается целью" }
+  - { id: inv-02, kind: invariant, check: inv-02, text: "0 ≤ hp ≤ hp_max" }
+  - { id: inv-03, kind: invariant, check: inv-03, text: "Трофей за NPC выдаётся не более одного раза" }
+  - { id: inv-04, kind: invariant, check: inv-04, text: "Позиция живого участника группы равна позиции группы" }
+  - { id: inv-05, kind: invariant, check: inv-05, text: "В группе от 1 до 6 участников" }
+  - { id: inv-06, kind: invariant, check: inv-06, text: "Игрок находится ровно в одном scope" }
+  - { id: inv-07, kind: invariant, check: inv-07, text: "HP после entity.updated равно HP в соответствующем combat.decided" }
+  - { id: inv-08, kind: invariant, check: inv-08, text: "Нет combat.decided против игрока без его действия" }
+  - { id: inv-09, kind: invariant, check: inv-09, text: "NPC, убитый игроком, не возрождается в течение respawn_ttl региона" }
+  - { id: inv-10, kind: invariant, check: inv-10, text: "Одна сущность — одна позиция" }
+  - { id: inv-11, kind: invariant, check: laws_version_current, text: "Вывод LLM создан под текущей версией законов мира" }
+  - { id: law-1, kind: declarative, source: author, text: "В Тёмном лесу нет магии, лечащей раны; отдых — единственный способ восстановить силы" }
+  - { id: law-2, kind: declarative, source: author, text: "Волки не разговаривают и не торгуют" }

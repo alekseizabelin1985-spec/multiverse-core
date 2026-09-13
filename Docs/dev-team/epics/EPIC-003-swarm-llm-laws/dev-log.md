@@ -2705,6 +2705,102 @@ fence (принят незакрытый, потеряна строка откр
 - F3 — `ctx.Err()` до `take` (M2 ревью);
 - F4 — задержка не ждёт таймер.
 
+<!-- dev-log T-205 -->
+## developer#3 · T-205 · A7 «Законы: `internal/laws`, `laws/dark-forest-world.v1.yaml`, `mvctl laws bump|show`» · 2026-09-13
+
+Ветка `task/T-205-laws` (от `epic/EPIC-003-swarm-llm-laws`, `586ded3`), папка `.worktrees/T-205`. Коммитов нет, по промпту они запрещены. Таблица DoD, мутанты и бэклог — в карточке `tasks/T-205.md`.
+
+**Сделано.**
+- `laws/dark-forest-world.v1.yaml` — `inv-01…inv-10` (`check` = id, ключ `mechanics.Invariant.ID`), `inv-11` (`check: laws_version_current`, ключ стража), `law-1`, `law-2`.
+- `internal/laws`:
+  - `document.go` — типы, enum статусов (без машины состояний), `KnownChecks`, строгий `Parse` с `*DocumentError` (`ErrInvalidDocument`, `ErrUnknownCheck`);
+  - `source.go` — `Source`, `FileSource`, интерфейс `ObjectSource`;
+  - `strain.go` — `Strain{Inc, Snapshot}`;
+  - `laws.go` — `WorldVersions` (решение 1f), `Service`, `*Keeper`: `Current/CurrentFrom/Get/Worlds/Versions/Problems/Health/Watch/Handle/Subscribe/Bump`.
+- `mvctl laws show|bump` в `cmd/mvctl/internal/laws`, регистрация — одной заменой строки в `commands_swarm.go`.
+- `MV_LAWS_DIR` в `shared/env/vars.go` и `.env.example`.
+
+**Решения по ходу.**
+- `check` инварианта равен его id: так требуют КД §10.4 и ADR-012 п. 5. Пример КД §12.1 с `dead_does_not_act` устарел.
+- Документ, который не загрузился, не роняет загрузку остальных: он становится `Problem`, `Get` его версии отдаёт причину, `Health` — `degraded` с `laws: unknown_check|invalid_document`.
+- Более новая версия, которая не загружается, — ошибка `Current`, а не молчаливый откат к старой.
+- `Bump` объявляет только документ, который лежит в каталоге законов и совпадает с файлом `--from`: `core` должен уметь загрузить объявленную версию. Базовая версия — из `WorldVersions`, без неё — старшая `approved` кроме объявляемой.
+- `world.laws.changed` — `NewRoot` (`source=mvctl`, `actor_kind=system`), `entity.update.proposed` — `Derive` от него, `cause=author`, `proposal_id=laws:{world}:{version}`.
+- `Watch` не блокирует подписку: буфер 16, переполнение — `Warn`.
+- `registry_swarm.go` не менялся: тип и издатели уже есть (T-214).
+
+**Отклонения.** Изменён файл EPIC-001 `cmd/mvctl/main_test.go` — две строки: `laws` перенесена из списка зарезервированных имён в реализованные. Без этого тест реестра падает на реализованной команде. Нужен просмотр tech-lead#1, как и для `shared/env/vars.go` и `.env.example`.
+
+**Тесты.**
+- `internal/laws` — 98.3 %:
+  - законы v1: `inv-01…inv-11`, ключи `check`;
+  - `Parse`: 19 отказов и все статусы;
+  - `FileSource`;
+  - `Current` на фейке `WorldVersions` и без него;
+  - неизвестный `check` → `unknown_check` в `Health`;
+  - `Handle`/`Watch`/`Subscribe` на `membus`;
+  - `Bump` на `membus` с валидацией схем, `source ∈ Publishers` и строкой `OwnershipRules`; 13 отказов без публикаций, сбой публикации;
+  - транзитивный обход импортов: нет `internal/*`, кроме самого пакета.
+- `cmd/mvctl/internal/laws` — 97.1 %: `show` на файле репозитория, JSON, находки, ошибки вызова, `bump` на `memory`.
+
+Прогоны:
+- `go build ./... && go vet ./...` — зелёные;
+- `go test -short -count=1 ./...` — все ok;
+- `go test -tags e2e ./test/e2e/...` — ok;
+- `golangci-lint run ./...` — 0 issues;
+- `mvctl contracts check` — зелёный, `mvctl env check` — 73 переменные;
+- `go run ./cmd/mvctl laws show` — exit 0;
+- `make test` — ok;
+- `gitleaks dir` по новым и изменённым файлам — чисто.
+
+Мутанты — в копии дерева в scratch, без `-overlay`: контрольный первым убит. Два выживших (M33, M38) закрыты тестами. M31 без `.golangci.yml` в копии прошёл линтер — копия пересобрана с конфигом, и depguard стал красным. Итог 39 из 39, копия удалена по точному пути.
+
+<!-- dev-log T-459 -->
+### architect#2 · T-459 · документы EPIC-003 под C-07 v1.5 и решения приёмок T-210, T-202 · 2026-09-13
+
+Основание: T-457 (EPIC-001), пункт «architect#2 (EPIC-003)» строк DoD; приёмка T-210 (Mi-2); приёмка T-202 (вопросы 7а, `city-gm`, владение, документы). Код, схемы, `contracts.md`, стенд LLM и Docker не трогались; коммитов нет.
+
+#### Что сделано
+- ADR-029 — «принято»; п. 5 по массиву; п. 6 — `unknown_entity` + `element` + `ref` (C-07 v1.5), временная форма `other` отменена; п. 7–8 — `labels_hash`; варианты, последствия, «Что сделать», условия пересмотра, история.
+- КД роя — §2, §3, §9.1 (источники `shared/recording`, ключ из `llm.Request`), §9.2 (`Allow` перед каждой попыткой, `Observe`, `labels_hash`, `ref`), §10.2, §13.2 (`ValidationEnv`, правила, три решения), §13.4–§13.4.2, §19, «Дополнение T-439», новое «Дополнение T-459».
+- Диаграмма ярлыков — replay по `labels_hash`, отброс с `ref`.
+- ADR-015 — уточнения п. 3 и п. 4; design v0.3c — §3.1 A2.
+- `tasks.md` 0.3.6 — строки DoD T-203, T-204, T-211, T-212, T-213, T-217, T-221, T-222, T-237, T-246, T-247, T-248, T-260…T-262; §14 с разделом T-459.
+
+#### Решения (КД §13.2)
+- 7а в рантайме — стабильный код `Issue.Code` (`model_missing`, `models_not_checked`); `LoadDir` понижает по коду. Поле окружения отвергнуто: находку для `/health` и шаблона рантайм всё равно ищет — без кода по тексту.
+- `city-gm` — пустой белый список, `info: reserved role, spawn disabled`.
+- Владение по уровню оставлено; пересмотр — две роли уровня с предложениями сущностей и разными правами (запрос к C-02).
+- Источник таблицы для `labels_hash` — `Call.Guard` (`Mentions`, `AbsenceEventIDs`, `Kind`), функция `llm.LabelsHash` (T-211).
+
+#### Находки для оркестратора и tech-lead#2
+- `49d1c6e` не содержит `contracts.md` v0.13 и пометок T-457 в ADR-016/017: T-457 есть только в `epic/EPIC-001-foundation` (`14b29aa`).
+- T-212: при отсутствии T-458 к старту приёмка T-207 и T-457 предписывают разный порядок — выбор tech-lead#2.
+
+#### Проверки
+- `git grep -n "C-07 v1.4" -- Docs/dev-team` — в `architecture/` и `tasks.md` EPIC-003 только денежный лимит и история приёмки T-439; `git grep "до v1.4\|после v1.4\|по v1.4"` в ADR-029 и КД — пусто.
+- Строка `:521` КД (`providers/ollama`, inline `gitleaks:allow`) побайтно равна `HEAD:521`: правки выше неё — однострочные замены. Построчный отпечаток `.gitleaksignore` (`swarm-llm-laws.md:generic-api-key:521`) не сдвинулся.
+- CRLF во всех изменённых и новых файлах, NUL и BOM нет; правка — скриптами Python с проверкой «ровно одно вхождение».
+- `gitleaks dir . --redact --no-banner -c .gitleaks.toml` по копии восьми изменённых и новых файлов (КД, ADR-029, ADR-015, диаграмма, design, `tasks.md`, `dev-log.md`, карточка) с `.gitleaks.toml` и `.gitleaksignore` ветки в scratch `t459-edit/leaks` — «no leaks found»; без `.gitleaksignore` — тоже «no leaks found» (строку `:521` гасит inline `gitleaks:allow`). Повторный прогон после вставки этой строки — тот же итог. Копия удалена по точному пути.
+
+<!-- dev-log T-459 итерация 2 -->
+### architect#2 · T-459 · итерация 2 (по ревью #1) · 2026-09-13
+
+Основание: ревью #1 code-reviewer#3 («вернуть», 0/1/3/5), решения оркестратора по Ma-1 и Mi-1, T-456 (C-07 v1.6 `called_at`, ветка EPIC-001, на ревью — только чтение). Код, схемы, `contracts.md` не трогались; коммитов нет.
+
+#### Что сделано
+- **Ma-1.** T-211 — `llm.LabelTable`, `llm.LabelsHash(t) (string, error)` (ключ вне формы — `ErrLabelTable`), схема, golden-значения, поле из явного входа `Recorder` `Labels *LabelTable`. T-213 — заполнение из `Call.Guard`, свойство-тест «поле ⇔ `Kind=narrative`», отказ на входе при таблице вне формы, сверка ярлыков replay. T-212 — только `warn llm_replay_prompt_drift` и `Record.LabelsHash`. Зависимость T-212 от T-213 не выбрана: T-213 зависит от T-212 — цикл. КД §9.2, ADR-029 «Что сделать» и п. 8 приведены; дубль теста снят (N-2).
+- **Mi-1.** T-212 стартует после T-458 в `develop` и синхронизации эпика, по частям не сливается; альтернатива «адаптер отдельной задачей» снята.
+- **Mi-2.** Оговорка e2e на записях с памятью — T-248, КД §13.4.2, ADR-029 п. 8 (причина — `AbsenceSummary` заменяет список журнала, КД §11.3).
+- **Mi-3.** `Rejection.Ref` — «Файлы» T-217, КД §3, «Дополнение T-459».
+- **N-1, N-3, N-4, N-5** — `warn` при пустых массивах; `recorded.Key`/`KeyOf` удаляются в пользу `recording.LLMOutputKey`; `levels_test.go:20` и правила 10/11 у резервной роли применяются; `round.timeout`, если задан.
+- **`called_at` (C-07 v1.6, после слияния T-456).** Строки DoD T-211 (схема, `Recorder`), T-212 (`Clock.Now()` перед `Generate`), T-250 (окно от `called_at`); КД §9.2.
+
+#### Проверки
+- Строка `:521` КД побайтно равна `HEAD:521`; единственная правка выше неё — однострочная замена в §3 (`Evaluate`).
+- CRLF во всех изменённых файлах, NUL и BOM нет; правка — скриптом Python `i2_docs.py` с проверкой «ровно одно вхождение».
+- `gitleaks dir . --redact --no-banner -c .gitleaks.toml` по копии восьми изменённых и новых файлов с `.gitleaks.toml` и `.gitleaksignore` ветки в scratch `t459-edit/leaks2` — «no leaks found»; повторный прогон после этой строки — тот же итог. Копия удалена по точному пути.
+
 <!-- dev-log T-451 -->
 ### developer#1 · T-451 · Go-правило «локальный адрес» по таблице T-450 · 2026-09-13
 

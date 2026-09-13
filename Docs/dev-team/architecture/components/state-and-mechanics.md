@@ -302,7 +302,7 @@ type Store interface {
 2. **Дедуп** (`dedup.go`): `proposal_id ∈ applied LRU` **или** у всех целевых сущностей `last_change.proposal_id == proposal_id` → предложение уже применено. Если факты для него ещё не подтверждены (`last_change.fact_event_id == ""`) — повторно опубликовать факты (§4.8) и выйти; иначе выйти молча (лог `debug`, `handled=true`).
 3. **Существование**: каждая `changes[i].entity` найдена в `WorldSet` → иначе `unknown_entity`.
 4. **Версия**: `expected_version` задан и `≠ entity.Version` → `version_conflict {expected_version, actual_version}`.
-5. **Мёртвые**: `status ∈ {dead, ascended_final}` у сущности **до** применения → `dead_entity`, кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id` и кроме `type=encounter/group` (у них нет `dead`). Переход `status: dead → alive` запрещён всегда (`law_violation inv-09`).
+5. **Мёртвые**: `status ∈ {dead, abandoned, ascended_final}` *(изм. T-457: `abandoned` — по C-02 v1.2)* у сущности **до** применения → `dead_entity`, кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id` и кроме `type=encounter/group` (у них нет `dead`). Переход терминальной сущности в нетерминальный статус (`dead → alive` и любой другой) — тоже `dead_entity` на этом шаге, в том числе когда пакет заодно стирает `died_at`/`killed_by` *(изм. T-457, C-02 v1.5b; прежде «запрещён всегда (`law_violation inv-09`)»: проверка шага 8 перехода не видит, мира «до» у неё нет)*.
 6. **Владение** (`ownership.go`): для каждой (сущность, op) проверка по `contracts.OwnershipRules` (§4.6) → `level_violation`.
 7. **Применение на копиях**: `entity.ApplyOps` на `Clone(e)` → `attrs, changed` или `invalid_op`.
 8. **Инварианты** (`invariants.go`): `overlayView` (WorldSet + копии) → `mechanics.Invariants()` с `touched = ids изменённых` → первое нарушение → `law_violation {invariant_id}`.
@@ -338,7 +338,7 @@ type OwnershipRule struct {
 | `task` | `npc` | `hp`, `status`, `died_at`, `killed_by`, `loot_claimed_by` | `combat, death` | — |
 | `task` | `encounter` | `*` | `combat, flee, group, death, resolve` | — |
 | `domain` (GM региона) | `region` | `*` кроме `description` | `tick, spawn` | `npc`, `encounter` |
-| `domain` | `npc` | `*` кроме `hp` вниз при живом игроке в встрече; `status: dead→alive` запрещён всегда (inv-09) | `tick, spawn` | `npc` |
+| `domain` | `npc` | `*` кроме `hp` вниз при живом игроке в встрече; `status: dead→alive` запрещён всегда (`dead_entity`, §4.5 п. 5; изм. T-457) | `tick, spawn` | `npc` |
 | `domain` | `encounter` | `state`, `participants`, `npcs` (создание) | `spawn` | `encounter` |
 | `global` | `world` | `weather`, `time_of_day`, `day`, `season`, `epoch` (не `laws_version`) | `tick` | — |
 | `author` (`mvctl`) / `system` (bootstrap) | `*` | `*` | `init, author` | все |
@@ -595,11 +595,11 @@ type Invariant struct {
 }
 ```
 
-**Состояние на 2026-09-11 (T-409).** Реестр `internal/mechanics/invariants.go` существует — идентификаторы и места проверки (`Where`) заполнены, — но **у всех десяти записей `Check == nil`**: проверки пишет EPIC-002 **T-054** (соло: inv-01, 02, 03, 09, 10) и последующие задачи. У `inv-07` и `inv-08` `Check` останется `nil` навсегда — они проверяются по журналу, а не по миру. Таблица ниже — целевое распределение, а не описание работающего кода; «мёртвый не действует» (inv-01) сегодня реализовано в одном месте — `Actor.Alive()` (C-03). Файла законов `laws/dark-forest-world.v1.yaml`, с которым сверяется реестр, в дереве тоже нет (EPIC-003).
+**Состояние на 2026-09-11 (T-409).** Реестр `internal/mechanics/invariants.go` существует — идентификаторы и места проверки (`Where`) заполнены, — но **у всех десяти записей `Check == nil`**: проверки пишет EPIC-002 **T-054** (соло: inv-01, 02, 03, 09, 10) и последующие задачи. У `inv-07` и `inv-08` `Check` останется `nil` навсегда — они проверяются по журналу, а не по миру. Таблица ниже — целевое распределение, а не описание работающего кода; «мёртвый не действует» (inv-01) сегодня реализовано в одном месте — `Actor.Alive()` (C-03). Файла законов `laws/dark-forest-world.v1.yaml`, с которым сверяется реестр, в дереве тоже нет (EPIC-003). *(изм. T-457: T-054 написал `Check` для inv-01, 02, 03, 09, 10; уточнения inv-01 по C-05 v1.8 п. 9 — T-056 и T-066.)*
 
 | ID | Инвариант (NFR-020) | `state` (Applier) | `mechanics` | другие |
 |---|---|---|---|---|
-| inv-01 | `dead` не действует и не цель | `dead_entity` на изменение мёртвого; `status` мёртвого не меняется | `NPCTarget` исключает; `Resolve` → `ErrInvalidTarget` | gateway валидирует действие |
+| inv-01 | `dead` не действует и не цель | `dead_entity` на изменение терминального (§4.5 п. 5); `Check` на затронутой незакрытой встрече: `npcs[]` не пуст и все NPC в нём терминальны; терминальный персонаж, затронутый тем же пакетом, ещё участвует (C-05 п. 9; изм. T-457) | `NPCTarget` исключает; `Resolve` → `ErrInvalidTarget` | gateway валидирует действие |
 | inv-02 | `0 ≤ hp ≤ hp_max` | `set hp` вне диапазона → `law_violation`; `inc hp` — clamp | `Resolve` даёт clamped `HPAfter` | — |
 | inv-03 | трофей за NPC ≤ 1 | `lootIndex[source.entity.id]` занят другим игроком → `law_violation`; заполняется при `append inventory` | — | `--audit` |
 | inv-04 | позиция участника = позиция группы | overlayView по затронутым группам/игрокам (`alive`) | — | тест |
@@ -607,8 +607,8 @@ type Invariant struct {
 | inv-06 | игрок ровно в одном scope | согласованность `scope ⇔ group_id ⇔ members` | — | — |
 | inv-07 | HP после факта = `hp_after` из `combat.decided` | — | — | `--audit`, тест |
 | inv-08 | нет `combat.decided` против игрока без его действия | — | — | страж (EPIC-003), тест |
-| inv-09 | NPC не возрождается раньше TTL; `dead → alive` запрещён | переход `status: dead→alive` → `law_violation` | — | GM региона (TTL, новый id) |
-| inv-10 | одна сущность — одна позиция | `position` — одно поле формата `outside:{world}` \| `{region_id}`, регион существует | — | — |
+| inv-09 | NPC не возрождается раньше TTL; `dead → alive` запрещён | переход из терминального статуса → `dead_entity` (§4.5 п. 5); `Check` — запись смерти у нетерминальной сущности → `law_violation` (изм. T-457, C-02 v1.5b) | — | GM региона (TTL, новый id) |
+| inv-10 | одна сущность — одна позиция | `position` — одно поле формата `outside:{world}` \| `{region_id}`, регион существует; проекция `players_present` региона инвариантом не проверяется (изм. T-457; `data-model.md` §3.2) | — | — |
 
 Файл законов `laws/dark-forest-world.v1.yaml` (EPIC-003) содержит `laws[] {id: inv-02, kind: invariant, text: "…"}`; тест контрактов (`mvctl laws check`, EPIC-003/005) сверяет: множество `kind: invariant` в законах == множество `Invariants()` в коде. Ни текст, ни логика не дублируются: текст — только в законах, код — только в `mechanics/invariants.go`. `rules.invariants[]` лишь включает/выключает id для набора правил.
 
