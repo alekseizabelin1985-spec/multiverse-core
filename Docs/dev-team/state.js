@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:21:31+03:00",
+  "updatedAt": "2026-09-13T17:22:47+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2548,7 +2548,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
@@ -4488,7 +4488,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
@@ -9076,7 +9076,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Ядро бота",
       "startedAt": "2026-09-13T16:39:05+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:22:47+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9176,7 +9176,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Итерация 3 по ревью #2",
       "startedAt": "2026-09-13T17:17:31+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:22:47+03:00"
     },
     {
       "instance": "developer#3",
@@ -9206,6 +9206,26 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Приёмка T-207 провайдеры fake и recorded",
       "startedAt": "2026-09-13T17:21:31+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Приёмка T-457 решения архитектора",
+      "startedAt": "2026-09-13T17:22:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Ревью #1: ядро бота",
+      "startedAt": "2026-09-13T17:22:47+03:00",
       "finishedAt": null
     }
   ],
@@ -12317,6 +12337,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-207 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/0/1. Ma-1 (таблица C-07 совпадает с allOf схемы, удержание ответа по статусу), Mi-1…Mi-3, N-1…N-5 закрыты; 16 мутантов убиты, включая выживших в ревью #1. Nit: null как отсутствие поля. Приёмка — TEAM-2/tech-lead#2."
+    },
+    {
+      "at": "2026-09-13T17:22:47+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · итерация 3 (system-architect#1) по ревью #2: R2-Mi-1 исключение §16 п. 8 и ownership §3 п. 4 для T-458 (shared/recording, Deps.Recording; ревью system-architect, просмотр tech-lead#1, contract-change); R2-Mi-2 корень входа — player.* в ответ на HTTP-вход; R2-Mi-3 поля Request.AgentID/Attempt"
+    },
+    {
+      "at": "2026-09-13T17:22:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 выполнена TEAM-3/developer#2: cmd/telegram-bot/internal/{privacy,config,updates,sender,commands,access}, зависимость github.com/go-telegram/bot v1.25.0 (ADR-018), MV_TELEGRAM_ACTION_KEY_SALT и MV_TELEGRAM_COMMANDS_PER_MIN (vars.go/.env.example — мягкий режим). 52 мутанта, покрытие 93–100 %. Бл"
     }
   ],
   "blockers": [],
