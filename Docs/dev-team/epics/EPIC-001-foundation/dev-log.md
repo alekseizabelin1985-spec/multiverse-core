@@ -8591,6 +8591,78 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **`BASE`.** `?= develop`; цель отказывает, если `BASE` не коммит (на неразрешимом диапазоне gitleaks выходит с 0). CI цель не вызывает. Диапазон `integration/mvp-1..HEAD` содержал коммит T-399, и с прежним умолчанием цель была красной.
 - **Прогоны.** `gitleaks dir` по трём копиям в scratch (изменённые файлы; без `.gitleaksignore`; все отслеживаемые файлы с содержимым рабочей копии) — no leaks, контрольный мутант — 1 находка. `compose-lint` и `--fixtures` — ok. `mvctl env check` — ok. Эталон ↔ файл: 60 переменных, 7 `[required]`. YAML `go.yml` — ok. `make ci BASE=develop` — rc=0: lint 0 issues; test ok; test-race SKIPPED (нет cgo); contracts 65 типов; env 67 переменных; secrets-scan no leaks; privacy-scan ok; govulncheck 0 затрагивающих; compose-lint ok; scripts-parity 97 PASS / 0 FAIL / 2 KNOWN-FAILING; test-e2e ok.
 - Не коммитил.
+<!-- dev-log T-449 -->
+## system-architect#1 · T-449 · Документы по решениям system-architect (ревизия 4, продолжение) · 2026-09-13
+
+Ветка `task/T-449-docs-architect-decisions`, Opus. Подробности — карточка `tasks/T-449.md`.
+- **Что сделано.**
+  - `contracts.md` v0.12 со сводкой. C-02: абзац «Код расходится» закрыт T-050, добавлена каноническая форма значений, C-02 v1.6 оставлен заготовкой «ожидает T-448». Новые версии: C-03 v1.3, C-07 v1.4, C-15 v1.3; у C-14 — запись истории v1.2a.
+  - КД State: §3.2, §3.3, §5.4. `data-model.md` §3.3 — `flee`.
+  - ADR-005 доп. 2 п. 3 — правило «локальный адрес». ADR-001 доп. 2026-09-13: п. 1 — направление зависимостей `internal/llm`, п. 3 — шаблон тестов роя. ADR-012 п. 4 — пометка «дополнено C-03 v1.3».
+  - КД шлюза §8.1 — `group_move`. `ownership.md` — запятая.
+- **Решения по ходу.**
+  - C-02 v1.6 оставлен заготовкой: в `.worktrees/T-448` нет карточки `tasks/T-448.md`, а значит, нет и готового текста. Заготовка перечисляет решение system-architect пунктами (а)–(г), а до замены действует v1.5.
+  - Текст C-03 v1.3 сверен с незакоммиченным кодом `.worktrees/T-053` (`types.go`, `changes.go`): отказ при `Version <= 0`, `At` читает только `ChangesFor`, `Rules.Stats` ставит `Kind`.
+  - В КД State §3.3 про целые за ±2^53 сказано «после T-448»: запрета в коде ещё нет.
+  - `design.md` EPIC-002 (I1-4) не правил — это ветка EPIC-002; передано строкой тимлиду.
+- **Проверки.**
+  - CRLF и отсутствие NUL проверены в скрипте правки до записи и после; `sed -i` не использовался.
+  - КД роя не менялся: строка таблицы провайдеров — 521-я.
+  - `gitleaks dir . --redact -c .gitleaks.toml` по копии 10 изменённых файлов с `.gitleaks.toml` и `.gitleaksignore` ветки — `no leaks found`. Копия удалена по точному пути.
+- Не коммитил.
+
+<!-- dev-log T-449 iteration 2 -->
+## system-architect#1 · T-449 · итерация 2 по ревью #1 · 2026-09-13
+
+Ветка `task/T-449-docs-architect-decisions`, Opus. Подробности — карточка `tasks/T-449.md`, «Итерация 2».
+- **Что сделано.**
+  - Закрыты все замечания ревью #1: Ma-1…Ma-3, Mi-1…Mi-6, N-1…N-5.
+  - C-02: заготовка v1.6 заменена текстом из карточки T-448 с решением system-architect по T-448, пометка «вступает в силу со слиянием T-448»; в заголовке и истории — v1.5a и v1.6.
+  - C-03 v1.3: `Version <= 0`, `kind` у NPC обязателен, «та же версия» при нескольких ударах. C-07 v1.4: восстановлено предложение `EntityWithName`, сужение `Money` для T-250.
+  - C-15 v1.3 и ADR-005 доп. 2 п. 3 — один текст по таблице T-450. ADR-001 — прямой импорт `shared/eventbus`.
+  - КД State: §3.2 (no-op), §3.3 (граница 2^53−1), §5.1 (C-03 v1.3), §8 (строка C-03). КД шлюза §8.1 — две строки вместо одной.
+- **Решения по ходу.**
+  - Mi-5 исправлен в T-449, тест — строкой DoD T-353.
+  - Точка на конце IPv4-адреса — `cloud`. Здесь решение расходится с шапкой таблицы T-450; строка для devops-engineer#2 — в отчёте оркестратору.
+  - Граница чисел — 2^53−1, а не 2^53: шина отдаёт payload уже во `float64`, и 2^53+1 неотличимо от 2^53.
+- **Проверки.**
+  - CRLF и отсутствие NUL — в скрипте правки до записи и после; `sed -i` не использовался.
+  - `Docs/dev-team/architecture/components/swarm-llm-laws.md` не менялся (`git diff --quiet`).
+  - `gitleaks dir . --redact -c .gitleaks.toml` по копии 12 изменённых и новых файлов с `.gitleaks.toml` и `.gitleaksignore` ветки — `no leaks found`. Карточку T-448 проверил отдельно, с конфигурацией её ветки, — тоже `no leaks found`. Копии удалены по точному пути.
+- Не коммитил.
+<!-- dev-log T-446 -->
+## developer#2 · T-446 · ревизия контрактов 4: runtime и раскладка cmd · 2026-09-13
+
+Ветка `task/T-446-runtime-cmd-layout`, TEAM-1, Opus. Подробности — карточка `tasks/T-446.md`, раздел «Выполнение». Метка `contract-change`. Решения system-architect#1, пункты 6 и 7; тексты — T-444, `contracts.md` не правил (T-449).
+- **HTTP процесса** (`shared/runtime/http.go`):
+  - `ReadHeaderTimeout 5s`, `IdleTimeout 120s`, без `ReadTimeout`/`WriteTimeout` сервера; `ShutdownTimeout` прежний;
+  - `ShuttingDown(ctx)` — канал из `BaseContext`, закрывается в начале `Stop` (`sync.Once`); вне сервера процесса — `nil`;
+  - `SetDeadlines(w, read, write)` — `http.ResponseController` от `clock.Real{}.Now()`; длительность ≤ 0 дедлайн не трогает; `serve.go` не менялся.
+- **Контексты**: порядок и `init` — `contexts.go` (`factoryOf` через `switch`, `nil` — паника с именем); фабрики — `contexts_state.go`, `contexts_swarm.go` (`newSwarmContext = newSwarm`), `contexts_gateway.go`, `contexts_memory.go`.
+- **mvctl**: `main.go` — `slices.Concat(foundation(), stateCmds(), swarmCmds(), opsCmds())`; `commands_state.go`, `commands_swarm.go`, `commands_ops.go` с `cli.Reserved`.
+- **Реестр**: `registry.go` склеивает `gatewayDefinitions`, `stateDefinitions`, `swarmDefinitions`, `gatewayAnalyticsDefinitions`, `opsDefinitions`, `legacyDefinitions`. Аналитика шлюза — отдельным списком, чтобы порядок `All()` не изменился.
+- **test/e2e**: `main_test.go` — единственный `TestMain`, `registerPackageSetup(owner, setup)`; подготовки по имени владельца, завершения в обратном порядке, ошибка регистрации или подготовки — код 1 до тестов.
+- **Тесты.** `shutdown_test.go` (runtime и `cmd/multiverse`), `http_internal_test.go`, `contexts_test.go`, `commands_test.go`, `registry_owners_test.go`, тесты регистратора в `test/e2e/main_test.go`.
+- **Сравнения до/после** (бинарь и дамп из `git archive HEAD` в scratch): `mvctl help` и `mvctl` без аргументов — `cmp` без различий; JSON всех 65 `Spec` из `All()` — без различий, порядок тоже; `contracts check` — те же 65/8/58.
+- **Мутанты** (копия в scratch без `-overlay`, контрольный первым, копии удалены по точным путям): M0 контрольный красный; M1–M8 (runtime), M10–M18 красные; M9 (переименование файлов владельцев) зелёный, как и должен. 19 из 19 по ожиданию.
+- **Отклонения.** Метода `Types()` у реестра нет — сравнивал `All()`. `internal/cli`, `.golangci.yml`, `serve.go` правки не потребовали.
+- **Прогоны.** `go build ./... && go vet ./...` — 0; `gofmt` — пусто; `go test -short -count=1 ./...` — 27 ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` — 0 issues; `make test` — 0 (без `-race`, нет cgo); `make ci BASE=develop` — 0 (test-race пропущен, script-parity 97/0/2 known); `gitleaks dir` по изменённым файлам — чисто.
+- Docker, `make up/down`, `make test-integration`, стенд `:8888` не трогались, `.env` не открывался. Не коммитил, `git add` не делал.
+
+<!-- dev-log T-446 iteration 2 -->
+## developer#1 · T-446 · итерация 2 по ревью #1 · 2026-09-13
+
+Продолжение работы developer#2 (ветка `task/T-446-runtime-cmd-layout`, папка `.worktrees/T-446`, база `a85d821`), TEAM-1, Opus. Подробности — карточка `tasks/T-446.md`, «Итерация 2».
+- **Ma-2** (`shared/runtime/http.go`): doc `SetDeadlines` — дедлайн чтения действует и на фоновое чтение соединения; у запроса без тела его истечение отменяет `r.Context()`, ответ при этом доходит. Long-poll и другим долгим обработчикам — дедлайн чтения не короче обработчика или `0`. Тест `TestAReadDeadlineCancelsTheContextOfARequestWithoutABody` (300 мс — отменён в окне [200 мс; 2,3 с]; `0` — жив через 1,3 с; в обоих случаях ответ дошёл).
+- **Ma-1** (`test/e2e/main_test.go`): пример `registerPackageSetup("state", stateSetup)`; владелец проверяется по набору `{state, swarm, gateway, ops}`, повтор — ошибка, как раньше; тесты регистратора на именах владельцев, новые случаи `EPIC-002` и `memory`.
+- **Mi-1**: владелец с `nil`-завершением в тесте порядка.
+- **N-1**: `TestAllKeepsTheOrderOfTheOwnerLists` закрепляет порядок списков владельцев в `All()`; золотой список 65 типов не взят — он сделал бы каждую строку типа владельца правкой теста EPIC-001 в трёх ветках (`ownership.md` §3 п. 6).
+- **N-2**: `Stop` до `Start` — no-op, канал не закрывается; тест `TestStopBeforeStartLeavesTheServerStartable`; в doc — запущенный и остановленный сервер повторно не запускается.
+- **N-3**: `Makefile` — ссылка на `cmd/mvctl/commands_swarm.go`. **N-4**: фраза карточки исправлена.
+- Ссылки на тексты T-444 (`contracts.md` §16 п. 8, ADR-001 доп. 2026-09-13 п. 7, `ownership.md` v0.6 §1 и §3 п. 6–7, C-01 v1.8, КД шлюза §5.1 п. 8) сверены с кончиком эпика `dcdb530` — совпадают.
+- **Мутанты** (копия `t446i2-mut` в scratch без `-overlay`, контрольный первым, удалена по точному пути): K0, A1–A3, E1–E3, G1, G2 — 9 из 9 красные по ожиданию. Нагрузка: 6 процессов × `-test.count=8` × `-test.cpu 1` по тестам дедлайнов и остановки — все зелёные.
+- **Прогоны.** `go build ./... && go vet ./...` — 0; `gofmt` — пусто; `contracts check` — 65/8/58; `go test -short -count=1 ./...` — 27 ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` (и с `--build-tags e2e`) — 0 issues; `make test` — 0; `gitleaks dir` по изменённым файлам — чисто.
+- Файлы T-454 (`cmd/multiverse/fake_contexts_test.go`, `shared/testkit/state`) не трогал. Docker, интеграционные тесты, стенд `:8888` не трогались, `.env` не открывался. Не коммитил, `git add` не делал.
 <!-- dev-log T-454 -->
 ## developer#2 · T-454 · CI на Linux: гонка данных в `testkit/state` и флак fight-05 стенда `cmd/multiverse` · 2026-09-13
 
