@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:56:12+03:00",
+  "updatedAt": "2026-09-13T19:57:19+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3342,7 +3342,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-208",
           "title": "B3a · Провайдер openai_compat (llama-server) — **провайдер по умолчанию",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
@@ -9748,7 +9748,7 @@ window.DEVTEAM_STATE =
       "task": "T-208",
       "action": "Провайдер openai_compat",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:57:19+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9898,6 +9898,16 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Итерация 2: метка ReadJournal, шаблон маршрута, форма Error",
       "startedAt": "2026-09-13T19:56:12+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-208",
+      "action": "Ревью #1 провайдера openai_compat",
+      "startedAt": "2026-09-13T19:57:19+03:00",
       "finishedAt": null
     }
   ],
@@ -13495,6 +13505,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "CI на develop (run 34769753575, после push 81eb173): unit, race, e2e, integration, contracts, compose-lint, security — зелёные; красный только scripts-parity — H48 «health: 401 without a key»: двойник стенда не смог слушать 127.0.0.1:41917 (address already in use) — флейк выбора порта на раннере, не"
+    },
+    {
+      "at": "2026-09-13T19:57:19+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-208 выполнена TEAM-2/developer#2: провайдер openai_compat (пакет openaicompat) — Generate с json_schema, enable_thinking и семплингом фазы, usage/cached_tokens/timings, reasoning_content отбрасывается; Embed, Models, Health (200 ok, 503 loading, запасной путь /v1/models, model_not_resident); гейт "
+    },
+    {
+      "at": "2026-09-13T19:57:19+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Очередь system-architect пополнена из T-208: признак оценки токенов (Estimated) в llm.Response (C-15) и схеме llm.output.tokens; откуда шлюз берёт модели блупринтов для Health (T-212). Фикстуры openai_compat переснять со стенда в T-260/T-263."
     }
   ],
   "blockers": [],
