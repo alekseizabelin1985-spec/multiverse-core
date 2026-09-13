@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:59:05+03:00",
+  "updatedAt": "2026-09-13T17:03:22+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2548,7 +2548,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
@@ -3079,6 +3079,19 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md",
           "branch": "task/T-448-changed-form-proposal-id",
           "worktree": ".worktrees/T-448"
+        },
+        {
+          "id": "T-458",
+          "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-458.md"
         }
       ],
       "defects": [],
@@ -9031,7 +9044,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Итерация 2: порядок поставки shared/recording",
       "startedAt": "2026-09-13T16:37:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:03:22+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9131,6 +9144,16 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Ревью #1: конвейер State",
       "startedAt": "2026-09-13T16:59:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Ревью #2: порядок поставки shared/recording",
+      "startedAt": "2026-09-13T17:03:22+03:00",
       "finishedAt": null
     }
   ],
@@ -12170,6 +12193,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-055 выполнена TEAM-1/developer#3: internal/state — worker на мир с recover, посредник доставки (C-01 v1.6), Applier на копиях (публикация → замена → окно proposal_id; при сбое публикации ничего не сохраняется), memstore; паника → ErrWorldStopped шине; Stop отменяет подписку до закрытия шины; serve"
+    },
+    {
+      "at": "2026-09-13T17:03:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · итерация 2 (system-architect#1): Ma-1 — вариант (а): новая задача EPIC-002 «запись сессии» (перенос internal/replay → shared/recording, ReadJournal, Deps.Recording, маршрут POST /v1/admin/replay/clock под тегом process, EventClock.Advance) — единственный владелец чтения записи в serve.go, в "
+    },
+    {
+      "at": "2026-09-13T17:03:22+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Заведена T-458 «запись сессии» (EPIC-002, M, TEAM-1, после приёмки T-457 и слияния T-055): shared/recording (git mv из internal/replay), ReadJournal, Deps.Recording и чтение записи в serve.go, маршрут часов replay, EventClock.Advance, тест «Derive наследует Replay»; файлы EPIC-001 — с просмотром tec"
     }
   ],
   "blockers": [],
