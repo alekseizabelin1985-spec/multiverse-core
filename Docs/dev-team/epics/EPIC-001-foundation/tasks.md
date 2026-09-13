@@ -1262,3 +1262,26 @@
   2. T-456 (DoD, C-15): символы хоста, которые отвергает `url.Parse` (пробел, `\`, `^`, `` ` ``, `{`, `|`, `}`), — в список `invalid`; ни одна реализация не печатает userinfo в текстах отказов.
   3. Nit: комментарий `LLM_EP_RAW` в `llm-endpoint.sh:152` («with any userinfo masked») устарел.
   4. Из итерации 2 исполнителя: топологическая проверка `kind=service` в `compose-lint` (N-3 ревью #1); скорость `llm_parse_url` без fork; сценарий на `//` в конце пути (ревью #1, п. 4).
+
+### T-455: CI `compose-lint` на `develop` — окружение процесса скрывало заглушку `CHROMA_IMAGE` · Размер: XS · Статус: done · Волна 1
+- **Причина (оркестратор, 2026-09-13)**: первый прогон CI на `develop` (run 34754402826, коммит `447b892`, job 103716226089). Задание `compose-lint` упало на шаге «The house rules»: `error while interpolating services.chromadb.image: required variable CHROMA_IMAGE is missing a value`. Шаг `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` перед ним прошёл, фикстуры и hadolint пропущены.
+- **Найдено (devops-engineer#1)**: не `.env` владельца — копия без `.env` проходит, а с `--env-file` compose `.env` не читает. Шаг «Read the pinned versions» экспортирует `build/versions.env` в `$GITHUB_ENV`, в том числе пустой по D-3 `CHROMA_IMAGE`. Переменная процесса у compose выше `--env-file`, и она скрыла заглушку `.github/ci.env`. Шаг `config -q` читает только `docker-compose.yml`, где `CHROMA_IMAGE` нет.
+- **Состав**:
+  1. `scripts/compose-lint.sh`: до первого `docker compose` снять из окружения все имена, объявленные в `--env-file` линтера, `build/versions.env` и `.env.example` правила 7 (или в парном `.env` фикстуры). Правило 6 и шапку не трогать.
+  2. `--fixtures`: каждый прогон — с этими именами, экспортированными пустыми. Зависимость линтера от окружения краснеет на любой машине, не только в CI.
+  3. D-3 не меняется: `build/versions.env`, `.github/ci.env`, `docker-compose.legacy.yml` (`${CHROMA_IMAGE:?}`) и правило 7 — без правок.
+  4. `testdata/compose-lint/README.md` и `infrastructure.md` §3.1.1 («Что читается», «Фикстуры») — вслед за скриптом.
+- **DoD**:
+  - scratch-копия `git archive HEAD` без `.env` с `build/versions.env`, экспортированным как в CI: до правки — ошибка CI дословно, после — ok;
+  - `scripts/compose-lint.sh` — ok (15 сервисов, 8 правил); `--fixtures` — ok (52 bad, 10 good); `bash -n` — ok; `CHROMA_IMAGE= QDRANT_IMAGE= make compose-lint` — ok;
+  - контрольный мутант (снятие имён отключено) — `--fixtures` красный;
+  - остальные шаги задания `compose-lint` и `scripts-parity` проверены на зависимость от окружения (карточка);
+  - `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0; `gitleaks dir` по копии изменённых файлов — no leaks;
+  - зелёный `compose-lint` в CI на `develop` — после слияния, оркестратор.
+- **Метка**: нет. Контракты и Go-код не меняются.
+- **Исполнитель**: devops-engineer#1. Ветка `task/T-455-ci-compose-lint-chroma-image` (от эпика `dcdb530`). Карточка — `tasks/T-455.md`.
+- **Бэклог (из T-455, 2026-09-13)** — отдельные задачи, не блокируют:
+  - `go.yml:425-426`, задание `compose-lint`: убрать шаг «Read the pinned versions» (выбран при приёмке). Шаг `docker compose … config -q` (`:438`) несёт ту же ловушку: окружение шага выше `--env-file`. Сейчас он безопасен, потому что в `docker-compose.yml` нет `${VAR:?}` с пустым значением в `build/versions.env`. В копии с окружением CI `config -q` — rc=0, тот же вызов с `-f docker-compose.legacy.yml --profile legacy` — rc=1. Ни одному шагу задания пины из окружения не нужны: compose получает их через `--env-file`, hadolint их не читает. Запасной вариант — `env -u` по именам `build/versions.env` для `config -q`. devops-engineer.
+  - hadolint (`go.yml:450`, `:460`) на `develop` ещё ни разу не выполнялся: в прогоне 34754402826 оба шага пропущены после падения. Проверить первый реальный прогон после слияния эпика в `develop`. devops-engineer.
+  - Упавшие в том же прогоне `unit` (`go test -short -race`), `race` (`make test-race`) и `integration` к T-455 не относятся — разбор отдельными задачами, оркестратор.
+- **Приёмка (tech-lead#1, 2026-09-13)**: принята после ревью #1 (0/0/1/2); Mi-1, N-1 и N-2 закрыты при приёмке. `declared_names` понимает `KEY: value` (разделитель `[=:]`): проба `T455_PROBE: dummy` в копии без `.env` при `T455_PROBE=` даёт тот же вердикт, что в чистом окружении, а мутант с `=` повторяет дефект T-455. Тексты скрипта, `infrastructure.md` §3.1.1 и README фикстур сведены к тому, что проверяют фикстуры; умолчание env-файлов — одна переменная `default_env_files`. Рабочая папка: `bash -n`, `compose-lint.sh`, `--fixtures` (52/10), `make compose-lint` — ok; `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0; `gitleaks dir` по изменённым файлам — no leaks. Копия с `set -a; . build/versions.env; set +a`: основной прогон и `--fixtures` — ok. **Порядок слияния: сначала T-450, затем T-455**; модель `merge-file` после правок приёмки — без конфликтов, после синхронизации повторить `--fixtures`. Подробности — карточка `tasks/T-455.md`, «Приёмка (tech-lead)».

@@ -178,6 +178,30 @@ export PYTHONIOENCODING=utf-8
 # them would make the result depend on whose terminal it ran in.
 unset COMPOSE_ENV_FILES COMPOSE_FILE COMPOSE_PROFILES
 
+# The names the given env files declare — `KEY=...`, `export KEY=...` and the
+# YAML form `KEY: value`, the lines compose's dotenv parser reads as variables —
+# into the array `names`. A comment never matches: `#` does not start a name.
+# Builtins only, for the same reason as above. A missing file declares nothing:
+# compose refuses a missing --env-file by itself.
+declared_names() {
+  local file line re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*[=:]'
+  names=()
+  for file in "$@"; do
+    [ -f "$file" ] || continue
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [[ $line =~ $re ]]; then
+        names+=("${BASH_REMATCH[2]}")
+      fi
+    done <"$file"
+  done
+  return 0
+}
+
+# The env files the model of rules 1-6 is resolved with unless
+# COMPOSE_LINT_ENV_FILES says otherwise. One place: the hostile environment of
+# --fixtures must be made of exactly the files the linter reads.
+default_env_files='build/versions.env .github/ci.env'
+
 # --------------------------------------------------------------------------
 # --fixtures — the linter's own fixtures, each held to the rule it plants.
 # --------------------------------------------------------------------------
@@ -247,6 +271,22 @@ run_fixtures() {
   # shellcheck disable=SC2064 # the directory is known now and must go whatever happens
   trap "rm -rf '$work'" EXIT
   limit=${COMPOSE_LINT_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+  # Every run below starts in a hostile environment: each name the env files of
+  # the linter, build/versions.env and .env.example declare is exported EMPTY —
+  # what the CI job did to CHROMA_IMAGE by exporting build/versions.env through
+  # $GITHUB_ENV (T-455). The linter takes its values from the files alone, so no
+  # verdict changes; a linter that lets the caller's environment shadow its
+  # --env-file fails the fixtures that take a value from those files, the good
+  # ones included, on the owner's machine and not only in CI. The names of
+  # .env.example are exported too, but nothing here can catch a linter that
+  # keeps them: see the note where the linter drops them.
+  local name
+  local -a lint_env_files
+  read -r -a lint_env_files <<<"${COMPOSE_LINT_ENV_FILES:-$default_env_files}"
+  declared_names "${lint_env_files[@]}" build/versions.env .env.example
+  for name in "${names[@]}"; do
+    export "$name=" 2>/dev/null || true
+  done
   i=0
   running=0
   for bad in "${bads[@]}" "${goods[@]}"; do
@@ -428,7 +468,7 @@ if [ ${#compose_files[@]} -eq 0 ]; then
   compose_files=(docker-compose.yml docker-compose.bot.yml docker-compose.legacy.yml)
 fi
 
-read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-build/versions.env .github/ci.env}"
+read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-$default_env_files}"
 read -r -a profiles <<<"${COMPOSE_LINT_PROFILES:-gpu memory dev legacy bot}"
 
 if command -v python3 >/dev/null 2>&1; then
@@ -447,6 +487,31 @@ done
 env_args=()
 for f in "${env_files[@]}"; do
   [ -n "$f" ] && env_args+=(--env-file "$f")
+done
+
+primary=${compose_files[0]}
+# A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
+# paired with bad-x.env when that file exists. That is how the half of rule 7
+# that reads .env.example gets a negative fixture of its own without teaching
+# the fixture loop a second file pattern.
+env_example=${primary%.yml}.env
+[ -f "$env_example" ] || env_example=.env.example
+
+# The values come from the files, never from the caller (T-455). Compose takes a
+# variable from the environment of its own process before any --env-file, so a
+# name the caller exports shadows the file — empty included. The CI job exports
+# build/versions.env through $GITHUB_ENV, its CHROMA_IMAGE is empty by decision
+# D-3, and that empty value hid the placeholder of .github/ci.env: the model
+# refused docker-compose.legacy.yml in CI and resolved on every machine that had
+# not exported the pins. Rule 7's clean machine is made of files as well. Every
+# name the files of this run declare is therefore dropped before the first
+# `docker compose`. `--fixtures` holds the linter to it for the names of its
+# --env-file. Dropping the names of the example file is a precaution no fixture
+# can check: a fixture's `${VAR:?}` must resolve in the model of rules 1-6
+# first, and that model reads the --env-file alone.
+declared_names "${env_files[@]}" build/versions.env "$env_example"
+for name in "${names[@]}"; do
+  unset -v "$name" 2>/dev/null || true
 done
 
 work=$(mktemp -d)
@@ -502,14 +567,6 @@ done
 # Judged first and on its own: if this fails, nothing else about the file
 # matters to an operator who cannot get past `docker compose config`.
 # --------------------------------------------------------------------------
-
-primary=${compose_files[0]}
-# A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
-# paired with bad-x.env when that file exists. That is how the half of rule 7
-# that reads .env.example gets a negative fixture of its own without teaching
-# the fixture loop a second file pattern.
-env_example=${primary%.yml}.env
-[ -f "$env_example" ] || env_example=.env.example
 
 if ! clean_out=$(CLEAN_ENV_PATH="$clean_env" MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
   "$python_bin" - <<'PY' 2>&1
