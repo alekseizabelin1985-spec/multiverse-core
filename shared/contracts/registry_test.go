@@ -216,6 +216,35 @@ func TestLegacyTypesCarryNoSchema(t *testing.T) {
 	}
 }
 
+// TestLegacyPublishers pins who may publish a legacy type: the services of the
+// profile, and for gm.created the gateway beside them, which publishes it when
+// MV_GM_PATH=legacy is on (contracts.md C-04 v1.4).
+func TestLegacyPublishers(t *testing.T) {
+	legacy := 0
+	for _, spec := range All() {
+		if !spec.Deprecated {
+			continue
+		}
+		legacy++
+		want := []string{SourceLegacy}
+		if spec.Type == "gm.created" {
+			want = []string{SourceLegacy, SourceGateway}
+		}
+		if !slices.Equal(spec.Publishers, want) {
+			t.Errorf("%s: publishers %v, want %v", spec.Type, spec.Publishers, want)
+		}
+		if !slices.Equal(spec.Consumers, []string{SourceLegacy}) {
+			t.Errorf("%s: consumers %v, want only %s", spec.Type, spec.Consumers, SourceLegacy)
+		}
+	}
+	if legacy == 0 {
+		t.Fatal("no legacy type is registered")
+	}
+	if _, ok := Lookup("gm.created"); !ok {
+		t.Fatal("gm.created is not registered")
+	}
+}
+
 // TestLegacyEnvelopeIsStillChecked pins what "only the envelope is validated"
 // means for a legacy type (foundation.md §6): the envelope rules of eventbus
 // apply, they are not skipped. Validate is exported and reached directly by

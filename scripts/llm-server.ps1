@@ -339,6 +339,46 @@ function Get-ModelAlias {
   return $name
 }
 
+function ConvertTo-ArgumentLine {
+  # The argument list as ONE command line, each element quoted by the rule the
+  # program on the other side splits it with — CommandLineToArgvW and the C
+  # runtime on Windows, and the same rule .NET applies to an Arguments string on
+  # other systems: an element with whitespace or a double quote goes in double
+  # quotes, a quote inside is escaped, and a run of backslashes is doubled only
+  # where it stands in front of a quote, the closing one included. That last
+  # part is what keeps MV_LLM_MODELS_DIR='D:\My Models\' one argument ending in a
+  # backslash instead of an escaped closing quote.
+  param([object[]] $Arguments = @())
+  $backslash = [char]92
+  $parts = foreach ($argument in $Arguments) {
+    $text = [string]$argument
+    if ($text.Length -gt 0 -and $text -notmatch '[\s"]') {
+      $text
+      continue
+    }
+    $builder = [Text.StringBuilder]::new()
+    [void]$builder.Append('"')
+    $slashes = 0
+    foreach ($character in $text.ToCharArray()) {
+      if ($character -eq $backslash) {
+        $slashes++
+        continue
+      }
+      if ($character -eq '"') {
+        [void]$builder.Append($backslash, 2 * $slashes + 1)
+      } elseif ($slashes -gt 0) {
+        [void]$builder.Append($backslash, $slashes)
+      }
+      $slashes = 0
+      [void]$builder.Append($character)
+    }
+    if ($slashes -gt 0) { [void]$builder.Append($backslash, 2 * $slashes) }
+    [void]$builder.Append('"')
+    $builder.ToString()
+  }
+  return ($parts -join ' ')
+}
+
 function Get-PinnedBuild {
   $versions = Join-Path $repoRoot 'build/versions.env'
   if (-not (Test-Path $versions)) { return '' }
@@ -629,8 +669,21 @@ switch ($Action) {
     Write-LlmLine "llm: starting $bin on ${llmHost}:$($ep.Port) ($mode mode); the platform calls it at $($ep.Url)"
     if (-not $Router) { Write-LlmLine "llm: the model is reported as $modelId (--alias, the file stem that blueprints name)" }
     Remove-Item $logFile -ErrorAction SilentlyContinue
-    $proc = Start-Process -FilePath $bin -ArgumentList $serverArgs -PassThru `
-      -RedirectStandardOutput $logFile -RedirectStandardError "$logFile.err" -WindowStyle Hidden
+    # One command line, quoted here: Start-Process joins an -ArgumentList array
+    # with single spaces and quotes nothing, so MV_LLM_MODEL_FILE='D:\My Models\x.gguf'
+    # reached llama-server as the two arguments `D:\My` and `Models\x.gguf`
+    # while the bash twin passed one (T-437 backlog, the parity stand of T-405).
+    # -WindowStyle belongs to Windows alone: there is no console window to hide
+    # anywhere else.
+    $startArgs = @{
+      FilePath               = $bin
+      ArgumentList           = (ConvertTo-ArgumentLine $serverArgs)
+      PassThru               = $true
+      RedirectStandardOutput = $logFile
+      RedirectStandardError  = "$logFile.err"
+    }
+    if ($IsWindows) { $startArgs.WindowStyle = 'Hidden' }
+    $proc = Start-Process @startArgs
     # Three lines, not one: the number alone is not evidence that the process is
     # ours when it is read back (review M-5). The resolved path is recorded, so
     # the check survives a later change of MV_LLM_BIN.
