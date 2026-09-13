@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:24:03+03:00",
+  "updatedAt": "2026-09-13T19:26:15+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3202,7 +3202,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-203",
           "title": "A3 · Пять блупринтов MVP-1 и схемы schemas/agent/",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T18:40:06+03:00",
           "finishedAt": null,
@@ -9669,7 +9669,7 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Итерация 2: allowed_event_types, тесты",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:26:15+03:00"
     },
     {
       "instance": "business-analyst#1",
@@ -9719,6 +9719,16 @@ window.DEVTEAM_STATE =
       "task": "T-461",
       "action": "Ревью #1 правила depguard бота",
       "startedAt": "2026-09-13T19:24:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-203",
+      "action": "Ревью #2 блупринтов MVP-1",
+      "startedAt": "2026-09-13T19:26:15+03:00",
       "finishedAt": null
     }
   ],
@@ -13178,6 +13188,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-461 выполнена TEAM-1/developer#1: правило depguard cmd-telegram-bot и исключение в internal-unlisted внесены в .golangci.yml байт в байт по отметке T-310; на EPIC-001 0 issues; на копии кончика EPIC-004 код бота — 0, мутанты shared/eventbus и gateway/links — находка cmd-telegram-bot, контроль gate"
+    },
+    {
+      "at": "2026-09-13T19:26:15+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 · итерация 2 (TEAM-2/developer#1): Ma-1 (а) — encounter-wolf +dice.rolled, +entity.update.proposed; domain +entity.create/update.proposed; global +entity.update.proposed (сверено с КД §15, ADR-028, C-05, levels.go); тест TestBlueprintsListWhatTheirRolesPublish по таблице из КД; N-2 additionalP"
+    },
+    {
+      "at": "2026-09-13T19:26:15+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Очередь architect#2 (EPIC-003): отразить в КД §13.3 и api-contracts §3.3, что allowed_event_types включает entity.*.proposed роли и dice.rolled встречи, в DoD T-223 — Emitter сверяет со списком блупринта; TL2-7 (enum против блупринта в валидаторе); данные phase2/tick — плейсхолдеры или секции сборщи"
     }
   ],
   "blockers": [],
