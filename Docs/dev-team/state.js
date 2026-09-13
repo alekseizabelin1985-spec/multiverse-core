@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:20:50+03:00",
+  "updatedAt": "2026-09-13T17:32:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2456,13 +2456,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-450",
           "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
-          "reviewIterations": 1,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 197,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-450.md",
           "branch": "task/T-450-local-endpoint-table",
@@ -2505,13 +2505,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-454",
           "title": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race) и флак fight-05 в TestTheProcessRunsTheFightsOfIAlpha",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T14:36:44+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:37:09+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 108,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-454.md",
           "branch": "task/T-454-ci-race-testkit-state-fight05",
@@ -2520,13 +2520,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-455",
           "title": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (профиль legacy)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/devops-engineer#1",
           "startedAt": "2026-09-13T14:36:44+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 78,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-455.md",
           "branch": "task/T-455-ci-compose-lint-chroma-image",
@@ -2548,13 +2548,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "review",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T17:32:24+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 103,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-457.md",
           "branch": "task/T-457-architect-decisions-queue",
@@ -2798,7 +2798,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T16:20:10+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -3079,6 +3079,19 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md",
           "branch": "task/T-448-changed-form-proposal-id",
           "worktree": ".worktrees/T-448"
+        },
+        {
+          "id": "T-458",
+          "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-458.md"
         }
       ],
       "defects": [],
@@ -3132,13 +3145,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-202",
           "title": "A2 · Реестр уровней levels.go и валидатор блупринтов",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T16:03:58+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
+          "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 66,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md",
           "subwave": "B",
@@ -3176,16 +3189,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-205",
           "title": "A7 · internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#3",
+          "startedAt": "2026-09-13T17:08:19+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md",
-          "subwave": "B"
+          "subwave": "B",
+          "branch": "task/T-205-laws",
+          "worktree": ".worktrees/T-205"
         },
         {
           "id": "T-206",
@@ -3231,13 +3246,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T16:10:55+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T17:32:24+03:00",
+          "reviewIterations": 2,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 79,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md",
           "subwave": "B",
@@ -3275,16 +3290,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-210",
           "title": "B5a · Бюджет вызовов LLM",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "TEAM-2/developer#3",
+          "startedAt": "2026-09-13T16:24:50+03:00",
+          "finishedAt": "2026-09-13T17:07:44+03:00",
+          "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 41,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md",
-          "subwave": "C"
+          "subwave": "C",
+          "branch": "task/T-210-llm-budget",
+          "worktree": ".worktrees/T-210"
         },
         {
           "id": "T-211",
@@ -4369,14 +4386,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:37:09+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
-          "spentMinutes": 0,
+          "spentMinutes": 179,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-303.md",
           "branch": "task/T-303-links-http-layer",
@@ -4385,16 +4402,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "review",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md",
+          "branch": "task/T-304-readmodel-consumer",
+          "worktree": ".worktrees/T-304"
         },
         {
           "id": "T-305",
@@ -4469,16 +4488,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "review",
+          "assignee": "TEAM-3/developer#2",
+          "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md",
+          "branch": "task/T-310-bot-core",
+          "worktree": ".worktrees/T-310"
         },
         {
           "id": "T-311",
@@ -8805,7 +8826,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Итерация 2: точка у IPv4, строки таблицы",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "architect#2",
@@ -8945,7 +8966,7 @@ window.DEVTEAM_STATE =
       "task": "T-202",
       "action": "levels.go и валидатор блупринтов",
       "startedAt": "2026-09-13T16:03:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:52+03:00"
     },
     {
       "instance": "developer#2",
@@ -8955,7 +8976,7 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Провайдеры fake и recorded",
       "startedAt": "2026-09-13T16:10:55+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:46:16+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8965,7 +8986,7 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "Приёмка T-454 гонка и флак CI",
       "startedAt": "2026-09-13T16:12:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "developer#3",
@@ -8975,7 +8996,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "state: конвейер предложение → факт",
       "startedAt": "2026-09-13T16:20:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:59:05+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8985,7 +9006,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Ревью #1: решения архитектора C-01/C-05/C-07",
       "startedAt": "2026-09-13T16:20:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8995,6 +9016,216 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Повторная отметка владельца: В-1, В-2",
       "startedAt": "2026-09-13T16:20:50+03:00",
+      "finishedAt": "2026-09-13T16:37:09+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-210",
+      "action": "Бюджет вызовов LLM",
+      "startedAt": "2026-09-13T16:24:50+03:00",
+      "finishedAt": "2026-09-13T16:41:05+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Ревью #2: таблица «локальный адрес»",
+      "startedAt": "2026-09-13T16:37:09+03:00",
+      "finishedAt": "2026-09-13T16:47:06+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Итерация 2: порядок поставки shared/recording",
+      "startedAt": "2026-09-13T16:37:09+03:00",
+      "finishedAt": "2026-09-13T17:03:22+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "Ревью #1: levels и валидатор блупринтов",
+      "startedAt": "2026-09-13T16:37:52+03:00",
+      "finishedAt": "2026-09-13T16:53:29+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "readmodel и consumer gateway",
+      "startedAt": "2026-09-13T16:39:05+03:00",
+      "finishedAt": "2026-09-13T17:19:56+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Ядро бота",
+      "startedAt": "2026-09-13T16:39:05+03:00",
+      "finishedAt": "2026-09-13T17:22:47+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-210",
+      "action": "Ревью #1: бюджет вызовов LLM",
+      "startedAt": "2026-09-13T16:41:05+03:00",
+      "finishedAt": "2026-09-13T16:52:44+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Ревью #1: провайдеры fake и recorded",
+      "startedAt": "2026-09-13T16:46:16+03:00",
+      "finishedAt": "2026-09-13T16:57:06+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Приёмка T-450 и закрытие утечки userinfo",
+      "startedAt": "2026-09-13T16:47:06+03:00",
+      "finishedAt": "2026-09-13T17:17:31+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-210",
+      "action": "Приёмка T-210 бюджет LLM",
+      "startedAt": "2026-09-13T16:52:44+03:00",
+      "finishedAt": "2026-09-13T17:07:44+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "Приёмка T-202 валидатор блупринтов",
+      "startedAt": "2026-09-13T16:53:29+03:00",
+      "finishedAt": "2026-09-13T17:17:31+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Итерация 2: удержание ответа по статусу записи",
+      "startedAt": "2026-09-13T16:57:06+03:00",
+      "finishedAt": "2026-09-13T17:21:31+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Ревью #1: конвейер State",
+      "startedAt": "2026-09-13T16:59:05+03:00",
+      "finishedAt": "2026-09-13T17:18:30+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Ревью #2: порядок поставки shared/recording",
+      "startedAt": "2026-09-13T17:03:22+03:00",
+      "finishedAt": "2026-09-13T17:17:31+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-205",
+      "action": "internal/laws и mvctl laws",
+      "startedAt": "2026-09-13T17:08:19+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Итерация 3 по ревью #2",
+      "startedAt": "2026-09-13T17:17:31+03:00",
+      "finishedAt": "2026-09-13T17:22:47+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Итерация 2: фантомный факт, Stop/Start, тесты создания",
+      "startedAt": "2026-09-13T17:18:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "Ревью #1: readmodel и consumer",
+      "startedAt": "2026-09-13T17:19:56+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Приёмка T-207 провайдеры fake и recorded",
+      "startedAt": "2026-09-13T17:21:31+03:00",
+      "finishedAt": "2026-09-13T17:32:24+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Приёмка T-457 решения архитектора",
+      "startedAt": "2026-09-13T17:22:47+03:00",
+      "finishedAt": "2026-09-13T17:32:24+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Ревью #1: ядро бота",
+      "startedAt": "2026-09-13T17:22:47+03:00",
       "finishedAt": null
     }
   ],
@@ -11944,6 +12175,192 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-303 принята TEAM-3/tech-lead#3: DoD сверен; R2-Mi-1 (два теста повтора каскада, мутант R1 красный) и R2-N-1 (тест часового сжатия) закрыты; В-1 (startProcess с временным MV_GATEWAY_DATA_DIR, проверка файлом-заглушкой — C:\\data не меняется) и В-2 (runbook: проверка тома :ro, chown/chmod вместо удал"
+    },
+    {
+      "at": "2026-09-13T16:24:06+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние D (постоянное разрешение): epic/EPIC-001-foundation → develop (a7a8fc6), состав — T-449, T-446. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с незакоммиченными файлами владельца нет, ветка эпика сохранена. Синхронизация develop → EPIC-003 (2ad8d4f), EPIC-0"
+    },
+    {
+      "at": "2026-09-13T16:24:50+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-210 (TEAM-2/developer#3, S, подволна C): бюджет вызовов LLM internal/llm/budget.go — зависимость T-206 слита; счётчик провайдера — локальная заглушка теста до слияния T-207."
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 принята tech-lead#1: Mi-1 закрыт unit-тестами обёртки learning (мутанты R1/R3/R6' красные 10/10), N-1…N-3; make ci BASE=epic — rc=0. Коммит e2e7a49; при finish — конфликт хвоста tasks.md (T-449/T-456/T-446 выше T-454). Слита в epic/EPIC-001-foundation (cd7ec02). Итераций ревью — 1."
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303: повторная отметка tech-lead#1 — согласовано (В-1 проверен файлом-заглушкой и контрольным overlay-мутантом, C:\\data не менялся; В-2 runbook безопасен). Коммит cb3df71 (первый прогон TEST_CMD уронил флак shared/testkit/gateway TestTheSkirmishStopsSwingingWhenTheFightEnds «1 proposals were refus"
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · итерация 2 (devops-engineer#2): M-1 точка снимается только у зарезервированных имён (127.0.0.1., 192.168.1.10., 0.0.0.0. → cloud), Mi-1…Mi-5, N-1/N-2/N-4/N-5; таблица 121 случай; T02 сверяет текст ошибки; бюджет драйвера 5 мин (тайм-аут на Windows маскировался под «убит»). Ревью #2 — TEAM-1/"
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/5/6. Решения по существу верны, схемы и inv-01/В3/В4 сходятся с кодом. Ma-1 порядок поставки C-01 v1.9 невыполним для задач в работе (T-207 уже начата, T-055 заполняла бы Deps.Recording без поля; два владельца строки serve.go). Mi-1 маршрут ча"
+    },
+    {
+      "at": "2026-09-13T16:37:52+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 выполнена TEAM-2/developer#1: shared/agent/levels.go (AllowedEventTypes по ролям, таблицы владения нет) и validator.go (правила 1–14 и 7а, стабильный порядок находок, warning на числа за 2^53−1/NaN/даты), корпус invalid из 16 файлов с полной таблицей находок; 47 мутантов убиты, shared/agent 95"
+    },
+    {
+      "at": "2026-09-13T16:39:05+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Начаты T-304 (TEAM-3/developer#1: readmodel и consumer gateway) и T-310 (TEAM-3/developer#2: ядро бота — config, access, updates, sender, commands, privacy) — зависимости T-301…T-303 слиты в эпик."
+    },
+    {
+      "at": "2026-09-13T16:41:05+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-210 выполнена TEAM-2/developer#3: internal/llm/budget.go — окна по (world, level, phase, provider), фон B/час на мир (global+domain, все провайдеры; B=0 — ни одного вызова), интерактив N/мин (0 — выключен), Allow → BudgetExceededError с budget{kind,limit,window}, Observe/Handle по llm.output с иде"
+    },
+    {
+      "at": "2026-09-13T16:46:16+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 выполнена TEAM-2/developer#2: providers/fake (таблица правил, Calls(), задержка по shared/clock, грязные ответы, ярлыки ADR-029) и providers/recorded (ключ correlation_id/agent.id/phase/attempt, ErrIncompleteRecord без живого вызова, Lookup, Source извне); TestReplayMakesNoLLMCalls; 65 мутанто"
+    },
+    {
+      "at": "2026-09-13T16:47:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · ревью #2 (TEAM-1/code-reviewer#1): принять — 0/0/1/2. M-1 и Mi-1…Mi-5 закрыты; набор недопустимых символов хоста сверен с настоящим Go url.Parse; 78 враждебных URL — bash и pwsh побайтно одинаковы; пробное слияние T-450 → T-455 без конфликтов. Mi-R2-1: логин/пароль из URL (user:pass@) печата"
+    },
+    {
+      "at": "2026-09-13T16:52:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-210 · ревью #1 (TEAM-2/code-reviewer#2): принять — 0/0/6/4. Суммирование фона, B=0/N=0, идемпотентность и форма отказа верны; утечки памяти нет. Mi-1 время причины ослабляет N/мин (вопрос called_at в C-07); Mi-2 Allow до цикла попыток против каждой попытки (US-012); Mi-3 условие одного воркера тол"
+    },
+    {
+      "at": "2026-09-13T16:53:29+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 · ревью #1 (TEAM-2/code-reviewer#1): принять — 0/0/2/4. Отклонения исполнителя признаны корректными (белые списки из api-contracts §2.4, laws_ref ↔ файл по КД §12.2, 7а, одна ошибка при чужой роли); белые списки и владение не обходятся; тест корпуса сравнивает полный список находок. Mi-1 не пр"
+    },
+    {
+      "at": "2026-09-13T16:57:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 · ревью #1 (TEAM-2/code-reviewer#3): вернуть — 0/1/3/5. Ma-1: recorded отдаёт заблокированный текст записи quarantined/filter_error с response_raw (C-07 это поле запрещает; файлы записей схему не проверяют). Mi-1 длительность задержки fake не проверена (мутант d/2 выжил), Mi-2 Calls() при заве"
+    },
+    {
+      "at": "2026-09-13T16:59:05+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 выполнена TEAM-1/developer#3: internal/state — worker на мир с recover, посредник доставки (C-01 v1.6), Applier на копиях (публикация → замена → окно proposal_id; при сбое публикации ничего не сохраняется), memstore; паника → ErrWorldStopped шине; Stop отменяет подписку до закрытия шины; serve"
+    },
+    {
+      "at": "2026-09-13T17:03:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · итерация 2 (system-architect#1): Ma-1 — вариант (а): новая задача EPIC-002 «запись сессии» (перенос internal/replay → shared/recording, ReadJournal, Deps.Recording, маршрут POST /v1/admin/replay/clock под тегом process, EventClock.Advance) — единственный владелец чтения записи в serve.go, в "
+    },
+    {
+      "at": "2026-09-13T17:03:22+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Заведена T-458 «запись сессии» (EPIC-002, M, TEAM-1, после приёмки T-457 и слияния T-055): shared/recording (git mv из internal/replay), ReadJournal, Deps.Recording и чтение записи в serve.go, маршрут часов replay, EventClock.Advance, тест «Derive наследует Replay»; файлы EPIC-001 — с просмотром tec"
+    },
+    {
+      "at": "2026-09-13T17:07:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-210 принята TEAM-2/tech-lead#2: Mi-4 (M1/M2 убиты), N-1…N-4 закрыты при приёмке; решения владельца: Mi-2 Allow перед каждой попыткой, отказ на повторе — rejected budget_exceeded + ErrBudget (DoD T-212; правка КД §9.2 шаг 1 — architect#2); Mi-3 синхронный Observe (T-212) и MV_SWARM_LLM_WORKERS ≠ 1 "
+    },
+    {
+      "at": "2026-09-13T17:08:19+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-205 (TEAM-2/developer#3, M, подволна B): internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show — схема world.laws.changed в дереве (T-214 принята)."
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 принята TEAM-2/tech-lead#2: Mi-1 (ttl у task, max_instances ≥ 1, round у encounter, background_events у global) и Mi-2 (роль без entity.*.proposed не владеет типами) закрыты при приёмке, N-1…N-3; корпус invalid — 20 файлов; 25 мутантов убиты, shared/agent 95,6 %. Строки DoD в T-204, T-222; воп"
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 принята tech-lead#1: Mi-R2-1 (userinfo из URL в текстах отказов) закрыта в обеих половинах — маска до первого отказа, сценарии H61–H66, мутант M28, фикстура userinfo; N-R2-1/N-R2-2 (§3.1.2 счётчики, §4.2 п. 4 → §6.3.1). Коммит 8407521; конфликт хвоста tasks.md при sync; compose-lint и --fixtur"
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 слита после T-450: коммит 674456b, конфликт хвоста tasks.md; compose-lint зелёный и в окружении, экспортирующем build/versions.env как в CI. epic/EPIC-001-foundation = 2a0b074. Итераций ревью — 1. Идёт make ci BASE=develop — контрольное слияние E (T-454, T-450, T-455) и push develop."
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Ma-1 вариант (а) выполним, C-15 v1.4 сходится с кодом T-206, Mi-4 проверен по 15 строкам. R2-Mi-1 исключение для shared/runtime в §16 п. 8/ownership §3 п. 4 не записано; R2-Mi-2 «корень входа» захватывает таймерные корни шлюза; R2-Mi-3 кт"
+    },
+    {
+      "at": "2026-09-13T17:18:30+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/1/4/3. Ma-1 фантомный факт: после 4-й попытки предложение уходит в dead_letters, опубликованные факты остаются, мир не изменён, следующий ответ публикует другой факт той же версии (подтверждено зондом). Mi-1 предложение без world молча (Debug), "
+    },
+    {
+      "at": "2026-09-13T17:19:56+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-304 выполнена TEAM-3/developer#1: internal/gateway/readmodel (проекция по версиям, stale при разрыве, обе формы changed[] C-02 v1.5/v1.6 со сверкой хеша по entity.ApplyOps, конец встречи по первому из пары, bootstrap снапшота, Expect/Wait/AwaitFact на shared/clock) и consumer (догон журнала от кур"
+    },
+    {
+      "at": "2026-09-13T17:21:31+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние E (постоянное разрешение): epic/EPIC-001-foundation → develop (ff83f9e), состав — T-454, T-450, T-455. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с файлами владельца нет, ветка эпика сохранена. gitleaks по 66 коммитам, которых нет на origin (develop и че"
+    },
+    {
+      "at": "2026-09-13T17:21:31+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/0/1. Ma-1 (таблица C-07 совпадает с allOf схемы, удержание ответа по статусу), Mi-1…Mi-3, N-1…N-5 закрыты; 16 мутантов убиты, включая выживших в ревью #1. Nit: null как отсутствие поля. Приёмка — TEAM-2/tech-lead#2."
+    },
+    {
+      "at": "2026-09-13T17:22:47+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · итерация 3 (system-architect#1) по ревью #2: R2-Mi-1 исключение §16 п. 8 и ownership §3 п. 4 для T-458 (shared/recording, Deps.Recording; ревью system-architect, просмотр tech-lead#1, contract-change); R2-Mi-2 корень входа — player.* в ответ на HTTP-вход; R2-Mi-3 поля Request.AgentID/Attempt"
+    },
+    {
+      "at": "2026-09-13T17:22:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 выполнена TEAM-3/developer#2: cmd/telegram-bot/internal/{privacy,config,updates,sender,commands,access}, зависимость github.com/go-telegram/bot v1.25.0 (ADR-018), MV_TELEGRAM_ACTION_KEY_SALT и MV_TELEGRAM_COMMANDS_PER_MIN (vars.go/.env.example — мягкий режим). 52 мутанта, покрытие 93–100 %. Бл"
+    },
+    {
+      "at": "2026-09-13T17:32:24+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 принята TEAM-2/tech-lead#2: DoD выполнен, отклонение по чтению записей принято по решению T-457; Nit ревью #2 закрыт; строки DoD в T-212 (удаление WithCall, ключ из Request, попытка 2 в replay, адаптер Source над shared/recording) и T-221. Коммит 6b09954; конфликт версии и changelog tasks.md ("
+    },
+    {
+      "at": "2026-09-13T17:32:24+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 принята tech-lead#1: закрытие R2-Mi-1…R2-Mi-3 и Nit сверено по тексту, git grep «C-07 v1.4» — только денежный лимит и история; раздел T-456 дополнен (v0.14/C-15 v1.5, символы хоста и userinfo из T-450, вопрос llm.output.called_at). Коммит f33517a; конфликт хвоста tasks.md. Слита в epic/EPIC-00"
     }
   ],
   "blockers": [],

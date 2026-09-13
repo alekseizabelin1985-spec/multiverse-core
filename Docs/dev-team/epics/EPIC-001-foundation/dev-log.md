@@ -8663,3 +8663,52 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Мутанты** (копия `t446i2-mut` в scratch без `-overlay`, контрольный первым, удалена по точному пути): K0, A1–A3, E1–E3, G1, G2 — 9 из 9 красные по ожиданию. Нагрузка: 6 процессов × `-test.count=8` × `-test.cpu 1` по тестам дедлайнов и остановки — все зелёные.
 - **Прогоны.** `go build ./... && go vet ./...` — 0; `gofmt` — пусто; `contracts check` — 65/8/58; `go test -short -count=1 ./...` — 27 ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` (и с `--build-tags e2e`) — 0 issues; `make test` — 0; `gitleaks dir` по изменённым файлам — чисто.
 - Файлы T-454 (`cmd/multiverse/fake_contexts_test.go`, `shared/testkit/state`) не трогал. Docker, интеграционные тесты, стенд `:8888` не трогались, `.env` не открывался. Не коммитил, `git add` не делал.
+<!-- dev-log T-454 -->
+## developer#2 · T-454 · CI на Linux: гонка данных в `testkit/state` и флак fight-05 стенда `cmd/multiverse` · 2026-09-13
+
+Ветка `task/T-454-ci-race-testkit-state-fight05` (от эпика `dcdb530`), TEAM-1, Opus. Запуск возобновлён после обрыва по лимиту API: частичные правки проверены и доработаны. Подробности — карточка `tasks/T-454.md`.
+- **Гонка `TestAConsumerBuildsItsProjectionFromTheStub`.** Запись `hp`/`refused` в `Handle` (горутина доставки membus) и чтение в `waitFor` (горутина теста) шли без синхронизации — это все четыре отчёта CI. Проекция под `sync.Mutex`, тест читает через `seen` (hp и копия отказов). Утверждения не ослаблены.
+- **Аудит однотипных мест.** `contract`, `gateway`, `swarm`, `state`, `test/e2e` читают под мьютексами, атомиками или из журнала шины — чисто. В стенде `cmd/multiverse` поля `stand` пишутся в горутине `process.run` (внутри `open`), а читаются тестом после `/health`. Детектор молчал только из-за `race.Acquire/ReleaseMerge(&ioSync)` на чтении и записи сокета (`syscall_unix.go`). Передача сделана явной каналом `opened`.
+- **Флак fight-05.** Двойник узнаёт волка только из `entity.created`, а `/health` ok уже при запущенных подписках. `entered` на `player_events` обгоняет факт на `system_events` (C-01 не упорядочивает топики) → `freeNPCOf` пуст → энкаунтер не открыт → 2 с без ответа. Стенд теперь ждёт события, а не срока: обёртка `learning` отмечает сущность после успешного возврата обработчика двойника, `ready` ждёт все сущности bootstrap до входа персонажа (10 с — предохранитель). Отличие от T-433 — ожидание по сигналу, а не по `standTimeout`.
+- **Регрессия.** `TestTheStandWaitsUntilTheFakeHasLearntTheWorld`: факты держатся, пока стенд не начнёт ждать. Мутант без ожидания даёт ровно текст CI и называет недоученные сущности. Мутант «отпустить без ожидания» не краснит — заявлено в док-комментарии.
+- **Попутно.** В стрессе `-cpu 1` death давал «ended ""»: `encounter.ended` публикуется после факта, который харнесс и нарратор слышат своими подписками. Стенд ждёт в журнале событие с id из `closed_by_event_id` закрытого энкаунтера. Мутант со старым чтением — 7 из 200 красных, итог — 0 из 200.
+- **Прогоны.** cgo нет, `-race` не запускался. Мутанты через `-overlay` с относительным ключом, контроль M0 — `setup failed`. Стресс `-count=50 -cpu 1,2,4,8` (fight-тесты 108 с; `shared/testkit/state` 19 с) — ok. `go build/vet` — ok; `go test -short ./...` — 27 ok; e2e — ok; `golangci-lint` — 0; `make test` — rc=0.
+- **CI.** Должны позеленеть `unit`, `race`, `integration`. Не проверены «Coverage floor» `unit` и e2e-часть `make test-race`: в прогоне они не выполнялись.
+- Не коммитил.
+
+<!-- dev-log T-450 -->
+## devops-engineer#2 · T-450 · единое правило «локальный адрес» для скриптов и линтера compose · 2026-09-13
+
+Ветка `task/T-450-local-endpoint-table` (от эпика `ab6cb1d`, с T-405), TEAM-1, Opus. Подробности — карточка `tasks/T-450.md`.
+
+- **Таблица.** `testdata/llm/local-endpoints.tsv`: 107 случаев (36 `local`, 32 `cloud`, 39 `invalid`). Правило и уточнения исполнителя — в шапке файла. Уточнения: завершающая точка, однословное имя с буквы, записанный `:80`, ведущие нули порта, пустой порт, скобки, `%`, `0.0.0.1`, `::127.0.0.1`, NAT64.
+- **Скрипты.** `llm_endpoint_classify` / `Get-LlmEndpointClass`, общий судья `llm_endpoint_judge` / `Set-LlmEndpointClass`. IPv4 и IPv6 разбираются вручную, одним алгоритмом в обеих половинах. Доверенный адрес (гейт облака) — любой `local`. Запускаемый — loopback, `localhost`, `host.docker.internal` у `openai_compat`. Изменения поведения — таблица в карточке и в `infrastructure.md` §6.3.1.
+- **compose-lint.** Правило 6 зовёт функцию bash: Python выносит тройки из модели через NUL, bash классифицирует, Python читает вердикты. `ipaddress` и `ALLOWED_HOSTS` удалены. Четыре фикстуры `*-llm-url-*`.
+- **Стенд.** `endpoints.go`: `T01` (bash) и `T02` (pwsh + совпадение `kind`) по всей таблице, при любом `-run`; таблица читается из `-repo`. Сценарии `D07` (`0.0.0.0`), `D08` (LAN без порта). Мутанты M18–M23.
+- **Документы.** `infrastructure.md`: новый §6.3.1 и строка правила 6 в §3.1.1; §6.4 и §4.2 не тронуты. `runbook.md` §3. README стенда и фикстур, комментарий в `docker-compose.yml`, `.gitattributes`.
+- **Прогоны.** `make scripts-parity` — 97 PASS + 2 KNOWN, `T01`/`T02` по 107 случаев PASS, порты 34/34; `make parity-mutants` — код 0, M18–M23 убиты; `compose-lint` — ok, `--fixtures` 55 bad / 11 good; мутанты `compose-lint` C1–C4 в копии в scratch убиты, копия удалена по пути; `bash -n`, `Parser::ParseFile`, `gofmt`/`go vet` стенда — чисто; `gitleaks dir` по изменённым файлам — no leaks; `make ci BASE=develop` — код 0 (первые два запуска упали на блокировке golangci-lint параллельного агента).
+- Стенд `:8888` не трогался, `.env` не открывался, контейнеры не запускались (`docker compose` — только `config`). Слушатели TCP до и после прогонов — своих нет; новый `8081` — Docker backend/wslrelay, не из этих прогонов. Не коммитил, `git add` не делал.
+
+### devops-engineer#2 · T-450 · итерация 2 по ревью #1 (0/1/5/5) и решению system-architect#1 · 2026-09-13
+
+- **M-1.** Точка на конце снимается только у `localhost.`, `*.localhost.`, `host.docker.internal.`. IPv4 с точкой (`127.0.0.1.`, `192.168.1.10.`, `0.0.0.0.`) — `cloud`: `LLM_IPV4_RE` сверяется с хостом как записан, в обеих половинах. `0.0.0.0.` решено как `cloud` (имя для DNS, а не any-address). Мутанты M24 (bash) и M25 (pwsh) — по отдельности.
+- **Mi-1.** `134744072` и `0x08080808` — `cloud`.
+- **Mi-2.** Символы, которые Go `url.Parse` не пускает в хост (пробел, `\`, `^`, `` ` ``, `{`, `|`, `}`), — `invalid`. Набор — ровно Go: `~` и прочие допустимые дают `cloud`. Два случая с пробелом держит стенд (`endpointStandCases`). Мутант M27.
+- **Mi-3.** `T02` сверяет текст ошибки bash и pwsh. Мутант M26 (уровень R1: `%` в скобках уходит в разбор IPv6) меняет только фразу.
+- **Mi-4, N-4.** runbook §3 — врезка риска резолвера и порядок действий до T-451; §6.3.1 — класс не зависит от DNS, место запроса зависит.
+- **Mi-5.** Блок T-450 в `compose-lint.sh` стоит выше комментария правила 3; комментарий правила 3 в диффе с базой не тронут.
+- **N-1, N-5.** Строка «запускаемый — любой loopback» в таблице изменений §6.3.1. Фраза `invalid` выбирается по kind.
+- **N-2.** Отказ на `?`/`#` идёт первым и печатает значение до `?`/`#`. Фикстура `bad-llm-url-query`, `H28` с `Absent`.
+- **Стенд.** Бюджет драйвера `T01`/`T02` — 5 минут вместо 90 с, тайм-аут печатается отдельной фразой. Первый `parity-mutants` дал `RED` у M01: драйвер bash не уложился под нагрузкой, отдельный замер — 56 с. Этот прогон отброшен.
+- **Таблица.** 121 случай (38/38/45) и 2 случая стенда. Фикстуры `bad-llm-url-dotted-quad`, `bad-llm-url-query`.
+- **Прогоны.** `bash -n` и `ParseFile` — чисто; `gofmt`/`go vet` стенда — чисто. `make scripts-parity` — код 0: 101 PASS + 2 KNOWN, `T01`/`T02` по 123 случая, порты 34/34. `make parity-mutants` — код 0: M00 убит, M01 зелёный, M02–M27 убиты; M26 ловит только сверка текста (проверено отдельным прогоном на копии в scratch). `compose-lint` — ok; `--fixtures` — 57 bad / 11 good. Мутанты compose-lint C0 (зелёный), C3/C5/C6/C7 (красные) — на копии в scratch, копия удалена по пути. `make secrets-scan BASE=epic/EPIC-001-foundation` — код 0, плюс `gitleaks dir` по изменённым файлам — no leaks. Слушатели TCP — своих новых нет (`:13000` — SpaceEngineers.exe).
+- `.env` не открывался, контейнеры и стенд LLM не трогались, к `:8888` запросов не было, `docker compose` — только `config` внутри compose-lint. Не коммитил, `git add` не делал. Подробности — карточка, раздел «Итерация 2».
+<!-- dev-log T-455 -->
+## devops-engineer#1 · T-455 · CI `compose-lint` на `develop`: окружение процесса скрывало заглушку `CHROMA_IMAGE` · 2026-09-13
+
+Ветка `task/T-455-ci-compose-lint-chroma-image` (от эпика `dcdb530`), TEAM-1, Opus. Подробности — карточка `tasks/T-455.md`.
+- **Находка.** Причина не в `.env`: копия `git archive HEAD` без `.env` проходит. Шаг `go.yml` «Read the pinned versions» экспортирует `build/versions.env` через `$GITHUB_ENV`, и пустой по D-3 `CHROMA_IMAGE` приходит в окружение шага. Compose ставит переменную процесса выше `--env-file`, поэтому заглушка `.github/ci.env` была скрыта. В scratch `CHROMA_IMAGE= scripts/compose-lint.sh` воспроизводит ошибку CI дословно. Фикстуры `CHROMA_IMAGE` не используют и в том же окружении проходили — дыру не ловил никто.
+- **Правка.** `scripts/compose-lint.sh` до первого `docker compose` снимает из окружения все имена, объявленные в своих `--env-file`, `build/versions.env` и `.env.example` правила 7. `--fixtures` запускает каждую фикстуру с этими именами, экспортированными пустыми. D-3, `.github/ci.env`, `docker-compose.legacy.yml` и правило 6 не тронуты.
+- **Проверки.** В scratch-копии без `.env`: чистое окружение и окружение CI — ok. `--fixtures` — 52 bad, 10 good. Контрольный мутант без снятия имён — `--fixtures` красный, основной прогон повторяет ошибку CI. В рабочей папке: `bash -n` — ok, `compose-lint` и `--fixtures` — ok, `CHROMA_IMAGE= QDRANT_IMAGE= make compose-lint` — ok, `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0, `gitleaks dir` по копии — no leaks. `scripts-parity` не затронут: в CI зелёный, пины берёт из файла.
+- **Бэклог.** Шаг `config -q` в `go.yml` с той же ловушкой (сейчас безопасен). hadolint на `develop` ещё не выполнялся.
+- Не коммитил.
