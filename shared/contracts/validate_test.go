@@ -174,6 +174,7 @@ func TestPayloadExamples(t *testing.T) {
 			"idle": [],
 			"closed_at": "2026-09-09T12:00:30Z"}`},
 		"entity.create.proposed": {eventbus.ActorHuman, `{
+			"proposal_id": "p-create-1",
 			"entity": {"entity": {"id": "player-A", "type": "player"}, "name": "Vasya"},
 			"attributes": {"hp": 10, "hp_max": 10, "status": "alive"},
 			"cause": "create"}`},
@@ -190,7 +191,8 @@ func TestPayloadExamples(t *testing.T) {
 		"entity.created": {eventbus.ActorSystem, `{
 			"entity": {"entity": {"id": "player-A", "type": "player"}, "name": "Vasya"},
 			"version": 1,
-			"attributes": {"hp": 10}}`},
+			"attributes": {"hp": 10},
+			"proposal_id": "p-create-1"}`},
 		"entity.updated": {eventbus.ActorSystem, `{
 			"entity": {"entity": {"id": "player-A", "type": "player"}},
 			"version": 24,

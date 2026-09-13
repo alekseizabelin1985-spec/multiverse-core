@@ -1,12 +1,15 @@
 package entity
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 
 	"multiverse-core.io/shared/eventbus"
@@ -33,12 +36,104 @@ type Op struct {
 
 // Change is one path that ended up different, as entity.updated carries it.
 //
-// Old is null when there was nothing at the path before — including the element
-// of an append, where the schema allows old to be absent altogether.
+// On the wire old is present exactly when the path existed before the change and
+// new exactly when it exists after it (C-02 v1.6). A null value and a missing
+// key read the same and are different states, so presence is carried by HasOld
+// and HasNew and by nothing else: an append has no old, a remove of a key has no
+// new, and a set to null has a new that is null. A consumer that catches up on
+// facts writes new when it is there and deletes the path when it is not
+// (state-and-mechanics.md §4.8).
+//
+// The flags alone decide, whatever the values hold. A Change built by hand has
+// to set them, and MarshalJSON refuses one that contradicts them — a value with
+// its flag down, or neither flag at all — rather than guess which was meant:
+// the schema of entity.updated would refuse the entry anyway, but far from the
+// code that built it.
 type Change struct {
-	Path string `json:"path"`
-	Old  any    `json:"old"`
-	New  any    `json:"new"`
+	Path   string
+	Old    any
+	New    any
+	HasOld bool
+	HasNew bool
+}
+
+// wireChange is the JSON shape of a Change on the way out. A pointer to a
+// RawMessage is left out by omitempty when nil and written as it is otherwise,
+// null included.
+type wireChange struct {
+	Path string           `json:"path"`
+	Old  *json.RawMessage `json:"old,omitempty"`
+	New  *json.RawMessage `json:"new,omitempty"`
+}
+
+// MarshalJSON writes old and new only when their flags are up.
+func (c Change) MarshalJSON() ([]byte, error) {
+	switch {
+	case !c.HasOld && !c.HasNew:
+		return nil, fmt.Errorf("entity: change %q: neither old nor new is present", c.Path)
+	case !c.HasOld && c.Old != nil:
+		return nil, fmt.Errorf("entity: change %q: old holds a value but HasOld is false", c.Path)
+	case !c.HasNew && c.New != nil:
+		return nil, fmt.Errorf("entity: change %q: new holds a value but HasNew is false", c.Path)
+	}
+	out := wireChange{Path: c.Path}
+	var err error
+	if c.HasOld {
+		if out.Old, err = rawOf(c.Old); err != nil {
+			return nil, fmt.Errorf("entity: change %q: old: %w", c.Path, err)
+		}
+	}
+	if c.HasNew {
+		if out.New, err = rawOf(c.New); err != nil {
+			return nil, fmt.Errorf("entity: change %q: new: %w", c.Path, err)
+		}
+	}
+	return json.Marshal(out)
+}
+
+func rawOf(v any) (*json.RawMessage, error) {
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	raw := json.RawMessage(encoded)
+	return &raw, nil
+}
+
+// UnmarshalJSON sets HasOld and HasNew from the keys the object carries. It
+// reads the object as a map of raw values because a decoder that unmarshals a
+// null into a pointer leaves the pointer nil, and a null old is a present one.
+//
+// A null in place of the whole object leaves the Change as it was, the way
+// encoding/json treats a null for every other type.
+func (c *Change) UnmarshalJSON(data []byte) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	var decoded Change
+	if raw, ok := fields["path"]; ok {
+		if err := json.Unmarshal(raw, &decoded.Path); err != nil {
+			return fmt.Errorf("entity: change: path: %w", err)
+		}
+	}
+	if raw, ok := fields["old"]; ok {
+		decoded.HasOld = true
+		if err := json.Unmarshal(raw, &decoded.Old); err != nil {
+			return fmt.Errorf("entity: change %q: old: %w", decoded.Path, err)
+		}
+	}
+	if raw, ok := fields["new"]; ok {
+		decoded.HasNew = true
+		if err := json.Unmarshal(raw, &decoded.New); err != nil {
+			return fmt.Errorf("entity: change %q: new: %w", decoded.Path, err)
+		}
+	}
+	*c = decoded
+	return nil
 }
 
 // ChangeSet is one element of the changes array of entity.update.proposed: the
@@ -78,6 +173,7 @@ const (
 	ReasonNotJSON      = "value is not JSON-compatible"
 	ReasonNotInteger   = "value is not an integer"
 	ReasonNotNumber    = "current value is not a number"
+	ReasonCurrentRange = "current value is past ±(2^53-1)"
 	ReasonNotList      = "current value is not a list"
 	ReasonMissingPath  = "nothing at path"
 )
@@ -162,7 +258,7 @@ func applyOp(attrs map[string]any, op Op, tracker *changeTracker) error {
 }
 
 func applySet(attrs map[string]any, op Op, tokens []string, tracker *changeTracker) error {
-	if !jsonCompatible(op.Value) {
+	if !JSONCompatible(op.Value) {
 		return ErrInvalidOp{Op: op, Reason: ReasonNotJSON}
 	}
 	if _, err := setIn(attrs, tokens, op.Value); err != nil {
@@ -177,14 +273,32 @@ func applyInc(attrs map[string]any, op Op, tokens []string, tracker *changeTrack
 	if !ok {
 		return ErrInvalidOp{Op: op, Reason: ReasonNotInteger}
 	}
+	if !intInSafeRange(delta) {
+		return ErrInvalidOp{Op: op, Reason: ReasonNotJSON}
+	}
 	old, exists := readPath(attrs, op.Path)
 	var current int64
 	if exists && old != nil {
 		if current, ok = asInt64(old); !ok {
+			if numberPastSafeRange(old) {
+				return ErrInvalidOp{Op: op, Reason: ReasonCurrentRange}
+			}
 			return ErrInvalidOp{Op: op, Reason: ReasonNotNumber}
 		}
 	}
+	// An attribute can be past the range when it was built that way in Go, and
+	// the sum of two numbers inside the range can leave it. With both operands
+	// inside, the sum cannot overflow int64, so the check of the result — the
+	// value the fact is going to carry — is not fooled by a wrap that clampHP
+	// would otherwise pull back to zero. The attribute, not the operation, is
+	// what is wrong then, and the reason says so.
+	if !intInSafeRange(current) {
+		return ErrInvalidOp{Op: op, Reason: ReasonCurrentRange}
+	}
 	result := clampHP(attrs, op.Path, tokens, current+delta)
+	if !intInSafeRange(result) {
+		return ErrInvalidOp{Op: op, Reason: ReasonNotJSON}
+	}
 	if _, err := setIn(attrs, tokens, result); err != nil {
 		return ErrInvalidOp{Op: op, Reason: writeReason(err)}
 	}
@@ -221,7 +335,7 @@ func siblingPath(path, last, sibling string) string {
 }
 
 func applyAppend(attrs map[string]any, op Op, tokens []string, tracker *changeTracker) error {
-	if !jsonCompatible(op.Value) {
+	if !JSONCompatible(op.Value) {
 		return ErrInvalidOp{Op: op, Reason: ReasonNotJSON}
 	}
 	current, _ := readPath(attrs, op.Path)
@@ -359,15 +473,95 @@ func hasSameIdentity(list []any, value any) bool {
 	return slices.ContainsFunc(list, func(item any) bool { return sameIdentity(item, value) })
 }
 
-// jsonCompatible is the definition of the phrase: a value survives a round trip
+// JSONCompatible is the definition of the phrase: a value survives a round trip
 // through the wire. It rules out NaN and infinities, channels, functions and
-// cycles — everything an op could carry that a fact could not.
-func jsonCompatible(v any) bool {
+// cycles — everything an op could carry that a fact could not. State checks the
+// value of every operation with it, and the attributes of a create too.
+//
+// It also rules out a number of magnitude 2^53 or more anywhere inside the value
+// (C-02 v1.6). Every reader of the bus decodes a number into a float64, and a
+// float64 holds every integer only up to 2^53: State would store 2^53+1 and the
+// fact, the snapshot and every read-model would hold 2^53, with a state hash
+// that no replay reproduces.
+//
+// The bound excludes 2^53 itself because the proposal reaches State decoded as
+// well: 2^53 and 2^53+1 arrive as the same float64, so a bound that let 2^53 in
+// would let 2^53+1 in whenever the proposal came over the bus. With the bound at
+// 2^53-1 every integer past it is still past it after decoding, and the answer
+// is the same for a direct call and for the bus. Past 2^53 every float64 is a
+// whole number, so the rule is the same for integers and for floats.
+func JSONCompatible(v any) bool {
 	if v == nil {
 		return true
 	}
-	_, err := json.Marshal(v)
-	return err == nil
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return false
+	}
+	return numbersInSafeRange(encoded)
+}
+
+// maxSafeInteger is 2^53-1, the largest magnitude a proposal may carry
+// (C-02 v1.6; I-JSON, RFC 7493 §2.2).
+const maxSafeInteger = 1<<53 - 1
+
+// numberPastSafeRange says whether v is a number, of any Go type a payload can
+// hold, whose magnitude is past maxSafeInteger.
+func numberPastSafeRange(v any) bool {
+	if !isNumber(v) {
+		return false
+	}
+	encoded, err := json.Marshal(v)
+	return err == nil && !numbersInSafeRange(encoded)
+}
+
+func isNumber(v any) bool {
+	if _, ok := v.(json.Number); ok {
+		return true
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	default:
+		return false
+	}
+}
+
+// numbersInSafeRange walks the tokens of an encoded value and checks each
+// number as it is written, before any float64 has had the chance to round it.
+func numbersInSafeRange(encoded []byte) bool {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if errors.Is(err, io.EOF) {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		if number, ok := token.(json.Number); ok && !numberInSafeRange(number) {
+			return false
+		}
+	}
+}
+
+func numberInSafeRange(number json.Number) bool {
+	i, err := strconv.ParseInt(number.String(), 10, 64)
+	if err == nil {
+		return intInSafeRange(i)
+	}
+	if errors.Is(err, strconv.ErrRange) {
+		return false
+	}
+	f, err := strconv.ParseFloat(number.String(), 64)
+	return err == nil && math.Abs(f) <= maxSafeInteger
+}
+
+func intInSafeRange(i int64) bool {
+	return i >= -maxSafeInteger && i <= maxSafeInteger
 }
 
 // asInt64 reads a JSON number that is a whole number. A payload decoded from
@@ -446,6 +640,36 @@ func (t *changeTracker) touch(path string) {
 	t.paths = append(t.paths, path)
 }
 
+// createdAncestor finds the outermost ancestor of path that the proposal made
+// into a container: absent or a scalar before, there after. A path that is gone
+// at the end reports nothing a consumer could rebuild that ancestor from — an
+// inc of fresh.deep undone by a remove of it leaves fresh = {} behind, and
+// neither entry says so — so the ancestor is reported on its own.
+func createdAncestor(before, after map[string]any, path string) (string, bool) {
+	for i := 1; i < len(path); i++ {
+		if path[i] != '.' && path[i] != '[' {
+			continue
+		}
+		prefix := path[:i]
+		if _, exists := readPath(after, prefix); !exists {
+			return "", false
+		}
+		if was, existed := readPath(before, prefix); !existed || !isContainer(was) {
+			return prefix, true
+		}
+	}
+	return "", false
+}
+
+// isContainer is what setIn walks into rather than replaces with a map.
+func isContainer(v any) bool {
+	if _, ok := v.(map[string]any); ok {
+		return true
+	}
+	_, ok := foreignSlice(v)
+	return ok
+}
+
 // changes compares every reported path in the entity as it was against the copy
 // as it is.
 //
@@ -457,7 +681,19 @@ func (t *changeTracker) touch(path string) {
 // null, appending a null element and removing a key that held null all count
 // (state-and-mechanics.md §3.2, §3.3; C-02, where version grows by one exactly
 // when changed[] is not empty).
+//
+// The same existence is what the entry carries: old is present when the path
+// was there before and new when it is there after (C-02 v1.6), so an append
+// reports no old and a remove of a key reports no new.
 func (t *changeTracker) changes(before, after map[string]any) []Change {
+	for _, path := range slices.Clone(t.paths) {
+		if _, exists := readPath(after, path); exists {
+			continue
+		}
+		if ancestor, created := createdAncestor(before, after, path); created {
+			t.touch(ancestor)
+		}
+	}
 	out := make([]Change, 0, len(t.paths))
 	for _, path := range t.paths {
 		old, hadOld := readPath(before, path)
@@ -465,7 +701,13 @@ func (t *changeTracker) changes(before, after map[string]any) []Change {
 		if hadOld == hasNew && sameCanonical(old, updated) {
 			continue
 		}
-		out = append(out, Change{Path: path, Old: snapshot(old), New: snapshot(updated)})
+		out = append(out, Change{
+			Path:   path,
+			Old:    snapshot(old),
+			New:    snapshot(updated),
+			HasOld: hadOld,
+			HasNew: hasNew,
+		})
 	}
 	return out
 }

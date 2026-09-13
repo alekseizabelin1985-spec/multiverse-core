@@ -99,3 +99,50 @@
 | 14 | `StateHash` стабилен при перестановке ключей и между процессами | `hash.go` — `CanonicalJSON`, `StateHash` | `hash_test.go` — `TestCanonicalJSONDoesNotDependOnMapOrder`, `TestStateHashDoesNotDependOnTheOrderOfTheWorld`, `TestCanonicalJSONAndStateHashGolden` |
 | 15 | `StateHash(e) == StateHash(roundtrip(e))` для значений из Go | `hash.go` — `writeCanonicalOther`, `writeCanonicalNilSlice`, `encodesItself`, `writeCanonicalEncoded` | `TestStateHashOfAGoBuiltWorldMatchesItsWireForm`, `TestASetOfANilListHashesTheSameAfterASnapshot` |
 | 16 | Покрытие `shared/entity` ≥ 60 % | весь пакет | `make test`: 93,7 % |
+
+<!-- dev-log T-448 -->
+## developer#3 · T-448 · C-02 v1.6: форма `changed[]`, `proposal_id` у create, ±2^53 · 2026-09-13
+
+Ветка `task/T-448-changed-form-proposal-id` (база `03c551d`), TEAM-1, Opus, `contract-change`. Подробности — карточка `tasks/T-448.md`; там же текст C-02 v1.6 для T-449 и строки для EPIC-003/EPIC-004.
+- **Сделано.** (а) `entity.Change{Path, Old, New, HasOld, HasNew}` с `OldPresent`/`NewPresent` и `MarshalJSON`/`UnmarshalJSON` по наличию ключей; `changes()` ставит флаги; схема `entity.updated` — `required: [path]` + `anyOf`; `changedPayload` двойника по наличию; КД §3.2, §4.8 (правило догона), §8. (б) `proposal_id` в `required` у `entity.create.proposed`; двойник без подстановки `event.id` (`refuseMalformed`); пример в `shared/contracts/validate_test.go`. (в) `jsonCompatible` отвергает число за ±2^53 в любом месте значения (разбор токенов с `UseNumber`); `inc` проверяет приращение, текущее и результат.
+- **Решения по ходу (нашёл тест-свойство).** Догон `a[n]` — простое добавление без дедупликации; удаление отсутствующего пути — no-op; `ApplyOps` добавляет элемент предка, созданного предложением, если затронутый путь в конце отсутствует (`inc fresh.deep` + `remove fresh.deep` давали `changed: []` при сдвинутом хеше — дефект до T-448, нарушал инвариант T-050). Все три — в КД и тексте v1.6, на подтверждение system-architect.
+- **Отклонения.** Правило переигрывания фактов — §4.8 КД, а не §4.4 (там формат `latest.json`); правка внесена в §4.8. Update без `proposal_id` двойник теперь тоже пропускает с `Warn`, а не отвергает под `event.id`. Проверка ±2^53 у `inc` — сверх `jsonCompatible`.
+- **Тесты.** `TestChangedFormPerOperation` (15 строк таблицы: флаги, ключи на проводе, схема, догон), `TestCatchingUpOnChangedReproducesTheState` (4000 случайных предложений; разово 1,2 млн в копии), `TestUpdatedSchemaHoldsTheChangedForm`, `TestCreateProposalSchemaRequiresTheProposalID`, `TestChangeJSONRoundTrip`, `TestApplyOpsRefusesNumbersPastTwoToTheFiftyThird`; в двойнике — `TestChangedCarriesOldAndNewByPresence`, `TestCreateWithoutProposalIDIsPassedOver`, `TestUpdateWithoutProposalIDIsPassedOver`, `TestNumberPastTwoToTheFiftyThirdIsInvalidOp`; догон добавлен в `TestChangedListAndStateHashMoveTogether`. `Harness`, `FakeNarrator`, `FakeEncounter` не правились, их тесты зелёные. Невалидные фикстуры — по одной ошибке у каждой (разовая проверка всех 35).
+- **Мутанты** (копия в scratch, без `-overlay`, контрольный первым, удалена по точному пути): M0 контрольный — красный; M1–M17 и M6s — красные. M12 (`cloneChanges` теряет флаги) в первом варианте теста выжил — подтест переписан на `null` по обе стороны.
+- **Прогоны**: `go build ./... && go vet ./...` — 0; `gofmt -l` — пусто; `mvctl contracts check` — 0; `go test -short -count=1 ./...` — 0 (в одном из прогонов один раз упал `TestTheProcessRunsTheFightsOfIAlpha/fight-00` — гонка старта двойников по диагнозу самого теста; `-count=5` и два полных повтора — ok); `mvctl privacy scan testdata/` — чисто; `go test -tags e2e ./test/e2e/...` — первый прогон FAIL `TestTheProbeGivesUpOnAProcessThatExited` (таймаут пробы 15 с, не State), повтор — ok; `golangci-lint run ./...` — 0 issues; `make test` (Git Bash) — 0, `shared/entity` 94,3 %. `-race` недоступен (нет cgo). Docker, стенд, `.env` не трогались.
+- Не коммитил; `contracts.md`, `shared/testkit/{swarm,gateway}`, `internal/mechanics`, `internal/replay`, `serve.go` не трогал.
+
+### developer#3 · T-448 · итерация 2 (ревью #1 и решение system-architect#1) · 2026-09-13
+
+Подробности — карточка `tasks/T-448.md`, «Выполнение» → «Итерация 2». Не закоммичено.
+- **Ma-1 и решение п. 1.** Граница перенесена на `|x| ≤ 2^53−1`: `maxSafeInteger = 1<<53 - 1`, отказ при `|x| ≥ 2^53`. Причина: предложение приходит в State уже во `float64`, и 2^53+1 неотличимо от 2^53. Тесты:
+  - `±(2^53−1)` проходят;
+  - `±2^53`, `float64(2^53)`, `json.Number("9007199254740992")`, `inc` с результатом 2^53 и литерал 9007199254740993 после JSON отвергаются;
+  - двойник: payload с `2^53+1` проходит JSON туда-обратно, `invalid_op` (`TestNumberPastTwoToTheFiftyThirdIsInvalidOp`); `-(2^53−1)` применяется.
+- **Mi-1.** Именованные векторы: `TestChangedReportsTheAncestorAProposalCreated` (с проверкой порядка «предок после путей», R2-Mi-2 ревью T-449), `TestCatchingUpAppendsWithoutDeduplication`, `TestCatchingUpSkipsAPathAnEarlierEntryAlreadyRemoved`. Мутант «догон через `op: append`» убивает только именованный вектор, генератор его не видит.
+- **Mi-2, N-1, N-2, N-3.**
+  - Наличие решают только `HasOld`/`HasNew`: `OldPresent`/`NewPresent` удалены. `MarshalJSON` возвращает ошибку, если нет ни одного флага или значение не `nil` при опущенном флаге.
+  - `UnmarshalJSON` на `null` ничего не делает.
+  - Текущее значение `inc` за пределом получает причину `ReasonCurrentRange`.
+  - Правило догона: `null` по пути списка — отсутствующий список; `a[n]` за концом — повреждённый факт. Помощник `catchUp` возвращает `errCorruptFact`, `replayChanged` роняет тест, закреплено `TestCatchingUpRefusesAnElementPastTheEndOfItsList`.
+- **Решение пп. 2–6.**
+  - КД: §4.8 (замена узла объектом, `a[n]` за концом → `state_divergence`), §4.5 п. 1 и §9 (без `proposal_id` — `Warn` и пропуск), §4.5 (создание: `attributes` через `JSONCompatible`, `proposal_id` в факте), §3.2, §8, §14.
+  - Схема `entity.created`: `proposal_id` в `required`.
+  - `entity.JSONCompatible` экспортирована, `applyCreate` двойника проверяет `attributes` → `invalid_op`.
+  - Строка для EPIC-003/004 о числах строкой.
+  - README `shared/entity` и README фикстур, текст v1.6 в карточке (N-3; правило порядка с пометкой R2-Mi-2).
+- **Вне зоны.** Одна строка теста EPIC-003: `shared/testkit/swarm/fake_narrator_test.go`, помощник `created()` получил `proposal_id`. Без неё `TestTheNarratorWorksOffTheBusToo` падал на новой схеме `entity.created`. Вынесено оркестратору.
+- **Мутанты** (копия `t448i2-mut` в scratch, без `-overlay`, удалена по точному пути):
+  - K0 (контрольный) — красный;
+  - K1, K1s, K1f, K2, K3, K3n, K4, K5, K5b, K5c, K6, K7, K7b, K8b, K9, K10, K11, K12 — красные;
+  - K8 не собрался и заменён K8b.
+- **Прогоны:**
+  - `go build ./... && go vet ./...` — 0;
+  - `gofmt -l` — пусто;
+  - `mvctl contracts check` — 0;
+  - `go test -short -count=1 ./...` — 0;
+  - `go test -tags e2e ./test/e2e/...` — ok;
+  - `golangci-lint run ./...` — 0 issues;
+  - `make test` (Git Bash) — 0; покрытие `shared/entity` 93,9 %, `shared/testkit/state` 89,0 %, gate `internal/mechanics` 94,9 %;
+  - `-race` недоступен.
+  - Docker, стенд, `.env`, интеграционные тесты не трогались.

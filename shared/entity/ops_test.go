@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,8 +95,8 @@ func TestApplySet(t *testing.T) {
 		t.Fatalf("banner.colour = %q, %v; want green: set creates intermediate maps", nested, ok)
 	}
 	want := []entity.Change{
-		{Path: entity.AttrPosition, Old: "outside:dark-forest-world", New: "dark-forest-01"},
-		{Path: "banner.colour", Old: nil, New: "green"},
+		{Path: entity.AttrPosition, Old: "outside:dark-forest-world", New: "dark-forest-01", HasOld: true, HasNew: true},
+		{Path: "banner.colour", New: "green", HasNew: true},
 	}
 	if !reflect.DeepEqual(changed, want) {
 		t.Fatalf("changed = %+v, want %+v", changed, want)
@@ -173,8 +176,8 @@ func TestApplyIncOnAMissingPathStartsAtZero(t *testing.T) {
 	if !reflect.DeepEqual(attrs["kills"], int64(1)) {
 		t.Fatalf("kills = %#v, want 1", attrs["kills"])
 	}
-	if len(changed) != 1 || changed[0].Old != nil {
-		t.Fatalf("changed = %+v, want one entry with a null old", changed)
+	if len(changed) != 1 || changed[0].HasOld || !changed[0].HasNew {
+		t.Fatalf("changed = %+v, want one entry with no old and a new", changed)
 	}
 }
 
@@ -202,8 +205,8 @@ func TestApplyAppend(t *testing.T) {
 	if len(changed) != 1 || changed[0].Path != "inventory[0]" {
 		t.Fatalf("changed = %+v, want the path of the element (C-02 v1.1)", changed)
 	}
-	if changed[0].Old != nil {
-		t.Fatalf("changed[0].Old = %v, want null: the element did not exist", changed[0].Old)
+	if changed[0].HasOld || !changed[0].HasNew {
+		t.Fatalf("changed[0] = %+v, want no old: the element did not exist (C-02 v1.6)", changed[0])
 	}
 }
 
@@ -299,8 +302,8 @@ func TestApplyRemoveWithoutAValueDropsTheKey(t *testing.T) {
 	if _, present := attrs[entity.AttrEncounterID]; present {
 		t.Fatalf("attributes = %+v, want encounter_id gone", attrs)
 	}
-	if len(changed) != 1 || changed[0].Old != "enc-1" || changed[0].New != nil {
-		t.Fatalf("changed = %+v, want enc-1 -> null", changed)
+	if len(changed) != 1 || changed[0].Old != "enc-1" || !changed[0].HasOld || changed[0].HasNew {
+		t.Fatalf("changed = %+v, want old enc-1 and no new (C-02 v1.6)", changed)
 	}
 }
 
@@ -716,9 +719,13 @@ func TestChangedListAndStateHashMoveTogether(t *testing.T) {
 			after := entity.Clone(e)
 			after.Attributes = attrs
 
-			hashMoved := entity.StateHash([]*entity.Entity{after}) != before
+			hashAfter := entity.StateHash([]*entity.Entity{after})
+			hashMoved := hashAfter != before
 			if hashMoved != (len(changed) > 0) {
 				t.Fatalf("state hash moved = %v, changed = %+v; want the two to agree", hashMoved, changed)
+			}
+			if replayChanged(t, e, changed) != hashAfter {
+				t.Fatalf("catching up on changed = %+v does not reproduce the state (C-02 v1.6)", changed)
 			}
 		})
 	}
@@ -805,24 +812,116 @@ func TestApplyRemoveByIndexReportsTheList(t *testing.T) {
 	}
 }
 
-// replayChanged is the read-model of C-02: it writes every new value at its
-// path and drops what became null, and hashes what it ends up with. The version
-// is carried over so that the hash answers for the attributes alone.
+// replayChanged is the read-model of C-02 v1.6, the rule State catches up by
+// (state-and-mechanics.md §4.8). changed[] first travels over the wire, so that
+// what is replayed is what a consumer reads, and a fact the rule calls corrupt
+// fails the test instead of being written somehow.
 func replayChanged(t *testing.T, base *entity.Entity, changed []entity.Change) string {
 	t.Helper()
+	hash, err := catchUp(base, overTheWire(t, changed))
+	if err != nil {
+		t.Fatalf("catching up on %+v: %v", changed, err)
+	}
+	return hash
+}
+
+// errCorruptFact is an entry of changed[] that no fact of State carries: State
+// meeting one while catching up stops the world with state_divergence (§4.8).
+var errCorruptFact = errors.New("corrupt fact")
+
+// catchUp applies changed[] entry by entry: new present is written at its path,
+// replacing a missing or scalar node on the way with an object, as set does,
+// and appended when the path is the element one past the end of its list; new
+// absent deletes the path. The version is carried over so that the hash answers for the
+// attributes alone.
+//
+// The append of catching up is a plain append, not the op: the fact already
+// carries the outcome of deduplication, and an element that shares an item_id
+// with another one — a set after the append made it so — is still an element.
+// And the delete of catching up deletes what is there: an earlier entry may
+// already have written the container without the path (inventory[0] = {}
+// before inventory[0].kind with no new), and that is the state asked for.
+func catchUp(base *entity.Entity, changed []entity.Change) (string, error) {
 	out := entity.Clone(base)
 	for _, change := range changed {
-		op := entity.Op{Op: entity.OpSet, Path: change.Path, Value: change.New}
-		if change.New == nil {
-			op = entity.Op{Op: entity.OpRemove, Path: change.Path}
-		}
-		attrs, _, err := entity.ApplyOps(out, []entity.Op{op})
+		op, err := catchUpOp(out.Attributes, change)
 		if err != nil {
-			t.Fatalf("replaying %+v: %v", change, err)
+			return "", err
+		}
+		if op == nil {
+			continue
+		}
+		attrs, _, err := entity.ApplyOps(out, []entity.Op{*op})
+		if err != nil {
+			return "", fmt.Errorf("replaying %+v: %w", change, err)
 		}
 		out.Attributes = attrs
 	}
-	return entity.StateHash([]*entity.Entity{out})
+	return entity.StateHash([]*entity.Entity{out}), nil
+}
+
+// catchUpOp is the operation one entry of changed[] comes down to, or nil when
+// there is nothing to do.
+func catchUpOp(attrs map[string]any, change entity.Change) (*entity.Op, error) {
+	if !change.HasNew {
+		if _, exists := jsonpath.New(attrs).GetAny(change.Path); !exists {
+			return nil, nil
+		}
+		return &entity.Op{Op: entity.OpRemove, Path: change.Path}, nil
+	}
+	set := &entity.Op{Op: entity.OpSet, Path: change.Path, Value: change.New}
+	parent, n, isElement := elementPath(change.Path)
+	if !isElement {
+		return set, nil
+	}
+	current, _ := jsonpath.New(attrs).GetAny(parent)
+	var list []any
+	switch held := current.(type) {
+	case nil:
+		// A list that is not there and a null where it would be are the same
+		// absent list: the append that creates a list takes either.
+	case []any:
+		list = held
+	default:
+		// An index into something that is not a list: set refuses it.
+		return set, nil
+	}
+	switch {
+	case n < len(list):
+		return set, nil
+	case n == len(list):
+		return &entity.Op{Op: entity.OpSet, Path: parent, Value: append(slices.Clone(list), change.New)}, nil
+	default:
+		return nil, fmt.Errorf("%w: %s past the end of a list of %d", errCorruptFact, change.Path, len(list))
+	}
+}
+
+// elementPath answers whether path is an element a[n] and names a and n.
+func elementPath(path string) (string, int, bool) {
+	open := strings.LastIndexByte(path, '[')
+	if open <= 0 || !strings.HasSuffix(path, "]") {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(path[open+1 : len(path)-1])
+	if err != nil {
+		return "", 0, false
+	}
+	return path[:open], n, true
+}
+
+// overTheWire is changed[] as a consumer of entity.updated holds it: encoded by
+// the publisher and decoded on the other side.
+func overTheWire(t *testing.T, changed []entity.Change) []entity.Change {
+	t.Helper()
+	encoded, err := json.Marshal(changed)
+	if err != nil {
+		t.Fatalf("marshal changed: %v", err)
+	}
+	var decoded []entity.Change
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal changed %s: %v", encoded, err)
+	}
+	return decoded
 }
 
 // Mi-1. An append undone by a remove in the same proposal is not a change: the
@@ -1034,8 +1133,8 @@ func TestApplyRemoveOfAKeyInsideAListElement(t *testing.T) {
 	if element, ok := list[0].(map[string]any); !ok || len(element) != 1 {
 		t.Fatalf("participants[0] = %#v, want only player_id left", list[0])
 	}
-	if len(changed) != 1 || changed[0].Path != "participants[0].last_hit_at" || changed[0].New != nil {
-		t.Fatalf("changed = %+v, want the removed key with a null new", changed)
+	if len(changed) != 1 || changed[0].Path != "participants[0].last_hit_at" || changed[0].HasNew {
+		t.Fatalf("changed = %+v, want the removed key with no new", changed)
 	}
 
 	applied := entity.Clone(e)
