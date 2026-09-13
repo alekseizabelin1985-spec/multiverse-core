@@ -22,6 +22,9 @@ import (
 	"multiverse-core.io/internal/gateway/store"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/eventbus/membus"
+	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
@@ -47,6 +50,7 @@ type running struct {
 	clock  *clock.Manual
 	client *client.Client
 	dir    string
+	bus    *membus.Bus
 }
 
 // start runs the context the way serve does: Routes on the mux, Start, and
@@ -59,14 +63,65 @@ func start(t *testing.T, mode runtime.Mode) running {
 // startIn is start on a data directory the test prepared.
 func startIn(t *testing.T, mode runtime.Mode, dir string) running {
 	t.Helper()
-	c := gateway.New(env.MapSource(map[string]string{
-		env.GatewayDataDir.Name(): dir,
-	}))
+	return startWith(t, mode, dir, nil)
+}
+
+// startWith is startIn with the object store the projection is loaded from;
+// nil is no store, the process on the memory bus.
+func startWith(t *testing.T, mode runtime.Mode, dir string, objects objstore.Client) running {
+	t.Helper()
+	return startOpts(t, mode, dir, options{objects: objects})
+}
+
+// options vary what a context under test is built with.
+type options struct {
+	// objects is the object store the projection is loaded from; nil builds
+	// the client from the variables.
+	objects objstore.Client
+	// vars are added to the source of the context.
+	vars map[string]string
+	// bus and journal stand in front of membus when set.
+	bus     func(*membus.Bus) eventbus.Bus
+	journal func(*membus.Bus) eventbus.Journal
+	// budget shortens both budgets of the start when set.
+	budget time.Duration
+}
+
+// build makes the context and its dependencies without starting it.
+func build(t *testing.T, mode runtime.Mode, dir string, o options) (running, *http.ServeMux, runtime.Deps) {
+	t.Helper()
+	vars := map[string]string{env.GatewayDataDir.Name(): dir}
+	for name, value := range o.vars {
+		vars[name] = value
+	}
+	c := gateway.New(env.MapSource(vars))
+	if o.objects != nil {
+		gateway.SetObjectStore(c, o.objects)
+	}
+	if o.budget > 0 {
+		gateway.SetStartBudgets(c, o.budget, o.budget)
+	}
 	manual := clock.NewManual(t0)
 	mux := http.NewServeMux()
 	c.Routes(mux)
+	bus := newBus(t)
 	deps := runtime.Deps{Clock: manual, Timers: manual.Timers(), IDs: sequence(), Mode: mode,
-		Log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+		Bus: bus, Journal: bus, Log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	if o.bus != nil {
+		deps.Bus = o.bus(bus)
+	}
+	if o.journal != nil {
+		deps.Journal = o.journal(bus)
+	}
+	return running{ctx: c, clock: manual, dir: dir, bus: bus}, mux, deps
+}
+
+// startOpts starts the context build made, the way serve does: Routes on the
+// mux, Start, and only then the server.
+func startOpts(t *testing.T, mode runtime.Mode, dir string, o options) running {
+	t.Helper()
+	r, mux, deps := build(t, mode, dir, o)
+	c := r.ctx
 	if err := c.Start(context.Background(), deps); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -74,9 +129,9 @@ func startIn(t *testing.T, mode runtime.Mode, dir string) running {
 	t.Cleanup(func() { _ = c.Stop(context.Background()) })
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	cl := client.New(srv.URL, "telegram-bot")
-	cl.Backoff = client.NoRetry
-	return running{ctx: c, clock: manual, client: cl, dir: dir}
+	r.client = client.New(srv.URL, "telegram-bot")
+	r.client.Backoff = client.NoRetry
+	return r
 }
 
 // The links routes answer through the real middleware, store and files.
@@ -225,7 +280,9 @@ func TestStopAtAnExpiredDeadlineClosesTheDatabases(t *testing.T) {
 
 func TestStartRefusesWhatItCannotRunWith(t *testing.T) {
 	manual := clock.NewManual(t0)
-	deps := runtime.Deps{Clock: manual, Timers: manual.Timers(), IDs: sequence(), Log: slog.New(slog.DiscardHandler)}
+	bus := newBus(t)
+	deps := runtime.Deps{Clock: manual, Timers: manual.Timers(), IDs: sequence(), Log: slog.New(slog.DiscardHandler),
+		Bus: bus, Journal: bus}
 
 	empty := gateway.New(env.MapSource(map[string]string{env.GatewayDataDir.Name(): ""}))
 	// An empty value falls back to the default of the manifest, so the refusal
@@ -243,6 +300,11 @@ func TestStartRefusesWhatItCannotRunWith(t *testing.T) {
 	noIDs.IDs = nil
 	if err := empty.Start(context.Background(), noIDs); err == nil {
 		t.Error("Start succeeded without Deps.IDs")
+	}
+	noBus := deps
+	noBus.Bus, noBus.Journal = nil, nil
+	if err := empty.Start(context.Background(), noBus); err == nil {
+		t.Error("Start succeeded without Deps.Bus and Deps.Journal")
 	}
 	if h := empty.Health(); h.Status != runtime.StatusFail {
 		t.Errorf("Health of a context that did not start = %+v, want fail", h)

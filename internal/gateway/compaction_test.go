@@ -325,8 +325,9 @@ func TestStartNamesTheDataDirectoryVariableWhenItCannotOpen(t *testing.T) {
 	}
 	manual := clock.NewManual(t0)
 	c := gateway.New(env.MapSource(map[string]string{env.GatewayDataDir.Name(): file}))
+	bus := newBus(t)
 	err := c.Start(context.Background(), runtime.Deps{Clock: manual, Timers: manual.Timers(), IDs: sequence(),
-		Log: slog.New(slog.DiscardHandler)})
+		Bus: bus, Journal: bus, Log: slog.New(slog.DiscardHandler)})
 	if err == nil {
 		_ = c.Stop(context.Background())
 		t.Fatal("Start succeeded on a data directory that is a file")
