@@ -8479,3 +8479,60 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - По ходу: гонка портов между параллельными сценариями (закрытый «мёртвый» порт B07 стал портом двойника B08) — `stand.freePort` с реестром портов прогона.
 - `make scripts-parity` ×2 rc=0 (95 PASS + 2 KNOWN, K01 10/16 + 6 UNCOVERED, K02 7/7, порты 34/34); `make parity-mutants` rc=0 (M00 убит, M01 зелёный, M02–M17 убиты); `go vet`/`gofmt` стенда чисто; слушатели до и после совпали.
 - Nit N-1…N-3 и предложения ревьюера — в бэклоге T-405 `tasks.md`. Скрипты не менялись. Стенд `:8888` не трогался, `.env` не открывался. Не коммитил.
+<!-- dev-log T-445 -->
+## developer#3 · T-445 · ревизия контрактов 4: линтер, реестр, схемы · 2026-09-13
+
+Ветка `task/T-445-depguard-registry-schemas`, TEAM-1, Opus. Подробности — карточка `tasks/T-445.md`, раздел «Выполнение». Метка `contract-change`. Закрывает Ma-1 ревью T-215.
+- **depguard** (`.golangci.yml`):
+  - 1c: `internal-swarm` плюс `llm/prompt$`, `llm/guardian$`; тесты роя — отдельное правило `internal-swarm-tests` с `llm/providers/fake$`. `internal-memory` сужено до `providers$`, `fake$` — в `internal-memory-tests`.
+  - 1d: `shared-testkit-swarm` плюс `swarm/template$`; листовое `internal-swarm-template`.
+  - 1e: `shared-testkit-gateway` (`client$`, `api$`) и исключение в `shared`; листовое `internal-gateway-client`; `gatewaytest` запрещён в `no-testkit-in-production`; исключение `_test.go` расширено.
+- **Схемы.**
+  - Хеши `^sha256:[0-9a-f]{64}$`.
+  - `llm.output` — `allOf` из шести `if/then` по таблице C-07 v1.3.
+  - `llm.output.rejected` — `budget_exceeded` / прочие (`then`/`else`) и `unknown_entity` (`element` + `oneOf[entity, background_ref]`).
+  - `$defs.EventRef` в `_common.json`, новое поле `background_ref` использует его.
+- **Реестр**: `gm.created` — издатели `legacy`, `core/gateway` (`legacyEvent(typ, topic, publishers...)`).
+- **Тесты.**
+  - Новый `llmrecord_test.go`: таблица статусов, таблица причин, форма хешей по 4 полям.
+  - `TestLegacyPublishers`.
+  - `blockv_test.go`: хеши, `filter` у примера, полные записи в отказах; `TestQuarantinedRecordKeepsNoText` перенесён в таблицу.
+  - Фикстуры `agent.*`, `llm.output*`, README.
+- **Решения по ходу и отклонения.**
+  - Шаблон `**/internal/swarm/**/*_test.go` из решения не покрывает тесты в корне `internal/swarm` (мутант D1). Записан `**/internal/swarm/**_test.go` — смысл тот же.
+  - Листовые правила разрешают сам пакет — для внешних тестов.
+  - «Одно из двух» реализовано как `oneOf`.
+  - Невалидная фикстура `llm.output.rejected` ломает теперь условие `budget_exceeded` + `llm_output`: прежняя нарушала бы два правила. Словарь держит случай «budget used as a reason».
+- **Открытый вопрос** к system-architect: расширенное исключение `_test.go` скрывает находки любого правила по `gatewaytest` в тестах. Тест роя с `gatewaytest` зелёный (L16), под HEAD был красным. Варианты (а/б/в) — в карточке.
+- **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути; контрольные первыми):
+  - depguard: M0 контрольный, L1–L15 красные, каждый своим правилом; законные импорты P1–P8 зелёные; сравнение с конфигом HEAD;
+  - схемы и реестр: S0 контрольный, S1–S27 красные.
+- **Прогоны.**
+  - `go build ./... && go vet ./...` — 0; `gofmt` — пусто.
+  - `mvctl contracts check` — 65 типов, 58 схем, код 0.
+  - `go test -short -count=1 ./...` — 27 ok.
+  - `golangci-lint run ./...` и `--build-tags integration` — 0 issues.
+  - `make contracts` — 0.
+  - `gitleaks dir` по 16 файлам — чисто.
+  - `mvctl privacy scan testdata/` — чисто.
+- Docker и стенд `:8888` не трогались, `.env` не открывался. Не коммитил, `git add` не делал.
+<!-- dev-log T-445 iteration 2 -->
+## developer#3 · T-445 · итерация 2 по ревью #1 · 2026-09-13
+
+Ветка `task/T-445-depguard-registry-schemas`, TEAM-1, Opus. Ревью #1 вернуло задачу (0/1/2/1); по открытому вопросу system-architect выбрал (б). Подробности — карточка `tasks/T-445.md`, «Итерация 2».
+- **Ma-1.** Новое исключение `_test.go`: `^import 'multiverse-core[.]io/(shared/testkit(/[^']*)?|internal/gateway/gatewaytest)' is not allowed from list 'no-testkit-in-production'`.
+  - Снимается только запрет `no-testkit-in-production`; правила контекстов и `shared` в тестах действуют.
+  - `gatewaytest` закрыт кавычкой: строка ревьюера пропускала `gatewaytestx` через исключение (H3).
+- **Mi-1.** Запрет `gatewaytest` добавлен в `cmd-multiverse-fake-contexts`.
+- **Mi-2.** Собственный пакет в десяти правилах `internal-*` записан как `<ctx>$` + `<ctx>/`. Добавлен комментарий: depguard сравнивает импорт с ближайшей записью списка.
+- **N-1.** Комментарии `const` и `blockVExamples` в `blockv_test.go` разделены; непроверяемый довод о копировании хеша убран.
+- **Мутанты** (новая копия в scratch, без `-overlay`, удалена по точному пути):
+  - M0 (контрольный) — красный;
+  - красные: A1 (L16), A2, A3, A4, A9, A10, A11, C1;
+  - зелёные: A5, A6, A7, A8;
+  - B1–B18: `<ctx>x` красные во всех изменённых правилах, законные подпакеты зелёные;
+  - H1–H3 показывают дыру прежнего текста и строки ревьюера;
+  - depguard по всей копии без мутантов — 0 issues.
+- **Прогоны:** `go build`/`go vet` — 0; `contracts check` — код 0; `go test -short -count=1 ./...` — 27 ok; `golangci-lint run ./...` и `--build-tags integration` — 0 issues; `make contracts` — 0; `gitleaks dir` — чисто.
+- В бэклог раздела T-445 записаны три пункта ревьюера и следствие варианта (б) для EPIC-004/T-308.
+- Не коммитил, `git add` не делал.
