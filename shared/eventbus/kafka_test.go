@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"testing"
 	"time"
 )
@@ -100,7 +102,12 @@ func TestStoppedTellsAShutdownFromAFailure(t *testing.T) {
 		"cancelled context": {cancelled: true, err: errHandler, want: true},
 		"closed reader":     {err: io.EOF, want: true},
 		"broken pipe":       {err: io.ErrClosedPipe, want: true},
-		"real failure":      {err: errHandler, want: false},
+		"closed bus":        {err: ErrClosed, want: true},
+		"closed bus, wrapped by the dead letter": {
+			err:  fmt.Errorf("eventbus: write dead letter for x: %w (cause: %v)", fmt.Errorf("eventbus: write to %s: %w", TopicDeadLetters, ErrClosed), errHandler),
+			want: true,
+		},
+		"real failure": {err: errHandler, want: false},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -113,6 +120,64 @@ func TestStoppedTellsAShutdownFromAFailure(t *testing.T) {
 				t.Errorf("stopped = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The window of T-443. Close sets closed under mu first and cancels the loop of
+// a subscription only afterwards: stopReaders runs after the lock is released,
+// and the cancel it triggers runs in the goroutine of context.AfterFunc. A
+// handler that fails its last attempt inside that window has its dead letter
+// refused with ErrClosed while loopCtx is still alive, and Subscribe used to
+// return "write dead letter … bus is closed" instead of the nil C-01 v1.2
+// promises for Close — with a Warn bus_closed=true in the log that already
+// called it an orderly stop.
+//
+// The window is built here by hand, without a broker: loopCtx exactly as
+// Subscribe derives it, then the first half of Close. What Subscribe does with
+// the error is the stopped call below; Tail and ReadRange make the same call
+// with the context of their caller.
+func TestADeadLetterRefusedInsideCloseIsAnOrderlyStop(t *testing.T) {
+	deterministicSources(t)
+	bus := newTestBus(t)
+	logs := &recordingLog{}
+	bus.log = slog.New(logs)
+	bus.backoff = noPause
+
+	loopCtx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	stopWatchingClose := context.AfterFunc(bus.closing, cancel)
+	defer stopWatchingClose()
+
+	bus.mu.Lock()
+	bus.closed = true
+	bus.mu.Unlock()
+	// Close returns early on a bus already marked closed, so the cleanup of
+	// newTestBus no longer releases closing.
+	t.Cleanup(bus.stopReaders)
+
+	body, err := json.Marshal(validEvent(t))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	err = bus.deliver(t.Context(), bus.delivery("core.state"), Position{Topic: TopicPlayerEvents, Offset: 7}, body,
+		func(context.Context, Event) error { return errHandler })
+
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("deliver = %v, want the dead letter refused with ErrClosed", err)
+	}
+	if loopCtx.Err() != nil {
+		t.Fatalf("loopCtx = %v, want it alive: the window is not reproduced", loopCtx.Err())
+	}
+	if !stopped(loopCtx, err) {
+		t.Errorf("stopped(alive loopCtx, %q) = false: Subscribe returns the error instead of nil when Close comes between the flag and the cancellation", err)
+	}
+	records := logs.all()
+	if len(records) != 1 {
+		t.Fatalf("%d log records, want 1: %v", len(records), messagesOf(records))
+	}
+	if rec := records[0]; rec.Level != slog.LevelWarn || attrsOf(rec)["bus_closed"] != "true" {
+		t.Errorf("log = %s %q bus_closed=%q, want WARN with bus_closed=true: the log and the return must agree that this is a stop",
+			rec.Level, rec.Message, attrsOf(rec)["bus_closed"])
 	}
 }
 
