@@ -2019,3 +2019,76 @@ id выводится из причины. «От факта» я прочита
   `TestTheOtherRefusalsOfTheFakeNameTheFlag` — PASS.
 - `golangci-lint run ./...` — 0 issues.
 - Дифф итерации: `fake_encounter.go` +28/−3, `fake_encounter_lifecycle_test.go` +57.
+
+---
+
+<!-- dev-log T-206 -->
+## developer#2 · T-206 · B1 «Типы шлюза, конфигурация, реестр провайдеров, таблица цен» · 2026-09-13
+
+Ветка `task/T-206-llm-gateway-types` (от `epic/EPIC-003-swarm-llm-laws`, `1c2ee7e`), папка
+`.worktrees/T-206`. Коммитов нет, по промпту они запрещены. Подробности, таблица DoD и мутанты —
+в карточке `tasks/T-206.md`.
+
+**Что сделано.** `internal/llm/types.go`: `Provider` и `Request`/`Response`/`Params`/`Tokens`
+по C-15 v1.1, `Status` с `degraded(model_not_resident)`, `Phase`, `ValidationStatus` (6 значений),
+`Rejection`, `Call`, `Result`, `Gateway`, ошибки `Err*`. `internal/llm/config.go`: `LoadConfig`
+через объявления `shared/env`; `MV_LLM_URL` обязателен для `openai_compat`/`anthropic`, хвост
+`/v1` отбрасывается; `MV_OLLAMA_URL` читается только при `ollama`; `openai`/`deepseek` получают
+отдельное сообщение. Там же `IsLocalEndpoint`, `EndpointHost`, `Config.CheckCloudGate` и `Secret`
+для ключа. `internal/llm/prices.go` и `config/llm-prices.yaml`: цены по
+`(endpoint_host, model)`; локальный хост стоит 0, платный локальный хост — ошибка загрузки;
+неизвестная облачная пара — `ErrNoPrice`. `internal/llm/providers/registry.go`: `Register`/`New`/`Names`,
+гейт облака до фабрики. В `shared/env/vars.go` и `.env.example` добавлены
+`MV_LLM_TIMEOUT_{NARRATIVE,TICK,DECISION,DEGRADED}` и `MV_LLM_PRICES`.
+
+**Решения по ходу.**
+- Поля `Call.Prompt` (`prompt.Sections`) и `Call.Guard` (`guardian.Input`) не добавлены, пакеты
+  `prompt`/`guardian` не созданы. План связывает их с T-212 (зависит от T-218) и T-213 (зависит
+  от T-217). По уточнению оркестратора пакет `guardian` в T-206 создаётся, только если этого
+  требует план, — не требует. `Call.Schema` — строка.
+- Словаря причин в корне нет: `Rejection.Reason string`. Словарь по плану — `guardian/reasons.go`,
+  и тест `test/fixtures` уже сверяет его со схемой.
+- Гейт по адресу выбранного провайдера, проверка в `providers.New`. Имя хоста не резолвится,
+  всё вне loopback / `host.docker.internal` / RFC 1918 считается облаком.
+- URL с `user:pass@`, query или fragment отвергается; ошибки называют только хост.
+
+**Как тестировал.** Unit-тесты на все пункты DoD. 23 мутанта в копии дерева в scratch, без
+`-overlay`: контрольный первым, красный; все 22 смысловых красные. Копия удалена по точному пути.
+`go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — ok;
+`golangci-lint run ./...` — 0 issues; `mvctl env check` — 72 переменные, 0 проблем;
+`mvctl contracts check` — ok; `make test` — exit 0, покрытие `internal/llm` 99.2 %.
+
+**Открытые вопросы** — в отчёте оркестратору. Среди них: гейт и compose-имя `http://ollama:11434`;
+цикл импорта `llm` ↔ `guardian` для `Rejection`/`Verdict` в T-217.
+
+<!-- dev-log T-206 итерация 2 -->
+### developer#2 · T-206 · итерация 2 (по ревью #1) · 2026-09-13
+
+Ревью #1 — «принять», 6 Minor, 5 Nit. По решению оркестратора исправлены Mi-1, Mi-2, Mi-3, Mi-5
+и N-1…N-5. Mi-4 (одно правило «локальный адрес» для Go/sh/ps1/compose-lint) и Mi-6 (типы стража,
+цикл `llm` ↔ `guardian`) отданы system-architect и записаны в бэклог карточки вместе
+с предложениями ревьюера 2–5. Ответ по каждому пункту и мутанты — в карточке, раздел «Итерация 2».
+
+**Главное решение по ходу.** Mi-1 одними методами не закрывался. `Format`, `MarshalText` и
+`MarshalYAML` добавлены, но новый тест (9 форм значения × 27 глаголов fmt, yaml, json, slog)
+показал ещё одну утечку: `%p`/`%w` на ключе и неподходящие глаголы на `*Config` и вложенных
+структурах. Отчёт fmt `%!p(…)` печатает значение рефлексией с выключенными методами. Поэтому
+`Secret` хранит значение за указателем (`struct{ v *string }`, `NewSecret`, `IsSet`, `Reveal`):
+рефлексия печатает указатель адресом и не разыменовывает его. Мутант «снова строковое поле» тест ловит.
+
+**Остальное.**
+- Гейт проверяет адрес по тем же правилам, что `LoadConfig` (`parseEndpoint`), и требует его
+  у провайдеров с адресом — также для `Config`, собранной вручную.
+- Любой `?`/`#` — отказ. Порт в 1–65535; loopback/`localhost`/`host.docker.internal`/`0.0.0.0` без
+  порта — отказ, как у `llm-endpoint.sh`. Правило «локальный» для гейта не менялось (Mi-4).
+- Хост в канонической форме (`canonicalHost`) для гейта, таблицы цен и `Cost`. `Cost` принимает
+  authority URL. Второй YAML-документ — отказ.
+
+**Как тестировал.** 18 мутантов итерации в копии дерева в scratch, без `-overlay`: контрольный
+первым, красный; все 17 смысловых красные. I1 в первом прогоне выжил (после перехода на указатель
+`%d` уже не печатает ключ), добавлена явная проверка плейсхолдера. I13 в первой форме не собрался
+и не засчитан. Копия удалена по точному пути. `go build ./... && go vet ./...` — 0;
+`go test -short -count=1 ./internal/llm/... ./shared/env/...` — ok, покрытие `llm` 99.6 %;
+`golangci-lint run ./...` — 0 issues; `mvctl env check` — 72, 0 проблем; `make test` — exit 0;
+`gitleaks dir` по изменённым файлам — no leaks. Единственная находка без конфигурации проекта —
+пустая строка `MV_LLM_API_KEY=` в `.env.example`: была до задачи, файл исключён `.gitleaks.toml`.
