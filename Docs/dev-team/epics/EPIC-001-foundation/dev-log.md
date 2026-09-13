@@ -8267,3 +8267,25 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - Проверка: подставной сервер в scratch (`127.0.0.1:18934`, `/health` → 404, id модели — путь Windows, переключаемые код прогрева, `/props` и `predicted_ms`), 4 сценария × 2 реализации, выход только в scratch. Утверждения DoD проверяет скрипт: 8 из 8 зелёных. CSV двух реализаций совпадают после маскирования латентностей и отметки времени. Прогрев без сервера — 4 id, включая кавычку в id и хвостовой обратный слеш.
 - Мутанты m1–m7 убиты, контроль m0 красный, тождественный m9 чист. m8 (снятие строки инвариантной культуры) выживает по построению: CSV и таблицу защищает `Format-BenchNumber`, который называет культуру сам, — объяснение и решение в карточке.
 - `bash -n scripts/llm-bench.sh` и парсер PowerShell чисты. Стенд владельца (`:8888`) не трогался — ни одного запроса, `make llm-*` не запускался, `.env` не открывался. Каталог scratch удалён по сохранённому пути. Не коммитил. Карточка — `tasks/T-434.md`.
+
+<!-- dev-log T-398 -->
+## tech-writer#1 · T-398 · раскол `docs/`/`Docs/` сведён, 10 устаревших файлов-инструкций — в `Docs/archive/` · 2026-09-13
+
+Ветка `task/T-398-docs-case-split`, TEAM-1, Sonnet. Подробности и таблица «файл → куда → почему» — карточка `tasks/T-398.md`, раздел «Выполнение».
+
+- **Сделано.** Все 6 файлов под строчным `docs/` (`FEATURES_VERIFICATION.md`, `LIVING_WORLDS_ARCHITECTURE.md`, `LIVING_WORLDS_FEATURE_CHECKLIST.md`, `LIVING_WORLDS_INTEGRATION_GUIDE.md`, `LIVING_WORLDS_QUICK_START.md`, `LIVING_WORLDS_SUMMARY.md`) и 4 корневых файла-инструкции (`QWEN.md`, `AI_AGENT_INSTRUCTIONS.md`, `README_LIVING_WORLDS.md`, `AUTOMATION-SETUP.md`) перенесены `git mv` в уже существующий `Docs/archive/` (создан T-002). Прочитан каждый файл целиком: все десять — либо дизайн отклонённой архитектуры «Entity-Actor» (Go 1.22, Redis, ChromaDB, нейросетевые веса как состояние), либо прежняя картина проекта/процесса (QWEN.md, AI_AGENT_INSTRUCTIONS.md, AUTOMATION-SETUP.md) — ничего верного для выноса отдельной ссылкой в текущий `Docs/` не нашлось.
+- **Проверки.** `git ls-files | grep '^docs/'` — пусто; `git status --porcelain` — все 10 строк `R` (rename), не удаление+добавление; двухшаговый приём через промежуточное имя не понадобился (путь меняется не только регистром, но и подкаталогом).
+- **`Docs/archive/README.md`.** Таблица «Перенесённые документы» заполнена (была пустая заглушка от T-002/T-019), причина и замена — по каждому файлу. Из списка «Кандидаты на перенос» убраны шесть пунктов, вошедших в T-398; `Docs/architecture*.md`, `Docs/EVENTS-MIGRATION.md`, `PULL_REQUEST.md`, `memory/**`/`plans/**`/`reports/**` — вне охвата T-398, остались кандидатами для отдельной задачи.
+- **Живые ссылки.** Грэп по `README.md`, `CLAUDE.md`, `Makefile`, `.github/`, `scripts/`, конфигурации линтеров/gitleaks на имена всех 10 файлов — пусто. Три места с упоминанием намеренно не тронуты: плановая таблица `architecture/components/foundation.md:330` (решение по ней уже исполнено этой задачей, переписывать план прошлой волны — стирать историю); датированные записи аудита `requirements/inventory.md`, `project/open-questions.md` (та же логика, что для журнала/дев-лога/ревью); `services/entity-actor/docs/technical-spec.md:745` — сервис заморожен, содержимое не правится ни при каких обстоятельствах.
+- **Не в моей власти.** `.claude/plugins/multiverse-core-plugins/README.md` ссылается на `AUTOMATION-SETUP.md`, `.qwen/PROJECT_SUMMARY.md` — на `QWEN.md`/`README_LIVING_WORLDS.md`; оба пути — под `.claude/*`/`.qwen/*`, условия задачи запрещают их трогать. Ссылки становятся битыми — риск в отчёте оркестратору.
+- Правка CLAUDE.md не потребовалась: ни один из 10 файлов там не упоминается.
+- Не коммитил.
+
+## tech-writer#1 · T-398 · итерация 2 — шестой файл `LIVING_WORLDS_*`, правило про `docs/**` в архиве · 2026-09-13
+
+Тот же branch, та же рабочая папка. Ревью #1 (code-reviewer#2, вердикт «вернуть», Major 1 / Minor 1) — подробности `review.md`, подраздел «Итерация 2» карточки `tasks/T-398.md`.
+
+- **Mj-1.** `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` лежал под заглавным `Docs/` (не строчным `docs/`), поэтому в итерации 1 не попал ни в перечень 10 файлов, ни в оставшийся пункт «Кандидаты на перенос» — семейство `LIVING_WORLDS_*` оказалось разорвано. Прочитан целиком, перенесён `git mv Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md Docs/archive/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` (`git status` — `R`, содержимое не менялось), добавлена строка в таблицу «Перенесённые документы» `Docs/archive/README.md` (теперь 11 строк). Упоминания в `audit-facts.md:159` и `open-questions.md:202` — записи аудита, не тронуты; живых ссылок на файл не было и до переноса.
+- **Mi-1.** `Docs/archive/README.md:14-15` — правило, называвшее `docs/**` местом актуальной документации и runbook, заменено на `Docs/**` вне `archive/`, runbook — `Docs/ops/runbook.md`, формулировкой ревьюера.
+- Таблица кандидатов сверена с `git show HEAD:Docs/archive/README.md` построчно — ни один пункт не потерян.
+- Не коммитил.
