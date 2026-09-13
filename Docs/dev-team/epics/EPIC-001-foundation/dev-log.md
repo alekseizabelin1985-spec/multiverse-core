@@ -8228,3 +8228,29 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Попутно найдено:** kafka-адаптер отменяет контекст обработчика при `Close` (контекст цикла от `closing`), а C-01 «Остановка» п. 3 / ADR-023 п. 4 говорят, что не отменяет. Для кейса исход тот же; вопрос к system-architect в карточке.
 - **Прогоны:** `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/ && go vet -tags e2e ./test/...` → 0; `gofmt` чисто; `go test -short -count=1 ./...` → 27 пакетов ok; e2e ok; `golangci-lint run ./...` и с `--build-tags integration` по `contract` → 0 issues. `-race` недоступен. Redpanda не прогонялась — прогон с T-394.
 - Не коммитил.
+
+<!-- dev-log T-437 -->
+## devops-engineer#1 · T-437 · `--alias` в llm-server, пин LLAMACPP_BUILD, ops/models.txt · 2026-09-13
+
+Ветка `task/T-437-llm-server-alias` (от `a6ed215`), TEAM-1, Opus. Подробности — карточка `tasks/T-437.md`.
+
+- **`--alias`.** В обоих скриптах, только в single-режиме: `-m <файл> --alias <id>`. Id — имя файла без `.gguf`, делится по `/` и `\` (`model_alias` / `Get-ModelAlias`). Тот же id уходит в прогрев. Пустой id — отказ до старта. Новая строка вывода: `llm: the model is reported as <id> …`.
+- **Пин** `LLAMACPP_BUILD`: `b10441` → `b10878`. Это `build_info` из `/props` зачётных прогонов T-402 (`b10878-4850c7727`), в пин идёт только номер, потому что `make llm-health` сравнивает `bNNNN`. Стенд `:8888` в момент задачи не отвечал, число взято из отчётов.
+- **`ops/models.txt`** сокращён до `decision_order`: gguf — E и Q36-A3B, ollama — `qwen3:30b-a3b`, `qwen3:8b`, `qwen3:14b`. Удалены `qwen3-8b` (E+) и эмбеддинги `nomic-embed-text`/`bge-m3` в обеих секциях.
+- **Отклонение от DoD** (по поручению оркестратора): пин и список сделаны до T-438, а не после.
+- **Проверка.** Подставной `llama-server` (Go) в scratch, копия дерева, порт 18937:
+  - S1–S5 × `.sh`/`.ps1` — 51/51, командные строки и строки `llm:` совпадают побайтово;
+  - `make llm-up` → `/v1/models` = `Qwen3.8-27B-UD-Q3_K_XL`, `make llm-health` → `build b10878 matches the pin`;
+  - на `HEAD` тот же S1 даёт путь к файлу — дефект воспроизведён.
+- **Мутанты:** контроль красный; без `--alias` в `.sh` / в `.ps1`, алиас в router, id через `GetFileNameWithoutExtension`, `.sh` без деления по `\`, другой текст строки в `.ps1` — все убиты паритетом или `/v1/models`; тождественный чист.
+- **Прогоны:**
+  - `bash -n` ok, парсер PowerShell — 0 ошибок;
+  - `mvctl env check` rc=0;
+  - `make ci` rc=0 (race SKIPPED без cgo, secrets-scan — no leaks);
+  - `gitleaks dir` по 6 изменённым файлам — чисто.
+- **Бэклог** (в карточке):
+  - `.ps1` рвёт аргументы с пробелом в `Start-Process`; дефект есть и на `HEAD`;
+  - прогрев `.sh` собирает JSON строкой;
+  - `llm-health` не сверяет `/v1/models` с `LLM_MODEL_DEFAULT`;
+  - отставшие тексты ADR-005 УИ п. 6, `baseline.md` §5 и `_model_ids` — за architect#1.
+- Стенд владельца не трогался, `.env` не открывался. Не коммитил.

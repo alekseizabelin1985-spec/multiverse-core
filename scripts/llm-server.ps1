@@ -324,6 +324,21 @@ function Stop-ServerIfOurs {
   return $false
 }
 
+function Get-ModelAlias {
+  # The id the server has to report for a model file: the file name without a
+  # trailing .gguf. Either separator ends the directory part, on every OS —
+  # [IO.Path] would not split a D:\Models\... path on Linux. Only .gguf is
+  # dropped, not "whatever follows the last dot": Qwen3.8-27B would otherwise
+  # become Qwen3. The twin, model_alias in llm-server.sh, applies the same rule
+  # character for character.
+  param([string] $Path = '')
+  $name = $Path.Substring($Path.LastIndexOfAny([char[]]@('/', '\')) + 1)
+  if ($name.EndsWith('.gguf', [StringComparison]::OrdinalIgnoreCase)) {
+    $name = $name.Substring(0, $name.Length - 5)
+  }
+  return $name
+}
+
 function Get-PinnedBuild {
   $versions = Join-Path $repoRoot 'build/versions.env'
   if (-not (Test-Path $versions)) { return '' }
@@ -585,7 +600,18 @@ switch ($Action) {
         Write-LlmFail 'llm: MV_LLM_MODEL_FILE is not set (single mode needs -m)'
         exit 1
       }
-      $serverArgs += @('-m', $Model)
+      $modelId = Get-ModelAlias $Model
+      if (-not $modelId) {
+        Write-LlmFail "llm: MV_LLM_MODEL_FILE=$Model names no file, so the server would have no model id to report"
+        exit 1
+      }
+      # --alias is what GET /v1/models reports. Without it llama-server reports
+      # the path to the file, and nothing that matches a model by name finds it:
+      # the blueprint validator (C-11 rule 7a), the Health of the provider
+      # (degraded(model_not_resident)) and make bench, which skips the phases
+      # (ADR-005 execution note p. 6, T-437). Router mode names the models by
+      # file stem on its own, so the alias belongs to single mode only.
+      $serverArgs += @('-m', $Model, '--alias', $modelId)
     }
 
     if ($WithUi) {
@@ -601,6 +627,7 @@ switch ($Action) {
 
     $mode = if ($Router) { 'router' } else { 'single' }
     Write-LlmLine "llm: starting $bin on ${llmHost}:$($ep.Port) ($mode mode); the platform calls it at $($ep.Url)"
+    if (-not $Router) { Write-LlmLine "llm: the model is reported as $modelId (--alias, the file stem that blueprints name)" }
     Remove-Item $logFile -ErrorAction SilentlyContinue
     $proc = Start-Process -FilePath $bin -ArgumentList $serverArgs -PassThru `
       -RedirectStandardOutput $logFile -RedirectStandardError "$logFile.err" -WindowStyle Hidden
@@ -637,7 +664,7 @@ switch ($Action) {
     # "the server answers" indicator. `make bench` measures it separately (B2)
     # and it never enters p50/p95.
     $modelName = ''
-    if (-not $Router) { $modelName = [System.IO.Path]::GetFileNameWithoutExtension($Model) }
+    if (-not $Router) { $modelName = $modelId }
     $body = @{
       model                = $modelName
       messages             = @(@{ role = 'user'; content = 'ok' })
