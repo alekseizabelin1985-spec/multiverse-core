@@ -56,18 +56,35 @@
 ### Поток A — `shared/agent`, блупринты, CLI, законы (developer#1)
 
 #### T-201 · A1 · `shared/agent` v2: типы блупринта, парсер, плейсхолдеры, чистка пакета
-Инкремент I1a · подволна **A** *(ревизия 4; было 1.1)* · developer#1 · Размер M · Статус todo · ветка `task/T-201-agent-blueprint-v2`
+Инкремент I1a · подволна **A** *(ревизия 4; было 1.1)* · developer#1 · Размер M · Статус **done** *(принята tech-lead#2 2026-09-13, итераций ревью 3; подробности — `tasks/T-201.md`)* · ветка `task/T-201-agent-blueprint-v2`
 Что сделать: `types.go` (перенос `AgentLevel`/`LODLevel`/`AgentLifecycleState` из `agent_types.go`), `blueprint.go` — структура `AgentBlueprint` v2 по КД §13.1 со всеми вложенными типами; `parser.go` — `ParseFile/ParseBytes`: YAML-frontmatter + секции `## system|phase1|phase2|tick|canon|description`, чистый YAML для `.yaml/.yml`, `yaml.v3` с `KnownFields(true)`, миграция плоских `llm.model/llm.temperature` → `llm.phase2` с `Issue{Severity: warning}`, `ContentHash` (SHA-256 нормализованного содержимого, независим от порядка ключей) **в виде `sha256:<64 hex>`** *(ревизия 4, решение 3 system-architect#1; шаблон в схемах — T-445)*; `placeholders.go` — фиксированный словарь КД §11.4. ~~Удалить **из пакета** (не из истории): `md_parser.go`, `blueprint_loader.go`, `helpers.go`, `worker_pool.go`, `state_manager.go`, `filter.go`, `router.go`, `lifecycle.go`, `pipeline.go`, устаревшие части `interfaces.go`, `examples/`, `agent_test.go`, `e2e_dark_forest_test.go`~~ **(ревизия 4, список по дереву `1c2ee7e`)** Удалить **из пакета** (не из истории): `agent_types.go` (после переноса типов), `md_parser.go`, `blueprint_loader.go`, `blueprint_validator.go` и `blueprint_validator_test.go` (валидатор пишется заново в T-202), `helpers.go`, `worker_pool.go`, `state_manager.go`, `router.go`, `lifecycle.go`, `pipeline.go`, устаревшие части `interfaces.go`, `examples/`, `agent_test.go`. Файлов `filter.go` и `e2e_dark_forest_test.go` в дереве нет. `README.md`/`MIGRATION.md` → `Docs/archive/` (уведомить tech-writer). Сохранить `lod.go`, `tools/registry.go`.
 **(ревизия 4) `time.Now` в сохраняемых файлах.** `lod.go:115` и `tools/registry.go:134, 165, 180` зовут `time.Now`/`time.Since`. Сейчас их прикрывает исключение `.golangci.yml` для пути `shared/agent/` (`forbidigo`, `errcheck`, `staticcheck`, `unused`), а оно обещано снять вместе с переписыванием пакета. Файл `.golangci.yml` — EPIC-001, поэтому **до старта задачи нужно решение tech-lead#1 об исключении**. Варианты: (а) T-201 переводит оба файла на `shared/clock` и исключение снимается задачей EPIC-001; (б) исключение сужается до двух файлов с комментарием «до `internal/swarm` (T-225)». Без решения исполнитель исключение не трогает и пишет расхождение в отчёт.
 Файлы: `shared/agent/{types,blueprint,parser,placeholders}.go`, `shared/agent/testdata/blueprints/valid/*.md`.
 Зависит от: F-2, F-4b (внешние, волна 0); решение tech-lead#1 об исключении `shared/agent/` в `.golangci.yml` *(ревизия 4)*.
 Ссылки: US-015, FR-090, FR-124, C-11, ADR-015 п. 6, design §3.1 A1, КД §13.1, §2, §17 I1-2.
 DoD (специфика):
-- [ ] `ParseFile` разбирает все файлы `testdata/blueprints/valid/` и файл в формате «чистый YAML»; секции доступны как `Prompts.{System,Phase1,Phase2,Tick,Canon,Description}`.
-- [ ] Неизвестный ключ frontmatter → ошибка с именем поля и файлом; плоский `llm.model` → предупреждение о миграции, разбор не падает.
-- [ ] `ContentHash` стабилен на 100 повторных разборах и меняется при изменении любого байта содержимого. **(ревизия 4)** Значение соответствует `^sha256:[0-9a-f]{64}$`; тест на форму.
-- [ ] `go build ./...` зелёный после удаления файлов; ни один пакет вне `services/_archive/**` не ссылается на удалённые символы.
-- [ ] **(ревизия 4)** `golangci-lint run ./shared/agent/...` зелёный с исключением `.golangci.yml` в той форме, которую выбрал tech-lead#1. В отчёте названо, что осталось под исключением и почему.
+- [x] `ParseFile` разбирает все файлы `testdata/blueprints/valid/` и файл в формате «чистый YAML»; секции доступны как `Prompts.{System,Phase1,Phase2,Tick,Canon,Description}`.
+- [x] Неизвестный ключ frontmatter → ошибка с именем поля и файлом; плоский `llm.model` → предупреждение о миграции, разбор не падает.
+- [x] `ContentHash` стабилен на 100 повторных разборах и меняется при изменении любого байта содержимого. **(ревизия 4)** Значение соответствует `^sha256:[0-9a-f]{64}$`; тест на форму.
+- [x] `go build ./...` зелёный после удаления файлов; ни один пакет вне `services/_archive/**` не ссылается на удалённые символы.
+- [x] **(ревизия 4)** `golangci-lint run ./shared/agent/...` зелёный с исключением `.golangci.yml` в той форме, которую выбрал tech-lead#1. В отчёте названо, что осталось под исключением и почему.
+
+**Приёмка (tech-lead#2, 2026-09-13): принято.** Прогоны зелёные: `go build/vet`, `go test -short`, `golangci-lint run ./...` (0 issues), `mvctl contracts check`, `make test`. Исключение `shared/agent/` в `.golangci.yml` снято целиком по варианту (а) и решению ОВ-7. **Нужна отметка tech-lead#1** — файл EPIC-001, что проверить — в карточке. Nit ревью #3 N-3/N-4 закрыты тестами при приёмке, мутанты M16/M9/M10 убиты. Слияние с кончиком эпика без конфликтов кода; `dev-log.md`/`review.md` — через драйвер `appendtail`.
+
+**Бэклог T-201 (приёмка T-201, 2026-09-13; без номера — номер выдаёт оркестратор при взятии в работу):**
+1. **`shared/agent/tools/registry.go` и `shared/agent/lod.go`** — до первого импорта `LODManager`/`ToolRegistry` из `internal/swarm`. Размер S.
+   - Гонка данных: `checkRateLimit` пишет под `RLock`, `updateStats`/`GetStats` работают без блокировки.
+   - Ключи `lodDistribution` не совпадают с `LODLevel.String()`; `lastHighLOD` пишется при любой смене LOD.
+   - DoD: тест на совпадение ключей; `go test -race ./shared/agent/...` в CI (Linux, cgo) зелёный на параллельном тесте `Execute`/`GetStats`.
+2. **Документы об as-is `shared/agent`** (architect#2 — архитектура, tech-writer — остальное; `swarm-llm-laws.md` правит только его владелец):
+   - `analysis/api-contracts.md` §3.1: `llm.tick` без `temperature`/`thinking`;
+   - КД `components/swarm-llm-laws.md`: §2 («`lod.go`/`tools/registry.go` без изменений», шапка «ни одного целевого файла»);
+   - `diagrams/c4-component-swarm-llm-laws.md:45`;
+   - ADR-015 п. 6;
+   - `PULL_REQUEST.md:21-29` (ссылки на перенесённые `md_parser.go`, `examples/`, `README.md`, `MIGRATION.md`).
+3. **Реестр блупринтов (T-222, горячая перезагрузка T-249):**
+   - решение о перевалидации — по `content_hash`, с тестом «файл без ключа → `[]` вызывает перевалидацию»;
+   - лимит `MaxBlueprintSize` — тот же, что у `ParseFile`.
 
 #### T-202 · A2 · Реестр уровней `levels.go` и валидатор блупринтов
 Инкремент I1a · подволна **B** *(ревизия 4; было 1.2)* · developer#1 · Размер M · Статус todo · ветка `task/T-202-levels-validator`
@@ -85,6 +102,15 @@ DoD (специфика):
 - [ ] **(T-416, 2026-09-11; ADR-025, C-02 v1.4)** Валидатор проверяет `owned_entity_types` блупринта по `ValidationEnv.OwnedEntityTypes`, который собирает вызывающий из `contracts.OwnershipRules`. Тест: тип вне строки своего уровня → `error` с `Field`/`Reason`. `shared/agent` не импортирует `shared/contracts`; `go list -deps ./shared/agent/...` — в тесте или в правиле depguard.
 - [ ] Правило 7а: `env.Models == nil` → `info: models not checked`; модель вне списка → `error`; поле `provider` в блупринте → `error` (`KnownFields`).
 - [ ] `monitor`/`object` — `info: reserved level, spawn disabled`, не `error`.
+- [ ] **(приёмка T-201, 2026-09-13; ревью #1 T-201 Mi-3, ревью #3 T-201 бэклог п. 2)** Правило 13 использует и `UnknownPlaceholders`, и `SuspiciousPlaceholders`.
+  - Неизвестный плейсхолдер точной формы — `error`.
+  - Подозрительная запись (`{Player.name}`, `{ x }`, `{игрок}`) — `warning`. Ложные срабатывания известны: `\frac{A}{B}`, `\text{Привет}`, `{日本}`.
+  - Тест таблицей на обе серьёзности.
+- [ ] **(приёмка T-201, 2026-09-13; ревью #3 T-201 бэклог п. 2; C-02 v1.6, T-448)** `warning` на значения в `ops[].value` и `conditions[].value`, которые State отвергнет только при применении:
+  - число за |x| ≤ 2^53−1;
+  - `time.Time`: незакавыченная дата YAML, в JSON уйдёт строкой.
+
+  Тест на оба случая и на граничное значение 2^53−1 без предупреждения.
 
 #### T-203 · A3 · Пять блупринтов MVP-1 и схемы `schemas/agent/`
 Инкремент I1a · подволна **C** *(ревизия 4; было 1.3)* · developer#1 · Размер M · Статус todo · ветка `task/T-203-mvp-blueprints` · **стартует после T-439**
@@ -97,7 +123,7 @@ DoD (специфика):
 - [ ] `agent.Validate` на всех пяти файлах — 0 `error`; `mvctl blueprint validate blueprints/` включается в CI задачей T-204.
 - [ ] Модель во всех пяти блупринтах — **стартовая E** (`Qwen3.8-27B-UD-Q3_K_XL`), `thinking: false`; поля провайдера в блупринте нет (SEC-21). Смена модели — **только правкой YAML по `ops/metrics/baseline.md`** (T-260), Go не меняется; критерий «модели соответствуют `baseline.md`» проверяется на стенде, не в CI (в CI — `fake`/`recorded`).
 - [ ] Схемы компилируются `santhosh-tekuri/jsonschema/v6` (draft 2020-12); `enum` типов в `tick-*.json` — полный набор MVP-1, сужение по `allowed_event_types` блупринта делается в рантайме (решение тимлида, см. §10 п. 7).
-- [ ] `blueprints/domain-dark-forest.md` заменяет `shared/agent/examples/domain-dark-forest.md` (старый файл уже удалён в T-201).
+- [ ] `blueprints/domain-dark-forest.md` заменяет `shared/agent/examples/domain-dark-forest.md` (старый файл перенесён в `services/_archive/shared/agent/examples/` в T-201 — *приёмка T-201, было «уже удалён»*).
 - [ ] Плейсхолдеры секций — только из словаря `placeholders.go`.
 - [ ] **(ревизия 4)** В фазах блупринтов только поля формата `{model, temperature, max_tokens, thinking, schema_ref}`; `temperature: 0.7`; `max_tokens` фазы нарратива и `text.maxLength`/`maxItems` в `schemas/agent/narrative.json` равны значениям T-439 для текущей конфигурации. Тест: разбор каждого блупринта с `KnownFields(true)` без ошибок; `maxLength` схемы совпадает с числом, записанным в T-439.
 
@@ -498,6 +524,10 @@ DoD: [ ] TTL на `clock.Manual`: 45 мин без действий → `agent.s
   - `Alive` видит экземпляр в любой фазе, включая `finishing`.
 
   Тест на каждое требование.
+- [ ] **(приёмка T-201, 2026-09-13; ревью #3 T-201 бэклог п. 1)** Пустой `ContentHash` блупринта — ошибка подъёма, а не пропуск поля.
+  - `agent.spawned.content_hash` не обязателен в схеме, поэтому при `omitempty` пустое значение молча пропало бы из события.
+  - `Ensure`/`SpawnChild` с блупринтом без хэша возвращают ошибку, `agent.spawned` не публикуется.
+  - Тест на блупринт, собранный в Go без `ParseFile`.
 
 #### T-226 · R4a · Scheduler: две очереди, воркеры, уступка, FIFO на агента
 I1b · **H** · developer#1 · M · todo *(ревизия 4: подволна H, было 1.11)*

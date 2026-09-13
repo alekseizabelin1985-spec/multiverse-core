@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"multiverse-core.io/shared/clock"
 )
 
 // Tool определяет интерфейс для всех инструментов агента
@@ -36,6 +38,10 @@ type ToolRegistry struct {
 
 	// stats статистика вызовов
 	stats *ToolStats
+
+	// clock measures latency and rate-limit windows; it comes from the caller
+	// so that replay and tests are not bound to the wall clock (shared/clock).
+	clock clock.Clock
 }
 
 // RateLimit ограничивает частоту вызовов инструмента
@@ -56,8 +62,9 @@ type ToolStats struct {
 }
 
 // NewToolRegistry создает новый реестр инструментов
-func NewToolRegistry() *ToolRegistry {
+func NewToolRegistry(clk clock.Clock) *ToolRegistry {
 	return &ToolRegistry{
+		clock:      clk,
 		tools:      make(map[string]Tool),
 		rateLimits: make(map[string]*RateLimit),
 		stats: &ToolStats{
@@ -131,7 +138,7 @@ func (r *ToolRegistry) List() []Tool {
 
 // Execute выполняет инструмент с проверкой rate-limit и аудитом
 func (r *ToolRegistry) Execute(ctx context.Context, name string, params map[string]interface{}) (interface{}, error) {
-	start := time.Now()
+	start := r.clock.Now()
 
 	tool, exists := r.Get(name)
 	if !exists {
@@ -162,7 +169,7 @@ func (r *ToolRegistry) checkRateLimit(name string) bool {
 		return false // Нет ограничения
 	}
 
-	now := time.Now()
+	now := r.clock.Now()
 
 	// Сбрасываем счётчик если окно истекло
 	if now.Sub(limiter.LastCalled) > limiter.Window {
@@ -177,7 +184,7 @@ func (r *ToolRegistry) checkRateLimit(name string) bool {
 
 // updateStats обновляет статистику вызовов
 func (r *ToolRegistry) updateStats(name string, start time.Time, err error) {
-	latency := time.Since(start)
+	latency := r.clock.Now().Sub(start)
 
 	r.stats.TotalCalls++
 	r.stats.CallsByTool[name]++

@@ -421,15 +421,11 @@ linters:
       #
       # shared/eventbus is no longer listed: F-4a (T-005) rewrote it, and its
       # time now comes from shared/clock through eventbus.SetClock.
-      # shared/agent: EPIC-003 rewrites the agent runtime; only the blueprint
-      # types, parser and validator stay. forbidigo (time.Now) goes away with
-      # that rewrite, like the one of shared/eventbus above.
-      - path: shared/agent/
-        linters:
-          - errcheck
-          - forbidigo
-          - staticcheck
-          - unused
+      # shared/agent is no longer listed either: T-201 (EPIC-003) moved the
+      # as-is agent runtime to services/_archive/shared/agent, wrote the
+      # blueprint v2 types and parser, and gave lod.go and tools/registry.go
+      # their time through shared/clock.Clock/Timers taken as constructor
+      # arguments.
       # shared/entity is no longer listed either: F-10 (T-011) rewrote it as the
       # model v2, which has no clock at all — every timestamp of an entity is
       # the timestamp of the event that caused it (ADR-003 p. 6).

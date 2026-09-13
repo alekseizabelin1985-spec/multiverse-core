@@ -70,6 +70,8 @@ ADR-001 доп. п. 5.
 | `configs/gm_player.yaml` | `services/_archive/configs/gm_player.yaml` | профиль GM as-is → блупринты и законы мира (`overview.md` §16) | `9ffca2d` | нет |
 | `configs/gm_region.yaml` | `services/_archive/configs/gm_region.yaml` | профиль GM as-is → блупринты и законы мира (`overview.md` §16) | `9ffca2d` | нет |
 | `configs/gm_world.yaml` | `services/_archive/configs/gm_world.yaml` | профиль GM as-is → блупринты и законы мира (`overview.md` §16) | `9ffca2d` | нет |
+| `shared/agent/{agent_types,md_parser,blueprint_loader,blueprint_validator,helpers,worker_pool,state_manager,router,lifecycle,pipeline,interfaces}.go`, `blueprint_validator_test.go`, `agent_test.go` | `services/_archive/shared/agent/` (те же имена) | as-is Agent GM Core и формат блупринта v1 → `internal/swarm` (EPIC-003) и формат v2 `shared/agent/{types,blueprint,parser,placeholders}.go` — **перенесены в T-201** (EPIC-003), подробности — `services/_archive/shared/agent/ARCHIVED.md` | `b7df900` / `e6103e4` | нет |
+| `shared/agent/examples/domain-dark-forest.md` | `services/_archive/shared/agent/examples/domain-dark-forest.md` | блупринт v1 (чистый YAML, `qwen:7b`) → `blueprints/domain-dark-forest.md` (T-203) — **перенесён в T-201** | `81aaf98` | нет |
 
 ## Что в архив **не** уходит в волне 0
 
