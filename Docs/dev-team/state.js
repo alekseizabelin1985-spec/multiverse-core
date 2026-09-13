@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:03:58+03:00",
+  "updatedAt": "2026-09-13T16:10:33+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8931,7 +8931,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Отметка владельца EPIC-001: Dockerfile, cmd, runbook",
       "startedAt": "2026-09-13T16:02:07+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:10:33+03:00"
     },
     {
       "instance": "developer#1",
@@ -11836,6 +11836,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Начата T-202 (TEAM-2/developer#1, подволна B): levels.go и валидатор блупринтов — зависимости T-201 и T-006 слиты."
+    },
+    {
+      "at": "2026-09-13T16:10:33+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303: отметка владельца EPIC-001 (tech-lead#1) — вернуть. В-1 (блокирует): startProcess в cmd/multiverse/fake_contexts_test.go не задаёт MV_GATEWAY_DATA_DIR — четыре теста процесса открывают SQLite в /data (CI Linux упадёт на mkdir /data; на Windows созданы C:\\data\\gateway.db и links.db). В-2: runb"
     }
   ],
   "blockers": [],
