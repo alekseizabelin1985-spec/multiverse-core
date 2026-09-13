@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:19:59+03:00",
+  "updatedAt": "2026-09-13T21:23:58+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -9991,7 +9991,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Владение, инварианты, дедуп",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:23:58+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10081,6 +10081,16 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Ревью #2 парсера",
       "startedAt": "2026-09-13T21:19:59+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Снятие блокера FakeEncounter",
+      "startedAt": "2026-09-13T21:23:58+03:00",
       "finishedAt": null
     }
   ],
@@ -13816,6 +13826,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-311 начата (TEAM-3/developer#2): flow (FSM онбординга, /forget) и render (тексты FR-009 из T-318, клавиатуры, ошибки); предусловие depguard cmd-telegram-bot выполнено синхронизацией develop. Отметки tech-lead#1 по T-305, T-222, T-209 — одним агентом."
+    },
+    {
+      "at": "2026-09-13T21:23:58+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 выполнена TEAM-1/developer#2 частично: internal/state — дедуп (окно и last_change), шаг 5 dead_entity, владение по OwnershipRules с нормами C-02, законы через overlayView; WorldRequired у entity.*.proposed; FakeState = Applier над memstore; остановленный мир — обычная ErrWorldStopped; стенд I1"
+    },
+    {
+      "at": "2026-09-13T21:23:58+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по T-056: правка shared/testkit/swarm (FakeEncounter) разрешена в T-056 минимально с отметкой владельца tech-lead#2 EPIC-003 — died_at/killed_by только NPC по таблице §4.6, тесты без зависимости от последовательности id, WithCauseID сохраняется; остановленный мир — обычная ошибк"
     }
   ],
   "blockers": [],
