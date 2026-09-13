@@ -47,7 +47,7 @@ func TestLoadGoldenNumbers(t *testing.T) {
 
 	want := map[string]Actor{
 		"player": {Type: entity.TypePlayer, HP: 10, HPMax: 10, Atk: 2, Def: 12, Dmg: "d6", Flee: "2", Status: entity.StatusAlive},
-		"wolf":   {Type: entity.TypeNPC, HP: 10, HPMax: 10, Atk: 3, Def: 11, Dmg: "d4", Flee: "", Status: entity.StatusAlive},
+		"wolf":   {Type: entity.TypeNPC, Kind: "wolf", HP: 10, HPMax: 10, Atk: 3, Def: 11, Dmg: "d4", Flee: "", Status: entity.StatusAlive},
 	}
 	for kind, expected := range want {
 		got, ok := r.Stats(kind)
@@ -267,6 +267,11 @@ func TestLoadRejects(t *testing.T) {
 		},
 		"rest restores nothing readable": {
 			old: "restore: hp_max", new: "restore: everything", path: "rest.restore",
+		},
+		// dice.rolled has no purpose for a rest roll, so a rest by dice would
+		// be a chance nobody could audit (T-053, Nit-5 of review #1).
+		"rest restores by dice": {
+			old: "restore: hp_max", new: "restore: d4", path: "rest.restore",
 		},
 		"unknown target order": {
 			old: "order: [last_damager, min_hp, player_id_asc]", new: "order: [random]", path: "npc_target.order[0]",

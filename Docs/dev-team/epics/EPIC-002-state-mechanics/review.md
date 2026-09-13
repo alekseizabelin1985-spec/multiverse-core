@@ -94,3 +94,161 @@ ADR-003 п. 5, ADR-012, NFR-060, C-03.
    d20×d20 для пары 0–1 (400 клеток, df = 361, n ≥ 2000 даёт ожидаемую частоту ≥ 5) или
    более дешёвый вариант — χ² по разности `(r1 − r0) mod 20` (df = 19, тот же порог 43,82;
    ловит P11 и любые сдвиги/перестановки вида «r1 = f(r0)»). Размер XS, `internal/mechanics`.
+
+---
+
+## T-053 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-1)
+
+### Границы ревью
+
+Папка `.worktrees/T-053`, ветка `task/T-053-resolve-npctarget-changes`, HEAD `8768980`.
+Коммитов вне родителя нет (`git log epic/EPIC-002-state-mechanics..HEAD` пуст). Ветка эпика
+с тех пор ушла вперёд на слияние T-052 (`2196b58`). Там схемы `analytics.replay.completed`
+и `snapshot.created`, фикстуры событий, `test/fixtures/state_schemas_test.go` и артефакты
+эпика. С кодом T-053 файлы не пересекаются, но при слиянии будет конфликт в `review.md` и
+`dev-log.md`, см. «Риски».
+
+Изменения не закоммичены (`git status`):
+
+| Действие | Путь |
+|---|---|
+| M | `internal/mechanics/{resolve,target,changes,types,actor,rules,rng}.go` |
+| M | `internal/mechanics/{actor_test,rules_test,dice_event_test}.go` |
+| A | `internal/mechanics/{resolve_test,target_test,changes_test,changes_encounter_test}.go` |
+| M | `shared/testkit/mechanics/{fixed,fixed_test,consumer_test}.go` |
+| M | `Docs/dev-team/epics/EPIC-002-state-mechanics/{tasks/T-053.md,dev-log.md}` |
+
+Артефакты в `Docs/` внутри папки задачи оркестратор разрешил, поэтому это не замечание.
+`shared/testkit/swarm`, схемы и фикстуры не менялись, подтверждено. Карта владения не
+нарушена: `internal/mechanics/**` и `shared/testkit/mechanics/**` принадлежат EPIC-002.
+
+Основание ревью:
+- `tasks.md` T-053: описание, DoD и сверки 2026-09-13;
+- C-03 v1.2, C-05 v1.4–v1.6 (п. 1в, 1г);
+- `state-and-mechanics.md` §4.6, §5.1, §5.4, §5.5, §7.1, §17;
+- ADR-012 п. 4, ADR-024;
+- `data-model.md` §3.3, §3.4;
+- `rules/dark-forest.yaml`;
+- `shared/contracts/ownership.go`;
+- `shared/testkit/swarm/fake_encounter.go`: `attacked`, `fled`, `pack`, `wound`, `asEntity`.
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 5.
+
+`Resolve`, `NPCTarget` и `ChangesFor` реализованы по §5.4. Код детерминирован, чист и
+покрыт тестами на границах. Семь мутантов ревьюера, кроме контрольного, убиты. Тест сверки
+с двойником правда краснеет, если расхождение исчезает или появляется новое, но только для
+сущностей игрока и NPC. Сущность встречи тест пропускает целиком, и Р5 им не держится
+(Minor-1, мутант D3 выжил).
+
+Незакрытый пункт DoD про `died_at` — не дефект кода, возврата он не требует (оценка ниже).
+При этом приёмка tech-lead должна зафиксировать два условия:
+- вопрос 1 карточки (время и версия для `ChangesFor`) и `Actor.Kind` (вопрос 4) переданы
+  system-architect до слияния в ветку эпика;
+- расхождение «код ↔ C-03 v1.2 ↔ §5.1» (поле `Actor.Kind`) по C-03 «Гарантии» считается
+  дефектом документа, пока не выпущена C-03 v1.3.
+
+### Проверенные пункты
+
+| # | Что проверено | Как | Результат |
+|---|---|---|---|
+| 1 | Детерминизм | `resolve.go`: нет `time.*`, глобального состояния и обхода map (из `actors` только чтение по ключу). `target.go`: `slices.SortFunc` с полным порядком, ключи правил, затем `cmp.Compare(ID)`; id уникальны (повтор — ошибка), поэтому нестабильность сортировки не влияет. `changes.go`: порядок ops фиксирован кодом. `TestNPCTargetOrder` перебирает все перестановки, `TestResolveIsPureAndDeterministic` повторяет решения на новом `Rules` (200×5) | выполнено |
+| 1а | Индексы бросков ↔ C-05, §5.5 и `FakeEncounter` | Удар: `hit` на idx, `damage` на idx+1 только при попадании. Ответ NPC: 2/3 (`rollNPCCounter`). Бегство: 0, свободная атака — 1/2 (`rollFlee`, `rollFreeAttack`). Совпадает с §5.5 («свободная атака … от `player.flee_attempted` (1..2)»). `compareRolls` в `changes_encounter_test.go:405` сравнивает броски на шине с бросками `Resolve` по index/formula/seed/result/natural/purpose | выполнено |
+| 2 | Таблица §5.4 | Код `resolve.go:76-141`: `Fumble` побеждает, `Critical = !Fumble ∧ crit`, `Hit = !Fumble ∧ (Critical ∨ check)`, урон — `Damage(roll, crit)` (кубы × множитель), `ClampHP`, `TargetDead = HPAfter == 0`, `Loot` только у NPC. `Excluded` — `ErrInvalidTarget` (`:93`). Порог бегства — правая часть `flee.check`: 11 и 12 при 1 и 2 врагах. `FreeAttack = !success ∧ on_fail = free_attack` (`:159`). Тесты: 16 строк `TestResolveAttackTable` с гранями 1/2, 8/9, 19/20 и def 40/1, `TestResolveFleeTable` с `on_fail: none`, `TestResolveKillingBlow`, `TestResolveRefuses` (dead/abandoned/ascended/idle/out_of_combat) | выполнено |
+| 2а | Мутанты ревьюера | см. ниже | 7 из 7 убиты, D3 выжил (Minor-1) |
+| 3 | Смена сигнатуры `NPCTarget` | `grep "NPCTarget("` по всему дереву вне `services/`: `internal/mechanics` и `shared/testkit/mechanics`, в `test/e2e`, `cmd` и `shared/testkit/swarm` вызовов нет. Файлы с тегами проверены `go vet -tags "e2e integration" ./test/... ./shared/testkit/... ./cmd/...`, exit 0. `ErrNotImplemented` в дереве не встречается | выполнено |
+| 4 | `Actor.Kind` | Совместимое дополнение: все литералы `Actor{…}` в дереве с именами полей, `go build` и `go vet` зелёные. Заполняют `ActorFromEntity` (только NPC, `actor.go:55-58`) и `Rules.Stats` (только NPC, `rules.go:348-352`). У персонажа поле пустое, поэтому `test/fixtures` (сравнение `Stats` ↔ `ActorFromEntity`) зелёный без правок. Двойники: `FixedMechanics` теперь заполняет `Outcome.Loot`. `FakeEncounter` берёт трофей из `rules.Loot(kind)` сам и `Outcome.Loot` не читает, `testkit/gateway` тоже, поэтому поведение двойников на шине не меняется. Контракт: C-03 v1.2 поле не знает — нужен v1.3 (см. вердикт) | выполнено, с условием |
+| 5 | Сверка `ChangesFor` ↔ `FakeEncounter` | Разобран `changes_encounter_test.go`. Пять форм обмена гоняются на membus с настоящим `*Rules`, шпион записывает решения. Разница выбрасывается по пяти константам (`:47-64`), остальное сравнивается через JSON. Каждая константа обязана встретиться (`:394-398`). Мутант D1 (двойник перестаёт писать `died_at`/`killed_by` персонажу) краснит тест на «gap … did not occur». D2 (двойник пишет в `killed_by` id решения) краснит на «ops of wolf-alpha». **Но** сущность встречи пропускается целиком (`:342-344`), и D3 (двойник добавляет op в пакет встречи) выживает — Minor-1 | частично |
+| 5а | Точность Р1–Р5 | Р1 (`expected_version`), Р2 (`died_at` NPC, `acquired_at`), Р4 (`position`) — точны и держатся тестом. Р5 точен по существу: `FakeEncounter` держит `last_damager` только в представлении (`fake_encounter.go:838`, `:1981-1983` в `asEntity` для `ActorFromEntity`), `turnOps` (`:998-1019`) пишет лишь `round_seq`/`participants`/`state`/`resolution`/`closed_by_event_id`. Тестом Р5 не держится, хотя карточка (`T-053.md:35`) и `dev-log.md:34` пишут «каждое проверяется тестом» | Р5 — Minor-1 |
+| 5б | Р3: дефект двойника или норма? | `shared/contracts/ownership.go:83-86`: у `task`/`player` пути `hp, status, position, inventory, encounter_id`, пути `died_at` и `killed_by` отсутствуют. У `task`/`npc` (`:89-92`) они есть. `data-model.md` §3.3 у персонажа этих атрибутов не знает, §3.4 даёт их только NPC, строка «Механика…» в §4 (`data-model.md:197`) называет у Character `hp/status/position/inventory`. `FakeState` владение не проверяет (`testkit/state/state.go:21`), поэтому двойник зелёный. **Р3 — дефект двойника EPIC-003**: настоящий State ответит `level_violation`, и по C-05 v1.5 п. 1е пакет смерти персонажа будет выброшен. `ChangesFor` здесь прав | дефект двойника |
+| 6 | Пункт DoD `died_at` | Оценка ниже | принять с вопросом |
+| 7 | `rest` кубами — ошибка | `rules/dark-forest.yaml` использует `restore: hp_max`, прогон зелёный. Существующие тесты не ломаются: `formula_test.go:358` проверяет `Rules.Restore` с `restore: d4`, `Load` такой файл по-прежнему принимает, отказ только в `Resolve(rest)` (`resolve.go:171-175`). Остаток — Nit-5 | не ломает |
+| 8 | Прогоны | см. ниже | зелёные |
+
+**Оценка пункта DoD `died_at` (п. 6).** Считаю приемлемым принять с вопросом к архитектору,
+возврат не нужен. Причины:
+- В C-03 v1.2 у `ChangesFor(a, o, attacker, target, factEventID)` нет ни времени, ни
+  версии. Без нарушения гарантии «без часов» (C-03, §5.1) `died_at` взять неоткуда. Вывод
+  времени из id события — неявный контракт на формат id, и в replay-режиме это хуже
+  явного поля.
+- Отклонение названо в карточке и в `dev-log.md`, варианты с рекомендацией даны. Вариант (а) —
+  `Action.At`, `Actor.Version` — совместим и закрывает Р1/Р2 одним дополнением.
+- Рабочий потребитель пакета сегодня — `FakeEncounter`, и он пишет `died_at` сам. Регресса
+  на шине нет, а `ChangesFor` до EPIC-003 T-230 никто не вызывает.
+
+Условие приёмки: tech-lead#1 помечает п. 5 DoD как «частично, блокировано C-03». Вопрос 1
+уходит system-architect. Дополнение (`Action.At`/`Actor.Version` и выставление `died_at`,
+`acquired_at`, `expected_version` в `ChangesFor`) заводится отдельной задачей EPIC-002 и
+закрывается до того, как агент встречи EPIC-003 перейдёт на `ChangesFor`. Без такой задачи
+пункт DoD потеряется. Тогда это Major уже для плана, а не для кода.
+
+### Прогоны ревьюера (go1.26.8 windows/amd64, golangci-lint 2.13.2)
+
+- `go build ./... && go vet ./...` — exit 0;
+- `go vet -tags "e2e integration" ./test/... ./shared/testkit/... ./cmd/...` — exit 0;
+- `go test -short -count=1 ./...` — exit 0, все пакеты `ok`, FAIL нет;
+- `golangci-lint run ./...` — 0 issues. Первый запуск упал с «parallel golangci-lint is
+  running» (чужой процесс), повтор чистый;
+- `gofmt -l internal shared` — пусто;
+- `make test` — exit 0, `coverage-gate: internal/mechanics 95.7% (643 of 672)`, совпадает с
+  карточкой.
+
+### Мутанты ревьюера
+
+Копия дерева без `.git`, `services/`, `Docs/`, `bin/` лежала в scratch
+(`…/scratchpad/t053-review-mutants`), без `-overlay`, базовый прогон копии зелёный. Скрипт
+делал литеральную замену с проверкой `count == 1` и восстанавливал файл из копии после
+каждого прогона. После серии `diff -r` `internal/mechanics` и `shared/testkit` копии с
+рабочей папкой — идентичны. Копия удалена по сохранённому точному пути.
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный (`resolve.go`): `Hit = !Fumble ∧ (Critical ∨ check.OK ∨ Threshold > −1000)`. Первая форма `Hit = true` не собиралась (`check` не используется), поэтому заменена поведенческой | **красный**: `TestResolveAttackTable`, 4 строки промаха |
+| R1 | `Damage(damage.Result, out.Critical)` → `Damage(damage.Result, false)` | **красный**: крит игрока, крит против def 40, крит NPC |
+| R2 | `FreeAttack: !success ∧ on_fail = free_attack` → `FreeAttack: !success` | **красный**: `TestResolveFleeTable` (`on_fail: none`) |
+| R3 | порог бегства читает `living_enemies = 1` вместо `a.LivingEnemies` | **красный**: 5 строк `TestResolveFleeTable` |
+| R4 | `min_hp` в обратную сторону (`cmp.Compare(y.HP, x.HP)`) | **красный**: `TestNPCTargetOrder` ×4, `TestNPCTargetReadsTheOrderOfTheRules` |
+| R5 | причина свободной атаки `flee` → `combat` в `ChangesFor` | **красный**: `TestChangesForTable` и сверка с двойником («a failed flight is punished») |
+| R6 | `if r.Excluded(*target)` → `if !target.Alive()` (участие не исключает) | **красный**: `TestResolveRefuses` idle / out_of_combat |
+| D1 | двойник (`fake_encounter.go`, `wound`): персонажу не пишутся `died_at`/`killed_by` — Р3 исчезает | **красный**: «the gap "the double writes an NPC death record on a character" did not occur» |
+| D2 | двойник: `killed_by` NPC = id решения вместо id атакующего — новое расхождение | **красный**: «a killing blow hands out the trophy» |
+| D3 | двойник: в пакет встречи добавлен op `last_damager_probe` — новое расхождение на сущности встречи | **зелёный** → Minor-1 |
+
+Мутанты исполнителя (M00–M35, в том числе выживший и закрытый M16) выборочно сверены с
+тестами, заявленное подтверждается. R0–R6 выбраны так, чтобы не повторять их.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Minor-1 | Minor | `internal/mechanics/changes_encounter_test.go:342-344`, `:394`; `tasks/T-053.md:35`; `dev-log.md:34` | Сущность встречи в пакете двойника пропускается целиком. Р5 («`encounter.npcs[].last_damager` не пишет никто») в списке обязательных расхождений отсутствует: там пять констант — Р1, Р2 ×2, Р3, Р4. Если двойник или будущий агент начнёт писать `npcs[]` либо что-то ещё на встрече, тест останется зелёным (D3). Вопрос 3 к архитектору так и не всплывёт. Карточка и dev-log утверждают, что тестом держится каждое расхождение, — для Р5 это неверно. | Для сущности встречи проверять, что пути двойника ⊆ {`round_seq`, `participants`, `state`, `resolution`, `closed_by_event_id`}. Добавить расхождение Р5 как «пути `npcs` в пакете нет» — проверка отсутствия, с той же обязательностью, что у остальных. Либо, минимум, исправить формулировку в карточке и dev-log: Р5 установлен чтением кода, не тестом. | открыто |
+| Minor-2 | Minor | `internal/mechanics/actor.go:55-58` | `kind` у NPC прочитан как необязательный: NPC без вида молча падает без трофея, и inv-03 этого не увидит. `data-model.md` §3.4 помечает `kind` обязательным. Обоснование канала ошибки `ActorFromEntity` в C-03 v1.2 — «актор без `hp`/`def` не должен молча получить ноль» — применимо и здесь: дефект создателя сущности превращается в бой по другим правилам (без трофея). | Одно из двух, решение вместе с вопросом 4 (`Actor.Kind` в C-03 v1.3). (а) NPC без `kind` → `missingAttr`; вид без таблицы трофеев остаётся законным. Перед правкой проверить сущности NPC в тестах `shared/testkit/{swarm,gateway,state}` (фикстура `testdata/fixtures/npc.json` вид содержит). (б) Явно записать в C-03 v1.3, что `Kind == ""` у NPC законен, и поправить `data-model.md` §3.4. | открыто |
+| Nit-1 | Nit | `internal/mechanics/changes.go:112`, `:174` | Формула inv-02 `min(max(hp, 0), hpMax)` продублирована рядом с `Rules.ClampHP` (`rules.go:749`). Причина понятна: `ChangesFor` — свободная функция без `*Rules`. Но арифметика инварианта теперь живёт в двух местах. | Пакетная `clampHP(hp, hpMax)`, которую зовут и `Rules.ClampHP`, и `ChangesFor`. | открыто |
+| Nit-2 | Nit | `internal/mechanics/changes.go:118-121` | Попадание с нулевым уроном (достижимо при формуле с отрицательным модификатором, например `d4-3`: `Damage` отсекает до 0) даёт `set hp` в то же значение. `restChanges` (`:175`) такой пустой `set` сознательно не порождает (`changed[]` пуст). Два пути одной функции ведут себя по-разному. | Не выпускать набор для цели, если `hpAfter == target.HP` и цель не пала, как в `restChanges`. Строка в `TestChangesForTable`. | открыто |
+| Nit-3 | Nit | `internal/mechanics/changes.go:29-35` | Для пакета с несколькими ударами по одной цели (групповой раунд I2) вызывающий обязан передавать цель с HP после предыдущих ударов. Иначе второй `set hp` в одном наборе посчитан от устаревшего HP (двойник это делает в `pack`, `hp` map). Комментарий говорит «from the target as given», но это требование не называет. | Одна фраза в документации `ChangesFor`. Проверка — в задаче I2-2 (T-066 или соседней). | открыто |
+| Nit-4 | Nit | `shared/testkit/mechanics/fixed.go:7-9`; `:319-338` | (1) Абзац пакетного комментария переформатирован с разрывом: «The rules themselves are» / «real — …». (2) Канал ошибки двойника уже настоящего. Настоящий `NPCTarget` отвечает ошибкой ещё на мёртвого NPC, не-NPC в роли кусающего, кандидата-не-персонажа и повтор id. Двойник на это отвечает целью, и потребитель, отлаженный на двойнике, узнает о дефекте только на настоящей механике. | (1) Сшить абзац. (2) Либо повторить четыре проверки в `FixedMechanics.NPCTarget`, либо назвать различие в его комментарии. | открыто |
+| Nit-5 | Nit | `internal/mechanics/resolve.go:171-175`; `rules.go:739-745` | `rest.restore: d4` проходит `Load`, `Rules.Restore(a, rng)` бросает по неадресованному генератору, а `Resolve(rest)` на том же файле отказывает. Отказ верный, но проявится посреди игры, а не при загрузке правил. | Совпадает с предложением 2 исполнителя: запрет при `Load` (или назначение броска в схеме `dice.rolled`) — бэклог. | в бэклог |
+
+### Предложения в бэклог
+
+1. **EPIC-003 (двойник, запрос через tech-lead#1).** Р3: `FakeEncounter.wound`
+   (`fake_encounter.go:1176-1182`) не должен писать `died_at`/`killed_by` павшему персонажу —
+   нарушение `ownership.go:83-86`, настоящий State отвергнет пакет. Там же устаревшие
+   комментарии `:132-133` («once EPIC-002 implements Resolve (T-053)»).
+2. **EPIC-002, после ответа архитектора на вопрос 1.** Совместимое дополнение C-03 v1.3
+   (`Action.At`, `Actor.Version`, `Actor.Kind`) и выставление `died_at`, `acquired_at`,
+   `expected_version` в `ChangesFor`, с удалением Р1/Р2 из теста сверки. Размер S.
+3. Предложения исполнителя 1–3 (проверка `attack.rolls`/`flee.rolls` при `Load`, запрет
+   `rest.restore` кубами при `Load`, тип `dmg` в `data-model.md` §3.3) поддерживаю.
+
+### Риски и допущения
+
+- Слияние в ветку эпика: `review.md` и `dev-log.md` уже изменены там слиянием T-052
+  (`2196b58`). Оба файла дописываются в конец, конфликт механический, но разрешать его
+  нужно с сохранением обеих записей.
+- `-race` не прогонялся (нет cgo), как и у исполнителя. Код T-053 конкурентности не
+  содержит, а тест сверки вызывает двойник синхронно.
+- `testkit.Deterministic` в `changes_encounter_test.go:228` меняет глобальный источник id
+  шины. Сейчас в пакете нет `t.Parallel`, и это безопасно. Добавление `t.Parallel` в
+  `internal/mechanics` сделает тест недетерминированным.
