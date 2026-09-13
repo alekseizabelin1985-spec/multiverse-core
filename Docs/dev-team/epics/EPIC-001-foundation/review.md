@@ -14114,3 +14114,175 @@ golden-set run (§12)» без пояснения, почему в T-437 его 
 - Тело прогрева в `up` (`model` = id) проверено чтением кода, а не записью запроса: мой подставной сервер тело не
   сохранял. Прогрев на всех сценариях отработал без ошибки.
 - `make ci` сам не перезапускал: правки — shell, PowerShell и текст, Go не менялся; результат исполнителя принят.
+## T-398 · ревью #1 · 2026-09-13 · code-reviewer#2
+
+### Границы ревью
+
+Ревью #1 задачи T-398 (M, tech-writer#1). Работа не закоммичена и лежит в `.worktrees/T-398`, ветка
+`task/T-398-docs-case-split` от `adadca5`, коммитов вне ветки нет. В индексе 10 переносов `R`, в рабочей копии
+изменены `Docs/archive/README.md`, карточка и `dev-log.md`. Прочитаны:
+- раздел «### T-398» индекса `tasks.md:439-441`, карточка, запись dev-log;
+- `Docs/archive/README.md` в HEAD и в рабочей копии;
+- `foundation.md` §11, `plan/ownership.md` §1.
+
+Проверки делались только чтением: `git diff --cached -M --summary`, `rev-parse` blob-хэшей, `ls-files`/`ls-tree`,
+`git grep` по дереву. Индекс не менялся, `.claude/*`, `.qwen/*`, `.mcp.json` только прочитаны.
+
+### Вердикт
+
+**ВЕРНУТЬ** — Critical 0, Major 1, Minor 1, Nit 0.
+
+Сам перенос сделан чисто:
+- **Переносы.** Все 10 записей — `rename ... (100%)`. Blob-хэш источника в HEAD совпадает с хэшем назначения в
+  индексе и с `hash-object` рабочей копии у каждого из 10 файлов, то есть ничего не удалено и содержимое не правилось.
+- **Счёт файлов.** В HEAD и в индексе по 968 файлов. Под `Docs/` было 230, стало 240 (+6 из `docs/` и +4 корневых).
+  Путей под строчным `docs/` в индексе нет. На диске один каталог `Docs`, лишнего `docs` нет.
+- **Место архива.** `Docs/archive/` выбран верно и не противоречит указанию «всё в архив». `foundation.md` §11 в
+  последней строке прямо называет его для исторических документов, `ownership.md:30` отдаёт `Docs/archive/**`
+  tech-writer, `README.md` каталога требует `git mv`. `services/_archive/` по §11 и ownership предназначен для кода.
+- **Живые ссылки.** В `README.md`, `CLAUDE.md`, `AGENTS.md`, `Makefile`, `.github/`, `scripts/`, конфигурации
+  gitleaks и линтеров ссылок на перенесённые файлы нет. `.github/workflows/qwen-*.yml` не ссылаются на `QWEN.md`.
+
+Возвращаю из-за Mj-1: у семейства `LIVING_WORLDS_*` один файл остался вне архива и одновременно выпал из списка
+кандидатов.
+
+### Замечания
+
+#### Major
+
+**Mj-1. `Docs/archive/README.md:38` (HEAD: `:31-32`): `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` не перенесён и
+выпал из списка кандидатов.**
+- **Что было.** В HEAD пункт звучал так: «`Docs/LIVING_WORLDS_*.md` (6 файлов), `Docs/FEATURES_VERIFICATION.md`,
+  `Docs/EVENTS-MIGRATION.md`». Шесть `LIVING_WORLDS_*` — это пять файлов из строчного `docs/` плюс
+  `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` (он и в HEAD лежит под заглавным `Docs/`).
+- **Что стало.** Перенесены пять, а из пункта оставлен только `Docs/EVENTS-MIGRATION.md`. Шестой файл больше нигде в
+  списке не значится, а dev-log и карточка о нём молчат.
+- **Почему это важно.** Файл из того же семейства: отчёт «Core Implementation Complete ✅ ~85%» по ветке
+  `feat/living-worlds-entity-actor`. Его статус противоречит коду, и `open-questions.md:202` сравнивает его с
+  `README_LIVING_WORLDS.md` как пару. `foundation.md` §11 отправляет в архив `Docs/LIVING_WORLDS_*` целиком, а
+  заголовок задачи — «вычистить устаревшие… (QWEN.md и др.)». После правки семейство разорвано между `Docs/` и
+  `Docs/archive/`, а единственный список, по которому его подобрала бы будущая задача, файл потерял.
+
+*Как исправить (предпочтительно):* перенести `git mv Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md Docs/archive/` с тем
+же обоснованием и добавить строку в таблицу «Перенесённые документы» («отчёт о готовности отклонённой архитектуры
+Entity-Actor, статус не подтверждён кодом — `requirements/inventory.md` INV-23, `project/open-questions.md`» →
+`Docs/dev-team/architecture/overview.md`). Упоминания в `audit-facts.md:159` и `open-questions.md:202` — записи
+аудита, их не трогать.
+*Минимум:* вернуть файл в список кандидатов отдельным пунктом.
+В обоих случаях добавить в dev-log одну строку о нём.
+
+#### Minor
+
+**Mi-1. `Docs/archive/README.md:14-15`: правило указывает на `docs/**` как на место актуальной документации.**
+Строка «Актуальная документация проекта живёт в `Docs/dev-team/**` … и в `docs/**` (пользовательская документация и
+runbook, создаётся в F-9)» после этой задачи неверна: в git путей под `docs/` больше нет, runbook лежит в
+`Docs/ops/runbook.md`. На ФС с учётом регистра правило ведёт в несуществующий каталог и заново узаконивает раскол,
+который задача сводит. Раздел «Правила» в задаче правился (`:11`), а эта строка осталась.
+*Как исправить:* «… и в `Docs/**` вне `archive/` (пользовательская и эксплуатационная документация, например
+`Docs/ops/runbook.md`); строчного `docs/` в корне нет (T-398)».
+
+### Проверено и замечаний не дало
+
+- **Оставленные ссылки.** Исполнитель не тронул три места: `foundation.md:330` (план), `inventory.md` и
+  `open-questions.md` (датированный аудит), `services/entity-actor/docs/technical-spec.md:745` (заморожен). Согласен
+  со всеми тремя. В замороженной спецификации соседние ссылки (`docs/SEMANTIC_MEMORY_V2.md`,
+  `docs/GM_COMPLETE_DOCUMENTATION.md`) были битыми и до задачи.
+- **Ссылки в файлах владельца.** Под `.claude/*`/`.qwen/*` они битые, но трогать эти файлы нельзя:
+  - `.claude/plugins/multiverse-core-plugins/README.md:175` — ссылка `../../../../AUTOMATION-SETUP.md`;
+  - `.qwen/PROJECT_SUMMARY.md:3,5,15,63` — журнал сессии Qwen, упоминание, а не ссылка.
+
+  Исполнитель правильно вынес это в риски.
+- **`shared/eventbus/README.md:242`, `foundation.md:149`.** Там `docs/` означает `shared/eventbus/docs/`, который
+  существует, к задаче это не относится.
+- **Таблица `Docs/archive/README.md:21-30`.** 10 строк, ровно 10 фактических переносов, исходные пути совпадают с
+  `git status`. Остальные кандидаты (`Docs/architecture*.md` ×3, `Docs/EVENTS-MIGRATION.md`, `PULL_REQUEST.md`,
+  `memory/**`/`plans/**`/`reports/**`) на месте и существуют в дереве. Потерян только пункт из Mj-1.
+- **Гигиена.** `git diff --check` и `git diff --cached --check` чисты. Три изменённых файла в рабочей копии — CRLF,
+  число CR равно числу LF, смешения нет; `.gitattributes` `* text=auto` нормализует. В `artifactsDir` изменены
+  только карточка и dev-log.
+
+### Предложения в бэклог
+
+1. `infrastructure.md:1044`, `:1106` ссылаются на `docs/ops/runbook.md` строчными буквами, а файл лежит в
+   `Docs/ops/runbook.md`. На ФС с учётом регистра ссылка битая. Файл ведёт devops-engineer, и его как раз
+   переписывает T-399, так что правку разумно добавить туда.
+2. `architecture/overview.md:5` и `project/glossary.md:8` называют источником `Docs/LIVING_WORLDS_*.md`. После
+   переноса маска ведёт в `Docs/archive/`. Это живые документы (system-architect и BA). Нужна одна строка у
+   владельцев при следующей правке, приёмку это не блокирует.
+3. Битая ссылка в `.claude/plugins/multiverse-core-plugins/README.md:175` — решение за владельцем: убрать или
+   направить в `Docs/archive/AUTOMATION-SETUP.md`.
+
+## T-398 · ревью #2 · 2026-09-13 · code-reviewer#1
+
+### Границы ревью
+
+Повторное ревью после итерации 2: проверены исправления Mj-1 и Mi-1, регрессия от них и итог задачи целиком.
+Работа по-прежнему не закоммичена: `.worktrees/T-398`, ветка `task/T-398-docs-case-split`, HEAD `adadca5`.
+HEAD — предок `epic/EPIC-001-foundation`, коммитов вне ветки задачи нет. После HEAD эпик не менял ни одного
+перенесённого пути, `Docs/archive/` и карточку T-398. В индексе 11 переносов `R`. В рабочей копии изменены
+`Docs/archive/README.md`, карточка, `dev-log.md` и `review.md`, последний — запись ревью #1.
+
+Прочитаны: ревью #1, раздел «Итерация 2» карточки, обе записи T-398 в dev-log, `git show HEAD:Docs/archive/README.md`
+и текущий README. Проверки делались только чтением: `diff --cached -M --summary/--name-status`, blob-хэши
+(`rev-parse HEAD:<src>`, `rev-parse :<dst>`, `hash-object <dst>`), `ls-tree`/`ls-files`, `git grep`, `diff --check`.
+Индекс не менялся.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 2.
+
+- **Mj-1 закрыт.** `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md → Docs/archive/` — `rename (100%)`, хэш
+  `7681fc9a…` совпадает в HEAD, индексе и рабочей копии. Исходного пути на диске нет. Строка
+  в таблице — `Docs/archive/README.md:32`. `audit-facts.md:159` и `open-questions.md:202` не изменены:
+  `git diff HEAD` по `Docs/dev-team/architecture`, `requirements`, `project` пуст. Кроме самого README, `git grep`
+  по дереву находит имя файла только в этих двух записях аудита, то есть живых ссылок нет. Семейство
+  `LIVING_WORLDS_*` теперь целиком в архиве: 6 файлов плюс `README_LIVING_WORLDS.md`, это те же 7, что в
+  `open-questions.md:750`. Вне `Docs/archive/` таких файлов нет.
+- **Mi-1 закрыт.** `Docs/archive/README.md:14-16`: «`Docs/**` вне `archive/` … например `Docs/ops/runbook.md`;
+  строчного `docs/` в корне нет (T-398)». Текст совпадает с предложенным, `Docs/ops/runbook.md` есть в индексе.
+
+### Итог по задаче целиком
+
+- **Переносы.** 11 записей `R100`: 5 из `docs/LIVING_WORLDS_*`, `docs/FEATURES_VERIFICATION.md`,
+  `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` и 4 корневых (`QWEN.md`, `AI_AGENT_INSTRUCTIONS.md`,
+  `README_LIVING_WORLDS.md`, `AUTOMATION-SETUP.md`). У каждой хэш источника в HEAD совпадает с хэшем назначения
+  в индексе и в рабочей копии.
+- **Ничего не удалено.** В HEAD и в индексе по 968 файлов. `--diff-filter=D` пуст и в индексе, и в рабочей копии,
+  неотслеживаемых файлов нет. Под `Docs/` было 230, стало 240: +6 из `docs/` и +4 из корня, а
+  `IMPLEMENTATION_STATUS` остался внутри `Docs/`.
+- **`docs/`.** `git ls-files | grep '^docs/'` возвращает 0. На диске рабочей папки один каталог `Docs`.
+- **Таблица = факт.** В `Docs/archive/README.md:22-32` 11 строк. Исходные пути строк совпадают с 11 путями
+  `--name-status` один к одному, лишних и недостающих нет.
+- **Кандидаты не потеряны.** Разобран каждый пункт `HEAD:Docs/archive/README.md:29-36`:
+  - перенесены: `LIVING_WORLDS_*` ×6, `FEATURES_VERIFICATION.md`, `AI_AGENT_INSTRUCTIONS.md`, `QWEN.md`,
+    `AUTOMATION-SETUP.md`, `README_LIVING_WORLDS.md`;
+  - остались в `:38-43`: `Docs/architecture*.md` ×3, `Docs/EVENTS-MIGRATION.md`, `PULL_REQUEST.md`,
+    `memory/**`, `plans/**`, `reports/**`. Все пути отслеживаются, каталоги непусты (6/2/1 файлов).
+- **Объём итерации 2.** Добавились только перенос одного файла, строка `:32`, правка правила `:14-16`, запись
+  dev-log и подраздел карточки. Остальные строки README совпадают с состоянием, описанным в ревью #1: сдвиг на 2
+  строки объясняется этими правками. Других файлов не появилось, `.claude/*`, `.qwen/*`, `.mcp.json` и
+  `Docs/user-stories/` не затронуты.
+- **Гигиена.** `git diff --check` и `git diff --cached --check` чисты. Четыре изменённых файла в CRLF, число CR
+  равно числу LF, смешения нет.
+
+### Замечания
+
+#### Nit
+
+**N-1. `Docs/dev-team/epics/EPIC-001-foundation/dev-log.md:8286`: неверный относительный путь `../review.md`.**
+`dev-log.md` лежит в одном каталоге с `review.md`, поэтому `../review.md` ведёт в несуществующий
+`Docs/dev-team/epics/review.md`. В карточке, которая лежит в `tasks/`, тот же путь верен, отсюда, видимо, и
+перенос. *Как исправить:* `review.md`. Можно поправить при следующем касании dev-log, приёмку это не блокирует.
+
+**N-2. `Docs/dev-team/epics/EPIC-001-foundation/tasks/T-398.md:105`: «из шести пунктов HEAD».** В
+`HEAD:Docs/archive/README.md` четыре пункта списка кандидатов: `architecture*`; `LIVING_WORLDS_*` +
+`FEATURES_VERIFICATION` + `EVENTS-MIGRATION`; корневые as-is; `memory`/`plans`/`reports`. Сама сверка верна, неточен
+только счёт. *Как исправить:* «из четырёх пунктов HEAD».
+
+### Предложения в бэклог
+
+Пункты 1–3 ревью #1 остаются в силе, итерация 2 их не касалась. Добавляется один:
+
+4. `architecture/overview.md:5` помимо `LIVING_WORLDS_*` называет историческим `Docs/agent-gm-research/`. Этого каталога не было в
+   списке кандидатов `Docs/archive/README.md` ни в HEAD, ни сейчас. Если решение A3 (`open-questions.md:754`) в силе,
+   пункт стоит добавить в список кандидатов при следующей гигиенической задаче tech-writer.
