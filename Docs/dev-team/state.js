@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:53:58+03:00",
+  "updatedAt": "2026-09-13T17:58:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4276,7 +4276,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-459",
           "title": "Документы EPIC-003 под C-07 v1.5 и решения T-457: ADR-029 принято, КД роя §9.1/§9.2/§13.4, DoD T-203/T-211/T-212/T-213, ответы по валидатору T-202 (architect#2)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -9275,7 +9275,7 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Документы EPIC-003 под C-07 v1.5",
       "startedAt": "2026-09-13T17:34:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:58:06+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9335,6 +9335,16 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Ревью #1: Go-гейт локального адреса",
       "startedAt": "2026-09-13T17:53:58+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-459",
+      "action": "Ревью #1: документы EPIC-003 под C-07 v1.5",
+      "startedAt": "2026-09-13T17:58:06+03:00",
       "finishedAt": null
     }
   ],
@@ -12512,6 +12522,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-451 выполнена TEAM-2/developer#1: гейт облака internal/llm даёт на каждую строку local-endpoints.tsv (121) и endpointStandCases (2) тот же класс — третий тест паритета (IsLocalEndpoint, LoadConfig с гейтом, Config вручную); точка у IPv4 и однословного имени не снимается; порт обязателен у любого l"
+    },
+    {
+      "at": "2026-09-13T17:58:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-459 выполнена TEAM-2/architect#2: ADR-029 «принято» (N-6, unknown_entity+element+ref, labels_hash), КД роя §9.1 (fake/recorded, ключ из llm.Request, shared/recording), §9.2 (Allow перед каждой попыткой, синхронный Observe), §13.2 решения по валидатору (Issue.Code для 7а — T-222, city-gm резервная "
     }
   ],
   "blockers": [],
