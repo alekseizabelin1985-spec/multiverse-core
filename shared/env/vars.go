@@ -103,6 +103,16 @@ var (
 		"clients allowed to send X-Actor-Kind ci or sim")
 	CoreURL = Declare("MV_CORE_URL", "http://127.0.0.1:8090",
 		"core address the gateway proxies /v1/admin/* to (D-7)")
+	GatewayRateActionsPerMin = Declare("MV_GATEWAY_RATE_ACTIONS_PER_MIN", "30",
+		"actions a player may send in any minute (SEC-11); the 31st of the default answers 429", IsInt())
+	GatewayRateActionsBurst = Declare("MV_GATEWAY_RATE_ACTIONS_BURST", "5",
+		"actions a player may send in a row before the per-minute rate applies (SEC-11)", IsInt())
+	GatewayInputFilter = Declare("MV_GATEWAY_INPUT_FILTER", "noop",
+		"input filter of the texts of players (FR-056); MVP-1 has only noop, any other value fails the start",
+		OneOf("noop"))
+	GatewayEncounterGrace = Declare("MV_GATEWAY_ENCOUNTER_GRACE", "10s",
+		"how long an active encounter may run without its task agent before its actions answer encounter_unavailable",
+		IsDuration())
 
 	// --- core -------------------------------------------------------------
 
@@ -134,6 +144,11 @@ var (
 		"memory service address; empty switches memory off (degradation FR-035)")
 	SnapshotEveryFacts = Declare("MV_SNAPSHOT_EVERY_FACTS", "200",
 		"state writes a snapshot every N facts", IsInt())
+	// StateWorlds is read by internal/state when the context starts: one worker
+	// per world, the single writer of that world (EPIC-002 design.md §4.3, T-055).
+	StateWorlds = Declare("MV_STATE_WORLDS", "dark-forest-world",
+		"comma separated worlds the context state serves, one worker each; "+
+			"proposals of any other world are passed over")
 	GMPath = Declare("MV_GM_PATH", "agent",
 		"game master path; the feature flag of the migration off the legacy orchestrator (S5)",
 		OneOf("agent", "legacy"))
@@ -146,6 +161,15 @@ var (
 	// started from the repository root finds laws/ there.
 	LawsDir = Declare("MV_LAWS_DIR", "laws",
 		"directory of the laws documents <world>.v<N>.yaml (C-12, ADR-008); "+
+			"relative to the working directory of the process")
+	// SwarmBlueprintsDir is read by internal/swarm (swarm.LoadFromEnv) when it
+	// builds the registry of blueprints. The default is relative on purpose,
+	// like MV_LAWS_DIR: a process started from the repository root finds
+	// blueprints/ there, and the references of a blueprint (laws, rules,
+	// absolute limits, schemas) are resolved against that same working
+	// directory.
+	SwarmBlueprintsDir = Declare("MV_SWARM_BLUEPRINTS_DIR", "blueprints",
+		"directory of the agent blueprints the swarm loads (C-11); "+
 			"relative to the working directory of the process")
 	// SwarmFake belongs to the process, not to a context: cmd/multiverse reads
 	// it when it builds the context swarm, because at I1-α there is no swarm
@@ -292,6 +316,15 @@ var (
 		"long polling timeout of getUpdates, in seconds", IsInt())
 	TelegramHealthAddr = Declare("MV_TELEGRAM_HEALTH_ADDR", ":8089",
 		"listen address of /health of the bot")
+	// T-310. The names follow MV_TELEGRAM_* of this block; component §11.3
+	// still says MV_BOT_ACTION_KEY_SALT and MV_BOT_RATE_COMMANDS_PER_MIN, the
+	// final names are architect#3's to confirm there.
+	TelegramActionKeySalt = Declare("MV_TELEGRAM_ACTION_KEY_SALT", "",
+		"HMAC key of action_key (ADR-018), at least 16 characters; empty derives it from the bot token by SHA-256",
+		Secret())
+	TelegramCommandsPerMin = Declare("MV_TELEGRAM_COMMANDS_PER_MIN", "20",
+		"commands one Telegram user may send within any 60 seconds before the bot answers \"too often\" (SEC-11, NFR-049)",
+		IsInt())
 )
 
 func init() {

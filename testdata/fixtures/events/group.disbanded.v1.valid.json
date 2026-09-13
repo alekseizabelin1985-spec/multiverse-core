@@ -1,0 +1,6 @@
+{
+  "group": { "entity": { "id": "g-1", "type": "group" }, "name": "g-1" },
+  "leader": null,
+  "members": [],
+  "cause": "disband"
+}

@@ -1,0 +1,15 @@
+{
+  "mode": "recovery",
+  "replay": {
+    "run_id": "dark-forest-world:core/state:000001",
+    "snapshot_id": "state:dark-forest-world:000000",
+    "events_replayed": 0,
+    "llm_calls": 0,
+    "dice_rolled_new": 0,
+    "duration_ms": 180,
+    "state_hash_before": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e",
+    "state_hash_after": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e",
+    "identical": true,
+    "incomplete_record": false
+  }
+}

@@ -1,31 +1,38 @@
 # Задачи EPIC-002 «Состояние и механика» (I1 — волна 1, I2 — волна 1.8→2)
 
-Версия 0.1.1 · 2026-09-09 · tech-lead#1 (TEAM-1) · статус: к G3.
+Версия 0.1.4 · 2026-09-13 · tech-lead#1 (TEAM-1); v0.1.3, v0.1.4 — tech-lead#2 (TEAM-1) · статус: G3 утверждён 2026-09-09; v0.1.2 — редакционная правка без изменения объёма, переутверждение не требуется; v0.1.3 — добавлена задача T-458 по решению system-architect#1 (T-457); v0.1.4 — приёмка T-458, строки DoD T-061 и T-066, слова статуса в заголовках по `state.js`.
 **Правки сведения 3** (`architecture/consolidation.md` §14.1 З-2, `contracts.md` v0.4 C-02 v1.2, ADR-017 доп. 1 п. 5; внесено tech-lead#1): T-053 (`NPCTarget` — `abandoned` = `dead`), T-054 (inv-01 для `status ∈ dead|abandoned|ascended_final`), T-056 (`abandoned` — терминальный, переход только `alive → abandoned` от gateway, `cause=forget`). Схемы `entity.*.proposed` с `cause=forget` создаёт EPIC-001 T-006 (F-4b-1). Структура подволн не менялась.
 **Правки ревизии контрактов T-416** (`contracts.md` v0.7: C-01 v1.4, C-02 v1.4; ADR-025, ADR-027; внесено tech-lead#1 2026-09-11): T-055 — решение о `WithCauseID` для фактов State; T-060 — таймеры шины сужены до решения архитектора; T-061, критерии I1/I2 и §5 — `FakeEncounter` вместо `WithEncounterStub`, `mvctl report`, таблица владения одна. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
-Команда TEAM-1 · ветка **`epic/EPIC-002-state-mechanics`** (от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0) · G2 утверждён 2026-09-09.
-Основание: `epics/EPIC-002-state-mechanics/design.md` v0.1 (§4.1 блоки I1-1…I1-12, §4.2 блоки I2-1…I2-6, §4.3 специфика, §9 тестируемость); `architecture/components/state-and-mechanics.md` v0.2 (§3–§7, §4.10, §11, §12, §16); `architecture/contracts.md` v0.2 (C-01 v1.1, C-02 v1.1, C-03 v1.1, C-13, C-14 v1.1); ADR-003, ADR-011, ADR-012, ADR-013, ADR-021; `plan/epics.md` v0.2 §2; `plan/teams.md` §4; `plan/ownership.md` v0.2; `epics/EPIC-001-foundation/design.md` §5 и `tasks.md` §8 (волны проекта).
+**Редакционная правка v0.1.2** (2026-09-13, tech-lead#1; сверка плана EPIC-002 с деревом, `journal.md` 2026-09-13): индекс приведён к `contracts.md` v0.10 (C-01 v1.7, C-02 v1.4, C-03 v1.2, C-14 v1.2), к дереву `develop` 1c2ee7e и к gitflow. Ветка эпика — от `develop`, задачи — ветки `task/T-NNN-<slug>` в своих папках. Вместо `integration/mvp-1`, «раннего merge» и тегов — контрольные слияния в `develop` по постоянному разрешению пользователя (2026-09-13). T-050 и T-051 ужаты до S «сверка и добор»: их код в `develop` с EPIC-001. Правка `StatusTransitionAllowed(x, x)` перенесена из T-056 в T-050. DoD T-052…T-071 дополнены по C-01 v1.5–v1.7, C-02 v1.3–v1.4, C-03 v1.2, C-14 v1.2. Состав задач, порядок, подволны и исполнители не менялись. Добавленные пункты помечены «(сверка 2026-09-13)», отменённые зачёркнуты с пометкой «заменено (сверка 2026-09-13)».
+**Добавление v0.1.3** (2026-09-13, tech-lead#2, TEAM-1; основание — EPIC-001 T-457: `contracts.md` v0.13, C-01 v1.9, §16 п. 8; `ownership.md` v0.7 §3 п. 4 (а)): в конец индекса добавлен раздел **T-458** «Запись сессии» (`shared/recording` переносом из `internal/replay`, `ReadJournal`, `Deps.Recording` в `serve.go`, маршрут часов replay, `EventClock.Advance`), M, developer#3, подволна 1.4, `contract-change`; часть А — первой. Сверка «Файлов» с T-056 и T-057 — в разделе задачи: пересечений нет. Прочие разделы не менялись.
+**Правка v0.1.4** (2026-09-13, tech-lead#2, TEAM-1; основание — приёмка T-458, карточка `tasks/T-458.md`, раздел «Приёмка»; EPIC-001 `tasks/T-457.md`, «Строки DoD для владельцев задач» → EPIC-002): T-458 — статус `done` и строка приёмки; T-061 — зависимость от T-458, строки DoD T-457 (время корней через маршрут часов) и приёмки T-458 (общий клиент маршрута с разбором `clock_behind`, терпимый разбор тела ошибки, справочное чтение журнала только через `recording.ReadJournal`); T-066 — строки DoD T-457 (inv-01, сторона NPC). Слова статуса в заголовках приведены к `state.js`: T-050, T-051, T-052, T-053, T-054, T-060 — `done`; T-056 — `in_progress`. Раздел T-056, кроме слова статуса, не менялся: задача в работе у developer#2, строки T-457 для неё в индекс не внесены (вопрос оркестратору из приёмки T-458). Прочие разделы не менялись.
+
+Команда TEAM-1 · ветка **`epic/EPIC-002-state-mechanics`** от `develop` 1c2ee7e (после контрольного слияния EPIC-001 → `develop` 2026-09-13), папка `.worktrees/EPIC-002` · G2 утверждён 2026-09-09. ~~(от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0)~~ заменено (сверка 2026-09-13).
+**Gitflow (сверка 2026-09-13)**: задача — ветка `task/T-NNN-<slug>` от ветки эпика, в своей папке `.worktrees/T-NNN`; исполнитель ведёт карточку `tasks/T-NNN.md`, `dev-log.md` и `review.md` в ветке задачи; этот индекс правит только tech-lead#1. После приёмки оркестратор сливает ветку задачи в ветку эпика; конфликт разрешает исполнитель, которого назначит tech-lead#1. Задачи одной подволны у разных исполнителей ведутся параллельно в разных папках.
+Основание: `epics/EPIC-002-state-mechanics/design.md` v0.1.1 (§4.1 блоки I1-1…I1-12, §4.2 блоки I2-1…I2-6, §4.3 специфика, §9 тестируемость); `architecture/components/state-and-mechanics.md` v0.3 (§3–§7, §4.10, §11, §12, §16); **`architecture/contracts.md` v0.10 (C-01 v1.7, C-02 v1.4, C-03 v1.2, C-13, C-14 v1.2)** ~~v0.2 (C-01 v1.1, C-02 v1.1, C-03 v1.1, C-13, C-14 v1.1)~~; ADR-003, ADR-011, ADR-012, ADR-013, ADR-021, ADR-023, ADR-024, ADR-025, ADR-027; `plan/epics.md` v0.3 §2; `plan/teams.md` §4; `plan/ownership.md` v0.5; `epics/EPIC-001-foundation/design.md` §5 и `tasks.md` §8 (волны проекта).
 
 Диапазон номеров: **T-050…T-129** (TEAM-1). Слоты волны 1: **2 разработчика** — две нитки: `mechanics` (developer#1) ∥ `entity`/`state` (developer#2).
 Размер: **S** ≤ полдня · **M** ≤ одной сессии одного разработчика · L не допускается.
 
-**Стартовая точка — не «с нуля»**: `shared/entity` v2 (T-011), `internal/mechanics` типы + `Load` + `rules/dark-forest.yaml` (T-015), `FakeState` v0 / `FixedMechanics` (T-017), `Harness` v0 (T-018), фикстуры (T-016) уже в `integration/mvp-1`; двойники боя и нарратива — `FakeEncounter` и `FakeNarrator` (EPIC-003 T-219, T-220; по C-05 v1.4 их дорабатывает T-419). *(T-416, 2026-09-11: прежде здесь стояло `FakeNarrator` + `WithEncounterStub` (T-018). `WithEncounterStub` снят сведением 2 и не делался — см. EPIC-001 T-018.)*
+**Стартовая точка — не «с нуля»**: `shared/entity` v2 (T-011), `internal/mechanics` типы + `Load` + `rules/dark-forest.yaml` (T-015), `FakeState` v0 / `FixedMechanics` (T-017), `Harness` v0 (T-018), фикстуры (T-016) уже в **`develop`** ~~`integration/mvp-1`~~; двойники боя и нарратива — `FakeEncounter` и `FakeNarrator` (EPIC-003 T-219, T-220; по C-05 v1.4 их доработала T-419). *(T-416, 2026-09-11: прежде здесь стояло `FakeNarrator` + `WithEncounterStub` (T-018). `WithEncounterStub` снят сведением 2 и не делался — см. EPIC-001 T-018.)*
+**(сверка 2026-09-13) Что ещё в `develop` 1c2ee7e**: `rng.go` (`Seed`, `NewRNG`) и `formula.go` с вычислителем (`CheckExpr.Eval`, идентификатор `living_enemies`), `actor.go` (`ActorFromEntity`), `dice_event.go` (`DiceRolledPayload`) в форме C-03 v1.2; `resolve.go` и `changes.go` отвечают `ErrNotImplemented`, `target.go` — `NPCTarget` без канала ошибки, у всех `Invariants()` `Check == nil`. Покрытие: `shared/entity` 86,9 %, `internal/mechanics` 94,9 %. Шина: `shared/eventbus/membus` (T-418), `Dedup.Has/Add/IDs/Restore` и `WithCauseID` (T-417), перехват паники обработчика в `Delivery` (T-426), `runtime.StopAll` с перехватом паники (T-430). Фикстуры payload событий `testdata/fixtures/events/` и их сверка `test/fixtures/events_test.go` (T-214, T-215). Сборка процесса и флаги `--mode`, `--recording`, `--id-source` — в `cmd/multiverse/serve.go`; источники конструкторов (`SetRegistry`/`SetClock`/`SetIDSource`) процесс пока не ставит.
 
 ---
 
 ## 1. Общий DoD (применяется к каждой задаче)
 
-1. `make lint` чист; `go build ./... && go vet ./...` зелёные.
-2. `go test -short -race -count=1 ./...` зелёные; тесты написаны в той же задаче (уровни — `design.md` §9, `state-and-mechanics.md` §11).
-3. **CI зелёный** на PR в ветку эпика и в `integration/mvp-1`: `unit`, `integration`, `e2e`, `contracts`, `security`, `compose-lint`.
-4. `coverage-gate.sh 60 internal/state internal/mechanics internal/replay` — покрытие ядра **≥ 60 %** (NFR-064); падение покрытия ниже порога блокирует приёмку.
-5. `dev-log.md` эпика заполнен: `developer#K`, `T-NNN`, что сделано, отклонения от дизайна, запросы к владельцам контрактов.
-6. Изменений вне карты владения нет: EPIC-002 владеет `shared/entity/**`, `internal/{state,mechanics,replay}/**`, `rules/**`, `schemas/events/{entity.*,dice.rolled,snapshot.created,analytics.replay.completed}`, `cmd/mvctl/internal/world/**`, `shared/testkit/{state,mechanics}/**`. Правки `shared/{eventbus,contracts,clock,runtime,objstore}` — **запрос к system-architect / tech-lead#1**, не прямая правка.
-7. Заглушки других команд (`testkit/gateway`, `testkit/swarm`) **не правятся** — запрос владельцу (EPIC-004 / EPIC-003) через tech-lead#1.
-8. Поведение соответствует критериям приёмки US задачи (US-003, US-005, US-011, US-017, US-006/US-007 для I2).
+1. **(сверка 2026-09-13)** В папке задачи (`.worktrees/T-NNN`) зелёный **`make ci BASE=develop`**: `lint`, `test` с порогом покрытия, `test-race` (без cgo — SKIPPED), `contracts`, `secrets-scan`, `privacy-scan`, `vuln`, `compose-lint`, `test-e2e`. `BASE=develop` указывается явно, пока `Makefile:85` держит `BASE ?= integration/mvp-1` (бэклог EPIC-001). Отдельно `go build ./... && go vet ./...` зелёные.
+2. **(сверка 2026-09-13)** **`make test`** зелёный вместе с порогом покрытия: `scripts/coverage-gate.sh 60` по `internal/{state,mechanics,swarm,llm,replay}` (пакета ещё нет — предупреждение, не отказ). Покрытие каждого пакета задачи из этого списка ≥ 60 % (NFR-064); у `shared/entity` порог 60 % проверяется `go test -cover`, в gate пакет не входит. Падение ниже порога блокирует приёмку. Тесты написаны в той же задаче (уровни — `design.md` §9, `state-and-mechanics.md` §11).
+3. ~~**CI зелёный** на PR в ветку эпика и в `integration/mvp-1`: `unit`, `integration`, `e2e`, `contracts`, `security`, `compose-lint`.~~ Заменено (сверка 2026-09-13) пунктами 1–2: PR и `integration/mvp-1` не используются.
+4. ~~`coverage-gate.sh 60 internal/state internal/mechanics internal/replay` — покрытие ядра **≥ 60 %** (NFR-064); падение покрытия ниже порога блокирует приёмку.~~ Заменено (сверка 2026-09-13) пунктом 2: порог входит в `make test`.
+5. **(сверка 2026-09-13) Интеграционные прогоны** — только если задача их требует: `go test -tags integration ./<пакеты задачи>/...` на одноразовых контейнерах testcontainers. Одновременно — не больше одного интеграционного прогона на проект (очередь держит оркестратор). После прогона проверить, что контейнеров testcontainers не осталось, и записать результат в `dev-log.md`. `make test-integration`, `make up`/`make down` и контейнеры владельца — нельзя (решение пользователя 2026-09-13).
+6. `dev-log.md` эпика и карточка `tasks/T-NNN.md` заполнены в ветке задачи: `developer#K`, `T-NNN`, что сделано, отклонения от дизайна, запросы к владельцам контрактов.
+7. Изменений вне карты владения нет: EPIC-002 владеет `shared/entity/**`, `internal/{state,mechanics,replay}/**`, `rules/**`, `schemas/events/{entity.*,dice.rolled,snapshot.created,analytics.replay.completed}` и их фикстурами в `testdata/fixtures/events/`, `cmd/mvctl/internal/world/**`, `shared/testkit/{state,mechanics}/**`. Правки `shared/{eventbus,contracts,clock,runtime,objstore}` — **запрос к system-architect через tech-lead#1** (`contract-change`), не прямая правка; на период трёх веток эпиков такие правки делаются только в EPIC-001. Правки `cmd/multiverse/**` и `cmd/mvctl/main.go` — через tech-lead#1.
+8. Заглушки других команд (`testkit/gateway`, `testkit/swarm`) **не правятся** — запрос владельцу (EPIC-004 / EPIC-003) через tech-lead#1.
+9. Поведение соответствует критериям приёмки US задачи (US-003, US-005, US-011, US-017, US-006/US-007 для I2).
 
 **Критерии приёмки инкрементов** (ворота тимлида):
-- **I1**: `mvctl world init --fixtures testdata/fixtures/` создаёт «Тёмный лес» (6 сущностей, снапшот seq 0 `reason=bootstrap`); e2e **`solo-30` на `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) с реальными `mechanics`** — 30 ходов без расхождений снапшота и журнала *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; **recovery: рестарт → `identical=true`, `llm_calls=0`, `dice_rolled_new=0`** (`analytics.replay.completed mode=recovery`); участие в **I1-α** (живая игра через бота); unit ≥ 60 % ядра.
+- **I1**: `mvctl world init --fixtures testdata/fixtures/` создаёт «Тёмный лес» (6 сущностей, снапшот seq 0 `reason=bootstrap`); e2e **`solo-30` на `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) с реальными `mechanics`** — 30 ходов без расхождений снапшота и журнала *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; **recovery: рестарт → `identical=true`, `llm_calls=0`, `dice_rolled_new=0`** (`analytics.replay.completed mode=recovery`); участие в **I1-α** (живая игра через бота; сборка — контрольными слияниями EPIC-002 → `develop`, затем EPIC-004 → `develop`, сверка 2026-09-13); unit ≥ 60 % ядра.
 - **I2**: `group-3x30` в CI зелёный; S2 с харнессом из трёх клиентов (после EPIC-004 I2); `mvctl report --audit` на записи S2 даёт `state_divergence = 0` *(T-416: было `session-report --audit`; имя — C-10, T-409)*.
 
 ---
@@ -36,105 +43,178 @@
 
 ### Подволна 1.1
 
-### T-050: I1-1 · `shared/entity` — дозаполнение и полное покрытие · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.1
-- **Описание**: сверить `shared/entity` v2 (из T-011) с `state-and-mechanics.md` §3: геттеры `attrs.go` для **всех** атрибутов `data-model.md` §3 (в т. ч. `flee`, `encounter`, `participation`, `died_at`, `killed_by`, `inventory[].source`), обрезка `HistoryEntry` до 50, `Ref` ⇄ `eventbus.EntityRef` в обе стороны, полный набор тестов `ApplyOps` (§11).
-- **Файлы**: `shared/entity/{entity,attrs,ops,types,hash,ref}.go` + тесты.
-- **Зависимости**: T-011 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-1; `state-and-mechanics.md` §3, §11; C-02 v1.1; ADR-013.
-- **DoD**: тесты покрывают каждую op (`set/inc/append/remove`), каждую ошибку (`invalid_op`, тип не совпал, путь не найден) и no-op; `StateHash` стабилен при перестановке ключей и между процессами; покрытие `shared/entity` ≥ 60 %; изменения структуры (если нужны) согласованы с system-architect как `contract-change`; общий DoD §1.
+### T-050: I1-1 · `shared/entity` — сверка и добор, `StatusTransitionAllowed(x, x)` по C-02 v1.4 · Размер: S ~~M~~ · Статус: done · Исполнитель: developer#2 · Подволна 1.1 · Ветка: `task/T-050-entity-reconcile`
+- **Описание (сверка 2026-09-13)**: код T-011 в `develop`, покрытие `shared/entity` 86,9 %. Сверить с деревом пункты прежнего описания: геттеры `attrs.go` для всех атрибутов `data-model.md` §3, `HistoryLimit = 50`, `Ref.EventRef`/`RefFrom`, полный набор тестов `ApplyOps` (§11). Добрать недостающее. **Перенесено из T-056**: `entity.StatusTransitionAllowed(x, x)` отвечает `true` для нетерминального `x` (C-02 v1.4 «Статус в то же значение»), для терминальных — по-прежнему `false`.
+  ~~Прежнее описание: сверить `shared/entity` v2 (из T-011) с `state-and-mechanics.md` §3: геттеры `attrs.go` для **всех** атрибутов `data-model.md` §3 (в т. ч. `flee`, `encounter`, `participation`, `died_at`, `killed_by`, `inventory[].source`), обрезка `HistoryEntry` до 50, `Ref` ⇄ `eventbus.EntityRef` в обе стороны, полный набор тестов `ApplyOps` (§11).~~ Заменено (сверка 2026-09-13): это сделано в T-011, остаётся сверка.
+- **Файлы**: `shared/entity/{types,attrs,entity,ops,hash}.go` + тесты (`ref.go` нет: `Ref` живёт в `entity.go`).
+- **Зависимости**: T-011 (волна 0, в `develop`).
+- **Ссылки**: `design.md` §4.1 I1-1; `state-and-mechanics.md` §3, §11; **C-02 v1.4** ~~C-02 v1.1~~; ADR-013.
+- **DoD**: тесты покрывают каждую op (`set/inc/append/remove`), каждую ошибку (`invalid_op`, тип не совпал, путь не найден) и no-op; `StateHash` стабилен при перестановке ключей и между процессами; изменения структуры (если нужны) согласованы с system-architect как `contract-change`; общий DoD §1.
+  - **(сверка 2026-09-13)** В `dev-log.md` — таблица сверки «пункт прежнего описания → место в дереве → тест»; недостающее добрано тестами. Покрытие `shared/entity` не ниже 86,9 %.
+  - **(сверка 2026-09-13; C-02 v1.4, перенос из T-056)** `StatusTransitionAllowed(alive, alive) = true`. Строка `alive→alive` в `TestStatusTransitionAllowed` меняет ожидание на `true`. Строки `abandoned→abandoned`, `dead→dead`, `ascended_final→ascended_final` — `false`. Мутант «вернуть `from == to → false`» краснеет. `shared/testkit/state` (`statusRefusal`) зелёный без правок. Метка `contract-change`: сигнатура не меняется, меняется ответ; ревью system-architect.
 
-### T-051: I1-3 · `mechanics` — RNG и вычислитель формул · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.1
-- **Описание**: довести `rng.go` (`Seed(eventID, rollIndex)`, `NewRNG`, бросок `NdM+K` на одном RNG) и `formula.go` — от парсера (T-015) до **вычислителя** мини-грамматики `check`/`dice` (`state-and-mechanics.md` §5.3) с подстановкой статов актёров.
-- **Файлы**: `internal/mechanics/{rng,formula}.go` + тесты.
-- **Зависимости**: T-015 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-3; `state-and-mechanics.md` §5.3; ADR-012; US-003; **NFR-060**.
-- **DoD**: тест **1000 событий × 4 броска**: один `(event_id, roll_index)` → один результат в 100 % случаев; броски с разными `roll_index` статистически независимы (корреляция не отличима от 0, χ² на равномерность); фиксированные `Seed`-векторы в `testdata`; вычислитель формул — таблица позитив/негатив; общий DoD §1.
+### T-051: I1-3 · `mechanics` — RNG и формулы: сверка и добор · Размер: S ~~M~~ · Статус: done · Исполнитель: developer#1 · Подволна 1.1 · Ветка: `task/T-051-rng-statistics`
+- **Описание (сверка 2026-09-13)**: `rng.go` (`Seed`, `NewRNG`) и `formula.go` с вычислителем (`CheckExpr.Eval`) в `develop`, покрытие `internal/mechanics` 94,9 %. Сверить с прежним DoD и добрать статистические тесты: воспроизводимость 1000×4, χ² равномерности d20, корреляция соседних индексов бросков.
+  ~~Прежнее описание: довести `rng.go` (`Seed(eventID, rollIndex)`, `NewRNG`, бросок `NdM+K` на одном RNG) и `formula.go` — от парсера (T-015) до **вычислителя** мини-грамматики `check`/`dice` (`state-and-mechanics.md` §5.3) с подстановкой статов актёров.~~ Заменено (сверка 2026-09-13): вычислитель сделан в EPIC-001.
+- **Файлы**: `internal/mechanics/{rng,formula}_test.go`; `rng.go`/`formula.go` — только если сверка найдёт дефект.
+- **Зависимости**: T-015 (волна 0, в `develop`).
+- **Ссылки**: `design.md` §4.1 I1-3; `state-and-mechanics.md` §5.3; ADR-012; C-03 v1.2; US-003; **NFR-060**.
+- **DoD**: тест **1000 событий × 4 броска**: один `(event_id, roll_index)` → один результат в 100 % случаев; броски с разными `roll_index` статистически независимы (корреляция не отличима от 0, χ² на равномерность); фиксированные `Seed`-векторы в `testdata` или в табличном тесте; вычислитель формул — таблица позитив/негатив; общий DoD §1.
+  - **(сверка 2026-09-13)** χ² проверяется на d20; порог, число степеней свободы и уровень значимости записаны в тесте. Порог корреляции записан в тесте. Тесты детерминированы: без настенного времени и без глобального RNG. В `dev-log.md` — какие пункты уже были покрыты тестами EPIC-001 и что добрано.
 
 ### Подволна 1.2
 
-### T-052: I1-2 · Схемы EPIC-002 — ревизия и примеры · Размер: S · Статус: todo · Исполнитель: developer#2 · Подволна 1.2
-- **Описание**: ревизия восьми схем, созданных в F-4b (T-006): `entity.create.proposed`, `entity.update.proposed`, `entity.created`, `entity.updated`, `entity.update.rejected`, `dice.rolled`, `snapshot.created`, `analytics.replay.completed` — enum ops, `expected_version` опционален, `reason` enum C-02 v1.1 (включая `duplicate_entity`), `changed[]` для `append`, `component` enum (C-14 v1.1), `mode ∈ {recovery, test}`; примеры `api-contracts.md` §2.3.4/5/12 валидны.
-- **Файлы**: `schemas/events/{entity.*,dice.rolled,snapshot.created,analytics.replay.completed}.v1.json`, тесты в `shared/contracts`.
-- **Зависимости**: T-050, T-006/T-009 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-2; C-02 v1.1, C-14 v1.1; `api-contracts.md` §2.3; `ownership.md` §1 (совладение `analytics.replay.completed` с EPIC-005).
+### T-052: I1-2 · Схемы EPIC-002 — ревизия и примеры · Размер: S · Статус: done · Исполнитель: developer#2 · Подволна 1.2
+- **Описание**: ревизия восьми схем, созданных в F-4b (T-006): `entity.create.proposed`, `entity.update.proposed`, `entity.created`, `entity.updated`, `entity.update.rejected`, `dice.rolled`, `snapshot.created`, `analytics.replay.completed` — enum ops, `expected_version` опционален, `reason` enum **C-02 v1.4** ~~C-02 v1.1~~ (включая `duplicate_entity` и **`law_violation`**), `changed[]` для `append`, `component` enum (**C-14 v1.2** ~~C-14 v1.1~~), `mode ∈ {recovery, test}`; примеры `api-contracts.md` §2.3.4/5/12 валидны.
+  - **(сверка 2026-09-13)** Фикстуры payload по образцу T-214: на каждый из восьми типов пара `testdata/fixtures/events/<тип>.v1.valid.json` и `<тип>.v1.invalid.json`. Сверку делает существующий `test/fixtures/events_test.go`, его не правим.
+- **Файлы**: `schemas/events/{entity.*,dice.rolled,snapshot.created,analytics.replay.completed}.v1.json`; **(сверка 2026-09-13)** `testdata/fixtures/events/<тип>.v1.{valid,invalid}.json` (16 файлов), счёт типов и файлов в `testdata/fixtures/events/README.md`. ~~тесты в `shared/contracts`~~ Заменено (сверка 2026-09-13): `shared/contracts` — EPIC-001; сверку схем и фикстур уже делают `mvctl contracts check` и `test/fixtures`.
+- **Зависимости**: T-050, T-006/T-009 (волна 0, в `develop`).
+- **Ссылки**: `design.md` §4.1 I1-2; C-02 v1.4, C-14 v1.2; `api-contracts.md` §2.3; `ownership.md` §1 (совладение `analytics.replay.completed` с EPIC-005); `testdata/fixtures/events/README.md` (формат пар, T-214).
 - **DoD**: `make contracts` зелёный; каждая схема покрывает соответствующий пример из `api-contracts.md`; поля `mode=test`, `events_hash_match` в `analytics.replay.completed` **не удалены и не переименованы** (совладение с EPIC-005 — уведомить tech-lead#1 при любой правке); FR-034 (enum причин отказа) отражён; общий DoD §1.
+  - **(сверка 2026-09-13)** `go test ./test/fixtures/...` зелёный. Валидная фикстура каждого из восьми типов доходит до обработчика. Невалидная паркуется в `dead_letters` при валидации при чтении и проходит при `MV_BUS_VALIDATE_ON_READ=false`. Каждая невалидная фикстура нарушает ровно одно правило схемы, и оно названо (README или имя случая). `entity.update.rejected.reason` — семь значений C-02 v1.4, отдельного значения `invariant` нет. `mvctl privacy scan testdata/` чист.
 
-### T-053: I1-4 · `mechanics` — `Resolve`, `NPCTarget`, `ChangesFor`, `dice.rolled` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.2
+### T-053: I1-4 · `mechanics` — `Resolve`, `NPCTarget`, `ChangesFor`, `dice.rolled` · Размер: M · Статус: done · Исполнитель: developer#1 · Подволна 1.2
 - **Описание**: `resolve.go` (таблица исходов §5.4: попадание/крит/фамбл/промах, урон по формулам, `flee`), `target.go` (`NPCTarget` — без `Participation`, это I2), `changes.go` (`ChangesFor`: ops HP с clamp, `status`, `died_at`/`killed_by`, `inventory append` с `source`, `encounter.npcs[].last_damager`), `dice_event.go` (`DiceRolledPayload` ↔ схема), `actor.go` (`ActorFromEntity`).
-- **Файлы**: `internal/mechanics/{resolve,target,changes,dice_event,actor}.go` + тесты.
+  - **(сверка 2026-09-13; C-03 v1.2)** Файлы уже в дереве. `DiceRolledPayload` и `ActorFromEntity` реализованы в форме v1.2, остаётся сверка схемы. Содержание пишется для `Resolve` и `ChangesFor` (сейчас `ErrNotImplemented`) и для `NPCTarget`.
+  - **(сверка 2026-09-13)** Сигнатура **`NPCTarget(npc *Actor, candidates []*Actor) (*Actor, error)`** — единственная правка сигнатуры C-03 v1.2. Потребители правятся той же задачей: `shared/testkit/mechanics` (`FixedMechanics.NPCTarget`, `fixed_test.go`, `consumer_test.go`) и `internal/mechanics/actor_test.go`.
+  - **(сверка 2026-09-13)** `Resolve` учитывает `Action.LivingEnemies` в пороге побега (`living_enemies`) и `free_attack`: неудачный побег при `flee.on_fail=free_attack` даёт `Outcome.FreeAttack` и бросок NPC.
+  - **(сверка 2026-09-13; C-03 «Состояние реализации»)** `ChangesFor` сверяется с пакетом, который сейчас сам строит `testkit/swarm.FakeEncounter`. Расхождение — запрос EPIC-003 через tech-lead#1; `testkit/swarm` не правится.
+- **Файлы**: `internal/mechanics/{resolve,target,changes,dice_event,actor}.go` + тесты; **(сверка 2026-09-13)** `shared/testkit/mechanics/{fixed.go,fixed_test.go,consumer_test.go}` (правка сигнатуры `NPCTarget`).
 - **Зависимости**: T-051.
-- **Ссылки**: `design.md` §4.1 I1-4; `state-and-mechanics.md` §5.4, §7.1; C-03 v1.1; US-003 (FR-018, FR-020…FR-022), BR-05.
+- **Ссылки**: `design.md` §4.1 I1-4; `state-and-mechanics.md` §5.4, §7.1; **C-03 v1.2** ~~C-03 v1.1~~, ADR-024; US-003 (FR-018, FR-020…FR-022), BR-05.
 - **Дополнение (сведение 3, C-02 v1.2; З-2)**: `NPCTarget` и `ActorFromEntity` считают «живым» только `status = alive` — `dead`, **`abandoned`** и `ascended_final` исключаются из кандидатов одинаково (C-03: `Actor.Status ≠ alive` не может быть целью).
 - **DoD**: табличные тесты `Resolve` по всем исходам (включая границы крита/фамбла и `flee`); `NPCTarget` детерминирован при равных кандидатах и **не выбирает `abandoned`** (наравне с `dead`); `ChangesFor` — HP не уходит ниже 0 и выше `hp_max`, смерть выставляет `status/died_at/killed_by` одним пакетом; `DiceRolledPayload` валиден против схемы (`contracts.Validate`); `mechanics.ErrNotImplemented` больше не возвращается ни одним из трёх методов; общий DoD §1.
+  - **(сверка 2026-09-13)** `NPCTarget` без живых кандидатов → `(nil, nil)` (UC-008 A2); ошибка — только при дефекте входа (например, `npc == nil`), не при пустом списке. Тест на оба случая. `FixedMechanics.NPCTarget` имеет ту же сигнатуру, `shared/testkit/mechanics` зелёный, `consumer_test.go` компилируется против обеих реализаций.
+  - **(сверка 2026-09-13)** `Resolve(flee)`: при `LivingEnemies` 1 и 2 пороги разные и совпадают с `rules/dark-forest.yaml`; неудачный побег → `FreeAttack=true` и бросок NPC; индексы бросков сверены с `FakeEncounter` (`rollFlee`, `rollFreeAttack`).
+  - **(сверка 2026-09-13)** Тест «`ChangesFor` против `FakeEncounter`»: на одном исходе ops, `expected_version` и `cause` из `ChangesFor` совпадают с пакетом, который публикует `FakeEncounter` на `membus`. Тест во внешнем тестовом пакете, `testkit/swarm` не правится. Расхождения — в `dev-log.md` и запросом EPIC-003.
 
 ### Подволна 1.3
 
-### T-054: I1-5 · `mechanics` — инварианты соло (inv-01, 02, 03, 09, 10) · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.3
+### T-054: I1-5 · `mechanics` — инварианты соло (inv-01, 02, 03, 09, 10) · Размер: M · Статус: done (приёмка 2026-09-13; `done` — после «Учёт времени» и слияния) · Исполнитель: developer#1 · Подволна 1.3 · Ветка: `task/T-054-solo-invariants`
 - **Описание**: реализации `Check` для inv-01, inv-02, inv-03, inv-09, inv-10 в `invariants.go`; inv-04/05/06 — `Check` по `overlayView` в I2 (T-066); inv-07/08 — `Check=nil` (`Where: audit|guardian`). Один набор id совпадает с `laws@v1` (ADR-012 п. 5).
+  - **(сверка 2026-09-13; C-03 «Состояние реализации»)** Сейчас `Invariants()` возвращает 10 записей, у всех `Check == nil`.
 - **Дополнение (сведение 3, C-02 v1.2, ADR-017 доп. 1 п. 5; З-2)**: **inv-01 `dead_does_not_act` срабатывает для `status ∈ dead | abandoned | ascended_final`** — покинутый персонаж (`abandoned`) трактуется как `dead` во всех правилах, целях и раундах; отдельного инварианта для `abandoned` не заводим.
 - **Файлы**: `internal/mechanics/invariants.go` + тесты.
 - **Зависимости**: T-050, T-053.
-- **Ссылки**: `design.md` §4.1 I1-5; `state-and-mechanics.md` §5.5; **`contracts.md` v0.4 C-02 v1.2**; ADR-012 п. 5, ADR-017 доп. 1 п. 5; **NFR-020**; BR-03.
+- **Ссылки**: `design.md` §4.1 I1-5; `state-and-mechanics.md` §5.5; **`contracts.md` v0.10 C-02 v1.4, C-03 v1.2** ~~`contracts.md` v0.4 C-02 v1.2~~; ADR-012 п. 5, ADR-017 доп. 1 п. 5; **NFR-020**; BR-03.
 - **DoD**: на каждый инвариант — позитивный и негативный тест с `Violation{id, reason}`; **(сведение 3)** негативный тест inv-01 прогоняется на трёх значениях `status` (`dead`, `abandoned`, `ascended_final`) с одинаковым `Violation`; `Invariants()` возвращает 10 записей, id совпадают со списком `laws@v1` (сверка с EPIC-003 — тест `mvctl laws check` в I1b, здесь фиксируется список в `testdata`); inv-04/05/06 явно помечены «I2»; общий DoD §1.
+  - **(сверка 2026-09-13)** Тест перечисляет id: `Check != nil` у inv-01, inv-02, inv-03, inv-09, inv-10; `Check == nil` у inv-04, inv-05, inv-06 (до T-066) и у inv-07, inv-08 (навсегда). Мутант «`Check = nil` у любого из пяти» краснеет.
+  - **(приёмка T-054, 2026-09-13)** `touched` в `Check(v, touched)` — **id сущностей**, которые меняет предложение, а не пути изменений (КД `state-and-mechanics.md` §4.5 п. 8 «`touched = ids изменённых`», ADR-012 п. 5). Формулировка «список изменённых путей» из промпта задачи неверна и не применяется.
+- **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). Пять проверок соло подключены к реестру, детерминированы и не отвергают законных путей соло из C-05; ревью #1 — «принять» (0/0/3/3). При приёмке закрыты Minor-3 (inv-02: `player`/`npc` без `hp` — нарушение) и Nit-2 (inv-09 перебирает все `TerminalStatuses`), мутанты приёмки красные. Minor-1 и Minor-2 (inv-01 в гонке с `/forget` и в бою с несколькими NPC) — вопросы system-architect; закон меняет T-066, поведение State закрепляет T-056 (строки DoD в их разделах). Nit-1, Nit-3 — в бэклог. Подробно — `tasks/T-054.md`, раздел «Приёмка».
 
-### T-055: I1-6a · `state` — конвейер предложение → факт (memstore, Applier, версии) · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.3
-- **Описание**: `context.go` (`runtime.Context` "state", `DependsOn`), `worker.go` (по одному worker'у на мир из `MV_STATE_WORLDS`, единственный писатель), `memstore/`, `proposal.go`, `apply.go`, `facts.go`: приём `entity.create.proposed`/`entity.update.proposed` из `system_events`, применение `ApplyOps` на копии, `version+1`, публикация `entity.created`/`entity.updated` через `Derive` (наследование `timestamp` предложения и `correlation_id`), `atomic` all-or-nothing в памяти. Паника в worker'е не глотается — `/health fail`, мир останавливается (NFR-012).
-- **Файлы**: `internal/state/{context,worker,proposal,apply,facts}.go`, `internal/state/memstore/**` + тесты.
-- **Зависимости**: T-050, T-052, T-054 (интерфейс `Invariants()`), C-01 (T-005/T-014).
-- **Ссылки**: `design.md` §4.1 I1-6; `state-and-mechanics.md` §4.5, §4.1; C-02 v1.1; NFR-012, NFR-013.
-- **DoD**: unit — цикл «предложение → факт» для create/update/atomic; версии строго +1 (0 пропусков и 0 повторов на 1000 предложений); факт несёт `causation_id` предложения и его `timestamp`; паника в обработчике → `/health fail` и остановка мира (тест); **(T-410, 2026-09-11)** процесс ставит глобальные источники событий `eventbus.SetRegistry`/`SetClock`/`SetIDSource` из тех же объектов, что кладёт в `runtime.Deps` (сегодня не ставит, хотя `shared/eventbus/sources.go` говорит, что их ставит `cmd/multiverse`), — тест: id и время события, построенного конструктором, берутся из источников `Deps`; правка `cmd/multiverse` — через tech-lead#1, согласовать с T-060 (`--id-source=sequence`) *(подтверждено C-01 v1.4 «Источники конструкторов», T-416: T-055 — срок, первый настоящий издатель; контекст источники не ставит и не меняет)*; **(T-416, 2026-09-11; C-01 v1.4, ADR-027 п. 2)** решение EPIC-002 о `eventbus.WithCauseID` для фактов State (`entity.created`/`entity.updated`, `parts` — id сущности) принято и записано в `dev-log.md` с доводами. Архитектор рекомендует «да»: тогда «факты досылаются, если не были опубликованы» (C-02 «Гарантии») не даёт дублей у потребителей, дедуплицирующих по `id`. Учесть: повтор предложения под тем же `proposal_id` приходит новым событием с другим `causation_id` (C-05 п. 1). Если нужен один id факта на все повторы, в `parts` входит `proposal_id` — выбор за исполнителем с тимлидом. При «да» — тест: досылка факта по повтору предложения даёт факт с тем же `id`, разные сущности одного пакета — разные `id`. При «нет» — обоснование в `dev-log.md`. При «да» задача зависит от **T-417**; общий DoD §1.
+### T-055: I1-6a · `state` — конвейер предложение → факт (memstore, Applier, версии) · Размер: M · Статус: done · Исполнитель: developer#2 · Подволна 1.3
+- **Описание**: `context.go` (`runtime.Context` "state", `DependsOn`), `worker.go` (по одному worker'у на мир из `MV_STATE_WORLDS`, единственный писатель), `memstore/`, `proposal.go`, `apply.go`, `facts.go`: приём `entity.create.proposed`/`entity.update.proposed` из `system_events`, применение `ApplyOps` на копии, `version+1`, публикация `entity.created`/`entity.updated` через `Derive` (наследование `timestamp` предложения и `correlation_id`), `atomic` all-or-nothing в памяти. ~~Паника в worker'е не глотается — `/health fail`, мир останавливается (NFR-012).~~ Заменено (сверка 2026-09-13) пунктами ниже.
+  - **(сверка 2026-09-13; C-01 v1.5 «Паника обработчика»)** Панику обработчика перехватывает `Delivery`: без повтора, сразу в `dead_letters` с `ErrHandlerPanic`. State — stateful-контекст, поэтому ставит свой `recover` на границе worker'а и останавливает мир: `/health fail`, лог `Error` со стеком (NFR-012; `state-and-mechanics.md` §9, «Паника в worker'е»).
+  - **(сверка 2026-09-13; C-01 v1.6 «Посредник доставки»)** Подписка `state` на `system_events` раздаёт предложения worker'ам миров, то есть работает посредником доставки. Предложение запоминается в окне только после ответа worker'а без ошибки. Ошибка worker'а возвращается шине. Доставка синхронна.
+  - **(сверка 2026-09-13; C-01 v1.7, ADR-023 п. 4)** Порядок остановки: `Stop` контекста отменяет контекст своей подписки до того, как процесс закроет шину. `Close` не прерывает обработчик. Остановку ограничивает `runtime.StopTimeout`.
+- **Файлы**: `internal/state/{context,worker,proposal,apply,facts}.go`, `internal/state/memstore/**` + тесты; **(сверка 2026-09-13)** `cmd/multiverse/serve.go` — источники конструкторов (через tech-lead#1) ~~`cmd/multiverse`~~.
+- **Зависимости**: T-050, T-052, T-054 (интерфейс `Invariants()`), C-01 (T-005/T-014, в `develop`). ~~T-417~~ снято (сверка 2026-09-13): `WithCauseID` и `Dedup.Has/Add` в `develop` (`shared/eventbus/cause_id.go`, `dedup.go`).
+- **Ссылки**: `design.md` §4.1 I1-6; `state-and-mechanics.md` §4.5, §4.1; C-02 v1.4, **C-01 v1.5–v1.7**, ADR-023, ADR-027; NFR-012, NFR-013.
+- **DoD**: unit — цикл «предложение → факт» для create/update/atomic; версии строго +1 (0 пропусков и 0 повторов на 1000 предложений); факт несёт `causation_id` предложения и его `timestamp`; ~~паника в обработчике → `/health fail` и остановка мира (тест)~~ заменено (сверка 2026-09-13) пунктом о панике ниже; **(T-410, 2026-09-11)** процесс ставит глобальные источники событий `eventbus.SetRegistry`/`SetClock`/`SetIDSource` из тех же объектов, что кладёт в `runtime.Deps` (сегодня не ставит, хотя `shared/eventbus/sources.go` говорит, что их ставит `cmd/multiverse`), — тест: id и время события, построенного конструктором, берутся из источников `Deps`; правка — **в `cmd/multiverse/serve.go`** (сверка 2026-09-13) через tech-lead#1, согласовать с T-060 (`--id-source=sequence`, тот же файл) *(подтверждено C-01 v1.4 «Источники конструкторов», T-416: T-055 — срок, первый настоящий издатель; контекст источники не ставит и не меняет)*; **(T-416, 2026-09-11; C-01 v1.4, ADR-027 п. 2)** решение EPIC-002 о `eventbus.WithCauseID` для фактов State (`entity.created`/`entity.updated`, `parts` — id сущности) принято и записано в `dev-log.md` с доводами. Архитектор рекомендует «да»: тогда «факты досылаются, если не были опубликованы» (C-02 «Гарантии») не даёт дублей у потребителей, дедуплицирующих по `id`. Учесть: повтор предложения под тем же `proposal_id` приходит новым событием с другим `causation_id` (C-05 п. 1). Если нужен один id факта на все повторы, в `parts` входит `proposal_id` — выбор за исполнителем с тимлидом. При «да» — тест: досылка факта по повтору предложения даёт факт с тем же `id`, разные сущности одного пакета — разные `id`. При «нет» — обоснование в `dev-log.md`. ~~При «да» задача зависит от **T-417**~~ снято (сверка 2026-09-13): T-417 в `develop`; общий DoD §1.
+  - **(сверка 2026-09-13; C-01 v1.5)** Паника в `apply` ловится собственным `recover` State: лог `Error` со стеком, мир остановлен, `/health fail`, факта нет, следующие предложения этого мира не применяются (тест). Что обработчик отдаёт шине после остановки мира — ошибку (повтор ×3, затем `dead_letters`) или повторную панику (`ErrHandlerPanic` без повтора) — решает исполнитель с тимлидом, решение и довод в `dev-log.md`; тест закрепляет выбранный путь.
+  - **(сверка 2026-09-13; C-01 v1.6)** Тест посредника: worker возвращает ошибку на первой доставке → повтор шины доходит до worker'а, предложение применяется ровно один раз. Мутант «запомнить в окне до ответа worker'а» краснеет.
+  - **(сверка 2026-09-13; C-01 v1.7)** Тест остановки на `membus`: `Stop` во время применения предложения — предложение доводится до факта либо не коммитится и приходит снова, где гасится дедупом по `proposal_id` без второго факта; `Stop` укладывается в `runtime.StopTimeout`; контекст подписки отменён до `Close` шины.
+  - **(приёмка T-448, 2026-09-13; C-02 v1.6, КД §4.5)** Вход и факты по C-02 v1.6:
+    - `entity.updated.changed[]` — `[]entity.Change` из `ApplyOps`, кодируется **только** `Change.MarshalJSON` (наличие `old`/`new` — по `HasOld`/`HasNew`, не по значению); своего кодировщика формы у State нет. Тест: `set` отсутствовавшего пути в `null` → только `new: null`; `set` существующего в `null` → оба; `remove` ключа со значением `null` → только `old: null`; каждый факт проходит `contracts.Validate`. Мутант «наличие по `!= nil`» краснеет;
+    - `entity.created` всегда несёт `proposal_id` предложения (схема требует с v1.6);
+    - предложение без `proposal_id` (create или update; прямой вызов или `MV_BUS_VALIDATE_ON_READ=false`) не применяется и не отвергается: `Warn` с `event_id` и `type`, офсет фиксируется (КД §4.5 п. 1). Тест на оба типа;
+    - `attributes` создания проверяются `entity.JSONCompatible` **до** дедупликации и `duplicate_entity` (проверка формы, решение тимлида при приёмке T-448): число по модулю от 2^53 → `invalid_op`, в том числе для уже существующей сущности. Значения операций — через `ApplyOps` (`ReasonNotJSON`, `ReasonCurrentRange` → `invalid_op`). Тест через шину: литерал `9007199254740993` приходит как `float64(2^53)` и получает `invalid_op`;
+    - оверлей §4.5 п. 8 (бэклог исполнителя T-448 п. 3, решение system-architect#1): `ApplyOps` кладёт в копию ту же map/slice, что пришла в `op.Value`, — State делает глубокую копию значения операции (или гарантирует, что предложение не меняется между `ApplyOps` и `Commit`). Тест: правка `op.Value` после `ApplyOps` не меняет применённое состояние и `StateHash`.
+- **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). Конвейер «предложение → факт» State (`memstore`, `Applier`, worker на мир, контекст `state`, источники конструкторов в `serve.go`, `MV_STATE_WORLDS`) выполняет DoD; ревью #2 — «принять» (0/0/3/2), итераций ревью — 2. При приёмке закрыты Mi-5 (паузы повтора публикации — на `Config.Timers`, по умолчанию `clock.RealTimers`, как паузы транспорта C-01 v1.4; тест replay с никогда не срабатывающими таймерами `Deps`), Mi-6 (после повторного `Start` брошенное при `Stop` предложение приходит снова), Mi-7 (отрицательный `expected_version` — `invalid_op` без `details`, отказ проходит схему при `MV_BUS_VALIDATE_ON_READ=false`), N-5 (комментарий `Apply` без ссылки на несуществующую строку §9); N-4 — мутант R20 эквивалентен (`Start` ждёт закрытия `done`, которое идёт после записи `subErr`), инвариант держит тест Mi-2, комментарий в коде. Мутанты приёмки красные, R20 — выжил как эквивалентный. Совместимость с кончиком эпика `bd38826` проверена на слитом дереве (build/vet, `go test -short ./...`, e2e, `golangci-lint`, `mvctl env check`) — рецепт конфликта в карточке. Строки DoD — в T-056, T-057, T-059. До слияния — отметка tech-lead#1 по `cmd/multiverse/*`, `shared/env/vars.go`, `.env.example`. Подробно — `tasks/T-055.md`, раздел «Приёмка».
 
 ### Подволна 1.4
 
-### T-056: I1-6b · `state` — владение, инварианты, дедуп, матрица отказов; **замена `FakeState` v0** · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.4
-- **Описание**: `ownership.go` (проверка по статичной таблице `contracts.OwnershipRules`, `level_violation`), `invariants.go` (подключение `mechanics.Invariants()` к конвейеру), `dedup.go` (`proposal_id`: LRU + `last_change`), `world.go` (мир без `latest.json` → `/health degraded {world: uninitialized}`, предложения отклоняются `unknown_entity`); полная матрица причин отказа C-02 v1.1 (`unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`, `level_violation`, `invariant`, `dead_entity`); **замена заглушки**: `shared/testkit/state.FakeState` = `state.Applier` над `memstore` без `Store` I/O, `WithInvariants()` — реальный.
+### T-056: I1-6b · `state` — владение, инварианты, дедуп, матрица отказов; **замена `FakeState` v0** · Размер: M · Статус: in_progress · Исполнитель: developer#2 · Подволна 1.4
+- **Описание**: `ownership.go` (проверка по статичной таблице `contracts.OwnershipRules`, `level_violation`), `invariants.go` (подключение `mechanics.Invariants()` к конвейеру), `dedup.go` (`proposal_id`: LRU + `last_change`), `world.go` (мир без `latest.json` → `/health degraded {world: uninitialized}`, предложения отклоняются `unknown_entity`); полная матрица причин отказа **C-02 v1.4** ~~C-02 v1.1~~ (`unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`, `level_violation`, **`law_violation`** ~~`invariant`~~, `dead_entity`); **замена заглушки**: `shared/testkit/state.FakeState` = `state.Applier` над `memstore` без `Store` I/O, `WithInvariants()` — реальный.
+  - **(сверка 2026-09-13; C-02 v1.3–v1.4)** Нормы поверх таблицы владения: пакет с одной сущностью дважды (v1.3), связка «путь ↔ причина» (v1.4), статус в то же значение (v1.4). ~~Правка `StatusTransitionAllowed(x, x)` (C-02 v1.4 называет T-056)~~ перенесена в T-050 (сверка 2026-09-13); здесь — поведение State: матрица переходов применяется к изменениям, оставшимся после `ApplyOps`, а не к операциям предложения.
 - **Дополнение (сведение 3, `contracts.md` v0.4 C-02 v1.2; З-2)**: статус **`abandoned`** — терминальный.
   - Переход `status: alive → abandoned` разрешён **только** по предложению gateway (`entity.update.proposed {atomic: true, cause: forget}`, `set path=status value=abandoned`, с `expected_version`, **без** `meta.agent`); предложение с `meta.agent` → `level_violation`; строка gateway в `contracts.OwnershipRules` (`Character.status → abandoned`, `Group.leader_id` включая `null`) — из T-006 волны 0.
   - Над `status ∈ dead | abandoned | ascended_final` любое предложение (в т. ч. повторный `abandoned`) → **`dead_entity`**: `dead` терминален по FR-023 и в `abandoned` не переходит.
   - `cause` дополнена значением `forget`; факт — `entity.updated {changed: [{path: status, old: alive, new: abandoned}], cause: forget}`; `narrative.output kind=death` по нему **не** генерируется (это не смерть).
 - **Файлы**: `internal/state/{ownership,invariants,dedup,world}.go`, `shared/testkit/state/**` + тесты.
-- **Зависимости**: T-055.
-- **Ссылки**: `design.md` §4.1 I1-6, §5 (C-02); `state-and-mechanics.md` §4.5, §4.6; **`contracts.md` v0.4 C-02 v1.2**, C-13; `consolidation.md` §14.1 (З-2); **FR-034**, FR-061, NFR-013, NFR-020, BR-16.
-- **DoD**: матрица отказов «proposer × тип × путь × причина» покрыта таблично, каждая причина встречается ≥ 1 раз; дедуп: повтор `proposal_id` не создаёт второй факт (`--chaos=duplicate`, NFR-013); `system` proposer разрешён только с `source=core/state`, `author` — только из `mvctl`; **(сведение 3)** тесты: `alive → abandoned` от gateway с `cause=forget` принимается; то же от агента → `level_violation`; `dead`/`abandoned`/`ascended_final` → `dead_entity`; **потребители заглушки (EPIC-003/EPIC-004) компилируются без правок** — проверяется прогоном их e2e на новой реализации; общий DoD §1. **(T-425, 2026-09-11; C-05 v1.5)** тест: пакет уровня `task` с `cause=resolve` на сущность встречи принимается (закрытие встречи по чужому факту), тот же `cause` на путь игрока или NPC → `level_violation`.
+- **Зависимости**: T-055; T-050 (`StatusTransitionAllowed(x, x)`, сверка 2026-09-13).
+- **Ссылки**: `design.md` §4.1 I1-6, §5 (C-02); `state-and-mechanics.md` §4.5, §4.6; **`contracts.md` v0.10 C-02 v1.4** ~~`contracts.md` v0.4 C-02 v1.2~~, C-13; `consolidation.md` §14.1 (З-2); ADR-025; **FR-034**, FR-061, NFR-013, NFR-020, BR-16.
+- **DoD**: матрица отказов «proposer × тип × путь × причина» покрыта таблично, каждая причина встречается ≥ 1 раз; дедуп: повтор `proposal_id` не создаёт второй факт (`--chaos=duplicate`, NFR-013); ~~`system` proposer разрешён только с `source=core/state`~~ **(сверка 2026-09-13)** `system` proposer разрешён только с источником bootstrap **по решению system-architect** (в реестре у `entity.*.proposed` издателя `core/state` нет; до решения тест источника не пишется, пункт открыт), `author` — только из `mvctl`; **(сведение 3)** тесты: `alive → abandoned` от gateway с `cause=forget` принимается; то же от агента → `level_violation`; `dead`/`abandoned`/`ascended_final` → `dead_entity`; **потребители заглушки (EPIC-003/EPIC-004) компилируются без правок** — проверяется прогоном их e2e на новой реализации; общий DoD §1. **(T-425, 2026-09-11; C-05 v1.5)** тест: пакет уровня `task` с `cause=resolve` на сущность встречи принимается (закрытие встречи по чужому факту), тот же `cause` на путь игрока или NPC → `level_violation`.
+  - **(сверка 2026-09-13)** Нарушение инварианта → `entity.update.rejected {reason: law_violation, details.invariant_id}`; значения `invariant` в ответах нет (тест по схеме).
+  - **(приёмка T-448, 2026-09-13; C-02 v1.6)** Замена `FakeState` сохраняет поведение v1.6 без правок тестов двойника: `TestChangedCarriesOldAndNewByPresence`, `TestChangedCarriesAPresentNull`, `TestCreateWithoutProposalIDIsPassedOver`, `TestUpdateWithoutProposalIDIsPassedOver`, `TestNumberPastTwoToTheFiftyThirdIsInvalidOp`, `TestTheLargestSafeNumberIsApplied`, `TestCreateWithANumberPastTheRangeIsInvalidOp`, `TestTheAttributesOfACreateAreCheckedBeforeTheWorld` зелёные на `state.Applier`. `changedPayload` двойника уходит вместе с ним. Матрица отказов включает `invalid_op` за ±(2^53−1) — в `value` операции, в текущем значении и результате `inc`, в `attributes` создания — и `duplicate_entity` под `proposal_id` создания; дедуп создания — только по `proposal_id`, подстановки `event.id` нет.
+  - **(сверка 2026-09-13; C-02 v1.3)** Тест: пакет `changes[]`, называющий одну сущность дважды, отвергается целиком `invalid_op` с `entity` = повторённая, при `atomic=true` и при `atomic=false`; фактов нет, версии не меняются.
+  - **(сверка 2026-09-13; C-02 v1.4 «путь ↔ причина»)** Тест норм поверх таблицы: gateway `set status` с `cause=move` → отказ; `hp` от gateway не с `cause=rest`, во встрече или выше `hp_max` → отказ (при активной встрече — `law_violation`); `alive → abandoned` с `cause=forget` принимается. Причина отказа для нарушения связки, если C-02 её не называет, выбирается с тимлидом и записывается в `dev-log.md`.
+  - **(сверка 2026-09-13; C-02 v1.4 «Статус в то же значение»)** Тест: `set status alive` у `alive` → факт с пустым `changed[]`, версия не меняется; `set status abandoned` у `abandoned` → `dead_entity`.
+  - **(приёмка T-054, 2026-09-13; КД §4.5 п. 5, п. 8, §5.7; `review.md` «T-054 · ревью #1», «Что State обязан держать на шаге 5»)** `mechanics.Invariants()` видит только мир **после** изменения (`overlayView`) и `touched`; мира «до» у проверки нет. Поэтому State держит сам и закрепляет тестами:
+    - **шаг 5, `dead_entity`**: любое изменение сущности со `status ∈ dead | abandoned | ascended_final` (по сущности **до** применения), кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id`, отвергается `dead_entity` раньше владения и инвариантов. Текст §4.5 п. 5 перечисляет `{dead, ascended_final}`; `abandoned` входит по C-02 v1.2 (сведение 3). Тест — на каждый из трёх статусов и на каждый из четырёх разрешённых путей;
+    - **переход терминальный → нетерминальный** (`set status alive` и любой нетерминальный статус) отвергается **до** применения по сущности «до», в том числе когда тот же пакет стирает `died_at`/`killed_by`: иначе запись смерти не останется и inv-09 в `Check` промолчит. Причина — `dead_entity` по C-02 v1.5; КД §4.5 п. 5 и строка inv-09 §5.7 называют `law_violation inv-09` — расхождение передано system-architect (приёмка T-054, вопрос В3). Тест закрепляет ответ C-02; смена решения — одно ожидание теста;
+    - **`touched` — id сущностей, не пути** (КД §4.5 п. 8): все сущности применяемой части `changes[]`, включая те, у которых `changed[]` пуст (`set` в то же значение), и создаваемая сущность `entity.create.proposed`; при `atomic=false` — пересчёт по оставшимся (§4.5 п. 9). Тест: пакет «`set` в то же значение» над сущностью, которая нарушает закон, отвергается `law_violation`;
+    - **`Violation.EntityID` может называть сущность вне `changes[]`** (inv-01 отвечает на NPC или участника, когда затронута только встреча): `entity.update.rejected.entity {id, type}` берёт тип из вида мира, а не из `changes[]`. Тест: пакет только по встрече, в `npcs[]` незакрытой встречи мёртвый волк → `rejected {reason: law_violation, entity: {id: <волк>, type: npc}, details.invariant_id: inv-01}`;
+    - **порядок отказа**: «первое нарушение» — первое в порядке реестра `Invariants()`, внутри закона — первое в ответе `Check` (он уже отсортирован). Тест: мир, где предложение ломает два закона, даёт один и тот же `rejected` на 50 прогонах;
+    - **гонка `/forget` в соло** (ревью T-054 Minor-1, зонд P3): `/forget` игрока применён раньше пакета встречи «оба промахнулись» (пакет трогает только встречу). Тест на State + `mechanics.Invariants()` закрепляет ответ по решению system-architect (вопрос В1 приёмки T-054); до решения — `law_violation inv-01` с комментарием-ссылкой на вопрос;
+    - **`shared/testkit/state`** (после слияния T-448, правка — по именам, строки сдвинутся): снять комментарии «checking them is EPIC-002 work (T-054)» у поля `invariants` в `state.go`, «every Check is nil until EPIC-002 T-054» в логе `WithInvariants()`, «asking changes nothing until EPIC-002 writes the checks (T-054)» у теста в `apply_test.go`. `TestWithInvariantsIsANoOp` меняет ожидание и имя: с `WithInvariants()` перемещение `player-A` в `nowhere-at-all` отвергается `law_violation {invariant_id: inv-10}`, фактов нет, версия не меняется; без `WithInvariants()` — применяется, как сейчас.
+  - **(приёмка T-055, 2026-09-13; C-02 v1.7, C-01 v1.10; после T-460)** Мир в конверте и остановленный мир:
+    - строки реестра `entity.create.proposed`/`entity.update.proposed` получают `Policy.World = WorldRequired`: издатель без мира получает `ErrPolicyViolation` при `Publish`. `Applier` и двойник сходятся к одному поведению C-02 v1.7 (без мира — не применять и не отвергать, `Warn`; сегодня двойник применяет к своему миру) — тест двойника меняет ожидание, `TestAProposalWithoutAWorldIsReported` остаётся зелёным;
+    - предложение **уже остановленного** мира (паника, `publish_failed` прошлого предложения) — `eventbus.Permanent(ErrWorldStopped)`: письмо в `dead_letters` с первой доставки, без пауз `DefaultBackoff`. Тест: два мира, мир А остановлен, предложение мира Б за двумя предложениями мира А отвечено без пауз шины (`membus` с ненулевым `Backoff`); ожидание `Attempts == 4` в `TestAPanicStopsItsWorldAndOnlyItsWorld` и `TestAStopThatEndsTheAttemptsStopsTheWorld` меняется по норме `Permanent`;
+    - **ответ, брошенный при `Stop`** (`ErrPublishFailed` на отменённом контексте), `Permanent` **не** оборачивается: C-01 v1.10 паркует окончательную ошибку и на отменённом контексте, а брошенное предложение должно остаться незакоммиченным (решение по Ma-1 T-055). Страж — ожидание повторной доставки `prop-round` в `TestAStopThatEndsTheAttemptsStopsTheWorld` (Mi-6 приёмки T-055, мутант R3);
+  - **(приёмка T-055, 2026-09-13; N-3 ревью #1 T-055, КД §4.5 п. 9)** `last_change.batch_size` — число **применённых** наборов, как у `state.Applier`; двойник `shared/testkit/state` пишет размер предложенного пакета (`apply.go`, `len(changes)`) и уходит вместе с этим расхождением. Тест: неатомарный пакет 4 набора, 2 отвергнуты → `batch_size = 2` на новой реализации двойника;
+  - **(приёмка T-055, 2026-09-13)** Стенд боёв I1-α — на настоящем State: в `fightThroughTheProcess` (`cmd/multiverse/fake_contexts_test.go`, файл EPIC-001 — через tech-lead#1) снять `t.Setenv(env.StateWorlds.Name(), "world-of-no-stand")`, контекст `state` процесса обслуживает мир фикстур, `FakeState` стенда уходит. Бои I1-α через процесс (`fightThroughTheProcess` и его потребители, включая `TestTheStandWaitsUntilTheFakeHasLearntTheWorld`) зелёные, у каждой сущности один факт на версию;
+  - **(приёмка T-055, 2026-09-13; бэклог ревью #1 T-055 п. 2)** `plan` сверяет не только `entity.id`, но и `entity.type` набора с типом сущности мира: несовпадение → `invalid_op` с `entity` из набора, факта нет; владение §4.6 берёт тип из мира, а не из набора. Тест: набор `{id: player-A, type: npc}` над `player`.
 
-### T-060: I1-10 · `internal/replay` — `EventClock`, `NullTimers`, `Recording`, middleware · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.4 · ⚠ только через tech-lead#1 (сборка в `cmd/multiverse/main.go`)
-- **Описание**: `cursor.go`, `eventclock.go` (время из `timestamp` события, монотонность), `timers.go` (`NullTimers` — тики только из `tick.fired`), `journal.go`, `recording.go` (`*.jsonl` round-trip + `Index`), `middleware.go`; сборка в `cmd/multiverse`: `--mode=replay` → `EventClock` + `NullTimers` + middleware, `--recording=<file>`, `--id-source=sequence`. Правка `cmd/multiverse/main.go` — **одним PR через tech-lead#1**.
-- **Файлы**: `internal/replay/**`, `cmd/multiverse/main.go` (регистрация).
-- **Зависимости**: T-003 (волна 0), C-01.
-- **Ссылки**: `design.md` §4.1 I1-10; `state-and-mechanics.md` §6; ADR-003, ADR-010; **US-017**, NFR-014, NFR-061.
+### T-060: I1-10 · `internal/replay` — `EventClock`, `NullTimers`, `Recording`, middleware · Размер: M · Статус: done · Исполнитель: developer#1 · Подволна 1.4 · ⚠ только через tech-lead#1 (сборка в **`cmd/multiverse/serve.go`** ~~`cmd/multiverse/main.go`~~)
+- **Описание**: `cursor.go`, `eventclock.go` (время из `timestamp` события, монотонность), `timers.go` (`NullTimers` — тики только из `tick.fired`), `journal.go`, `recording.go` (`*.jsonl` round-trip + `Index`), `middleware.go`; сборка в `cmd/multiverse`: `--mode=replay` → `EventClock` + `NullTimers` + middleware, `--recording=<file>`, `--id-source=sequence`. ~~Правка `cmd/multiverse/main.go` — **одним PR через tech-lead#1**.~~ **(сверка 2026-09-13)** Флаги `--mode`, `--recording`, `--id-source` уже разбирает `cmd/multiverse/serve.go`; сборка replay — правка `serve.go` в ветке задачи, приёмка tech-lead#1. Тот же файл правит T-055 (источники конструкторов) — согласовать, при конфликте слияния разрешает developer#1.
+- **Файлы**: `internal/replay/**`, `cmd/multiverse/serve.go` (сборка режима) ~~`cmd/multiverse/main.go` (регистрация)~~.
+- **Зависимости**: T-003 (волна 0, в `develop`), C-01.
+- **Ссылки**: `design.md` §4.1 I1-10; `state-and-mechanics.md` §6; ADR-003, ADR-010; C-01 v1.4 («Источники конструкторов», «Таймеры повторной доставки»); **US-017**, NFR-014, NFR-061.
 - **DoD**: unit — `EventClock` монотонен и не читает wall-clock; `NullTimers` не порождает тиков; `Recording` round-trip побайтово и `Index` находит запись по `(correlation_id, agent.id, phase, attempt)`; `--mode=replay` не даёт ни одного обращения к `time.Now` в доменном коде (`forbidigo` + тест); общий DoD §1. ~~**(ревью T-410, 2026-09-11)** шина в `--mode=replay` получает таймеры от тех же `NullTimers`/`EventClock`, что и контексты, или явно освобождена от них: сегодня она получает ручные таймеры, которые никто не двигает, и первая повторная доставка после ошибки обработчика повиснет до отмены — тест на повтор доставки в replay.~~ **Заменено (T-416):** из двух вариантов архитектор выбрал «шина освобождена». **(T-416, 2026-09-11; C-01 v1.4 «Таймеры повторной доставки» и «Источники конструкторов»)** Процесс даёт шине реальные таймеры (`clock.RealTimers`) в любом режиме, включая `--mode=replay`. `EventClock`/`NullTimers` получают только контексты (`Deps.Clock`, `Deps.Timers`): доменное время — у контекстов, у транспорта его нет. В `--mode=replay` глобальный источник времени конструкторов (`eventbus.SetClock`) — `EventClock`, согласовать с T-055. Паузы повтора (100/500/2000 мс) в байты событий не входят; число попыток и порядок — входят и совпадают с live. Тест: в replay ошибка обработчика → повторная доставка ×3 без зависания, затем `dead_letters`; тесту разрешено дать шине ручные таймеры и двигать их самому.
+  - **(сверка 2026-09-13)** Тесты сборки режима — в `cmd/multiverse` рядом с `serve_test.go`.
 
 ### Подволна 1.5
 
 ### T-057: I1-7 · `state` — `objStore`, интенты, снапшоты, ротация, `latest.json` · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.5
 - **Описание**: `store.go` (write-through в `shared/objstore`: `entities-{world}/{type}/{id}.json`, один PUT на сущность), `intent.go` (`entities-{world}/_intents/{proposal_id}.json` — только для пакетов > 1 сущности; `PutIntent` → PUT по `id` → `DeleteIntent`), `snapshot.go` (по `MV_STATE_SNAPSHOT_EVERY=200`, по `SIGTERM`, по admin-маршруту; ротация K=5; `latest.json` — **указатель** с атомарной заменой; публикация `snapshot.created`).
+  - **(сверка 2026-09-13; C-14 v1.2 (а))** Окно дедупликации `proposal_id` (`applied_proposals`, `state-and-mechanics.md` §4.4) входит в снапшот.
+  - **(сверка 2026-09-13; C-01 v1.7, ADR-023 п. 4)** PUT под `Stop`: `Close` шины не прерывает обработчик посреди записи, поэтому C-02 «факт публикуется после успешной записи» держится и при остановке.
 - **Файлы**: `internal/state/{store,intent,snapshot}.go` + тесты (unit + `-tags integration`).
-- **Зависимости**: T-056, T-007 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-7; `state-and-mechanics.md` §4.3, §4.4; **ADR-011**, ADR-013, ADR-021; C-14 v1.1; US-011.
-- **DoD**: unit на `objstore.Memory` — снапшот, ротация K=5 (шестой удаляет первый), `latest.json` указывает на последний; integration (testcontainers MinIO из `versions.env`) — PUT/GET/List, `EnsureBucket` включает versioning/ILM, `latest.json` корректен после эмуляции падения между PUT; интент создаётся только при пакете > 1 сущности; общий DoD §1.
+- **Зависимости**: T-056, T-007 (волна 0, в `develop`).
+- **Ссылки**: `design.md` §4.1 I1-7; `state-and-mechanics.md` §4.3, §4.4; **ADR-011**, ADR-013, ADR-021, ADR-023; **C-14 v1.2** ~~C-14 v1.1~~, C-01 v1.7; US-011.
+- **DoD**: unit на `objstore.Memory` — снапшот, ротация K=5 (шестой удаляет первый), `latest.json` указывает на последний; ~~integration (testcontainers MinIO из `versions.env`)~~ **integration (сверка 2026-09-13): `go test -tags integration ./internal/state/...` на одноразовом MinIO testcontainers (образ `MINIO_IMAGE` из `build/versions.env`) — один прогон, проверка остатков контейнеров (общий DoD §1 п. 5)** — PUT/GET/List, `EnsureBucket` включает versioning/ILM, `latest.json` корректен после эмуляции падения между PUT; интент создаётся только при пакете > 1 сущности; общий DoD §1.
+  - **(сверка 2026-09-13; C-01 v1.7)** Тест на `objstore.Memory` с блокирующимся PUT: `Stop` во время PUT — запись доводится до конца, факт публикуется после неё; если обработчик закончил после `Close`, событие не коммитится, приходит снова и гасится дедупом по `proposal_id` без второго факта; `Stop` укладывается в `runtime.StopTimeout`. Снапшот по `SIGTERM` пишется до `Close` шины.
+  - **(сверка 2026-09-13; C-14 v1.2 (а))** Тест: снапшот содержит окно `proposal_id`, его размер ограничен (1000, §4.4), порядок детерминирован и входит в побайтовое сравнение снапшотов.
+  - **(сверка 2026-09-13)** Если образа `MINIO_IMAGE` локально нет, `make minio-image` (сборка Docker) не запускается без разрешения пользователя — вопрос оркестратору; unit-часть DoD от этого не зависит.
+  - **(приёмка T-055, 2026-09-13; N-5 ревью #2 T-055)** КД `state-and-mechanics.md` §9 — строка «Ошибка `Publish` до PUT» по решению Ma-1 T-055 (повтор того же события с теми же id и байтами, пауза 100 мс → 5 с на реальных таймерах; `Stop` → мир `publish_failed`, `/health fail`, предложение не коммитится) и её судьба после PUT (порядок «PUT → факт» C-02 против «ответ → память» T-055) — правка КД через system-architect до кода; одно имя поля `/health` для неудачных попыток публикации: `publish_attempts_failed` (код T-055) или `unpublished_facts` (§9, §4.9), тест `/health` по выбранному имени.
 
 ### T-061: e2e-харнесс `solo-30` (каркас прогона) · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.5
 - **Описание**: каркас e2e EPIC-002: один процесс `--contexts=all --bus=memory --mode=replay`, сборка `Harness` v0 (EPIC-004) + `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) + реальные `mechanics` *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; сбор доменных событий, сверка порядка `player.attacked → dice.rolled → combat.decided → entity.update.proposed → entity.updated → narrative.output`; режим `--chaos=duplicate`. До готовности `state` работает на `FakeState`, затем переключается флагом.
-- **Файлы**: `internal/state/e2e_test.go` (или `test/e2e/solo30_test.go`, `-tags e2e`), хелперы в `internal/state/testsupport`.
-- **Зависимости**: T-053, T-018 (волна 0).
+- **Файлы**: **(сверка 2026-09-13)** `test/e2e/solo30_test.go` (`//go:build e2e`, пакет `test/e2e` рядом со `stubs_v0_test.go`), хелперы — в том же пакете. ~~`internal/state/e2e_test.go` (или `test/e2e/solo30_test.go`, `-tags e2e`), хелперы в `internal/state/testsupport`~~ заменено (сверка 2026-09-13): e2e платформы живут в `test/e2e`.
+- **Зависимости**: T-053, T-018 (волна 0, в `develop`); **T-458** (маршрут `POST /v1/admin/replay/clock`, `EventClock.Advance`, `recording.ReadJournal`; приёмка T-458, 2026-09-13) — старт после её слияния в ветку эпика.
 - **Ссылки**: `design.md` §4.1 I1-11, §4.3 (`FakeEncounter`, T-219; *T-416: было `WithEncounterStub`*); `epics.md` §2 (I1-α); `contracts.md` §17, C-05 «Заглушка»; NFR-062.
 - **DoD**: `make test-e2e` прогоняет 30 ходов ≤ 1 мин без Docker и без сети; порядок событий хода соответствует §7.1; `dead_letters` = 0; каркас параметризован реализацией State (заглушка/реальная); общий DoD §1.
+  - **(T-457, 2026-09-13; C-01 v1.9 «Время корневых событий в replay»)** Время корней задаёт харнесс:
+    - перед каждым входом — `POST /v1/admin/replay/clock` у процесса с контекстом `gateway` (в e2e одного процесса — тот же сервер), `at` — из сценария, ответ `204`;
+    - до первого вызова харнесс проверяет, что времена корней входов не убывают. Корень входа — `player.*` без `causation_id`, опубликованный шлюзом в ответ на HTTP-вход; корни таймера шлюза (`cause=round_timeout`) — не входы и не проверяются (T-457, итерация 3, R2-Mi-2);
+    - убывание или `409` — остановка прогона с сообщением: корень, его `at`, время предыдущего входа и `message` процесса. `400` — дефект харнесса, прогон падает;
+    - тесты: два прогона `solo-30` дают побайтово одинаковую последовательность доменных событий (E2E-12), время корня равно `at` шага; сценарий с убывающим `at` останавливается до первого входа.
+  - **(приёмка T-458, 2026-09-13; C-01 v1.11; ревью #2 system-architect T-458)** Клиент маршрута часов и чтение журнала:
+    - **общий клиент маршрута** — один для харнесса и `mvctl` (подкоманда `mvctl` — не в этой задаче). Клиент шлёт `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS` процесса. `204` — успех; `409` с `error.code = clock_behind` — отдельная ошибка (`errors.Is`) с `message` процесса; `400` (`invalid_body`) — ошибка дефекта клиента; `403`, `404`, `405` — ошибка со статусом, тело не разбирается (у `404` и `405` это ответ mux, схемы нет). Пакет клиента — не `internal/replay`: его импортирует только `cmd/multiverse` (depguard); место согласовать с tech-lead#1 до кода;
+    - **тело ошибки разбирается терпимо**: без `DisallowUnknownFields`, `details` и незнакомые поля — не ошибка, ветвление только по `error.code`, `message` — только текст. Тест: тело `409` с `details` и лишним полем даёт ту же ошибку `clock_behind`; мутант «строгий разбор» краснеет;
+    - **справочное чтение журнала** (записи LLM и любой журнал-справочник) в харнессе и контекстах-зондах — только `recording.ReadJournal`: свой обработчик над `Deps.Journal.ReadRange`/`Tail` в replay — доставка, он двигает часы процесса и ставит `meta.replay`. Тест: контекст-зонд в `Start` читает через `ReadJournal` заранее заполненный `llm_records` со временем позже первого корня; первый вызов часов на время первого корня отвечает `204`.
 
 ### Подволна 1.6
 
 ### T-058: I1-8 · `bootstrap.go` + `mvctl world init` / `world status` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.6 · ⚠ только через tech-lead#1 (реестр подкоманд `cmd/mvctl/main.go`)
-- **Описание**: `state.Bootstrap(ctx, deps, worldID, fixturesDir)` — публикует `entity.create.proposed` (proposer `system`, `cause=init`, `source=core/state`, `proposal_id="bootstrap:{world}:{type}/{id}"`) в порядке world → region → npc → players, ждёт факты через `Journal.Tail` (таймаут 10 с), идемпотентен; `cmd/mvctl/internal/world/{init,status}.go`: `EnsureBucket` с `BucketOptionsFor`, отказ `exit 2` при существующем `latest.json` без `--force`, вызов `Bootstrap`, снапшот **seq 0 `reason=bootstrap`** через admin-маршрут (`--bus kafka`) или in-process (`--bus memory`), печать `entities_count` и `state_hash`.
-- **Файлы**: `internal/state/bootstrap.go`, `cmd/mvctl/internal/world/**`, регистрация в `cmd/mvctl/main.go` (PR через tech-lead#1).
-- **Зависимости**: T-057, T-010 и T-016 (волна 0).
-- **Ссылки**: `design.md` §4.1 I1-8; **`state-and-mechanics.md` §4.10**; `epics.md` §2 («единый способ инициализации мира»); C-14 v1.1; `decomposition-review.md` §5.1 п. 1.
+- **Описание**: `state.Bootstrap(ctx, deps, worldID, fixturesDir)` — публикует `entity.create.proposed` (proposer `system`, `cause=init`, ~~`source=core/state`~~ источник — **по решению system-architect** (сверка 2026-09-13: в реестре у `entity.*.proposed` издателя `core/state` нет), `proposal_id="bootstrap:{world}:{type}/{id}"`) в порядке world → region → npc → players, ждёт факты через `Journal.Tail` (таймаут 10 с), идемпотентен; `cmd/mvctl/internal/world/{init,status}.go`: `EnsureBucket` с `BucketOptionsFor`, отказ `exit 2` при существующем `latest.json` без `--force`, вызов `Bootstrap`, снапшот **seq 0 `reason=bootstrap`** через admin-маршрут (`--bus kafka`) или in-process (`--bus memory`), печать `entities_count` и `state_hash`.
+- **Файлы**: `internal/state/bootstrap.go`, `cmd/mvctl/internal/world/**`, регистрация в `cmd/mvctl/main.go` (правка через tech-lead#1) ~~(PR через tech-lead#1)~~.
+- **Зависимости**: T-057, T-010 и T-016 (волна 0, в `develop`); решение system-architect об источнике bootstrap (сверка 2026-09-13).
+- **Ссылки**: `design.md` §4.1 I1-8; **`state-and-mechanics.md` §4.10**; `epics.md` §2 («единый способ инициализации мира»); C-14 v1.2; `decomposition-review.md` §5.1 п. 1.
 - **DoD**: `go run ./cmd/mvctl world init --world dark-forest-world --fixtures testdata/fixtures/ --bus memory` создаёт 6 сущностей и снапшот seq 0 (`entities_count: 6`, `cursor.system_events: 0`); повторный запуск без `--force` → `exit 2` «мир инициализирован»; повторный `Bootstrap` идемпотентен (дедуп по `proposal_id`, 0 новых фактов); тест сверяет статы фикстур с `Rules.Stats(kind)`; `world status` печатает `state_hash`, `entities_count`, `rules_version`; общий DoD §1.
+  - **(сверка 2026-09-13)** Предложения bootstrap валидны против реестра (`contracts.Validate`, издатель из `Spec.Publishers`) — тест. Прогон `--bus kafka` против поднятого стека — только стендовая часть §4, с разрешения пользователя.
 
 ### T-059: I1-9 · `state` — recovery, `/health`, admin-маршруты · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.6
 - **Описание**: `recovery.go` — протокол `state-and-mechanics.md` §4.8 шаги (a)–(g): чтение `latest.json` → снапшот → `Journal.ReadRange` от курсора → применение фактов тем же `applyFact` → `analytics.replay.completed mode=recovery {identical, llm_calls, dice_rolled_new, log_gap}`; roll-forward висящего интента; битый/отсутствующий снапшот → не подниматься молча; `health.go` (секция `state`: `world`, `seq`, `state_hash`, `rules_version`, `cursor`); `admin.go` (`Routes(mux)` на `shared/runtime`, `POST /v1/admin/state/{world}/snapshot`, `runtime.AdminOnly`).
+  - **(сверка 2026-09-13; C-14 v1.2 (а))** Восстановление окна дедупликации `proposal_id` из снапшота (`Dedup.Restore`) и его дополнение из фактов, дочитанных `ReadRange` после курсора.
 - **Файлы**: `internal/state/{recovery,health,admin}.go` + тесты.
 - **Зависимости**: T-057.
-- **Ссылки**: `design.md` §4.1 I1-9, §9 (строка «unit `state` recovery»); `state-and-mechanics.md` §4.8, §4.9; ADR-009 п. 9, ADR-011; **US-011** (все критерии), NFR-010, NFR-011.
+- **Ссылки**: `design.md` §4.1 I1-9, §9 (строка «unit `state` recovery»); `state-and-mechanics.md` §4.8, §4.9; ADR-009 п. 9, ADR-011; **C-14 v1.2**; **US-011** (все критерии), NFR-010, NFR-011.
 - **DoD**: семь сценариев recovery покрыты unit-тестами: (a) штатная остановка → `identical=true`; (b) факты после снапшота догоняются; (c) висящая запись; (d) roll-forward интента; (e) битый снапшот → `/health fail`, процесс не поднимается с пустым состоянием; (f) дивергенция → `identical=false` + запись; (g) `log_gap`; `analytics.replay.completed` валиден против схемы; admin-маршрут отклоняет запрос без `X-Actor-Kind`; общий DoD §1.
+  - **(сверка 2026-09-13; C-14 v1.2 (а))** Тест: после рестарта повтор предложения, применённого до снапшота, не даёт второго факта (окно восстановлено из снапшота); то же для предложения, чей факт лежит в журнале после курсора (окно дополнено при догоне). Мутант «не восстанавливать окно» краснеет.
+  - **(приёмка T-448, 2026-09-13; C-02 v1.6, КД §4.8)** Применение факта `entity.updated` при догоне — по правилу догона v1.6: элементы `changed[]` по порядку; `new` есть — записать (промежуточный узел, которого нет или который не контейнер, заменяется объектом); `a[n]` при `n` равном длине списка (для `n = 0` — и когда списка нет или по пути `null`) — простое добавление без дедупликации; `a[n]` за концом списка — `state_divergence`; `new` нет — удалить путь, отсутствующий путь — no-op. Тест recovery прогоняет через `applyFact` именованные векторы `shared/entity` (`TestChangedReportsTheAncestorAProposalCreated`, `TestCatchingUpAppendsWithoutDeduplication`, `TestCatchingUpSkipsAPathAnEarlierEntryAlreadyRemoved`, `TestCatchingUpRefusesAnElementPastTheEndOfItsList`) и сверяет `StateHash` с живым применением. Если system-architect примет production-функцию догона в `shared/entity` (бэклог T-448), `applyFact` вызывает её. Окно дедупликации дополняется и по `proposal_id` фактов `entity.created`.
+  - **(приёмка T-055, 2026-09-13; бэклог ревью #2 T-055 п. 3, ревью #1 п. 4)** Догон атомарного пакета после `publish_failed`: предложение, часть ответа которого уже в журнале, после рестарта приходит снова (незакоммичено). Способ — дослать недостающие факты из интента (T-057) или объявить `state_divergence` — решение с system-architect, запись в `dev-log.md`. Тест: журнал с `entity.updated player-A v2` без `wolf-alpha v2` одного `proposal_id` и повтор этого предложения — ни второго факта `player-A v2`, ни молчаливого расхождения; два разных `entity.updated` одной сущности под одной версией в журнале → `state_divergence`.
 
 ### Подволна 1.7 (I1 завершение)
 
@@ -143,13 +223,14 @@
 - **Файлы**: `test/e2e/{solo30,recovery}_test.go`, добор unit-тестов.
 - **Зависимости**: T-058, T-059, T-060, T-056.
 - **Ссылки**: `design.md` §4.1 I1-11, §9; `scenarios.md` S1, S3; **US-011**, US-017; NFR-012, NFR-013, NFR-061, NFR-062, NFR-064.
-- **DoD**: `make test-e2e` зелёный ≤ 10 мин без Docker; S1 — 30 `narrative.output`, `state_hash` снапшота = хэш пересчёта по журналу; S3 — `identical=true`, `llm_calls=0`; `--chaos=duplicate` — число фактов не изменилось; `coverage-gate.sh 60 internal/state internal/mechanics internal/replay` зелёный; общий DoD §1.
+- **DoD**: `make test-e2e` зелёный ≤ 10 мин без Docker; S1 — 30 `narrative.output`, `state_hash` снапшота = хэш пересчёта по журналу; S3 — `identical=true`, `llm_calls=0`; `--chaos=duplicate` — число фактов не изменилось; ~~`coverage-gate.sh 60 internal/state internal/mechanics internal/replay` зелёный~~ **`make test` зелёный вместе с порогом покрытия 60 % по `internal/{state,mechanics,replay}` (сверка 2026-09-13)**; общий DoD §1.
+  - **(сверка 2026-09-13)** Регистрация настоящего контекста `state` вместо заглушки в `cmd/multiverse/contexts.go` — по решению system-architect о регистрации контекстов; до решения S1/S3 собирают контексты в тесте in-process.
 
 ### T-063: I1-α · Стендовый прогон «соло на шаблонах через бота» · Размер: S · Статус: todo · Исполнитель: tech-lead#1 + пользователь (**стенд**, слот не занимает) · Подволна 1.9
-- **Описание**: сборка EPIC-002 I1 + EPIC-004 I1 + `FakeNarrator` в `integration/mvp-1` (порядок слияния 002 → 004), `make up`, `mvctl world init`, живая игра человека через Telegram: создание персонажа, вход в регион, `look`, бой с волком, `rest`, `/forget`. Замечания → задачи EPIC-002 (T-0NN) / EPIC-004 (T-3NN).
-- **Зависимости**: T-062; EPIC-004 подволна 1.9 принята tech-lead#3 (T-313 e2e соло, T-315 e2e бота; стендовая пара — T-391 EPIC-004); `FakeNarrator` T-220 (EPIC-003) слит ранним merge или используется v0 из T-018.
-- **Ссылки**: `epics.md` §2 (точка I1-α), §4; `teams.md` §3.3 п. 2, §5.
-- **DoD**: сквозной соло-ход через бота работает с `generated_by=template`; тег **`mvp-1/i1-alpha`** на `integration/mvp-1`; список замечаний человека оформлен задачами с указанием эпика-владельца; запись в `journal.md`.
+- **Описание**: ~~сборка EPIC-002 I1 + EPIC-004 I1 + `FakeNarrator` в `integration/mvp-1` (порядок слияния 002 → 004)~~ **(сверка 2026-09-13)** сборка EPIC-002 I1 + EPIC-004 I1 в `develop` контрольными слияниями по постоянному разрешению пользователя от 2026-09-13 (порядок 002 → 004; условия: зелёный `make ci`, чистый `make secrets-scan`, все задачи слияния приняты, запись в `journal.md`; без тегов, push и `main`); `make up` (стенд поднимает пользователь или агент с его явного разрешения на этот прогон), `mvctl world init`, живая игра человека через Telegram: создание персонажа, вход в регион, `look`, бой с волком, `rest`, `/forget`. Замечания → задачи EPIC-002 (T-0NN) / EPIC-004 (T-3NN).
+- **Зависимости**: T-062; EPIC-004 подволна 1.9 принята tech-lead#3 (T-313 e2e соло, T-315 e2e бота; стендовая пара — T-391 EPIC-004); ~~`FakeNarrator` T-220 (EPIC-003) слит ранним merge или используется v0 из T-018~~ **`FakeNarrator` (T-220) и `FakeEncounter` (T-219) уже в `develop` 1c2ee7e (сверка 2026-09-13)**.
+- **Ссылки**: `epics.md` §2 (точка I1-α), §4; `teams.md` §3.3 п. 2, §5; `journal.md` 2026-09-13 (постоянное разрешение на контрольные слияния).
+- **DoD**: сквозной соло-ход через бота работает с `generated_by=template`; ~~тег **`mvp-1/i1-alpha`** на `integration/mvp-1`~~ **контрольные слияния EPIC-002 → `develop` и EPIC-004 → `develop` выполнены и записаны в `journal.md` (merge-коммиты, прогоны `make ci`, `make secrets-scan`); тегов нет (сверка 2026-09-13)**; список замечаний человека оформлен задачами с указанием эпика-владельца; запись в `journal.md`.
 
 ### Подволны 1.9–1.10 (хвост I1; TEAM-1 переходит на I2 и 005-ops)
 
@@ -162,15 +243,16 @@
 
 ---
 
-## 3. Инкремент I2 «группа» — задачи T-065…T-071 (подволны 1.8–1.14, слияние — после интеграции I1)
+## 3. Инкремент I2 «группа» — задачи T-065…T-071 (подволны 1.8–1.14, слияние — после I1-α)
 
-Старт — **по приёмке I1 тимлидом команды** (не дожидаясь интеграции трёх эпиков); **слияние** I2 в `integration/mvp-1` — после зелёного интеграционного прогона I1 (S1, S3, S8, S9, S10, S14), в порядке 002 → 003 → 004 → 005.
+Старт — **по приёмке I1 тимлидом команды** (не дожидаясь интеграции трёх эпиков); ~~**слияние** I2 в `integration/mvp-1` — после зелёного интеграционного прогона I1 (S1, S3, S8, S9, S10, S14), в порядке 002 → 003 → 004 → 005.~~ **(сверка 2026-09-13)** задачи I2 сливаются в ветку эпика после приёмки; **в `develop`** I2 попадает контрольным слиянием по постоянному разрешению пользователя — после T-063 (I1-α) и зелёного прогона I1 (S1, S3, S8, S9, S10, S14) на `develop`, в порядке 002 → 003 → 004 → 005, с записью в `journal.md`, без тегов.
 
 ### T-065: I2-1a · Atomic-пакеты группы: перемещение, вступление, выход · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.8
 - **Описание**: `group.entered_region` → **один atomic-пакет** (сущность группы + все участники: `position`, `scope`), `group.joined`/`group.left` (`members`, `scope`, `group_id`); протокол `PutIntent` → PUT по `id` → `DeleteIntent`; **roll-forward** незавершённого интента при старте worker'а.
 - **Файлы**: `internal/state/{apply,intent}.go` (расширение), `internal/state/group.go` + тесты.
 - **Зависимости**: T-057, T-059.
-- **Ссылки**: `design.md` §4.2 I2-1; `state-and-mechanics.md` §4.7; **ADR-013**; C-02 v1.1, C-04; US-006, BR-13.
+- **Ссылки**: `design.md` §4.2 I2-1; `state-and-mechanics.md` §4.7; **ADR-013**; **C-02 v1.4** ~~C-02 v1.1~~, C-04; US-006, BR-13.
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: пакет из 6 сущностей применяется целиком или не применяется вовсе (тест на сбое середины); roll-forward после «падения» между PUT восстанавливает пакет однозначно; `version_conflict` внутри пакета откатывает весь пакет; общий DoD §1.
 
 ### T-066: I2-1b · Инварианты группы inv-04, inv-05, inv-06 по `overlayView` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.9
@@ -178,27 +260,45 @@
 - **Файлы**: `internal/mechanics/invariants.go`, `internal/state/overlay.go` + тесты.
 - **Зависимости**: T-065, T-054.
 - **Ссылки**: `design.md` §4.2 I2-1, §11 (риск inv-04); `state-and-mechanics.md` §5.5; NFR-020; BR-13, BR-16 п. 4.
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: позитив/негатив на каждый из трёх инвариантов; тест «участник умер — группа не разваливается, мёртвый остаётся в `members`»; решение BA по inv-04 зафиксировано в `dev-log.md` (при ином решении — правка одного `Check`); общий DoD §1.
+  - **(сверка 2026-09-13)** Тест T-054 на множества `Check` обновлён: `Check != nil` у inv-04, inv-05, inv-06; нарушение → `law_violation` с `invariant_id` (C-02 v1.4).
+  - **(приёмка T-054, 2026-09-13; ревью T-054 Minor-1, Minor-2)** Закон inv-01 (`checkDeadDoesNotAct`) меняется по ответу system-architect на вопросы В1 и В2 приёмки T-054; ответ и довод — в `dev-log.md`:
+    - **сторона NPC** (Minor-2, В2): рекомендация тимлида — нарушение, когда встреча не `resolved`, `npcs[]` не пуст и **все** NPC терминальны; мёртвые NPC остаются в `npcs[]` как история (`living_enemies`). Тесты: два волка, первый убит, бой идёт, `touched` = встреча и убитый (зонд P1) → нарушения нет; оба мертвы, встреча открыта → нарушение. Строки «a corpse named twice», «both sides» `TestInvDeadDoesNotAct` пересмотреть. Мутант «хватает одного терминального NPC» краснеет;
+    - **сторона участников** (Minor-1, В1): при варианте А (агент встречи выводит погибшего из участия, пункт C-05) проверка не меняется, зонд P2 закрепляется тестом как нарушение со ссылкой на пункт C-05; при варианте Б проверка участников снимается, а DoD T-054 «три терминальных статуса — одно нарушение» закрепляется на стороне NPC. Зонд P3 (гонка `/forget` в соло) — по тому же ответу и согласованно с тестом T-056;
+    - без ответа архитектора этот пункт открыт, и T-066 по нему не принимается. *(T-457, 2026-09-13: ответ дан — строка ниже.)*
+  - **(T-457, 2026-09-13; C-05 v1.8 п. 9 (а); ответ на В1, В2 приёмки T-054)** Закон inv-01, сторона NPC: нарушение на каждом NPC, когда встреча не `resolved`, `npcs[]` не пуст и **все** NPC терминальны. Сторона участников (п. 9 (б), условие `touched`) — в T-056.
+    - Новые тесты: два волка, первый убит, бой идёт (P1) — нарушения нет; оба мертвы, встреча открыта — нарушение на обоих. Мутант «хватает одного терминального NPC» краснеет на P1.
+    - Существующие строки `TestInvDeadDoesNotAct` не правятся и остаются зелёными (Mi-4 ревью T-457); это заменяет «пересмотреть» в строке выше:
+      - «a dead wolf is still a target», «a fight is opened against a corpse», «a fight without a state is taken as on», «both sides» (после T-056) — один NPC, и он терминален;
+      - «a corpse named twice is one violation» — одно нарушение на id;
+      - «a fighter the world does not hold» — NPC вне `View` не терминален.
+    - Групповой тест P2 на `overlayView`; сама сторона участников — T-056.
 
 ### T-067: I2-2 · `Participation` в механике (`idle`/`out_of_combat`) · Размер: S · Статус: todo · Исполнитель: developer#1 · Подволна 1.10
 - **Описание**: `Actor.Participation` из `encounter.participants[]`; `NPCTarget` исключает `idle|out_of_combat|dead`; `Resolve` возвращает `ErrInvalidTarget` для недопустимой цели; `ActorsFromEncounter`.
 - **Файлы**: `internal/mechanics/{target,resolve,actor}.go` + тесты.
 - **Зависимости**: T-053.
-- **Ссылки**: `design.md` §4.2 I2-2; `state-and-mechanics.md` §5.4; C-03 v1.1, C-05 v1.1; US-007.
+- **Ссылки**: `design.md` §4.2 I2-2; `state-and-mechanics.md` §5.4; **C-03 v1.2** ~~C-03 v1.1~~, C-05 v1.1; US-007.
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: таблица «состав участников → выбранная цель» покрыта; `idle` игрок не выбирается целью; `Resolve` по мёртвой цели → `ErrInvalidTarget` без изменения состояния; общий DoD §1.
+  - **(сверка 2026-09-13; C-03 v1.2)** `NPCTarget` сохраняет сигнатуру `(*Actor, error)` из T-053; `ActorFromEntity(e, enc)` берёт `Participation` из сущности встречи (второй аргумент), `nil` — вне боя.
 
 ### T-068: I2-3 · Снапшот по `analytics.session.ended` · Размер: S · Статус: todo · Исполнитель: developer#1 · Подволна 1.11
 - **Описание**: подписка группой `core.state.triggers` на `analytics_events` (**не в режиме replay** — там по счётчику), снапшот с `reason=session_ended`.
 - **Файлы**: `internal/state/snapshot.go`, `internal/state/triggers.go` + тесты.
 - **Зависимости**: T-057.
 - **Ссылки**: `design.md` §4.2 I2-3, §11 (риск S-10); ADR-003, ADR-011; C-10; US-038 (вклад).
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: снапшот создаётся один раз на `session.ended` (дубли события не создают второй снапшот); в `--mode=replay` подписка отключена и снапшот берётся по счётчику; общий DoD §1.
+  - **(сверка 2026-09-13; C-14 v1.2 (а))** Окно, которым гасятся дубли `session.ended`, входит в снапшот State: после рестарта дубль события не создаёт второй снапшот (тест).
 
 ### T-069: I2-4 · `internal/state/audit` — `Recompute` и `Compare` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.12
 - **Описание**: `audit.Recompute(snapshot *Snapshot, facts iter.Seq[eventbus.Event]) (hash string, entities []*entity.Entity, err error)` — применяет `entity.created/updated` к снапшоту **тем же** `applyFact`, что recovery; `audit.Compare(hashA, hashB) Divergence` (какая сущность, какое поле, какая версия). Библиотека для `mvctl report --audit` (EPIC-005 T-137; *T-416: было `session-report`*) и для теста S3.
 - **Файлы**: `internal/state/audit/**` + тесты.
 - **Зависимости**: T-059.
 - **Ссылки**: `design.md` §4.2 I2-4, §5 (строка `internal/state/audit`); `epics/EPIC-005-memory-ops/design.md` §3 п. 2, §5; `state-and-mechanics.md` §3.3, §4.8; US-038; NFR-032.
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~. EPIC-005 получает библиотеку из `develop`.
 - **DoD**: тест «снапшот + факты = объекты `entities-{world}`» на подложенном расхождении даёт `Divergence` с указанием сущности и поля; `Recompute` и recovery используют **один** `applyFact` (проверяется тестом на общем наборе фактов); API согласовано с EPIC-005 (уведомление tech-lead#1); общий DoD §1.
 
 ### T-070: I2-5 · e2e `group-3x30` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.13
@@ -206,26 +306,30 @@
 - **Файлы**: `test/e2e/group3x30_test.go`.
 - **Зависимости**: T-065, T-066, T-067; `Harness` v1 (EPIC-004 I2) — при отсутствии запрос владельцу.
 - **Ссылки**: `design.md` §4.2 I2-5, §11 (допущение про `Harness`); `scenarios.md` S2; US-006, US-007.
+- **Слияние (сверка 2026-09-13)**: в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: `make test-e2e` зелёный; конфликт версий разрешается повтором без потери хода; `state_hash` совпадает с пересчётом по журналу; 0 `dead_letters`; общий DoD §1.
 
 ### T-071: I2-6 · Замер латентности atomic-пакета группы (стенд) · Размер: S · Статус: todo · Исполнитель: developer#1 + пользователь (**стенд**) · Подволна 1.14
 - **Описание**: замер NFR-001 на стенде: латентность применения пакета из 6 сущностей через интент (`applied.duration_ms` из лога), 20 прогонов, p50/p95; при провале порога — задача «вариант B ADR-013 (объект-транзакция)» отдельно, контракты не меняются.
 - **Файлы**: `ops/metrics/bench-state-<date>.csv`, запись в `dev-log.md` и `journal.md`.
-- **Зависимости**: T-065, стенд (`make up`).
+- **Зависимости**: T-065, стенд (`make up`) — **только с разрешения пользователя** (сверка 2026-09-13): стенд поднимает пользователь или агент с его явного разрешения на этот прогон; то же для `make down`; контейнеры владельца не трогать.
 - **Ссылки**: `design.md` §4.2 I2-6, §11 (риск «интент +40 мс», S-9); ADR-013; **NFR-001** (механика ≤ 0,5 с).
+- **Слияние (сверка 2026-09-13)**: CSV и записи — в ветку эпика после приёмки; в `develop` — контрольным слиянием I2 (§3), ~~`integration/mvp-1`~~.
 - **DoD**: CSV с p50/p95 по 20 прогонам; вердикт «проходит NFR-001 / не проходит»; при провале — заведена задача на вариант B с оценкой; результат передан BA для закрепления порога (EPIC-005 T-140).
 
 ---
 
 ## 4. Стендовые задачи EPIC-002 (stand)
 
+**(сверка 2026-09-13)** `make up`/`make down` и живой стек — только пользователь или агент с его явного разрешения на конкретный прогон. Интеграционные тесты на одноразовых контейнерах testcontainers — по общему DoD §1 п. 5 и стендом не считаются.
+
 | Задача | Что на стенде | Когда | Кто |
 |---|---|---|---|
-| **T-063 (I1-α)** | живая игра через Telegram на шаблонах: персонаж, вход, `look`, бой с волком, `rest`, `/forget`; тег `mvp-1/i1-alpha` | подволна 1.7 | tech-lead#1 + пользователь |
-| T-058 (часть) | `mvctl world init --bus kafka` против поднятого `core` и MinIO (`make up`) | подволна 1.6 | developer#1 + пользователь |
-| T-057 (часть) | integration-тесты `objStore` над собранным образом MinIO (Docker Desktop) | подволна 1.5 | developer#2 |
+| **T-063 (I1-α)** | живая игра через Telegram на шаблонах: персонаж, вход, `look`, бой с волком, `rest`, `/forget`; ~~тег `mvp-1/i1-alpha`~~ контрольные слияния 002 → 004 в `develop` (сверка 2026-09-13) | подволна 1.7 | tech-lead#1 + пользователь |
+| T-058 (часть) | `mvctl world init --bus kafka` против поднятого `core` и MinIO (`make up` — с разрешения пользователя) | подволна 1.6 | developer#1 + пользователь |
+| T-057 (часть) | ~~integration-тесты `objStore` над собранным образом MinIO (Docker Desktop)~~ `go test -tags integration ./internal/state/...` на одноразовом MinIO testcontainers, один прогон, проверка остатков контейнеров (сверка 2026-09-13; не стенд) | подволна 1.5 | developer#2 |
 | T-062 (часть) | S3 recovery на живом стенде (перезапуск процесса между ходами) | интеграция I1 | tester#1 + пользователь |
-| **T-071 (I2-6)** | латентность atomic-пакета группы из 6 сущностей, 20 прогонов | подволна 2.3–2.4 | developer#1 + пользователь |
+| **T-071 (I2-6)** | латентность atomic-пакета группы из 6 сущностей, 20 прогонов (`make up` — с разрешения пользователя) | подволна 2.3–2.4 | developer#1 + пользователь |
 
 ---
 
@@ -233,11 +337,204 @@
 
 | Что нужно | От кого | Заглушка до готовности | Риск |
 |---|---|---|---|
-| C-01 (шина, журнал, часы, рантайм, `objstore`) | EPIC-001 (волна 0) | — (готово к старту) | contract-тест T-014 — ворота волны 1 |
+| **C-01 v1.7** (шина, журнал, `Dedup.Has/Add/IDs/Restore`, `WithCauseID`, перехват паники в `Delivery`, часы, рантайм, `objstore`; `membus` в `shared/eventbus/membus`) ~~C-01 (шина, журнал, часы, рантайм, `objstore`)~~ | EPIC-001 (в `develop` 1c2ee7e, сверка 2026-09-13) | — (готово) | правки `shared/{eventbus,contracts,clock,runtime}` на период трёх веток — только в EPIC-001 через system-architect; ~~contract-тест T-014 — ворота волны 1~~ пройдено (точка A 2026-09-13) |
 | `Harness` (генератор `player.*`) | EPIC-004 | `Harness` v0 (T-018) | для `group-3x30` нужен `Harness` v1 или генератор `round.*` — запрос EPIC-004 |
-| `FakeEncounter` + `FakeNarrator` *(T-416: было `FakeNarrator` + `WithEncounterStub`)* | EPIC-003 (T-219, T-220 приняты; по C-05 v1.4 — T-419) | `FakeEncounter` (T-219) — единственная заглушка боя | после слияния EPIC-003 I1b двойники заменяет настоящий агент встречи — e2e T-062 переводится на него (задача EPIC-003) |
+| `FakeEncounter` + `FakeNarrator` *(T-416: было `FakeNarrator` + `WithEncounterStub`)* | EPIC-003 (T-219, T-220, T-419 — в `develop`, сверка 2026-09-13) | `FakeEncounter` (T-219) — единственная заглушка боя | после слияния EPIC-003 I1b двойники заменяет настоящий агент встречи — e2e T-062 переводится на него (задача EPIC-003) |
 | таблица владения `contracts.OwnershipRules` *(T-416: было «`shared/agent/levels.go` ↔ `contracts.OwnershipRules`»)* | EPIC-001 (T-006); строки `author`/`system` — EPIC-002 | — (готова, T-006) | таблица одна (ADR-025, подтверждён T-416), сверять нечего; строки меняют владельцы семантики PR с `contract-change`; норма «путь ↔ причина» проверяется поверх таблицы (C-02 v1.4, T-056) |
+| **(сверка 2026-09-13)** источник предложений bootstrap (`system` proposer) | system-architect | — | в реестре у `entity.*.proposed` нет издателя `core/state`, а C-02/`state-and-mechanics.md` §4.10 требуют `source=core/state`; до решения T-056 (тест источника) и T-058 не закрываются |
+| **(сверка 2026-09-13)** регистрация настоящего контекста `state` в `cmd/multiverse/contexts.go` | system-architect (решение по регистрации контекстов) + tech-lead#1 | заглушка `state` в `contexts.go` | до решения S1/S3 (T-062) собирают контексты in-process в тесте |
 | `analytics.session.ended` | EPIC-004 | фикстуры `testdata/analytics` | I2-3 |
 | `internal/state/audit` | **поставщик** для EPIC-005 (T-137) | режим `partial` у `--audit` до T-069 | API согласовать до подволны 2.2 |
 
-**Допущения**: (1) inv-04 считается по `alive` участникам до ответа BA; (2) горячая перезагрузка `rules/dark-forest.yaml` не в MVP-1 — `rules_version` в `/health` у `state` и `swarm` сверяет тест; (3) `MV_STATE_WORLDS=dark-forest-world` — один мир на MVP-1; (4) имя ветки эпика — `epic/EPIC-002-state-mechanics` (фиксируется в T-020 EPIC-001, `teams.md` §3.2 правится там же).
+**Допущения**: (1) inv-04 считается по `alive` участникам до ответа BA; (2) горячая перезагрузка `rules/dark-forest.yaml` не в MVP-1 — `rules_version` в `/health` у `state` и `swarm` сверяет тест; (3) `MV_STATE_WORLDS=dark-forest-world` — один мир на MVP-1; ~~(4) имя ветки эпика — `epic/EPIC-002-state-mechanics` (фиксируется в T-020 EPIC-001, `teams.md` §3.2 правится там же)~~ (4) закрыто (сверка 2026-09-13): ветка `epic/EPIC-002-state-mechanics` создана 2026-09-13 от `develop` 1c2ee7e.
+
+---
+
+### T-448: C-02 v1.6 · форма `changed[]`, обязательный `proposal_id` у `entity.create.proposed`, запрет чисел за ±2^53 · Размер: M · Статус: done · Волна 1 · contract-change
+- **Исполнитель**: developer#3 (TEAM-1). **Ветка**: `task/T-448-changed-form-proposal-id` (родитель `epic/EPIC-002-state-mechanics`, `03c551d`). Выполнить **до T-055**. Заведена оркестратором по решению system-architect#1.
+- **Причина**: ревью T-052 (`review.md` EPIC-002, «Оценка открытых вопросов», п. 1–2). (1) `entity.Change` писал `old` и `new` всегда: `remove` ключа выходил на провод как `new: null` — неотличимо от `set path null`, а правило догона `state-and-mechanics.md` §4.8 (строка :392; в решении архитектора и ревью T-052 названо §4.4) «записать `changed[].new`» превращало удаление в запись `null`, и `state_hash_after` расходился с живым миром; у `append` вместо отсутствующего `old` — `old: null`. (2) `proposal_id` у `entity.create.proposed` был необязателен, а `entity.update.rejected` его требует и C-02 гасит повторы по нему; двойник State подставлял `event.id`, и это правило нигде не записано. (3) Числа за ±2^53 JSON теряет: после декодирования во `float64` State, факт и read-model держат разные числа.
+- **Состав** (решение system-architect#1):
+  - (а) форма `changed[]`: `old` есть ⇔ путь существовал до изменения, `new` есть ⇔ путь существует после; схема `entity.updated` — `required: ["path"]` + `anyOf` из `required: [old]` и `required: [new]`; `entity.Change` — признаки наличия и `MarshalJSON`/`UnmarshalJSON` по ключам; `changedPayload` двойника; КД §4.8 (правило догона) и строка C-02 (выход) в §8;
+  - (б) `proposal_id` у `entity.create.proposed` обязателен: схема, двойник без подстановки `event.id`, пример в `shared/contracts/validate_test.go`;
+  - (в) число по модулю больше 2^53 в значении операции → `ReasonNotJSON` → `invalid_op`;
+  - (г) текст C-02 v1.6 для T-449 — в карточке `tasks/T-448.md` (в `contracts.md` не вносится: его правят T-444 и T-449 в EPIC-001).
+- **Файлы**: `shared/entity/{ops,entity}.go`, `shared/entity/{ops,changed}_test.go`, `shared/entity/README.md`; `shared/testkit/state/apply{,_test}.go`; `schemas/events/entity.{updated,create.proposed}.v1.json`; `shared/contracts/validate_test.go` (одна строка, зона EPIC-001 — ревью system-architect); `testdata/fixtures/events/README.md`; `Docs/dev-team/architecture/components/state-and-mechanics.md` §3.2, §4.1, §4.8, §8, §14.
+- **Не трогать**: `contracts.md`, `shared/testkit/{swarm,gateway}`, `internal/mechanics`, `internal/replay`, `serve.go` (T-053, T-060).
+- **Ссылки**: C-02 v1.4 (+ v1.5 T-444); `review.md` EPIC-002 (ревью T-052); `state-and-mechanics.md` §3.2, §4.8; `api-contracts.md` §2.3.4.
+- **DoD**:
+  - тест-свойство: для каждой строки таблицы формы факт, применённый по правилу догона (после JSON туда-обратно), даёт тот же `StateHash`, что `ApplyOps`;
+  - `Harness` и `FakeNarrator` читают только `new` у `status`/`position` — их тесты зелёные без правок;
+  - схема `entity.create.proposed` требует `proposal_id`; двойник не подставляет `event.id`; издатели (`Harness`, `FakeEncounter`, bootstrap в `cmd/multiverse`) поле уже передают;
+  - значение за ±2^53 → `invalid_op` (тест в `shared/entity` и через двойник);
+  - у каждой невалидной фикстуры по-прежнему одна ошибка;
+  - мутанты в копии дерева в scratch, контрольный первым; `go build ./... && go vet ./...`, `mvctl contracts check`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `golangci-lint run ./...`, `make test` — зелёные;
+  - в карточке — текст C-02 v1.6 для T-449 и строки для EPIC-003 и EPIC-004.
+- **Для других эпиков** (подробно — в карточке):
+  - EPIC-003: `shared/testkit/swarm/fake_encounter.go:1629-1635` при отсутствующем `new` строит `remove` без `value`, а не `set null`;
+  - EPIC-004: DoD T-314/T-355 — `proposal_id` каскада `/forget` = `forget:{player_id}`; `dead_entity` на своём предложении забвения → 200.
+- **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). C-02 v1.6 — форма `changed[]` по наличию ключей, `proposal_id` обязателен у `entity.create.proposed` и `entity.created`, числа |x| ≤ 2^53−1, правило догона — реализован по решению system-architect#1; ревью #2 — «принять» (0/0/3/2). При приёмке закрыты Mi-3 и N-4 (тесты двойника `TestChangedCarriesAPresentNull`, `TestTheAttributesOfACreateAreCheckedBeforeTheWorld`, мутанты приёмки красные) и Mi-4 (строка карточки). Mi-5 (строка `shared/testkit/swarm/fake_narrator_test.go`, зона EPIC-003) оставлен решением оркестратора; отставание текста C-02 v1.6 в `contracts.md` доводит T-456. Совместимость с кончиком эпика `1fc6480` подтверждена прогоном на слитом дереве. Строки DoD внесены в T-055, T-056, T-059. Подробно — `tasks/T-448.md`, раздел «Приёмка».
+
+### T-458: Запись сессии · `shared/recording` (перенос из `internal/replay`), `ReadJournal`, `Deps.Recording` в `serve.go`, маршрут часов replay, `EventClock.Advance` · Размер: M · Статус: done · Исполнитель: developer#3 · Волна 1 · Подволна 1.4 · Ветка: `task/T-458-session-recording` · contract-change
+- **Исполнитель**: developer#3 (TEAM-1, Opus). **Ветка**: `task/T-458-session-recording` от `epic/EPIC-002-state-mechanics` `a037efb` (кончик эпика после слияния T-055), папка `.worktrees/T-458`. Задача заведена по решению system-architect#1 в T-457 (EPIC-001; C-01 v1.9, «Порядок поставки»). Раздел написал tech-lead#2 2026-09-13.
+- **Причина**: вопросы приёмки T-060 и ревью T-207.
+  - Формат записи живёт в `internal/replay`, а depguard пускает этот пакет только в `cmd/multiverse`. Поэтому `providers/recorded` (EPIC-003) не может прочитать запись без второго читателя JSONL.
+  - В replay часы корневых событий стоят на последнем увиденном времени. Все корни сценария получают одно время, и законы времени идут не так, как в записанной сессии.
+  - Решение C-01 v1.9: формат, чтение файла и журнала, индекс и ключ `llm.output`, писатель переезжают в `shared/recording` (пакет EPIC-001). Процесс кладёт прочитанную запись в `runtime.Deps.Recording`. Время корней задаёт харнесс через `POST /v1/admin/replay/clock` → `EventClock.Advance`.
+- **Зависит от**:
+  - T-457 (EPIC-001, `done`): `contracts.md` v0.13 (C-01 v1.9, §16 п. 8) и `ownership.md` v0.7 уже в `develop` и в ветке эпика;
+  - T-055 (`done`, слита в эпик `a037efb`): блок источников конструкторов в `serve.go`, поверх которого идёт правка;
+  - T-060 (`done`, в эпике): код `internal/replay`, который переносится. В заголовке раздела T-060 выше статус `todo` отстал от карточки и `state.js` *(v0.1.4: заголовок исправлен)*.
+- **Ждут эту задачу**:
+  - EPIC-003 T-212 — условие старта: контрольное слияние EPIC-002 с T-458 в `develop` и синхронизация EPIC-003;
+  - EPIC-003 T-221 (`recording.Writer`, `ReadJournal`) и T-237 (`ReadJournal` в фазе догона) — тоже через `develop`;
+  - EPIC-002 T-061 (маршрут часов).
+- **Порядок внутри задачи — часть А первой.**
+  - **Часть А — поставка другим эпикам:** пакет `shared/recording`, `LLMOutputKeyOf`, `ReadJournal`, поле `Deps.Recording` и его заполнение в `serve.go`, тест `Derive`, depguard. Пункты DoD А1–А9. Именно этого ждут T-212, T-221 и T-237.
+  - **Часть Б — нужна только EPIC-002:** `EventClock.Advance` и маршрут `POST /v1/admin/replay/clock`. Пункты DoD Б1–Б2, потребитель — харнесс T-061.
+  - На ревью задача сдаётся целиком. Если часть Б не укладывается в сессию, исполнитель останавливается после зелёных прогонов части А и записывает это в карточку. Разбиение на две задачи решает оркестратор по отчёту tech-lead#2.
+- **Файлы**:
+  - перенос `git mv`: `internal/replay/recording.go` → `shared/recording/recording.go`, `internal/replay/recording_test.go` → `shared/recording/recording_test.go`. Новый код — в новых файлах, чтобы переименование опознавалось (сходство ≥ 50 %);
+  - новые файлы: `shared/recording/journal.go` и `journal_test.go`; пакетный комментарий `recording` — в `recording.go` или в `doc.go`;
+  - `internal/replay/eventclock.go`: пакетный комментарий без `Recording`, `Advance`, `ErrClockBehind`. Тесты — `internal/replay/clock_test.go`;
+  - обработчик маршрута часов — новый `internal/replay/clockroute.go` и `clockroute_test.go`. Это зона EPIC-002, а `serve.go` только монтирует маршрут;
+  - `shared/runtime/runtime.go` — поле `Recording` (исключение §16 п. 8);
+  - `shared/eventbus/derive_replay_test.go` — новый файл (исключение §16 п. 8). Тест не кладётся в `types_test.go`: `shared/eventbus` параллельно правит T-460 (EPIC-001);
+  - `cmd/multiverse/serve.go` — чтение записи один раз, `Deps.Recording`, монтирование маршрута в replay, справка `--recording`;
+  - тесты процесса — `cmd/multiverse/replay_test.go`, `sources_test.go` (при необходимости) или новый `cmd/multiverse/replay_clock_test.go`;
+  - `.golangci.yml` — `**/shared/recording/**` в `files` правила `no-testkit-in-production`, с комментарием.
+- **Не трогать**:
+  - `internal/state/**`, `internal/mechanics/**`, `shared/testkit/**`;
+  - `internal/llm/**` (привязку `providers/recorded` к пакету делает T-212) и `cmd/mvctl/**` (T-221);
+  - `api/gateway.openapi.yaml`: операцию под тегом `process` вносит EPIC-004;
+  - `cmd/multiverse/{main,contexts}.go`;
+  - `cmd/multiverse/serve_test.go`: его правит EPIC-004 в своей ветке;
+  - не-тестовые файлы `shared/eventbus/**` (T-460);
+  - `shared/env/**` и `.env.example`: новых переменных нет, `MV_REPLAY_RECORDING` не вводится;
+  - `architecture/**` и `plan/**`: общие документы правятся на `develop` (`ownership.md` §3 п. 1).
+- **Ссылки**:
+  - `contracts.md` v0.13, C-01 v1.9: «Запись сессии», «Чтение журнала», «Источники записей LLM», «Время в обработчике replay», «Время корневых событий в replay», «Порядок поставки»; §16 п. 8 — исключение T-458;
+  - `plan/ownership.md` v0.7: §1 (строка `shared/recording/**`), §3 п. 4 (а);
+  - карточка `epics/EPIC-001-foundation/tasks/T-457.md`: «Часть 3», «Итерация 2», «Строки DoD для владельцев задач» → EPIC-002 → T-458;
+  - карточка `tasks/T-060.md`: мутанты M6, M7, M12, M13, M16, M20–M22; «Отметка владельца», Н-2;
+  - `state-and-mechanics.md` §6; ADR-001 доп. п. 2, ADR-003, ADR-009 п. 9, ADR-010;
+  - EPIC-003 `tasks.md`, разделы T-212, T-221, T-237 — потребители пакета;
+  - NFR-061, US-017.
+- **DoD** (в дополнение к общему DoD §1):
+  - **А1. Перенос с историей.** Файлы переносятся `git mv`, как требует C-01 v1.9: без второй копии кода. `git diff --cached -M --summary a037efb` показывает `rename internal/replay/recording.go => shared/recording/recording.go` и то же для теста, со сходством ≥ 50 %. После коммита `git log --follow shared/recording/recording.go` доходит до коммитов T-060. `git mv` меняет индекс. Если исполнителю индекс трогать нельзя, перенос по списку из карточки делает оркестратор, до правок содержимого.
+  - **А2. API пакета `recording`.**
+    - Состав: `TypeLLMOutput`; `Recording` с методами `Len`, `Start`, `Events`, `Index`; `Open` и `Read` (были `OpenRecording` и `ReadRecording`); `LLMOutputKey`, `LLMOutputKeyOf`; `Writer` (`NewWriter`, `Append`, `Close`); `ReadJournal`.
+    - Префикс ошибок — `recording:` (был `replay:`). Поведение перенесённого кода не меняется, кроме `LLMOutputKeyOf` (А4). Golden-значения `LLMOutputKey` прежние.
+    - `internal/replay` имён записи не экспортирует и псевдонимов не держит. Пакетный комментарий (`eventclock.go:1-8`) не упоминает `Recording` (N-5 T-457). В пакете остаются `EventClock`, `NullTimers`, `Cursor`, `ReadToEnd`/`CatchUp`, `Middleware`/`WithMiddleware`.
+    - `go list -deps ./shared/recording` не содержит `multiverse-core.io/internal/…`, `shared/runtime` и `shared/testkit`.
+  - **А3. Совместимость потребителей `internal/replay`.**
+    - Все импортёры переведены на новый пакет: `cmd/multiverse/serve.go` (`recording.Open`), `cmd/multiverse/replay_test.go` (`recording.NewWriter`), остальные — по `git grep`.
+    - `git grep -nE "replay\.(OpenRecording|ReadRecording|NewWriter|Recording|TypeLLMOutput|LLMOutputKey)"` пуст.
+    - Тесты `internal/replay` и `cmd/multiverse` зелёные без ослабления ожиданий. Среди них `TestTheModeDecidesTheTimeOfTheContextsAndNotOfTheBus`, `TestReplayMovesTheClockOfTheContextsByTheEventsTheyRead`, `TestReplayRedeliversAFailingHandlerWithoutHanging`, `TestReplayRefusesAnUnreadableRecording`, `TestReplayLogsTheRecordingItRunsOn`, `TestReplayWithoutARecordingStartsAndWarns`, `TestTheProcessInstallsTheSourcesOfTheConstructorsFromDeps`. Единственная допустимая правка ожиданий — префикс текста ошибки, если тест его сверяет.
+    - Тесты перенесённого файла живут на новом месте, пакет `recording_test`.
+  - **А4. `LLMOutputKeyOf`** возвращает `""`, если выполнено любое условие:
+    - нет `meta.agent.id`;
+    - `phase` отсутствует или пуста;
+    - `attempt` не целое число ≥ 1: дробное (`1.5`), `0`, отрицательное, строка или поле отсутствует.
+
+    `attempt` из JSON (`float64`) и из Go (`int`) дают один ключ. Тест — таблицей. Мутант «усечение через `jsonpath.GetInt`» (прежний код) краснеет на `1.5`, мутант «`attempt ≥ 0`» — на `0`.
+  - **А5. `ReadJournal(ctx, j eventbus.Journal, topic string, from int64) (*Recording, error)`.**
+    - `End` снимается один раз, до чтения. Читается `[from, End)`; при `End ≤ from` — пустая запись без ошибки.
+    - Обработчик только добавляет событие и всегда отвечает `nil`. Разбирает payload потребитель, после чтения.
+    - Ошибка — если чтение вернуло `next < End` без ошибки (так `membus` отвечает на остановку) или `ctx` отменён: `recording: journal <topic> read stopped at <next> of <end>`. Ошибка `End` или `ReadRange` входит в цепочку через `%w`.
+    - Контракт-тесты на `membus` (`shared/eventbus/membus`, без Docker) в `shared/recording/journal_test.go`:
+      - полное чтение: события разных типов в порядке офсетов, `Len() == End − from`, чтение с `from > 0`;
+      - событие, опубликованное после снятия `End`, в запись не попадает;
+      - `Close` шины посреди чтения → ошибка, текст называет `next` и `End`; мутант «частичное чтение без ошибки» краснеет;
+      - отменённый `ctx` → ошибка;
+      - `llm.output`, валидный по схеме, но без ключа (нет `phase`, дробный `attempt`), попадает в запись, а `dead_letters` пуст; мутант «разбор и отказ в обработчике» краснеет.
+    - Интеграционный прогон на Redpanda не требуется: `Journal` kafka-адаптера держит общий contract-тест `shared/testkit/contract`.
+    - Зонд в `cmd/multiverse`: `ReadJournal` над `Deps.Journal` процесса в `--mode=replay`. Там журнал обёрнут middleware T-060, и тест закрепляет, двигает ли чтение `EventClock` и ставит ли `meta.replay` у прочитанных событий. Факт записывается в карточку для T-212 и T-237. Поведение в этой задаче не меняется.
+  - **А6. Поле `runtime.Deps.Recording *recording.Recording`** с doc-комментарием по C-01 v1.9:
+    - процесс читает запись один раз, до открытия шины;
+    - `nil` — записи нет;
+    - payload событий общий для всех читателей, контекст его не меняет.
+
+    Цикла импорта нет. Литералы `runtime.Deps{…}` в тестах всех пакетов компилируются без правок.
+  - **А7. `serve.go`.**
+    - Запись читается ровно один раз, `recording.Open`, до открытия шины. `EventClock` стартует с её `Start`, тот же `*Recording` кладётся в `Deps.Recording`.
+    - В live и в replay без `--recording` поле равно `nil`. Отказы старта прежние: нечитаемая запись — до `openBus`, `--recording` без replay — ошибка разбора флагов.
+    - Тест со свидетелем-контекстом:
+      - в replay с записью `Deps.Recording != nil`, `Len()` равен числу событий файла, `Start()` равен начальному времени часов;
+      - за прогон файл открывается один раз — шпионом или сравнением указателя;
+      - в live и в replay без записи поле равно `nil`.
+    - Справка `--recording`: «recording of a session: sets the start of the clock in replay mode and feeds providers/recorded» (Н-2 отметки tech-lead#1 по T-060). `TestTheHelpOfRecordingSaysWhatItDoes` обновлён.
+    - Блок источников конструкторов T-055 и `times.bus = clock.RealTimers{}` не меняются. Стражи — тесты T-055 и T-060.
+  - **А8. Тест «`Derive` наследует `Meta.Replay`»** — `shared/eventbus/derive_replay_test.go`:
+    - причина с `Replay=true` → следствие с `true`;
+    - причина с `false` → `false`;
+    - внук сохраняет значение.
+
+    Мутант «`Derive` не копирует `Replay`» краснеет. Не-тестовые файлы `shared/eventbus` не меняются.
+  - **А9. depguard — кому разрешён `shared/recording`.**
+    - Потребителям новых разрешений не нужно: это слой `shared/*`, открытый всем, а `*recording.Recording` и так приходит контекстам через `runtime.Deps`.
+    - Потребители по C-01 v1.9: `shared/runtime`, `cmd/multiverse`, `internal/llm/providers/recorded` (T-212), `cmd/mvctl/internal/record` (T-221), догон окна бюджета (T-237).
+    - Пакету запрещён `internal/*` правилом `shared`. Зонд: временный файл в `shared/recording` с импортом `internal/replay` краснит `golangci-lint`, файл удаляется по точному пути.
+    - `**/shared/recording/**` добавлен в `files` правила `no-testkit-in-production`: пакет попадает в бинарник через `shared/runtime`. Зонд: импорт `shared/testkit` в не-тестовом файле пакета краснит линтер, в `_test.go` — нет.
+    - Правила `internal-replay` и `cmd-others` не меняются: `internal/replay` по-прежнему импортирует только `cmd/multiverse`.
+  - **Б1. `EventClock.Advance(at time.Time) error` и `replay.ErrClockBehind`.** Сравнение и сдвиг — под одной блокировкой `mu`.
+    - `at` раньше `Now()` → `ErrClockBehind`, текст называет оба времени, часы не меняются.
+    - `at`, равный `Now()`, → `nil`, часы не меняются.
+    - `at` позже → `nil`, `Now() == at`.
+    - Тесты: три ветки; параллельные `Advance` и `Observe` (≥ 8 горутин × 1000 вызовов), после которых `Now()` равно максимуму поданных времён. В CI тест идёт под `-race`; локально на Windows без cgo `-race` недоступен.
+    - Мутант «`Advance` = `Now()` + `Observe` без общей блокировки» детерминированным тестом может не ловиться. Если он выжил, в карточке объясняется почему; атомарность держат код и `-race` в CI.
+  - **Б2. Маршрут `POST /v1/admin/replay/clock`.**
+    - Обработчик — в `internal/replay` (например, `ClockHandler(ec *EventClock) http.Handler`). `serve.go` монтирует его на `srv.Mux` через `runtime.AdminOnly` только при `--mode=replay`, до `runtime.StartAll`.
+    - Тело — `{"at": "<RFC 3339>"}`, дробные секунды допустимы.
+    - Ответы:
+      - `204` — `at` не раньше времени часов;
+      - `409` с кодом `clock_behind` — `at` раньше, часы не меняются;
+      - `400` — тело не JSON, нет `at` или `at` не RFC 3339;
+      - `403` — нет `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS`;
+      - `405` — другой метод;
+      - `404` — в live, маршрута нет.
+    - Тело ответов `400` и `409` — JSON с полем `error`, как у `forbid` в `shared/runtime/http.go`. Точная форма записывается в карточку: по ней EPIC-004 пишет операцию под тегом `process`.
+    - Тесты через процесс (`process.run` на `membus`, свидетель-контекст) — все ветки выше и **время корней не идёт назад**:
+      - после `204` на `at1` корень, построенный контекстом через `NewRoot`, получает `Timestamp == at1`;
+      - после `409` на `at0 < at1` следующий корень снова получает `at1`, а не `at0`;
+      - после `204` на `at2 > at1` — `at2`.
+    - Мутант «откат молча проглатывается» (`Observe` вместо `Advance`, ответ `204`) краснеет. Мутант «маршрут монтируется и в live» краснеет.
+  - **Покрытие и мутанты.**
+    - Покрытие `internal/replay` и `shared/recording` ≥ 90 % каждого (`go test -cover`). У T-060 было 96,8 % вместе с записью; порог gate — 60 %, `shared/recording` в gate не входит. Цифры до и после — в карточке.
+    - Мутанты T-060 повторены на `shared/recording`:
+      - M6 — `Index`: побеждает последняя запись;
+      - M7 — ключ без длин частей;
+      - M12 — длинные строки не дочитываются;
+      - M13 — нечитаемая запись игнорируется;
+      - M16 — `Writer` обрезает файл;
+      - M20 — `Start` берёт первую строку;
+      - M21 — `Start` не пропускает нулевое время;
+      - M22 — ошибка чтения уходит в разбор JSON.
+    - Новые мутанты — из пунктов А4, А5, А8, Б1, Б2.
+    - Мутанты гоняются в копии дерева в scratch, контрольный — первым. Таблица «мутант → тест → результат» — в карточке.
+  - **Прогоны** в `.worktrees/T-458`: `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `golangci-lint run ./...`, `go run ./cmd/mvctl contracts check`, `make test`, `make ci BASE=develop` (общий DoD §1). Docker и стенд не нужны.
+  - **Ревью и просмотр до слияния.**
+    - Метка `contract-change`.
+    - Ревью system-architect: `shared/recording/**`, `shared/runtime/runtime.go`, `shared/eventbus/derive_replay_test.go`, строка `.golangci.yml`. Основание — исключение `contracts.md` §16 п. 8 и `ownership.md` §3 п. 4 (а). Отметка — в карточке, раздел «Ревью system-architect».
+    - Обязательный просмотр tech-lead#1: те же файлы и `cmd/multiverse/serve.go`. Отметка — в карточке, раздел «Отметка владельца (tech-lead#1)».
+    - Без обеих отметок задача не принимается. Приёмка — tech-lead#2; code-reviewer — как у остальных задач эпика.
+  - **Готовность к поставке.**
+    - Совместимость с кончиком эпика и с `develop` проверена на слитом дереве в копии: build, vet, `go test -short ./...`, e2e, `golangci-lint`.
+    - Отдельно сверяются `.golangci.yml` (EPIC-003 и T-451 правят блок `exclusions`) и `cmd/multiverse/serve_test.go` (правка EPIC-004).
+    - Конфликты и рецепт их разрешения — в карточке.
+- **Поставка** (после приёмки, делает оркестратор):
+  - Сразу после слияния T-458 в эпик — контрольное слияние EPIC-002 → `develop`. Это условие старта EPIC-003 T-212 и привязок T-221 и T-237 к пакету.
+  - Условия постоянного разрешения: зелёные `make ci` и `make secrets-scan`, все слитые в эпик задачи приняты, запись в `journal.md`; без тегов, push и `main`.
+  - Затем синхронизация `develop` → EPIC-001, EPIC-003, EPIC-004. До контрольного слияния EPIC-001 состав `Deps` не меняет (C-01 v1.9).
+- **Сверка с T-056 и T-057** (tech-lead#2, 2026-09-13).
+  - «Файлы» не пересекаются:
+    - T-056 — `internal/state/{ownership,invariants,dedup,world}.go`, `shared/testkit/state/**`, строки реестра `shared/contracts` и `cmd/multiverse/fake_contexts_test.go` (строки приёмки T-055);
+    - T-057 — `internal/state/{store,intent,snapshot}.go`.
+
+    Ни одна из них не правит `serve.go`, `internal/replay` и `shared/runtime`.
+  - Порядок: T-458 идёт параллельно T-056, каждая в своей папке; T-057 — после T-056, как в плане. Если при слиянии всё же возникнет конфликт, его разрешает developer#3.
+  - Смысловые стыки:
+    - поле `Deps.Recording` только добавляется, и литералы `runtime.Deps{…}` в тестах `internal/state` не ломаются;
+    - маршрут `/v1/admin/replay/clock` и будущий `POST /v1/admin/state/{world}/snapshot` (T-059) живут на одном mux процесса. Пути не пересекаются, оба закрыты `runtime.AdminOnly`;
+    - в replay `Deps.Journal` обёрнут middleware T-060, поэтому догон State (T-059) и `ReadJournal` двигают один `EventClock` (зонд А5).
+  - T-061 стартует после слияния T-458: ей нужен маршрут часов (строка T-457).
+- **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). Части А и Б сделаны целиком за две итерации: DoD А1–А9 и Б1–Б2 выполнены, условия system-architect У-1…У-4 закрыты (`ReadJournal` — чтение истории и в replay часы не двигает, C-01 v1.11; шаблон `POST`; тела ошибок — форма `Error`; префиксы `recording:`). Ревью #1 code-reviewer#3 — «принять» (0/0/2/5), ревью #2 system-architect#1 — «одобрено» (0/0/0/2), отметка tech-lead#1 есть (Н-1, Н-2). При приёмке закрыты Н-1 (параметр `replayOptions` — `path`) и N2-1 (ошибки `Writer` — `recording: open <path>: …`, `recording: sync <path>: …`, ошибка закрытия файла с тем же префиксом; тесты `TestErrorsOfTheWriterCarryThePrefixOnce`, `TestCloseReportsTheFailedStepWithThePrefix`, мутанты приёмки красные). Трёхстороннее слияние `tasks.md` и `.golangci.yml` с кончиком эпика `862c8c0` — без конфликтов. Строки DoD внесены в T-061 и T-066; строки для EPIC-001, EPIC-003 и EPIC-004 — в карточке, «Передать в другие эпики». Подробно — `tasks/T-458.md`, раздел «Приёмка».

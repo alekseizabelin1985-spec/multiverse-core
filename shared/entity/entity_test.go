@@ -214,9 +214,19 @@ func TestStatusTransitionAllowed(t *testing.T) {
 		{entity.StatusDead, entity.StatusAlive, false},
 		{entity.StatusDead, entity.StatusAbandoned, false},
 		{entity.StatusAbandoned, entity.StatusAlive, false},
-		{entity.StatusAbandoned, entity.StatusAbandoned, false},
 		{entity.StatusAscendedFinal, entity.StatusAlive, false},
-		{entity.StatusAlive, entity.StatusAlive, false},
+		// The same value is not a transition (C-02 v1.4): a living status
+		// set to itself is a turn with nothing changed, while a terminal
+		// status is refused even when it would stay where it is.
+		{entity.StatusAlive, entity.StatusAlive, true},
+		{entity.StatusAbandoned, entity.StatusAbandoned, false},
+		{entity.StatusDead, entity.StatusDead, false},
+		{entity.StatusAscendedFinal, entity.StatusAscendedFinal, false},
+		// A value outside data-model.md §3.3 is not a status, neither as a
+		// destination nor as a value set to itself.
+		{entity.StatusAlive, "sleeping", false},
+		{"sleeping", "sleeping", false},
+		{"", "", false},
 	}
 	for _, test := range tests {
 		t.Run(test.from+"->"+test.to, func(t *testing.T) {
@@ -224,6 +234,27 @@ func TestStatusTransitionAllowed(t *testing.T) {
 				t.Fatalf("StatusTransitionAllowed(%q, %q) = %v, want %v", test.from, test.to, got, test.want)
 			}
 		})
+	}
+}
+
+// C-02 v1.4: the matrix applies to what ApplyOps leaves in changed[], and a
+// status set to the value it has leaves nothing there. Both halves of the rule
+// say the same thing — no change on the entity, and no refusal from the matrix
+// if a State asks it about the operation instead of the change.
+func TestSameStatusIsATurnWithNothingChanged(t *testing.T) {
+	e := player(t)
+	attrs, changed := applyOK(t, e,
+		entity.Op{Op: entity.OpSet, Path: entity.AttrStatus, Value: entity.StatusAlive})
+	if len(changed) != 0 {
+		t.Fatalf("changed = %+v, want nothing for alive set to alive", changed)
+	}
+	e.Commit(attrs, changed, entity.LastChange{ProposalID: "p-forget-again", Cause: "forget", AppliedAt: proposedAt})
+	if e.Version != 1 {
+		t.Fatalf("version = %d, want 1: a status that did not move moved the version", e.Version)
+	}
+	status, _ := e.Status()
+	if !entity.StatusTransitionAllowed(status, entity.StatusAlive) {
+		t.Fatal("the matrix refuses the status the entity already has")
 	}
 }
 

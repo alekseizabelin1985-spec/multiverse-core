@@ -59,12 +59,14 @@ var roles = map[string]roleSpec{
 		scopeTypes: []string{ScopeTypeRegion},
 		events:     domainEvents,
 	},
-	// A city is a domain of its own kind (target, not in MVP-1); it publishes
-	// what a region publishes.
+	// A city is a domain of its own kind, reserved in MVP-1: there is neither a
+	// city blueprint nor a scope type city, so its white list is empty. The
+	// list of a region would hand the role the rights of a region GM without a
+	// decision on its powers; the epic of cities writes the list together with
+	// the scope type (swarm-llm-laws.md §13.2, decision 2).
 	RoleCityGM: {
 		level:      LevelNameDomain,
 		scopeTypes: []string{ScopeTypeRegion},
-		events:     domainEvents,
 	},
 	RolePersonalGM: {
 		level:      LevelNameTask,
@@ -130,6 +132,13 @@ func IsReservedLevel(level string) bool {
 	return level == LevelNameMonitor || level == LevelNameObject
 }
 
+// IsReservedRole reports whether role is kept for later epics inside a level
+// that is not reserved (city-gm): a blueprint of it is valid, but no agent of
+// it is spawned in MVP-1.
+func IsReservedRole(role string) bool {
+	return role == RoleCityGM
+}
+
 // RoleLevel returns the level a role belongs to.
 func RoleLevel(role string) (string, bool) {
 	spec, ok := roles[role]
@@ -148,7 +157,8 @@ func ParseLevel(level string) AgentLevel {
 }
 
 // AllowedEventTypes returns the event types an agent of the role may publish,
-// sorted. It is nil when the role publishes nothing (the reserved levels),
+// sorted. It is nil when the role publishes nothing (the reserved levels and
+// roles),
 // when the role is unknown or when it does not belong to the level: a white
 // list is given to a pair that makes sense, never guessed for one that does
 // not.

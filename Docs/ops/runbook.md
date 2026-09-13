@@ -140,6 +140,59 @@ core, `:8082` memory), совпадающий с опубликованным п
 - `make reset` — **удаляет тома**; требует свежего `make backup` и подтверждения
   вводом `yes`.
 
+### Том `gateway-data`, созданный до T-303 — проверить и починить один раз
+
+С T-303 контекст `gateway` при старте открывает `links.db` и `gateway.db` в
+`/data` (`MV_GATEWAY_DATA_DIR`) и отказывается работать в каталоге, открытом
+группе или остальным (ADR-019 п. 1), и с файлом базы шире `0600`. Образ
+платформы создаёт `/data` владельцем `nonroot` (65532) с правами `0700`, и
+**пустой** именованный том получает их при первом монтировании. Том
+`gateway-data`, созданный прежними `make up`, остался `root` `0755` и прав
+образа уже не унаследует: gateway не стартует, контейнер `unhealthy`, в логе
+(`make logs SERVICE=gateway`) —
+`gateway: data directory /data (MV_GATEWAY_DATA_DIR): … mode 0755, want 0700 or narrower`
+или `permission denied`. При признаке `mode 0755` данных в томе нет: шлюз
+отказывает до создания первого файла. `permission denied` или `mode 0644` у
+файла бывают и у тома **с данными** — например, если `links.db` вернули в том
+распаковкой архива от `root`. Поэтому сначала — только проверка (Git Bash, из
+корня репозитория; команды для оператора, агенты их не выполняют):
+
+```bash
+export COMPOSE_ENV_FILES=.env,build/versions.env
+ALPINE_IMAGE=$(sed -n 's/^ALPINE_IMAGE=//p' build/versions.env)
+docker volume ls --filter name=gateway-data  # <COMPOSE_PROJECT_NAME>_gateway-data
+docker run --rm -v multiverse_gateway-data:/v:ro "$ALPINE_IMAGE" ls -lan /v   # только чтение
+```
+
+**Том пуст** (в выводе только `.` и `..`) — пересоздать его:
+
+```bash
+make image                                   # образ с каталогом /data
+docker compose stop gateway && docker compose rm -f gateway
+docker volume rm multiverse_gateway-data     # имя из docker volume ls выше
+make up && make health                       # gateway: ok
+```
+
+**В томе есть `links.db`** (или `gateway.db`) — том **не удалять**: это
+единственная копия связок игроков. Вернуть владельца и права одной командой
+и запустить шлюз:
+
+```bash
+make image
+docker compose stop gateway
+docker run --rm -v multiverse_gateway-data:/v "$ALPINE_IMAGE" \
+  sh -c 'chown -R 65532:65532 /v && chmod 0700 /v && find /v -type f -exec chmod 0600 {} +'
+docker run --rm -v multiverse_gateway-data:/v:ro "$ALPINE_IMAGE" ls -lan /v   # 65532, drwx------, -rw-------
+make up && make health                       # gateway: ok
+```
+
+Вне compose (`go run ./cmd/multiverse serve --contexts=all --bus=memory` на
+хосте) умолчание `/data` — корень файловой системы: на Linux/macOS без root
+старт падает, на Windows создаётся `\data` в корне диска. Каталог задают явно,
+вне репозитория (там идентификаторы игроков, в git им не место), например
+`MV_GATEWAY_DATA_DIR="$HOME/.multiverse/gateway"`; ошибка старта называет
+переменную.
+
 ## 3. LLM: старт, проверка, смена модели
 
 **Адрес — один, `MV_LLM_URL`, и правило чтения адреса — тоже одно.**

@@ -40,8 +40,8 @@ func NewRNG(seed uint64) *rand.Rand { return rand.New(rand.NewPCG(seed, 0)) }
 
 // Roll throws one formula for one purpose, addressed by its cause and index.
 // It is the entry point for every roll outside a fight — the chance of an
-// encounter from a tick, a background table of a region — and the same one
-// Resolve will use inside it (C-03 v1.1).
+// encounter from a tick, a background table of a region — and the one Resolve
+// rolls the damage of a blow with inside it (C-03 v1.1).
 //
 // One roll, one generator: the index is what separates two rolls of the same
 // event, and reusing an index inside one cause means rolling the same dice
@@ -76,7 +76,7 @@ func (r *Rules) Roll(causeEventID string, rollIndex int, formula, purpose string
 // RollCheck throws a check — dice plus the bonuses of the actor against the
 // threshold of the target — and reports both the roll as dice.rolled carries it
 // and the arithmetic the decision rests on. It is what a hit and a flight
-// attempt are made of; how the two turn into an Outcome is Resolve (T-053).
+// attempt are made of; how the two turn into an Outcome is Resolve.
 func (r *Rules) RollCheck(causeEventID string, rollIndex int, c CheckExpr, purpose string, actor, target Actor, ctx map[string]int) (Roll, CheckResult, error) {
 	if causeEventID == "" {
 		return Roll{}, CheckResult{}, fmt.Errorf("mechanics: roll without a cause event")

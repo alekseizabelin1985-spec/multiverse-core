@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -151,8 +152,35 @@ func (e *Entity) Def() (int, bool) { return e.AttrInt(AttrDef) }
 // Dmg is the damage formula ("d6"), not a number: the rules own the dice.
 func (e *Entity) Dmg() (string, bool) { return e.AttrString(AttrDmg) }
 
-// Flee is the flee formula or modifier, as a string for the same reason as Dmg.
-func (e *Entity) Flee() (string, bool) { return e.AttrString(AttrFlee) }
+// Flee is the flee bonus, as the text a formula reads ("+2", "2").
+//
+// It is a modifier like atk (data-model.md §3.3), and the two writers of it
+// disagree about the shape: the fixtures write "2", the rules document writes
+// flee: 2. A whole number comes back as its decimal text, so a character
+// created from the rules does not silently lose the ability to run away. A null
+// flee — the wolf of the rules, which does not run — and an absent one are no
+// flee at all.
+//
+// Anything else that is there — a fraction, a boolean, a number past the range
+// of int64, an object — is a defect in the data, and it comes back as its
+// canonical JSON text ("2.5", "true") with true. The formula that reads it
+// fails on it exactly as it fails on the text "abc", instead of taking a broken
+// bonus for a character who does not run (internal/mechanics.ActorFromEntity).
+func (e *Entity) Flee() (string, bool) {
+	raw, ok := e.Attr(AttrFlee)
+	if !ok || raw == nil {
+		return "", false
+	}
+	if text, ok := raw.(string); ok {
+		return text, true
+	}
+	if n, ok := asInt64(raw); ok {
+		return strconv.FormatInt(n, 10), true
+	}
+	var text bytes.Buffer
+	writeCanonical(&text, raw)
+	return text.String(), true
+}
 
 // Status is alive, dead, abandoned or ascended_final.
 func (e *Entity) Status() (string, bool) { return e.AttrString(AttrStatus) }
@@ -328,6 +356,12 @@ func (e *Entity) PlayersPresent() ([]string, bool) { return e.AttrStrings(AttrPl
 
 // EncounterChance is the probability the region rolls for an encounter.
 func (e *Entity) EncounterChance() (float64, bool) { return e.AttrFloat(AttrEncounterChance) }
+
+// LastBackgroundEventAt is when the region last had a background event; the
+// summary and the metrics read it (data-model.md §3.2).
+func (e *Entity) LastBackgroundEventAt() (time.Time, bool) {
+	return e.AttrTime(AttrLastBackgroundEventAt)
+}
 
 // --- group (data-model.md §3.6) ---
 

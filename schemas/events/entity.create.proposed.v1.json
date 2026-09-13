@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://multiverse-core.io/schemas/events/entity.create.proposed.v1.json",
   "title": "entity.create.proposed payload",
-  "description": "A proposal to create an entity with its full initial attribute set (contracts.md C-02, api-contracts.md 2.3.4). meta.agent is mandatory when an agent proposes.",
+  "description": "A proposal to create an entity with its full initial attribute set (contracts.md C-02 v1.6, api-contracts.md 2.3.4). meta.agent is mandatory when an agent proposes.",
   "type": "object",
   "properties": {
     "proposal_id": {
       "type": "string",
       "minLength": 1,
-      "description": "Optional here, unlike entity.update.proposed: State echoes it in entity.update.rejected reason=duplicate_entity when the publisher sent one."
+      "description": "Required, as in entity.update.proposed (C-02 v1.6): State drops a repeat of the proposal by it and echoes it in entity.created and in entity.update.rejected reason=duplicate_entity."
     },
     "entity": { "$ref": "_common.json#/$defs/EntityWithName" },
     "attributes": { "type": "object" },
@@ -19,6 +19,6 @@
                "leave", "flee", "death", "resolve", "init", "author"]
     }
   },
-  "required": ["entity", "attributes", "cause"],
+  "required": ["proposal_id", "entity", "attributes", "cause"],
   "additionalProperties": false
 }

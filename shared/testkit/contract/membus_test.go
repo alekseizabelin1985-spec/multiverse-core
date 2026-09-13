@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
+	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/contract"
 )
 
@@ -76,6 +78,27 @@ func TestBusContractOnMembus(t *testing.T) {
 				return nil, false, err
 			}
 			return spare, false, nil
+		},
+		Stalled: func() (contract.StalledBus, error) {
+			// A bus of its own, like the spare: a view of the target could not
+			// carry other timers. Its dead letters are read from its own log.
+			stalled, err := membus.New(membus.Config{
+				Registry: contracts.Default(),
+				Topics:   platformTopics(),
+				Backoff:  contract.StalledBackoff(),
+				Timers:   clock.NewManual(testkit.Epoch).Timers(),
+			})
+			if err != nil {
+				return contract.StalledBus{}, err
+			}
+			return contract.StalledBus{
+				Bus:     stalled,
+				Journal: stalled,
+				DeadLetters: func(context.Context) ([]eventbus.DeadLetter, error) {
+					return stalled.DeadLetters()
+				},
+				Release: func() { _ = stalled.Close() },
+			}, nil
 		},
 		Close: bus.Close,
 	})

@@ -335,35 +335,17 @@ func TestFleePosition(t *testing.T) {
 }
 
 // TestRestore: a rest brings a wounded character back to full and leaves a
-// healthy one where it is. The generator is untouched when the rules do not
-// roll for it — a rest must not shift the dice of the next turn.
+// healthy one where it is — the only rest the rules admit (rest.restore).
 func TestRestore(t *testing.T) {
 	r := load(t)
 	player, _ := r.Stats("player")
-	player.ID, player.HP = "player-A", 3
+	player.ID = "player-A"
 
-	rng := NewRNG(Seed("01JCREST", 0))
-	before := rng.Uint64()
-	rng = NewRNG(Seed("01JCREST", 0))
-
-	if got := r.Restore(player, rng); got != player.HPMax {
-		t.Errorf("rest left %d hp, want %d", got, player.HPMax)
-	}
-	if rng.Uint64() != before {
-		t.Error("a rest that restores to the maximum drew from the generator")
-	}
-
-	// A rule set that rolls for a rest heals by the roll and never above the
-	// maximum (the alternative of domain-review §3.3).
-	dicey := withRest(t, "restore: d4")
-	player.HP = 9
-	if got := dicey.Restore(player, NewRNG(Seed("01JCREST", 1))); got != 10 {
-		t.Errorf("a d4 rest from 9 hp left %d, want the maximum 10", got)
-	}
-	player.HP = 1
-	got := dicey.Restore(player, NewRNG(Seed("01JCREST", 2)))
-	if got < 2 || got > 5 {
-		t.Errorf("a d4 rest from 1 hp left %d, outside [2, 5]", got)
+	for _, hp := range []int{0, 3, player.HPMax} {
+		player.HP = hp
+		if got := r.Restore(player); got != player.HPMax {
+			t.Errorf("rest from %d hp left %d, want %d", hp, got, player.HPMax)
+		}
 	}
 }
 
@@ -437,21 +419,6 @@ func TestActorAttr(t *testing.T) {
 	if _, ok := (Actor{Flee: "swiftly"}).Attr(IdentFlee); ok {
 		t.Error("an unreadable flee bonus resolved")
 	}
-}
-
-// withRest loads the rule set with rest.restore replaced, for the cases the
-// shipped file does not cover.
-func withRest(t *testing.T, line string) *Rules {
-	t.Helper()
-	body, err := readRules()
-	if err != nil {
-		t.Fatalf("read rules: %v", err)
-	}
-	r, err := LoadBytes([]byte(strings.Replace(body, "restore: hp_max", line, 1)))
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	return r
 }
 
 // TestDiceBounds pins where the grammar stops. A formula reaches the parser

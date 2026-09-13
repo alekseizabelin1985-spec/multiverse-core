@@ -26,6 +26,7 @@ import (
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 	"multiverse-core.io/shared/testkit/state"
 	"multiverse-core.io/shared/testkit/swarm"
 )
@@ -416,6 +417,11 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	// directory, as for `go run ./cmd/multiverse` from the root of the tree.
 	t.Chdir(filepath.Join("..", ".."))
 	t.Setenv(env.SwarmFake.Name(), "true")
+	// The world of the fixtures belongs to FakeState of the stand, so the
+	// context state of the process serves another one: two States answering
+	// one proposal would publish every fact twice. The stand moves onto the
+	// real State when T-056 replaces FakeState.
+	t.Setenv(env.StateWorlds.Name(), "world-of-no-stand")
 
 	fixtures, err := state.LoadFixtures(filepath.Join("testdata", "fixtures"))
 	if err != nil {
@@ -715,6 +721,7 @@ func startProcess(t *testing.T, contexts []runtime.Context, open openBusFunc) *r
 	t.Helper()
 	addr := loopbackAddr(t)
 	t.Setenv(env.CoreAddr.Name(), addr)
+	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t)) // the gateway of --contexts=all is real since T-303
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &running{addr: addr, cancel: cancel, done: make(chan error, 1)}
 	go func() { r.done <- newProcess(contexts, open).run(ctx, cancel) }()
