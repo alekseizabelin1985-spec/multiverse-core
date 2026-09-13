@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:37:12+03:00",
+  "updatedAt": "2026-09-13T17:48:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3195,7 +3195,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/developer#3",
           "startedAt": "2026-09-13T17:08:19+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9285,7 +9285,7 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Ревью #1: законы мира",
       "startedAt": "2026-09-13T17:36:12+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:48:52+03:00"
     },
     {
       "instance": "developer#1",
@@ -9295,6 +9295,16 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Итерация 2: переходы встречи, MinIO, сроки старта",
       "startedAt": "2026-09-13T17:37:12+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-205",
+      "action": "Приёмка T-205 законы мира",
+      "startedAt": "2026-09-13T17:48:52+03:00",
       "finishedAt": null
     }
   ],
@@ -12448,6 +12458,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-304 · ревью #1 (TEAM-3/code-reviewer#1): принять — 0/0/7/4. Транзакция consumer, дедуп, догон → подписка, остановка верны. Mi-1 v1.5 new:null — проекция хранит null, State удаляет (сверка хеша только v1.6); Mi-2 переходы встречи повторяются после рестарта; Mi-3…Mi-5 ветки без тестов (мутанты R1–R4"
+    },
+    {
+      "at": "2026-09-13T17:48:52+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-205 · ревью #1 (TEAM-2/code-reviewer#2): принять — 0/0/4/5. Bump соответствует C-02 v1.5 и реестру; KnownChecks совпадает с invariants.go; гонок нет. Mi-1 Current может вернуть ErrUnknownVersion, если факт State опередит world.laws.changed; Mi-2 повтор bump публикует второе объявление (норма C-12 "
     }
   ],
   "blockers": [],
