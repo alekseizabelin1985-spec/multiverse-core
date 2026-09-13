@@ -65,13 +65,29 @@ const (
 	AgentForbidden
 )
 
-// Policy is the topic policy of a type, checked on publish always and on read
-// when validation on read is on (ADR-007 addendum p. 4, SEC-16).
+// WorldRule states what the policy of a type demands of Event.World (C-01
+// v1.10).
+type WorldRule uint8
+
+const (
+	// WorldOptional accepts an envelope with or without a world. It is the
+	// zero value, so every policy written before the rule keeps its behaviour.
+	WorldOptional WorldRule = iota
+	// WorldRequired rejects an envelope without a world or with an empty
+	// World.Entity.ID. The publisher that forgot the world learns it from
+	// Publish, in its own process; a check in the consumer would only leave a
+	// Warn in the log of somebody else's.
+	WorldRequired
+)
+
+// Policy is the policy of a type, checked on publish always and on read when
+// validation on read is on (ADR-007 addendum p. 4, SEC-16).
 type Policy struct {
 	// ActorKinds lists the accepted Meta.ActorKind values; empty accepts any
 	// of the four.
 	ActorKinds []string
 	Agent      AgentRule
+	World      WorldRule
 }
 
 // PlayerEventsPolicy is the policy of player_events: a person, a CI harness or
@@ -102,6 +118,16 @@ func (p Policy) Check(ev Event) error {
 			return fmt.Errorf("%w: meta.agent is not allowed for %s", ErrPolicyViolation, ev.Type)
 		}
 	case AgentOptional:
+	}
+	switch p.World {
+	case WorldRequired:
+		if ev.World == nil {
+			return fmt.Errorf("%w: world is required for %s", ErrPolicyViolation, ev.Type)
+		}
+		if ev.World.Entity.ID == "" {
+			return fmt.Errorf("%w: world.entity.id is empty for %s", ErrPolicyViolation, ev.Type)
+		}
+	case WorldOptional:
 	}
 	return nil
 }
