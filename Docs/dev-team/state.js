@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:08:19+03:00",
+  "updatedAt": "2026-09-13T17:17:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2456,13 +2456,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-450",
           "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 197,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-450.md",
           "branch": "task/T-450-local-endpoint-table",
@@ -2520,13 +2520,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-455",
           "title": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (профиль legacy)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/devops-engineer#1",
           "startedAt": "2026-09-13T14:36:44+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 78,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-455.md",
           "branch": "task/T-455-ci-compose-lint-chroma-image",
@@ -2548,11 +2548,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3145,13 +3145,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-202",
           "title": "A2 · Реестр уровней levels.go и валидатор блупринтов",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T16:03:58+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:17:31+03:00",
           "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 66,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md",
           "subwave": "B",
@@ -9106,7 +9106,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Приёмка T-450 и закрытие утечки userinfo",
       "startedAt": "2026-09-13T16:47:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:17:31+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9126,7 +9126,7 @@ window.DEVTEAM_STATE =
       "task": "T-202",
       "action": "Приёмка T-202 валидатор блупринтов",
       "startedAt": "2026-09-13T16:53:29+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:17:31+03:00"
     },
     {
       "instance": "developer#2",
@@ -9156,7 +9156,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Ревью #2: порядок поставки shared/recording",
       "startedAt": "2026-09-13T17:03:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:17:31+03:00"
     },
     {
       "instance": "developer#3",
@@ -9166,6 +9166,16 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "internal/laws и mvctl laws",
       "startedAt": "2026-09-13T17:08:19+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Итерация 3 по ревью #2",
+      "startedAt": "2026-09-13T17:17:31+03:00",
       "finishedAt": null
     }
   ],
@@ -12229,6 +12239,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Начата T-205 (TEAM-2/developer#3, M, подволна B): internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show — схема world.laws.changed в дереве (T-214 принята)."
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 принята TEAM-2/tech-lead#2: Mi-1 (ttl у task, max_instances ≥ 1, round у encounter, background_events у global) и Mi-2 (роль без entity.*.proposed не владеет типами) закрыты при приёмке, N-1…N-3; корпус invalid — 20 файлов; 25 мутантов убиты, shared/agent 95,6 %. Строки DoD в T-204, T-222; воп"
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 принята tech-lead#1: Mi-R2-1 (userinfo из URL в текстах отказов) закрыта в обеих половинах — маска до первого отказа, сценарии H61–H66, мутант M28, фикстура userinfo; N-R2-1/N-R2-2 (§3.1.2 счётчики, §4.2 п. 4 → §6.3.1). Коммит 8407521; конфликт хвоста tasks.md при sync; compose-lint и --fixtur"
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 слита после T-450: коммит 674456b, конфликт хвоста tasks.md; compose-lint зелёный и в окружении, экспортирующем build/versions.env как в CI. epic/EPIC-001-foundation = 2a0b074. Итераций ревью — 1. Идёт make ci BASE=develop — контрольное слияние E (T-454, T-450, T-455) и push develop."
+    },
+    {
+      "at": "2026-09-13T17:17:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Ma-1 вариант (а) выполним, C-15 v1.4 сходится с кодом T-206, Mi-4 проверен по 15 строкам. R2-Mi-1 исключение для shared/runtime в §16 п. 8/ownership §3 п. 4 не записано; R2-Mi-2 «корень входа» захватывает таймерные корни шлюза; R2-Mi-3 кт"
     }
   ],
   "blockers": [],
