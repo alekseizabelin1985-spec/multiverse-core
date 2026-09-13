@@ -56,7 +56,7 @@ func TestEnvCheckOnTheShippedExample(t *testing.T) {
 func TestReservedNamesAreHeld(t *testing.T) {
 	registry := commands()
 	for _, name := range []string{
-		"world", "blueprint", "laws", "record",
+		"world", "blueprint", "record",
 		"golden", "llm", "memory", "report", "trace",
 	} {
 		cmd, ok := registry.Lookup(name)
@@ -74,7 +74,7 @@ func TestReservedNamesAreHeld(t *testing.T) {
 // works must not be listed as reserved.
 func TestImplementedCommandsHaveNoOwnerMark(t *testing.T) {
 	registry := commands()
-	for _, name := range []string{"contracts", "env", "privacy", "storage", "version"} {
+	for _, name := range []string{"contracts", "env", "laws", "privacy", "storage", "version"} {
 		cmd, ok := registry.Lookup(name)
 		if !ok {
 			t.Fatalf("%s is not registered", name)
