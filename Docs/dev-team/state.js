@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:26:15+03:00",
+  "updatedAt": "2026-09-13T19:26:53+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4662,11 +4662,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-318",
           "title": "Текст уведомления FR-009 (BA + tech-writer)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "business-analyst#1",
           "startedAt": "2026-09-13T18:33:01+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -9679,7 +9679,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Итерация 2 по ревью безопасности",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:26:53+03:00"
     },
     {
       "instance": "developer#2",
@@ -9729,6 +9729,16 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Ревью #2 блупринтов MVP-1",
       "startedAt": "2026-09-13T19:26:15+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "security-engineer#1",
+      "role": "security-engineer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Ревью безопасности #2 текста FR-009",
+      "startedAt": "2026-09-13T19:26:53+03:00",
       "finishedAt": null
     }
   ],
@@ -13200,6 +13210,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Очередь architect#2 (EPIC-003): отразить в КД §13.3 и api-contracts §3.3, что allowed_event_types включает entity.*.proposed роли и dice.rolled встречи, в DoD T-223 — Emitter сверяет со списком блупринта; TL2-7 (enum против блупринта в валидаторе); данные phase2/tick — плейсхолдеры или секции сборщи"
+    },
+    {
+      "at": "2026-09-13T19:26:53+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 · итерация 2 (business-analyst#1): внесены M-1 (строка о резервных копиях +30 дней), Mi-1 (псевдоним при создании персонажа, даты в связке — расширено last_seen_at/created_at), Mi-2 (прежние тексты уходят облаку после включения, /forget их у провайдера не удаляет); NoticeText ~2327 знаков; 21 "
     }
   ],
   "blockers": [],
