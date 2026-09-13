@@ -239,16 +239,13 @@ func TestOpenAPIAdminSectionIsReservedForT239(t *testing.T) {
 // the list can only shrink, and when it is empty the route table equals the
 // spec.
 var notYetMounted = map[string]string{
-	"pollDeliveries":   "T-307",
-	"ackDeliveries":    "T-307",
-	"streamDeliveries": "T-307",
-	"getGroup":         "T-352",
-	"closeRound":       "T-354",
-	"adminForgetLink":  "T-356",
-	"adminSessions":    "T-356",
-	"adminTick":        "T-356",
-	"adminAgents":      "T-356",
-	"adminLlmUsage":    "T-356",
+	"getGroup":        "T-352",
+	"closeRound":      "T-354",
+	"adminForgetLink": "T-356",
+	"adminSessions":   "T-356",
+	"adminTick":       "T-356",
+	"adminAgents":     "T-356",
+	"adminLlmUsage":   "T-356",
 }
 
 // servedByProcess are operations of the process HTTP server (shared/runtime,

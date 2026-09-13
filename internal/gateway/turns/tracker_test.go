@@ -140,7 +140,7 @@ func TestATurnCompletesAfterItsLastRecipient(t *testing.T) {
 			mech := eventbus.Derive(action, "combat.decided", contracts.SourceSwarm, map[string]any{"phase1_mode": "rules"}, eventbus.WithCauseID("m"))
 			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
 			f.inTx(t, func(tx *sql.Tx) error {
-				return f.tracker.OnNarrative(ctx, tx, narrative(t, action, tc.generatedBy, playerA, "player-B"))
+				return f.tracker.OnNarrative(ctx, tx, narrative(t, action, tc.generatedBy, playerA, "player-B"), 2)
 			})
 			f.clock.Advance(time.Second)
 			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, a.CorrelationID, f.clock.Now()) })
@@ -235,7 +235,7 @@ func TestANarratedTurnPastItsDeadlineTimesOut(t *testing.T) {
 	a := accepted(t, f.submit(t, "k-1", api.ActionLook, ""))
 	action := f.actionEvent(t, a.CorrelationID)
 	f.inTx(t, func(tx *sql.Tx) error {
-		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA, "player-B"))
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA, "player-B"), 2)
 	})
 	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, a.CorrelationID, f.clock.Now()) })
 	if row := rowOf(t, f, a.CorrelationID); row.Status != turns.StatusNarrated || row.DeliveredCount != 1 || row.RecipientsCount != 2 {

@@ -59,6 +59,10 @@ type Handlers struct {
 	CreateCharacter http.Handler
 	GetPlayer       http.Handler
 	PostAction      http.Handler
+	PollDeliveries  http.Handler
+	AckDeliveries   http.Handler
+	// StreamDeliveries is reserved for E-H and answers 501 not_implemented.
+	StreamDeliveries http.Handler
 }
 
 // GatewayRouter is the route table of the gateway context: the one
@@ -74,6 +78,9 @@ func GatewayRouter(h Handlers) *Router {
 	r.Handle("createCharacter", http.MethodPost, "/v1/characters", h.CreateCharacter)
 	r.Handle("getPlayer", http.MethodGet, "/v1/players/{player_id}", h.GetPlayer)
 	r.Handle("postAction", http.MethodPost, "/v1/players/{player_id}/actions", h.PostAction)
+	r.Handle("pollDeliveries", http.MethodGet, "/v1/clients/{client_id}/deliveries", h.PollDeliveries)
+	r.Handle("ackDeliveries", http.MethodPost, "/v1/clients/{client_id}/deliveries/ack", h.AckDeliveries)
+	r.Handle("streamDeliveries", http.MethodGet, "/v1/clients/{client_id}/stream", h.StreamDeliveries)
 	return r
 }
 

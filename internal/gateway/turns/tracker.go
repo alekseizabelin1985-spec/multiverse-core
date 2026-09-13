@@ -36,6 +36,19 @@ import (
 // DefaultTimeout is MV_GATEWAY_TURN_TIMEOUT by default.
 const DefaultTimeout = 60 * time.Second
 
+// DefaultPublishTimeout bounds one publication of analytics.turn.completed. The
+// steps of a turn publish inside the transaction of the consumer, of an
+// acknowledgement or of the sweeper, which holds the only connection of
+// gateway.db: a broker that does not answer must not hold it longer than an
+// ordinary request (api.RequestTimeout). The transaction is rolled back and the
+// step repeated — by the bus, by the client, by the next tick — under the same
+// id of the event (review #1 of T-306, Mi-2).
+const DefaultPublishTimeout = api.RequestTimeout
+
+// ErrPublish wraps a failure to publish analytics.turn.completed; the step that
+// published it did not happen and is repeated.
+var ErrPublish = errors.New("turns: analytics not published")
+
 // Statuses of a row of turns (component §4.2).
 const (
 	StatusAccepted         = "accepted"
@@ -78,6 +91,8 @@ type Config struct {
 	Bus     session.Publisher
 	Clock   clock.Clock
 	Timeout time.Duration
+	// PublishTimeout bounds a publication; zero is DefaultPublishTimeout.
+	PublishTimeout time.Duration
 	// GMPath is MV_GM_PATH, the path every turn of the process takes.
 	GMPath string
 	Log    *slog.Logger
@@ -102,8 +117,11 @@ func New(cfg Config) (*Tracker, error) {
 	if cfg.DB == nil || cfg.Sessions == nil || cfg.Clock == nil {
 		return nil, errors.New("turns: DB, Sessions and Clock are required")
 	}
-	if cfg.Timeout < 0 {
-		return nil, errors.New("turns: Timeout is not negative")
+	if cfg.Timeout < 0 || cfg.PublishTimeout < 0 {
+		return nil, errors.New("turns: Timeout and PublishTimeout are not negative")
+	}
+	if cfg.PublishTimeout == 0 {
+		cfg.PublishTimeout = DefaultPublishTimeout
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = DefaultTimeout
@@ -217,10 +235,18 @@ func (t *Tracker) OnMechanics(ctx context.Context, q DB, ev eventbus.Event, at t
 	return nil
 }
 
-// OnNarrative records the narrative.output of a turn: who it goes to, what
-// generated it and the absence summary it carries. q is the transaction of
-// the consumer.
-func (t *Tracker) OnNarrative(ctx context.Context, q DB, ev eventbus.Event) error {
+// OnNarrative records the narrative.output of a turn: what generated it, the
+// absence summary it carries, and recipients — the number of deliveries of the
+// narrative an acknowledgement can complete, which the consumer counts: the
+// distinct players of recipients[] that have a link. A recipient without a
+// link, a repeated one or one that is not a player gets no delivery to
+// acknowledge, and counting it would leave the turn waiting for its deadline
+// (review #1 of T-307, Ma-1). q is the transaction of the consumer.
+//
+// A narrative with nobody to deliver it to completes its turn here, ok or
+// degraded for a template, with narrative_at the moment the narrative is
+// applied, instead of timing out at its deadline (acceptance of T-306).
+func (t *Tracker) OnNarrative(ctx context.Context, q DB, ev eventbus.Event, recipients int) error {
 	var p narrativePayload
 	raw, err := json.Marshal(ev.Payload)
 	if err == nil {
@@ -256,11 +282,14 @@ func (t *Tracker) OnNarrative(ctx context.Context, q DB, ev eventbus.Event) erro
 	if _, err := q.ExecContext(ctx, `UPDATE turns SET status = ?, generated_by = ?, fallback_reason = ?, agent_level = ?,
 		agent_blueprint = ?, filter_applied = ?, recipients_count = ?, delivered_count = COALESCE(delivered_count, 0),
 		narrative_event_id = ?, absence = ? WHERE correlation_id = ? AND status IN (?, ?)`,
-		StatusNarrated, p.GeneratedBy, p.FallbackReason, level, blueprint, filtered, len(p.Recipients), narrativeID,
+		StatusNarrated, p.GeneratedBy, p.FallbackReason, level, blueprint, filtered, recipients, narrativeID,
 		absence, ev.CorrelationID(), StatusAccepted, StatusMechanicsApplied); err != nil {
 		return fmt.Errorf("turns: narrative of %s: %w", ev.CorrelationID(), err)
 	}
-	return nil
+	if recipients > 0 {
+		return nil
+	}
+	return t.completeDelivered(ctx, q, ev.CorrelationID(), t.cfg.Clock.Now())
 }
 
 // OnDelivered counts one delivery of the narrative of a turn acknowledged at
@@ -274,6 +303,12 @@ func (t *Tracker) OnDelivered(ctx context.Context, q DB, correlationID string, a
 		WHERE correlation_id = ? AND status = ?`, correlationID, StatusNarrated); err != nil {
 		return fmt.Errorf("turns: delivery of %s: %w", correlationID, err)
 	}
+	return t.completeDelivered(ctx, q, correlationID, at)
+}
+
+// completeDelivered completes a narrated turn whose every recipient has its
+// narrative, at at.
+func (t *Tracker) completeDelivered(ctx context.Context, q DB, correlationID string, at time.Time) error {
 	row, found, err := load(ctx, q, correlationID)
 	if err != nil || !found || row.Status != StatusNarrated || row.DeliveredCount < row.RecipientsCount {
 		return err
@@ -404,8 +439,10 @@ func (t *Tracker) publish(ctx context.Context, ev eventbus.Event) error {
 	if t.cfg.Bus == nil {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(ctx, t.cfg.PublishTimeout)
+	defer cancel()
 	if err := t.cfg.Bus.Publish(ctx, ev); err != nil {
-		return fmt.Errorf("turns: publish %s: %w", ev.Type, err)
+		return fmt.Errorf("%w: %s %s: %w", ErrPublish, ev.Type, ev.ID, err)
 	}
 	return nil
 }
@@ -448,10 +485,9 @@ func nullable(s string) any {
 
 // narrativePayload is what a turn takes of narrative.output (C-05).
 type narrativePayload struct {
-	Recipients       []json.RawMessage `json:"recipients"`
-	GeneratedBy      string            `json:"generated_by"`
-	FallbackReason   *string           `json:"fallback_reason"`
-	NarrativeEventID string            `json:"narrative_event_id"`
+	GeneratedBy      string  `json:"generated_by"`
+	FallbackReason   *string `json:"fallback_reason"`
+	NarrativeEventID string  `json:"narrative_event_id"`
 	Filter           *struct {
 		Applied bool `json:"applied"`
 	} `json:"filter"`

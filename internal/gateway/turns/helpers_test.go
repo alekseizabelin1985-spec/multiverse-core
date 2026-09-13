@@ -106,6 +106,8 @@ type fixture struct {
 type options struct {
 	replay bool
 	db     *sql.DB
+	// publishTimeout bounds a publication of the tracker; zero is the default.
+	publishTimeout time.Duration
 }
 
 func newFixture(t *testing.T, o options) *fixture {
@@ -154,7 +156,8 @@ func (f *fixture) build(t *testing.T, o options) {
 	if f.sessions, err = session.New(session.Config{DB: f.db, Bus: pub}); err != nil {
 		t.Fatal(err)
 	}
-	if f.tracker, err = turns.New(turns.Config{DB: f.db, Sessions: f.sessions, Bus: pub, Clock: f.clock}); err != nil {
+	if f.tracker, err = turns.New(turns.Config{DB: f.db, Sessions: f.sessions, Bus: pub, Clock: f.clock,
+		PublishTimeout: o.publishTimeout}); err != nil {
 		t.Fatal(err)
 	}
 	f.keys = actions.NewKeys(f.db, store.KeyTTL)

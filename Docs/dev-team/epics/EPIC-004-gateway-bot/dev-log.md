@@ -358,3 +358,28 @@
 - **Отступление от поручения.** Схемы C-10 требуют `session.id`, `participants[].entity.id`, `entity.entity.id`, а `Publish` проверяет схему: без этих полей аналитика не публикуется вовсе. Пишутся только обязательные поля, `scope` и имена — нет. Решение по R2-M-1 A для событий шины — вопрос оркестратору и system-architect.
 - **Проверки.** `go build`/`vet`, `go test -short ./...`, пакет `updates` через `go test -c`, e2e, `golangci-lint` (0), `mvctl env check` (78), `contracts check`, `privacy scan`, `make test` — см. карточку. Мутанты — в копиях дерева, контрольный первым, копии удалены по точным путям.
 - Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал.
+
+## developer#1 · T-307 · `outbox`, long-poll `deliveries`, `consumer` для `combat.decided`/`narrative.output` · 2026-09-14
+
+Ветка `task/T-307-outbox-deliveries`, папка `.worktrees/T-307`. Статус — `review`. Подробности, итог по DoD, мутанты и вопросы — карточка `tasks/T-307.md`, раздел «Выполнение (developer)». Не коммитил; фикстура перенесена `git mv`.
+
+- **`outbox`** (новый пакет): `Enqueue` в транзакции consumer, идемпотентно по выведенному id доставки; `Lease` — голова очереди на игрока, одна в лизинге; `Ack` принимает поздний ack своего лизинга, пока доставку не взял другой клиент (дополнение оркестратора по ревью #1 T-312); `ReleaseExpiredLeases` не стирает `leased_by`; `Expire`, `DropForPlayer` (первый хук `/forget`), `Purge`; long-poll без соединения БД на звонке платформы и пробуждении раз в секунду; тексты правил с golden-файлами (`merge=binary` правилом в каталоге `testdata/golden`).
+- **Consumer:** доставки на `combat.decided`, `entity.updated` (`move|rest|loot`, смерть, перемещение группы), открытие встречи (идемпотентно по встрече и переходу — Mi-2 T-304), отказ State на перемещение и отдых (игрок по цепочке предложения, `actions.ProposalID`), `narrative.output` в порядке топика; шаги ходов T-306 подключены.
+- **HTTP:** `pollDeliveries`, `ackDeliveries`, `streamDeliveries (501)`; дедлайны соединения обычных операций в `timeout`, long-poll — в обработчике и завершается при остановке сервера процесса; платформа клиента — `telegram-bot → telegram` (КД §5.1).
+- **Строки приёмки T-306:** ход без адресатов завершается при нарративе; публикация `turn.completed` со сроком (вариант «со сроком», риск — в карточке); срок у чтения `pending_characters` в `characters.Status`; README шлюза обновлён.
+- **Фикстура:** `internal/gateway/testdata/analytics/solo-30.jsonl` → `testdata/analytics/solo-30.jsonl` (`git mv`, содержимое без правки, 33 строки). Перегенерация — `go test -short -count=1 -run TestSolo30Fixture ./internal/gateway/turns/ -update`; прогон с `-update` в этой задаче дал тот же файл. **Уведомление EPIC-005 (T-130):** фикстура на согласованном месте.
+- **Переменные:** `MV_GATEWAY_DELIVERY_LEASE=30s`, `MV_GATEWAY_DELIVERY_TTL=24h` — нужна отметка tech-lead#1.
+- **Отступления:** id доставки `d-<UUID v5>` вместо `d-<ULID>`; «одна в лизинге» строже SQL КД §8.2; ожидание long-poll по настенным часам в любом режиме; лизинг работает и в replay (КД §11.2 — вопрос).
+- **Проверки:** `go build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl env check` (80), `contracts check`, `privacy scan`, `make test` (exit 0, флака не было). Мутанты M1–M24 — все красные, контрольный первым, копия удалена по точному пути.
+- Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал.
+
+## developer#1 · T-307 · итерация 2 · ревью #1 (0/1/2/3) · 2026-09-14
+
+Ветка `task/T-307-outbox-deliveries`, папка `.worktrees/T-307`. Статус — `review`. Подробности — карточка `tasks/T-307.md`, «Итерация 2». Не коммитил.
+
+- **Ma-1:** адресаты хода — только уникальные игроки `recipients[]` со связкой. Consumer передаёт это число в `turns.OnNarrative`, при `0` ход завершается сразу. Способ проще отметки `dropped` через `OnDelivered`: одно число закрывает адресата без связки, повторённого адресата и не-игрока. Тесты (а) без связки, (б) повтор, (в) никто не достижим.
+- **Mi-1:** `ci-harness` получает доставки `telegram` — условно до решения system-architect (T-308). В prod без `ci-harness` в `MV_GATEWAY_CLIENT_IDS` — `403`. Тест.
+- **Mi-2:** тест `absence`, `round_seq`, `fallback_reason` доставки нарратива в строке и в ответе long-poll; R6 красный.
+- **N-2:** тест `Expire` отличает `expires_at` от `created_at`. **N-3:** лизинг не начинается после истёкшего срока ожидания (тест на 20 раундов); ограничение лизинга дедлайном записи — в бэклог. **N-1** — T-352/T-353.
+- **Проверки:** `build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `env check` (80), `contracts check`, `privacy scan`, `make test` (exit 0, флака не было). Мутанты: K и 9 — все красные, копия удалена по точному пути.
+- Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал.

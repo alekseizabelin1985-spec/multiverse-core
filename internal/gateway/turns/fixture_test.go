@@ -21,12 +21,15 @@ import (
 	"multiverse-core.io/shared/eventbus"
 )
 
-var update = flag.Bool("update", false, "write testdata/analytics/solo-30.jsonl from the run")
+var update = flag.Bool("update", false, "write testdata/analytics/solo-30.jsonl of the root of the module from the run")
 
 // solo30Path is the fixture of the analytics of a solo session of 30 turns for
-// the report of EPIC-005 (mvctl report, C-10 "Заглушка"). It lives under the
-// testdata of the gateway: testdata/analytics/ of the root belongs to EPIC-005.
-var solo30Path = filepath.Join("..", "testdata", "analytics", "solo-30.jsonl")
+// the report of EPIC-005 (mvctl report, C-10 "Заглушка"). It lives in
+// testdata/analytics/ of the root of the module, which belongs to EPIC-005: its
+// owner agreed that this test alone writes the file, that every regeneration
+// is recorded in the dev-log of EPIC-004 with a notice to EPIC-005, and that
+// the checks of the test are not weakened (mark of tech-lead#1 on T-306).
+var solo30Path = filepath.Join("..", "..", "..", "testdata", "analytics", "solo-30.jsonl")
 
 // The fixture is what a solo session of 30 turns publishes on analytics_events
 // through the service of actions and the tracker: the start of the session, a
@@ -80,7 +83,7 @@ func TestSolo30Fixture(t *testing.T) {
 			generatedBy = turns.GeneratedByTemplate
 		}
 		f.inTx(t, func(tx *sql.Tx) error {
-			return f.tracker.OnNarrative(ctx, tx, narrative(t, action, generatedBy, playerA))
+			return f.tracker.OnNarrative(ctx, tx, narrative(t, action, generatedBy, playerA), 1)
 		})
 		f.clock.Advance(90 * time.Millisecond)
 		f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, acc.CorrelationID, f.clock.Now()) })
