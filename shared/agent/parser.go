@@ -31,6 +31,11 @@ type Issue struct {
 	Field    string
 	Reason   string
 	Severity Severity
+	// Code is a stable name of the finding for a caller that acts on it
+	// (swarm-llm-laws.md §13.2, decision 1): the text of Reason may change
+	// between versions, a code does not. Empty for the findings nobody acts on
+	// yet; the codes are the Code* constants of this package.
+	Code string
 }
 
 // ParseError is a blueprint that cannot be parsed. Line is the line of the

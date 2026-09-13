@@ -3902,3 +3902,145 @@ Ma-1 закрыт правкой данных по варианту (а). Каж
 - Ma-1 и Mi-4 оценены по тексту КД §5.4: кода `Emitter` ещё нет. Если architect#2 при правке КД §13.3 и `api-contracts.md` §3.3 решит, что `Emitter` сверяет `owned_entity_types` по таблице владения, а не по блупринту, Mi-4 снижается до Nit.
 - Отступление `allowed_event_types` от скелетов §3.3 ждёт отражения в КД и `api-contracts.md` у architect#2. Уведомление идёт через оркестратора, в дереве T-203 документы дизайна не менялись.
 - `make test`, `make secrets-scan` и `gitleaks` ревьюер не повторял. Итерация 2 меняет данные блупринтов и тест, секретов нет, исполнитель прогнал `gitleaks dir blueprints`.
+
+## T-222 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-2)
+
+### Границы ревью
+
+Ветка `task/T-222-blueprint-registry`, папка `.worktrees/T-222`, база `725b79c` (в ней T-201, T-202, T-203). Коммитов нет, ревьюировалось рабочее дерево:
+- `git diff`: `shared/agent/{parser,validator,levels}.go`, `shared/agent/{validator,levels}_test.go`, `blueprints/blueprints_test.go`, `shared/env/vars.go`, `.env.example`, карточка, `dev-log.md`;
+- неотслеживаемый `internal/swarm/`: `registry.go`, `scope.go` и их тесты.
+
+`tasks.md`, КД, `contracts.md`, `.golangci.yml`, `shared/contracts/**` и блупринты не менялись.
+
+Вне путей EPIC-003 правлены только `shared/env/vars.go` и `.env.example`. Это общий код, вариант (в) `ownership.md` §3 п. 4: переменная объявлена вместе с её чтением (`LoadFromEnv`). Нужен обязательный просмотр tech-lead#1 (см. «Риски»).
+
+Источники:
+- раздел T-222 в `tasks.md` (`:567-571`), карточка `tasks/T-222.md`, запись `dev-log.md`;
+- КД `swarm-llm-laws.md`: §2, §5.1–§5.2, §7.2, §11.1, §13.1–§13.3, «Дополнение T-459»;
+- design §3.2 R1; T-204 в `tasks.md` (`:158-174`);
+- `ownership.md:13, :21, :83`; `contracts.md` C-04 (`:538-544`); `api-contracts.md` §2.3.2;
+- схемы `entity.updated`, `group.left`, `_common.json` ScopeRef;
+- `.golangci.yml` (depguard), `build/Dockerfile`, `shared/agent/validator.go` (`EnvFromProject`, `projectFileExists`).
+
+### Прогоны
+
+| Команда | Итог |
+|---|---|
+| `go build ./... && go vet ./...` | зелёные |
+| `go test -short -count=1 ./internal/swarm/... ./shared/agent/... ./blueprints/...` | все `ok` |
+| `go test -v -run TestLoadDirOfTheProject ./internal/swarm/` | `rejected until T-216 delivers config/absolute-limits.yaml: [encounter-wolf.md group-narrator.md player-gm.md]` |
+| `golangci-lint run ./internal/swarm/... ./shared/agent/...` | 0 issues |
+| `go run ./cmd/mvctl env check` | 74 переменные, сверено с `.env.example` |
+| `go run ./cmd/mvctl contracts check` | 65 типов, 8 топиков, 58 схем |
+
+### DoD
+
+| Пункт | Итог |
+|---|---|
+| Каталог с одним невалидным блупринтом: остальные активны, файл в `Health()` | да: `TestLoadDirSkipsTheInvalidBlueprint`, `TestLoadDirFilesThatDoNotParse`, `TestLoadDirOfTheProject`. Активный блупринт может ссылаться на отвергнутый — Mi-1 |
+| `degraded` | да: `{blueprints: [<базовое имя>]}` и `{llm: model_missing}`; резервные файлы `/health` не портят |
+| 7а: понижение по коду, агент активен, блупринт и фаза отданы, оба режима | да. `runtimeIssues` сравнивает только `Code` (`registry.go:210-218`). `ModelsMissing()` отдаёт блупринт, файл, фазу и поле. Запрещённая модель остаётся `error`. Что понижается только `model_missing`, держит тест, зависящий от отсутствия файла T-216, — Mi-2 |
+| `city-gm`: пустой список, `info` правила 14, правила `domain` применяются, реестр не спавнит | да: `levels.go`; `checkReserved` (только при согласованной паре); четыре строки `TestRules`; `TestLoadDirKeepsReservedBlueprintsOut`. Резервный блупринт с `error` тестом не закреплён — Mi-3 |
+| Один построитель `OwnedEntityTypes`, отказ второму `name` | да: `OwnedEntityTypes` и `ProjectEnv` передаются в `EnvFromProject`, тест сверяет с `ProjectEnv().OwnedEntityTypes`. Второй файл отвергнут, первый остаётся активным |
+| Комментарий правила 8; `pendingReference` по `Issue.Code` | да: строки правила 8 в `TestRules` не менялись. Исключение сверяет `Code == file_missing`, поле и значение `absolute_limits_ref` блупринта |
+| `ScopeIndex`: таблица переходов, идемпотентность при повторе | да: 16 шагов, каждый применён дважды. `Apply` задаёт отношения и ничего не считает: членство — ровно список события, встреча — по id, позиция — последним значением |
+| `MV_SWARM_BLUEPRINTS_DIR` объявлен | да: `shared/env/vars.go`, строка `.env.example` с CRLF, `TestLoadFromEnv`, `mvctl env check` |
+
+**Границы `shared/agent`.** Правка не шире строк DoD:
+- поле `Issue.Code`;
+- три константы кодов и `addCoded`;
+- коды у 7а и у «файла нет» правила 10 (`rules_ref`, `absolute_limits_ref`, `laws_ref`);
+- `IsReservedRole`, пустой список `city-gm`, `info` резервной роли;
+- два комментария: правило 8 и `AllowedEventTypes`.
+
+`CodeFileMissing` сверх двух кодов КД §13.2 требует строка приёмки T-203: «код отсутствующего файла — константа в `shared/agent`». Расхождение с фразой КД «у остальных находок код пока пуст» — редакционное, его снимает architect#2 (вопрос 2 ниже). `IsReservedRole` — минимальный помощник: без него `LoadDir` сравнивал бы строку роли сам.
+
+**depguard: `mvctl` → `internal/swarm`.** Ни одно правило не ограничивает `cmd/mvctl/**` по `internal/*`: `no-testkit-in-production` запрещает только `shared/testkit` и `gatewaytest`. Импорт `swarm.ProjectEnv` из подкоманды T-204 линт пропустит. Цена — `mvctl` линкует пакет роя со всеми его production-зависимостями:
+- сейчас это `internal/mechanics`;
+- после T-226 и T-228 — ещё корень `internal/llm`, `prompt`, `guardian` и `internal/laws`.
+
+Провайдеров среди них нет (DoD T-226). Подкомандам `mvctl laws` и `mvctl llm` эти пакеты и так нужны.
+
+### Мутанты (копия дерева в scratch `t222r1-mutants`, без `-overlay`; копия до мутаций и после возврата — зелёная)
+
+| # | Мутация | Итог |
+|---|---|---|
+| M0 (контрольный) | `Health()` не пишет `llm: model_missing` | убит: `TestModelMissingInTheRuntimeAndInTheValidator` |
+| M1 | в `LoadDir` проверка резервности стоит раньше `hasError` | **выжил** — Mi-3 |
+| M2 | `runtimeIssues` понижает любую находку с непустым кодом | убит `TestLoadDirOfTheProject`, но только пока нет `config/absolute-limits.yaml`; с файлом (зонд в копии) — **выжил** — Mi-2 |
+| M3 | `endEncounter` освобождает scope без проверки `engaged[scope] == id` | **выжил** — N-1 |
+| M4 | позиция игрока не записывает мир региона (`regions[position]`) | убит: `TestScopeIndexTransitions` |
+| M5 | имя занимает только первый файл без `error` (альтернатива вопросу 6 разработчика) | **выжил** — N-2 |
+
+Копия, скрипт и зонд удалены по точным путям.
+
+### Замечания
+
+| # | Серьёзность | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `internal/swarm/registry.go:121-136`, `:157-166` | `env.Blueprints` собирается из **всех** разобранных файлов каталога, включая отвергнутые валидацией. Поэтому правила 3 и 11 (`parent.name`, `encounter.child_blueprint` ∈ `env.Blueprints`) пропускают ссылку на неактивный блупринт.<br>На текущем дереве `encounter-wolf.md` отвергнут (нет файла T-216), а `domain-dark-forest` активен с `child_blueprint: encounter-wolf`. GM региона поднимется и откроет встречу (ADR-028: `entity.create.proposed` встречи), а `SpawnChild` (T-225) не найдёт блупринт в `Get`. Встреча останется открытой без агента.<br>`/health` покажет `blueprints: [encounter-wolf.md]`, но зависимость не видна. То же при отвергнутом `global-*`: `domain-*` активен без родителя. КД говорит «невалидный не активируется, остальные загружаются», про зависимые — ничего | Нужно решение tech-lead#2 (при сомнении — architect#2), затем правка и тест. Варианты:<br>(а) итерация до неподвижной точки: `env.Blueprints` — имена активных и резервных; файлы со ссылкой на выпавшее имя перепроверяются и отвергаются (`error` по полю ссылки) и тоже попадают в `Health`;<br>(б) зависимый остаётся активным, но в его отчёт идёт `warning` со своим кодом, а `/health` получает признак, по которому T-225/T-229 не откроют встречу без агента.<br>Тест: `projectCopy`, у `encounter-wolf.md` битое поле → состояние и `Health` у `domain-dark-forest` по выбранному варианту |
+| Mi-2 | Minor | `internal/swarm/registry_test.go:150-191`, `:302-365` | Что рантайм понижает **только** `model_missing`, закреплено одним тестом — `TestLoadDirOfTheProject`, и то пока в дереве нет `config/absolute-limits.yaml`. В `projectCopy` файл T-216 заменён заглушкой, и `file_missing` там не возникает.<br>После T-216 мутант M2 («понижать любую находку с кодом») выживает. Такой код активирует блупринт с отсутствующим `rules_ref`/`laws_ref`/`absolute_limits_ref` — ровно ту ошибку, ослаблять которую решение 1 КД §13.2 не разрешает | В `TestModelMissingInTheRuntimeAndInTheValidator` (или отдельной строкой) при `Models: ["other-model"]` удалить из копии `rules/dark-forest.yaml`. Ожидать у `encounter-wolf.md` `rejected` с `error\|rules_ref\|file_missing\|…`, у нарраторов — `warning … model_missing` и `active` |
+| Mi-3 | Minor | `internal/swarm/registry.go:157-162`; `registry_test.go:369-392` | Порядок «сначала `hasError`, потом резервность» верен: резервный блупринт с ошибкой — `rejected` и попадает в `/health`. Но тест этого не держит: M1 (порядок переставлен) выжил. Сломанный блупринт города молча стал бы `reserved`, а `/health` — `ok`. Пункт DoD «невалидный файл… список в `Health()`» для резервных ролей и уровней не закреплён | В `TestLoadDirKeepsReservedBlueprintsOut` добавить второй файл: `city-gm` без `rules_ref` (правила `domain` применяются, решение 2). Ожидать `rejected` и `Health` = `degraded {blueprints: [<файл>]}`; сейчас такой файл даёт одну находку `error` и одну `info` |
+| Mi-4 | Minor | `internal/swarm/registry.go:89-91`; `shared/env/vars.go:150-158`; `build/Dockerfile:31-35` | Корень проекта — рабочий каталог процесса. Если корень не тот, реестр не падает, а тихо отвергает всё. Два сценария:<br>• оператор задал абсолютный `MV_SWARM_BLUEPRINTS_DIR` вне корня;<br>• образ (distroless, в финальном слое нет `WORKDIR`, рабочий каталог `/`) получит `blueprints/`, но не `schemas/agent`.<br>`EnvFromProject` не находит `schemas/agent` (`optionalDir`: «нет каталога» — не ошибка), и каждая `schema_ref` и ссылка на файл даёт `error`. Контекст стартует с нулём агентов и `degraded {blueprints: [все файлы]}`: сбой конфигурации выглядит как пять плохих блупринтов. Отсутствие самого каталога блупринтов, наоборот, даёт громкую ошибку. Прецедент `MV_LAWS_DIR` не подходит один в один: там ссылок от корня нет | Не блокирует. Одно из двух, в этой задаче или строкой DoD T-239/T-447:<br>(а) `LoadDir` возвращает ошибку, если в `cfg.Root` нет `schemas/agent` («root %q is not a project root»), с тестом;<br>(б) T-239: реестр без единого активного блупринта при непустом каталоге — `fail`, а не `degraded`.<br>Пояснения «от него же — ссылки блупринтов» в строке `.env.example` достаточно |
+| N-1 | Nit | `internal/swarm/scope.go:289-291`; `scope_test.go` | Проверка `engaged[scope] == id` в `endEncounter` не закреплена (M3 выжил). Случай: две встречи одного scope подряд, конец первой не должен снять вторую | Строка в `TestScopeIndexScopes`: `enc-1` и `enc-2` на `solo(A)`, `encounter.ended enc-1` → `EncounterOf(A) == enc-2` |
+| N-2 | Nit | `internal/swarm/registry.go:149-156`; `registry_test.go:281-296` | Выбранный порядок при повторе `name` («имя занимает первый по порядку файл, даже отвергнутый», вопрос 6) тестом не закреплён: M5 выжил. Тест покрывает только случай «оба валидны» | После подтверждения tech-lead#2 — случай «первый файл с `error`, второй валиден, то же имя» → оба `rejected` |
+| N-3 | Nit | `internal/swarm/registry.go:175-184`; `shared/agent/validator.go:902-906` | Список расширений блупринта (`.md/.yaml/.yml`) и пропуск каталогов записаны дважды — в `isBlueprintFile` и в `EnvFromProject`. T-204 добавит третью копию, а решение по README (вопрос 1) придётся вносить во все три | Одна функция `agent.IsBlueprintFile(entry)` в `shared/agent`; её вызывают `LoadDir`, `EnvFromProject` и CLI. Туда же — исключение README, если его выберут |
+| N-4 | Nit | `internal/swarm/registry.go:110`, `:121` | `ProjectEnv` через `EnvFromProject` разбирает все файлы `<root>/blueprints` ради имён, а `LoadDir` сразу выбрасывает этот набор и собирает свой. При каталоге по умолчанию каждый файл разбирается дважды. При другом `MV_SWARM_BLUEPRINTS_DIR` загрузку ломает нечитаемый `<root>/blueprints`, к которому реестр отношения не имеет; `TestLoadDirErrors` («bad root») закрепляет это как желаемое. T-204 нужна та же подмена (`validate <dir>`, DoD `:170`) | `ProjectEnv(root, dir string, models)` или параметр набора имён в `EnvFromProject`: имена — из `dir`, один разбор. Заодно CLI и рантайм получают одинаковую семантику `<dir>` |
+
+### Вердикт
+
+**Принять** · Critical 0 · Major 0 · Minor 4 · Nit 4.
+
+DoD выполнен целиком и закреплён тестами:
+- 7а понижается по коду, а не по тексту;
+- резервная роль не спавнится, правила её уровня применяются;
+- второй `name` отвергается;
+- индекс scope идемпотентен при повторе;
+- исключение T-203 держится на `Issue.Code`.
+
+Правки `shared/agent` не шире DoD, линт и проверки манифеста зелёные.
+
+- **Mi-1** — единственное замечание о поведении. Проявится в T-225/T-229 и только при уже деградированном каталоге. Возврата не требует, но нужно решение tech-lead#2 до T-225.
+- **Mi-2 и Mi-3** — дыры в тестах, найденные мутантами. Их лучше закрыть этой задачей при приёмке: это две строки теста без правки кода.
+- **Mi-4 и Nit** — по усмотрению tech-lead#2, можно передать в T-204/T-239.
+
+### Оценка вопросов разработчика (рекомендации, решения — за адресатами)
+
+1. **`blueprints/README.md` (T-204).** Решать нужно до T-204 в любом случае. README в каталоге даёт постоянный `degraded` в рантайме и `error` в CLI, а значит невыполнимый DoD T-204 «`mvctl blueprint validate blueprints/` = 0».
+   - *Рекомендация:* README остаётся рядом с блупринтами — S6 и T-241 ищут инструкцию там. Файлы `README*` (без учёта регистра) пропускает общая функция `agent.IsBlueprintFile` (N-3) у всех трёх читателей.
+   - Вынести README из каталога хуже: автор региона его не увидит. Отдельное расширение для блупринтов ломает уже принятый C-11.
+   - Адресат — tech-lead#2, КД §13.1 правит architect#2.
+2. **Код `file_missing`.** *Рекомендация:* оставить. Константу прямо требует строка приёмки T-203, после T-216 код понадобится CLI (T-204 печатает код находки) и `/health`. architect#2 дописывает третий код в решение 1 КД §13.2 — редакционная правка без изменения поведения.
+3. **Мёртвые и покинутые в `PlayersIn`.** Код соответствует КД §7.2 дословно («только позиция»). Но по C-04 (`contracts.md:543-544`) `dead` и `abandoned` сохраняют позицию и остаются в `members[]`. Регион с трупом навсегда в `active`: тик раз в 60 с вместо 30 мин, фоновый бюджет `B` мира уходит на регион без живых.
+   - *Рекомендация:* architect#2 уточняет §7.2: «позиция и не терминальный статус». Реализация дешёвая и не нарушает правило «один источник»: статус приходит в тех же `entity.created/updated`.
+   - До решения — как сейчас.
+4. **Форма id scope.** Расхождение есть в самих контрактах:
+   - `_common.json` ScopeRef и `api-contracts.md` §2.3 пишут `solo:{player_id}`;
+   - `contracts.md:541` (C-04 v1.2) — `{id: player-X, type: solo}`;
+   - КД §5.1 `bindScope` — `solo:{entity.entity.id}`.
+
+   *Рекомендация:* system-architect#1 фиксирует одну каноническую форму в C-01. Нормализацию в индексе оставить: она безвредна и снимает префикс только своего типа. Router и Emitter (T-224, T-223) должны сравнивать scope той же функцией. После решения её место — `shared/eventbus` (`contract-change`), а не копия в рое.
+5. **Порядок при повторе `name`.** *Рекомендация:* согласен с разработчиком. Правило «имя занимает первый по порядку файл» детерминировано: набор активных не зависит от валидности соседнего файла. Иначе исправление первого файла при перезагрузке (G4) молча сменит активный блупринт. Закрепить тестом (N-2). Адресат — tech-lead#2.
+
+**Экспорт `ProjectEnv` и `OwnedEntityTypes` (вопрос 2 разработчика).** Не преждевременно: строки DoD T-222 и T-204 (`:171`) требуют одного построителя для CLI и рантайма, и лежать он должен вне `shared/agent`. Пакет `internal/…` и так закрыт для внешних модулей. Линт импорт из `mvctl` пропустит, цена — вес линковки (см. «depguard»).
+
+*Рекомендация tech-lead#2:*
+- если T-204 стартует до T-223…T-228 — вынести оба построителя в листовой `internal/swarm/blueprintenv`. depguard пакета роя его уже разрешает (`internal/swarm/`), и `mvctl` не потянет рантайм роя;
+- если позже — оставить как есть и решить при T-204 вместе с сигнатурой `ProjectEnv(root, dir, models)` (N-4).
+
+### Предложения в бэклог
+
+1. **T-234 / T-237 (снапшот, догон).** `ScopeIndex` строится только из событий, а членство в группах — только из `group.*`. После рестарта догон читает журнал от курсора снапшота роя: `group.*` и позиции до курсора не повторятся, и `GroupOf`/`RegionOf` будут пусты, пока игроки не двинутся. Нужен путь восстановления, один из двух:
+   - индекс в `SwarmSnapshot` (КД §4.3);
+   - заполнение из `WorldView`: `latest.json` State даёт `position`, `group_id` и `members` групп, согласованные inv-06. В этом случае правило «один источник на отношение» (решение 4 разработчика) придётся расширить на атрибуты сущностей.
+2. **T-239 / T-447.** Строка DoD по Mi-4, если не закрыто здесь. В образе нужен `WORKDIR`, где `blueprints/`, `schemas/agent/`, `laws/`, `rules/`, `config/` лежат под одним корнем. Реестр без активных блупринтов — `fail`.
+3. **T-204.** `agent.IsBlueprintFile` (N-3) и `ProjectEnv(root, dir, models)` (N-4). Поддерживаю предложение разработчика: функция `agent.IssuesOf(err)` вместо `parseIssues` и `issuesOfFile`.
+4. **T-216.** После поставки файла удалить `pendingFiles`/`pendingReference` (N-1 ревью T-203) и проверить, что Mi-2 закрыт тестом, не зависящим от дерева.
+
+### Риски и допущения
+
+- `shared/env/vars.go` и `.env.example` — общий код (`ownership.md` §3 п. 4 (в)). Обязательный просмотр tech-lead#1 организует оркестратор. Ревьюер проверил форму: имя, умолчание, описание, CRLF, `mvctl env check`.
+- Mi-1 оценён по КД §5.1, ADR-028 и DoD T-225. Кода `Lifecycle` ещё нет, поэтому точное проявление зависит от того, как `SpawnChild` обработает промах `Get`.
+- Семантика `members[]` в `group.left` («состав после события») выведена из `api-contracts.md` §2.3.2 и схемы, прямой фразы в C-04 нет. Если gateway (T-301) положит в `members` только ушедшего, `setMembers` удалит из группы всех остальных. Проверять на фикстурах T-301.
+- Ревьюер не повторял `make test`, `-race` (локально нет cgo) и `make secrets-scan`. Новые файлы — код и тесты без секретов; `make test` прогнал исполнитель.

@@ -147,6 +147,15 @@ var (
 	LawsDir = Declare("MV_LAWS_DIR", "laws",
 		"directory of the laws documents <world>.v<N>.yaml (C-12, ADR-008); "+
 			"relative to the working directory of the process")
+	// SwarmBlueprintsDir is read by internal/swarm (swarm.LoadFromEnv) when it
+	// builds the registry of blueprints. The default is relative on purpose,
+	// like MV_LAWS_DIR: a process started from the repository root finds
+	// blueprints/ there, and the references of a blueprint (laws, rules,
+	// absolute limits, schemas) are resolved against that same working
+	// directory.
+	SwarmBlueprintsDir = Declare("MV_SWARM_BLUEPRINTS_DIR", "blueprints",
+		"directory of the agent blueprints the swarm loads (C-11); "+
+			"relative to the working directory of the process")
 	// SwarmFake belongs to the process, not to a context: cmd/multiverse reads
 	// it when it builds the context swarm, because at I1-α there is no swarm
 	// context to read it in (ADR-001 addendum p. 8). It leaves with the hook

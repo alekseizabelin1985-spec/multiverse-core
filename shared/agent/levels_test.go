@@ -17,7 +17,9 @@ func TestAllowedEventTypes(t *testing.T) {
 	}{
 		{"global", "global-gm", []string{"entity.update.proposed", "world.event_occurred", "world.time_advanced", "world.weather_changed"}},
 		{"domain", "region-gm", domain},
-		{"domain", "city-gm", domain},
+		// Reserved role: the list of a region would be powers without a
+		// decision (swarm-llm-laws.md §13.2, decision 2).
+		{"domain", "city-gm", nil},
 		{"task", "encounter", []string{"combat.decided", "dice.rolled", "encounter.ended", "entity.update.proposed"}},
 		{"task", "personal-gm", []string{"narrative.output"}},
 		{"task", "group-narrator", []string{"narrative.output"}},
@@ -103,6 +105,14 @@ func TestLevelsAndRoles(t *testing.T) {
 		if got := agent.IsReservedLevel(level); got != reserved {
 			t.Errorf("IsReservedLevel(%q) = %v, want %v", level, got, reserved)
 		}
+	}
+	for _, role := range roles {
+		if got, want := agent.IsReservedRole(role), role == "city-gm"; got != want {
+			t.Errorf("IsReservedRole(%q) = %v, want %v", role, got, want)
+		}
+	}
+	if agent.IsReservedRole("") || agent.IsReservedRole("bard") {
+		t.Error("IsReservedRole accepts a role that is not a reserved one")
 	}
 }
 

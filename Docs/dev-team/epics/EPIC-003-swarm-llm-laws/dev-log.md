@@ -2910,3 +2910,40 @@ fence (принят незакрытый, потеряна строка откр
   - M9 — без `dice.rolled`.
   - M10–M12 — без каждого из добавленных предложений.
 - Копия удалена по точному пути.
+
+<!-- dev-log T-222 -->
+## developer#1 · T-222 · R1 «Реестр блупринтов и индекс scope» · 2026-09-13
+
+Ветка `task/T-222-blueprint-registry` от `725b79c` (кончик эпика с T-201…T-203), папка `.worktrees/T-222`. Коммитов нет, файлы не в индексе. Подробно — карточка `tasks/T-222.md`, раздел «Выполнение (developer)».
+
+### Что сделано
+- `internal/swarm/registry.go` — `LoadDir(dir, LoadConfig{Root, Models})`: файлы `.md/.yaml/.yml` без рекурсии, `agent.ParseFile` + `agent.Validate`; файл с ошибкой (разбор, правило, повтор `name`) не активируется, остальные грузятся. `Get`, `Names`, `ByTrigger`, `ContentHash`, `Reports`, `Rejected`, `ModelsMissing`, `Health` (`degraded {blueprints: [файл]}`, `degraded {llm: model_missing}`), `LoadFromEnv`.
+- Общий построитель окружения валидатора — `swarm.ProjectEnv(root, models)` и `swarm.OwnedEntityTypes(level, role)` (строки `contracts.OwnershipRules` уровня, без `AnyType`); его берёт и CLI (T-204).
+- Правило 7а в рантайме: находка с кодом `model_missing` понижается до `warning`, агент активен, блупринт и фаза — в `ModelsMissing()`. Резервные уровень и роль (`monitor`, `object`, `city-gm`) — состояние `reserved`, не спавнятся, `/health` не деградирует.
+- `internal/swarm/scope.go` — `ScopeIndex`: позиция игрока и группы из `entity.*`, состав групп из `group.*`, встреча scope из `encounter.*`; `RegionOf`, `WorldOf`, `GroupOf`, `PlayersIn`, `EncounterOf`, `EncounterScope`. `Apply` задаёт отношения, повтор события ничего не меняет.
+- `shared/agent` по строкам DoD: `Issue.Code`; константы `model_missing`, `models_not_checked`, `file_missing`; `info: reserved role, spawn disabled` у `city-gm`, пустой белый список `city-gm`, `IsReservedRole`; комментарий правила 8 переписан по данным.
+- `blueprints/blueprints_test.go` — исключение `pendingReference` сверяет находку по `Issue.Code` и значению `absolute_limits_ref`, а не по тексту `Reason` (T-216 не слита).
+- `MV_SWARM_BLUEPRINTS_DIR` — `shared/env/vars.go` и `.env.example`.
+
+### Решения по ходу
+- Корень проекта — отдельный параметр `LoadConfig.Root`: ссылки блупринта — пути от корня, каталог блупринтов может лежать не в `<root>/blueprints`. `LoadFromEnv` берёт корнем рабочий каталог процесса, как `MV_LAWS_DIR`.
+- У каждого отношения `ScopeIndex` один источник, чтобы события двух издателей не спорили; `player.entered_region`/`group.entered_region` индекс не читает (КД §5.1 шаг 3).
+- Id scope читается в двух формах, `player-A` и `solo:player-A`: в дереве встречаются обе.
+- Payload декодируется через JSON: событие из процесса и событие с шины читаются одинаково.
+- `/health` — только ключи КД; блупринт и фаза без модели отдаются методом, вывод в `/health` — за T-239.
+
+### Отклонения от дизайна
+- API шире перечня design §3.2 R1 (`Names`, `Reports`, `Rejected`, `ModelsMissing`, `LoadFromEnv`, `ProjectEnv`, `OwnedEntityTypes`, `WorldOf`, `EncounterOf`, `EncounterScope`).
+- Код `file_missing` сверх двух кодов КД §13.2 — по строке DoD приёмки T-203; дописать в КД — architect#2.
+
+### Открытые вопросы (подробно — в карточке)
+- `blueprints/README.md` из T-204 станет отвергнутым файлом и постоянно деградирует `/health`.
+- Место построителя окружения для CLI: экспорт `internal/swarm` или пакет-лист.
+- `PlayersIn` считает мёртвых и покинутых персонажей в регионе.
+- Форма id scope по контракту.
+- Повтор `name`: отвергается второй по порядку файлов, даже если первый отвергнут.
+
+### Как тестировал
+- `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `golangci-lint run ./...` (0 issues), `go run ./cmd/mvctl contracts check` (65/8/58), `mvctl env check` (74), `make test` (exit 0; `internal/swarm` 99,3 %) — всё зелёное.
+- Тесты реестра — на настоящем `blueprints/` и на копии проекта в `t.TempDir()` с невалидным, неразбираемым, повторным и резервным блупринтами; тест `ScopeIndex` — таблица из 16 переходов, каждый шаг применён дважды.
+- Мутанты в копии дерева `t222-mutants` (scratch, без `-overlay`), контрольный первым: убиты 18 из 19, M17 — эквивалентный (дописанная проверка уже стояла). Копия удалена по точному пути.

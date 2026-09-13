@@ -182,8 +182,9 @@ func TestBlueprintsValidate(t *testing.T) {
 	env := projectEnv(t, []string{modelE})
 	for _, name := range mvp1Blueprints {
 		t.Run(name, func(t *testing.T) {
-			for _, issue := range agent.Validate(parseBlueprint(t, name), env) {
-				if task, ok := pendingReference(issue, env); ok {
+			bp := parseBlueprint(t, name)
+			for _, issue := range agent.Validate(bp, env) {
+				if task, ok := pendingReference(issue, bp, env); ok {
 					t.Logf("%s|%s|%s (the file comes with %s)", issue.Severity, issue.Field, issue.Reason, task)
 					continue
 				}
@@ -194,18 +195,18 @@ func TestBlueprintsValidate(t *testing.T) {
 }
 
 // pendingReference reports whether an issue is the missing file of another
-// task, and which task: an error on absolute_limits_ref naming a pending file
-// that is absent from the checkout.
-func pendingReference(issue agent.Issue, env agent.ValidationEnv) (string, bool) {
-	if issue.Severity != agent.SeverityError || issue.Field != "absolute_limits_ref" {
+// task, and which task: an error of rule 10 on absolute_limits_ref, told by its
+// code rather than by the text of its reason, of a blueprint whose reference
+// names a pending file that is absent from the checkout.
+func pendingReference(issue agent.Issue, bp *agent.AgentBlueprint, env agent.ValidationEnv) (string, bool) {
+	if issue.Severity != agent.SeverityError || issue.Code != agent.CodeFileMissing || issue.Field != "absolute_limits_ref" {
 		return "", false
 	}
-	for file, task := range pendingFiles {
-		if !env.FileExists(file) && issue.Reason == "file "+file+" does not exist" {
-			return task, true
-		}
+	task, pending := pendingFiles[bp.AbsoluteLimitsRef]
+	if !pending || env.FileExists(bp.AbsoluteLimitsRef) {
+		return "", false
 	}
-	return "", false
+	return task, true
 }
 
 // TestBlueprintsValidateOffline is mvctl --offline and a runtime without its
@@ -218,10 +219,10 @@ func TestBlueprintsValidateOffline(t *testing.T) {
 			bp := parseBlueprint(t, name)
 			var infos int
 			for _, issue := range agent.Validate(bp, env) {
-				_, pending := pendingReference(issue, env)
+				_, pending := pendingReference(issue, bp, env)
 				switch {
 				case pending:
-				case issue.Severity == agent.SeverityInfo && issue.Field == "llm":
+				case issue.Severity == agent.SeverityInfo && issue.Field == "llm" && issue.Code == agent.CodeModelsNotChecked:
 					infos++
 				default:
 					t.Errorf("%s|%s|%s", issue.Severity, issue.Field, issue.Reason)
