@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:49:43+03:00",
+  "updatedAt": "2026-09-13T17:50:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2796,7 +2796,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-055",
           "title": "state — конвейер предложение → факт, источники в serve.go",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T16:20:10+03:00",
           "finishedAt": null,
@@ -9205,7 +9205,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Итерация 2: фантомный факт, Stop/Start, тесты создания",
       "startedAt": "2026-09-13T17:18:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:50:27+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9315,6 +9315,16 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Итерация 2: потеря обновлений, флуд отказами, 401",
       "startedAt": "2026-09-13T17:49:43+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Ревью #2: повтор публикации и publish_failed",
+      "startedAt": "2026-09-13T17:50:27+03:00",
       "finishedAt": null
     }
   ],
@@ -12480,6 +12490,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-310 · ревью #1 (TEAM-3/code-reviewer#2): вернуть — 0/2/3/6. M-1 потеря команд при остановке: go-telegram/bot подтверждает обновления (offset) до обработки, очередь 1024 пропадает при SIGTERM/409 — нужен WithUpdatesChannelCap(0) и отказ обработки при отменённом ctx; M-2 флуд отказами с чужого аккау"
+    },
+    {
+      "at": "2026-09-13T17:50:27+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 · итерация 2 (TEAM-1/developer#3): Ma-1 по решению Б+А — повтор публикации тех же байтов (100 мс → 5 с на Deps.Timers, /health degraded), при Stop — мир publish_failed без записи в память и без dead_letters; остановка мира переживает повторный Start; отказ без типа сущности публикуется без ent"
     }
   ],
   "blockers": [],
