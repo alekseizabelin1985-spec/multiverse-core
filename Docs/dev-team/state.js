@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:31:13+03:00",
+  "updatedAt": "2026-09-13T21:44:45+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3630,13 +3630,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-222",
           "title": "R1 · Реестр блупринтов и индекс scope",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:54:53+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T21:44:45+03:00",
           "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 97,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-222.md",
           "subwave": "D"
@@ -4515,14 +4515,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-305",
           "title": "actions: валидация, идемпотентность, лимит, InputFilter",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T18:25:18+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T21:44:45+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.5",
-          "spentMinutes": 0,
+          "spentMinutes": 182,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-305.md",
           "branch": "task/T-305-actions",
@@ -4531,9 +4531,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-306",
           "title": "characters, worlds/players, session/turns, C-10",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4687,9 +4687,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-317",
           "title": "README gateway и бота, runbook §6, .env.example",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "tech-writer#1",
+          "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10071,7 +10071,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Отметки владельца T-305, T-222, T-209",
       "startedAt": "2026-09-13T21:19:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:44:45+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -10111,6 +10111,26 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Ревью #1 владения и инвариантов",
       "startedAt": "2026-09-13T21:31:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-306",
+      "action": "characters, sessions, turns",
+      "startedAt": "2026-09-13T21:44:45+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-317",
+      "action": "README шлюза и бота, runbook",
+      "startedAt": "2026-09-13T21:44:45+03:00",
       "finishedAt": null
     }
   ],
@@ -13870,6 +13890,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-056 · итерация 1b (developer#2): блокер снят — FakeEncounter.wound пишет died_at/killed_by только NPC, тесты роя выбирают атаки по исходу (swingUntilTheWolfFalls), WithCauseID сохранён; мутанты B1/B1s/B2/B3 и регресс итерации 1 красные; make test exit 0, internal/state 94,3 %. Ревью #1 — TEAM-1/co"
+    },
+    {
+      "at": "2026-09-13T21:44:45+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-305 · отметка tech-lead#1: есть (MV_GATEWAY_* с видами, replayClock по C-01 v1.11, слияние vars.go/.env.example с T-310 без конфликтов; бэклог Н-1…Н-3). Коммит 4d56dde, ветка task/T-305-actions запушена; конфликт changelog tasks.md (0.1.3+T-318, затем 0.1.4) разрешён sync; слита в epic/EPIC-004-ga"
+    },
+    {
+      "at": "2026-09-13T21:44:45+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-222 · отметка tech-lead#1: есть (MV_SWARM_BLUEPRINTS_DIR; в образе нет WORKDIR и каталогов данных — условия в DoD T-239). Коммит 366a7cc, ветка запушена; конфликт tasks.md (шапка 0.3.11, changelog 0.3.10/0.3.11) разрешён sync; слита в epic/EPIC-003-swarm-llm-laws (ec24cb8), эпик запушен. Итераций "
+    },
+    {
+      "at": "2026-09-13T21:44:45+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Запущены T-306 (TEAM-3/developer#1: characters, worlds/players, session и turns, аналитика C-10 без идентификаторов игрока — R2-M-1 A) и T-317 (tech-writer#1: README шлюза и бота, runbook ротации токена, сверка .env.example). Новые задачи роя EPIC-003 не берутся до ответа пользователя о приоритете I"
     }
   ],
   "blockers": [],
