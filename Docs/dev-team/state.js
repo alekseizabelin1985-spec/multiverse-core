@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T10:36:13+03:00",
+  "updatedAt": "2026-09-13T11:21:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -818,14 +818,45 @@ window.DEVTEAM_STATE =
         {
           "id": "T-398",
           "title": "Свести раскол docs/ и Docs/, вычистить устаревшие файлы-инструкции (QWEN.md и др.)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T10:31:50+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T11:03:14+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 26,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:31",
+              "to": "13.09 10:41",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 10:41",
+              "to": "13.09 10:46",
+              "duration": "5m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 10:46",
+              "to": "13.09 10:49",
+              "duration": "2m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 10:54",
+              "to": "13.09 10:57",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 10:57",
+              "to": "13.09 11:03",
+              "duration": "5m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-398.md",
           "branch": "task/T-398-docs-case-split",
           "worktree": ".worktrees/T-398"
@@ -833,14 +864,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-399",
           "title": "Привести infrastructure.md к состоянию после T-397",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "architect#1",
           "startedAt": "2026-09-13T10:31:50+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T11:13:03+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 40,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:31",
+              "to": "13.09 10:45",
+              "duration": "13m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 10:46",
+              "to": "13.09 10:59",
+              "duration": "13m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 10:59",
+              "to": "13.09 11:04",
+              "duration": "4m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 11:04",
+              "to": "13.09 11:13",
+              "duration": "8m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-399.md",
           "branch": "task/T-399-infrastructure-after-t397",
           "worktree": ".worktrees/T-399"
@@ -1039,9 +1095,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-405",
           "title": "Стенд паритета двух реализаций скриптов — в репозиторий и в CI",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-13T10:43:38+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -2003,14 +2059,33 @@ window.DEVTEAM_STATE =
         {
           "id": "T-437",
           "title": "llm-server: --alias, пин LLAMACPP_BUILD, сокращение ops/models.txt (из T-435)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T02:48:21+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T10:42:26+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 474,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 02:48",
+              "to": "13.09 03:16",
+              "duration": "28m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 03:16",
+              "to": "13.09 10:35",
+              "duration": "7h 18m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 10:35",
+              "to": "13.09 10:42",
+              "duration": "6m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-437-llm-server-alias",
           "worktree": ".worktrees/T-437"
@@ -2090,17 +2165,69 @@ window.DEVTEAM_STATE =
         {
           "id": "T-441",
           "title": "Delivery: не писать «event parked in dead letters», когда запись в dead_letters не удалась (после Close) — из ревью T-436",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T10:31:50+03:00",
+          "finishedAt": "2026-09-13T11:08:04+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 36,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:31",
+              "to": "13.09 10:44",
+              "duration": "12m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 10:44",
+              "to": "13.09 10:54",
+              "duration": "9m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 10:54",
+              "to": "13.09 11:00",
+              "duration": "5m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 11:00",
+              "to": "13.09 11:08",
+              "duration": "7m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-441-no-false-parked-warn",
+          "worktree": ".worktrees/T-441"
+        },
+        {
+          "id": "T-442",
+          "title": "Тексты после T-437: ADR-005 УИ п. 6, baseline.md §5, _model_ids в матрице",
+          "status": "in-progress",
+          "assignee": "architect#1",
+          "startedAt": "2026-09-13T10:45:49+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "card": "epics/EPIC-001-foundation/tasks/T-442.md",
+          "branch": "task/T-442-t437-followup-texts",
+          "worktree": ".worktrees/T-442"
+        },
+        {
+          "id": "T-443",
+          "title": "Kafka.Close: запись в dead_letters между closed и отменой loopCtx даёт «bus is closed» вместо nil — из ревью T-441",
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T11:21:37+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md",
-          "branch": "task/T-441-no-false-parked-warn",
-          "worktree": ".worktrees/T-441"
+          "card": "epics/EPIC-001-foundation/tasks/T-443.md",
+          "branch": "task/T-443-kafka-close-dead-letter-race",
+          "worktree": ".worktrees/T-443"
         }
       ],
       "defects": [],
@@ -5929,7 +6056,7 @@ window.DEVTEAM_STATE =
       "task": "T-399",
       "action": "infrastructure.md после T-397",
       "startedAt": "2026-09-13T10:31:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T10:45:49+03:00"
     },
     {
       "instance": "tech-writer#1",
@@ -5939,7 +6066,7 @@ window.DEVTEAM_STATE =
       "task": "T-398",
       "action": "раскол docs/ и Docs/, устаревшие инструкции в _archive",
       "startedAt": "2026-09-13T10:31:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T10:41:08+03:00"
     },
     {
       "instance": "developer#1",
@@ -5949,7 +6076,7 @@ window.DEVTEAM_STATE =
       "task": "T-441",
       "action": "ложный Warn parked после Close",
       "startedAt": "2026-09-13T10:31:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T10:44:32+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -5969,6 +6096,156 @@ window.DEVTEAM_STATE =
       "task": "T-437",
       "action": "приёмка T-437 по DoD",
       "startedAt": "2026-09-13T10:35:33+03:00",
+      "finishedAt": "2026-09-13T10:42:26+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-398",
+      "action": "ревью #1 T-398",
+      "startedAt": "2026-09-13T10:41:08+03:00",
+      "finishedAt": "2026-09-13T10:46:22+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "стенд паритета .sh/.ps1 в репозиторий и CI",
+      "startedAt": "2026-09-13T10:43:38+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-441",
+      "action": "ревью #1 T-441",
+      "startedAt": "2026-09-13T10:44:32+03:00",
+      "finishedAt": "2026-09-13T10:54:17+03:00"
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-442",
+      "action": "ADR-005, baseline §5, _model_ids после T-437",
+      "startedAt": "2026-09-13T10:45:49+03:00",
+      "finishedAt": "2026-09-13T10:53:53+03:00"
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-398",
+      "action": "итерация 2 T-398: шестой LIVING_WORLDS, правило README",
+      "startedAt": "2026-09-13T10:46:22+03:00",
+      "finishedAt": "2026-09-13T10:49:21+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-399",
+      "action": "ревью #1 T-399",
+      "startedAt": "2026-09-13T10:46:22+03:00",
+      "finishedAt": "2026-09-13T10:59:43+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-441",
+      "action": "итерация 2 T-441: Mi-1, Mi-2, N-1",
+      "startedAt": "2026-09-13T10:54:17+03:00",
+      "finishedAt": "2026-09-13T11:00:11+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-398",
+      "action": "ревью #2 T-398",
+      "startedAt": "2026-09-13T10:54:17+03:00",
+      "finishedAt": "2026-09-13T10:57:56+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-398",
+      "action": "приёмка T-398",
+      "startedAt": "2026-09-13T10:57:56+03:00",
+      "finishedAt": "2026-09-13T11:03:14+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-442",
+      "action": "ревью #1 T-442",
+      "startedAt": "2026-09-13T10:57:56+03:00",
+      "finishedAt": "2026-09-13T11:21:37+03:00"
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-399",
+      "action": "итерация 2 T-399: Mi-1, Mi-2, Nit, docs/ops",
+      "startedAt": "2026-09-13T10:59:43+03:00",
+      "finishedAt": "2026-09-13T11:04:19+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-441",
+      "action": "приёмка T-441",
+      "startedAt": "2026-09-13T11:00:11+03:00",
+      "finishedAt": "2026-09-13T11:08:04+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-399",
+      "action": "приёмка T-399",
+      "startedAt": "2026-09-13T11:04:19+03:00",
+      "finishedAt": "2026-09-13T11:13:03+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-443",
+      "action": "гонка Kafka.Close и dead_letters",
+      "startedAt": "2026-09-13T11:21:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-442",
+      "action": "приёмка T-442",
+      "startedAt": "2026-09-13T11:21:37+03:00",
       "finishedAt": null
     }
   ],
