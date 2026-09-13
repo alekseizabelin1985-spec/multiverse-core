@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:00:18+03:00",
+  "updatedAt": "2026-09-13T15:01:32+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2408,7 +2408,7 @@ window.DEVTEAM_STATE =
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T13:49:33+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8582,7 +8582,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "Ревью #2: документы по пакету решений",
       "startedAt": "2026-09-13T14:45:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:01:32+03:00"
     },
     {
       "instance": "developer#1",
@@ -8622,6 +8622,26 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Ревью #1: compose-lint без окружения CI",
       "startedAt": "2026-09-13T14:56:38+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Приёмка T-449 документы пакета решений",
+      "startedAt": "2026-09-13T15:01:32+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #2: итерация 2 runtime/раскладка",
+      "startedAt": "2026-09-13T15:01:32+03:00",
       "finishedAt": null
     }
   ],
@@ -11379,6 +11399,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-446 · итерация 2 (TEAM-1/developer#1): Ma-2 doc SetDeadlines исправлен + тест отмены r.Context() дедлайном чтения у GET (и 0 — жив); Ma-1 владельцы e2e из набора {state, swarm, gateway, ops}; Mi-1 nil-завершение; N-1 порядок All() закреплён по спискам владельцев (без золотого списка типов — иначе "
+    },
+    {
+      "at": "2026-09-13T15:01:32+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · ревью #2 (TEAM-1/code-reviewer#3): принять — 0/0/2/6. Все замечания ревью #1 закрыты (сверено с кодом EPIC-002 24f1baf, internal/llm/config.go EPIC-003, таблицей T-450). R2-Mi-1 нормы v1.6 без пометки «вступает в силу» в «Вход/Выход State»/«Гарантиях»; R2-Mi-2 порядок элемента предка не попа"
     }
   ],
   "blockers": [],
