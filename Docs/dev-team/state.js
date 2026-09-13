@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:02:39+03:00",
+  "updatedAt": "2026-09-13T23:06:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2665,6 +2665,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-469.md"
+        },
+        {
+          "id": "T-470",
+          "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-470.md"
         }
       ],
       "defects": [],
@@ -2916,7 +2929,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
@@ -3198,6 +3211,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 133,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-458.md"
+        },
+        {
+          "id": "T-471",
+          "title": "Законы мира в процессе: rules/dark-forest.yaml и Config.Invariants в contexts_state.go; норма rest hp == hp_max и строка system по C-02 v1.8 (после T-470, T-056)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-471.md"
         }
       ],
       "defects": [],
@@ -10317,7 +10343,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Просмотр contract-change T-056 и вопросы по State",
       "startedAt": "2026-09-13T22:51:46+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:06:59+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10357,6 +10383,16 @@ window.DEVTEAM_STATE =
       "task": "T-464",
       "action": "Приёмка T-464",
       "startedAt": "2026-09-13T23:02:39+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Итерация 4: условия system-architect У-1/У-2",
+      "startedAt": "2026-09-13T23:06:59+03:00",
       "finishedAt": null
     }
   ],
@@ -14278,6 +14314,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-464 · ревью #1 (TEAM-1/code-reviewer#1): принять — 0/0/1/2. Умолчания совпадают с манифестом, ${VAR:-} у соли законна, MV_.*_SALT без лишних совпадений, фикстуры и мутанты по ожиданию, docker compose config (только ключи) подтверждает доставку. Mi-1 правило 3 советует соли :? (сломал бы профиль bo"
+    },
+    {
+      "at": "2026-09-13T23:06:59+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · просмотр system-architect: одобрено с условиями. WorldRequired у двух предложений одобрен; шаг 1 совместим с C-02 v1.5/v1.6, но пропускает inventory.0 и индекс-переполнение (У-1); scalarAttributes неполон (У-2); мутанты линтера shared-testkit-state (У-3 — покрыты пробными импортами отметки t"
+    },
+    {
+      "at": "2026-09-13T23:06:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по T-056: У-1 и У-2 плюс Mi-8/N-4 ревью #3 — итерация 4 T-056 (developer#2); норма rest hp == hp_max и строка system — отдельно после текста C-02 v1.8. Заведены задачи, counters.task = 471: T-470 (EPIC-001, system-architect — документы по просмотру T-056: C-02 v1.8, C-03 v1.4, C"
     }
   ],
   "blockers": [],
