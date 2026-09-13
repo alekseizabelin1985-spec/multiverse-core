@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:59:56+03:00",
+  "updatedAt": "2026-09-13T19:02:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3098,9 +3098,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-458",
           "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -9570,7 +9570,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Постановка T-458",
       "startedAt": "2026-09-13T18:50:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:02:27+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9600,6 +9600,16 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Ревью #1 блупринтов MVP-1",
       "startedAt": "2026-09-13T18:59:56+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Запись сессии: shared/recording, ReadJournal, Deps.Recording",
+      "startedAt": "2026-09-13T19:02:27+03:00",
       "finishedAt": null
     }
   ],
@@ -12987,6 +12997,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Решения оркестратора по вопросам T-203: absolute-limits.yaml не подкладывать заглушкой — ждать T-216 (словарь категории (a) утверждает пользователь), в DoD T-216 — «тест T-203 проходит без исключения»; место теста (blueprints/ или test/blueprints/) оценивает ревью с учётом Dockerfile T-447. Бэклог: "
+    },
+    {
+      "at": "2026-09-13T19:02:27+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 поставлена TEAM-1/tech-lead#2 (tasks.md v0.1.3, карточка): M на верхней границе, часть А (перенос git mv в shared/recording, Open/Read, LLMOutputKeyOf, ReadJournal с контракт-тестом, Deps.Recording в serve.go, тест Derive, depguard) первой — её ждут T-212/T-221/T-237; часть Б (EventClock.Advan"
+    },
+    {
+      "at": "2026-09-13T19:02:27+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по T-458: одна задача M, при нехватке сессии — остановка после зелёной части А и разбиение оркестратором; git mv в папке задачи разрешён и обязателен. Вопрос к system-architect: ReadJournal поверх middleware T-060 в replay сдвигает EventClock и помечает meta.replay → возможен 40"
     }
   ],
   "blockers": [],
