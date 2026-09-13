@@ -289,6 +289,66 @@ func TestModelsNotChecked(t *testing.T) {
 	})
 }
 
+// Decision 1 of swarm-llm-laws.md §13.2: a caller tells findings apart by a
+// stable code, not by the text of Reason. Only the findings someone acts on
+// carry one; a reason edited in a later version keeps its code.
+func TestIssueCodes(t *testing.T) {
+	codes := func(issues []agent.Issue) []string {
+		out := make([]string, 0, len(issues))
+		for _, issue := range issues {
+			out = append(out, issue.Field+"="+issue.Code)
+		}
+		return out
+	}
+	cases := []struct {
+		name   string
+		file   string
+		change func(*agent.AgentBlueprint)
+		env    func(*agent.ValidationEnv)
+		want   []string
+	}{
+		{"model outside the provider", "personal-gm.md", func(bp *agent.AgentBlueprint) { bp.LLM.Phase2.Model = "qwen3:30b-a3b" }, nil,
+			[]string{"llm.phase2.model=model_missing"}},
+		{"model of a tick outside the provider", "global-world.md", nil, func(env *agent.ValidationEnv) { env.Models = agent.NewSet("other") },
+			[]string{"llm.tick.model=model_missing"}},
+		{"models not checked", "personal-gm.md", nil, func(env *agent.ValidationEnv) { env.Models = nil },
+			[]string{"llm=models_not_checked"}},
+		// A forbidden model is rule 7, not 7a: the runtime must not lower it.
+		{"forbidden model has no code", "personal-gm.md", func(bp *agent.AgentBlueprint) { bp.LLM.Phase2.Model = "qwen:7b" }, nil,
+			[]string{"llm.phase2.model="}},
+		{"missing file", "encounter.md", nil, func(env *agent.ValidationEnv) { env.FileExists = nil },
+			[]string{"absolute_limits_ref=file_missing", "rules_ref=file_missing"}},
+		{"missing laws file", "global-world.md", func(bp *agent.AgentBlueprint) { bp.LawsRef = "laws/dark-forest-world@v2" }, nil,
+			[]string{"laws_ref=file_missing"}},
+		// A reference that is absent or of the wrong form is not a missing file.
+		{"required reference has no code", "encounter.md", func(bp *agent.AgentBlueprint) { bp.RulesRef = "" }, nil,
+			[]string{"rules_ref="}},
+		{"malformed laws reference has no code", "global-world.md", func(bp *agent.AgentBlueprint) { bp.LawsRef = "laws/x.yaml" }, nil,
+			[]string{"laws_ref="}},
+		{"reserved role has no code", "domain-region.md", func(bp *agent.AgentBlueprint) {
+			bp.Role, bp.AllowedEventTypes, bp.OwnedEntityTypes = "city-gm", nil, nil
+		}, nil, []string{"role="}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bp := parseValid(t, tc.file)
+			if tc.change != nil {
+				tc.change(bp)
+			}
+			env := testEnv()
+			if tc.env != nil {
+				tc.env(&env)
+			}
+			if got := codes(agent.Validate(bp, env)); !slices.Equal(got, tc.want) {
+				t.Errorf("codes:\n  got  %q\n  want %q", got, tc.want)
+			}
+		})
+	}
+	if agent.CodeModelMissing != "model_missing" || agent.CodeModelsNotChecked != "models_not_checked" || agent.CodeFileMissing != "file_missing" {
+		t.Error("a code changed its value: codes are stable between versions")
+	}
+}
+
 func TestValidateNil(t *testing.T) {
 	assertIssues(t, agent.Validate(nil, testEnv()), []string{"error||no blueprint"})
 }
@@ -746,6 +806,34 @@ func TestRules(t *testing.T) {
 		{"a role of rules only needs no system prompt", "encounter.md", nil, nil, nil},
 
 		// Rule 14.
+		{"city-gm is a reserved role", "domain-region.md", func(bp *agent.AgentBlueprint) {
+			bp.Role, bp.AllowedEventTypes, bp.OwnedEntityTypes = "city-gm", nil, nil
+		}, nil, []string{"info|role|reserved role, spawn disabled"}},
+		// The rules of the level apply to the reserved role (decision 2): a
+		// region broken by rules 10 and 11 is broken as a city too.
+		{"the rules of domain apply to city-gm", "domain-region.md", func(bp *agent.AgentBlueprint) {
+			bp.Role, bp.AllowedEventTypes, bp.OwnedEntityTypes = "city-gm", nil, nil
+			bp.RulesRef, bp.NPCTable = "", nil
+		}, nil, []string{
+			"error|npc_table|required for level domain: at least one row",
+			"info|role|reserved role, spawn disabled",
+			"error|rules_ref|required for level domain",
+		}},
+		// With the white list empty a city publishes and owns nothing.
+		{"city-gm publishes nothing", "domain-region.md", func(bp *agent.AgentBlueprint) { bp.Role = "city-gm" }, nil, []string{
+			`error|allowed_event_types[0]|"region.event_occurred" is not allowed for role city-gm of level domain`,
+			`error|allowed_event_types[1]|"npc.moved" is not allowed for role city-gm of level domain`,
+			`error|allowed_event_types[2]|"npc.spawned" is not allowed for role city-gm of level domain`,
+			`error|allowed_event_types[3]|"encounter.started" is not allowed for role city-gm of level domain`,
+			`error|owned_entity_types[0]|entity type "region": role city-gm proposes no entity changes`,
+			`error|owned_entity_types[1]|entity type "npc": role city-gm proposes no entity changes`,
+			`error|owned_entity_types[2]|entity type "encounter": role city-gm proposes no entity changes`,
+			"info|role|reserved role, spawn disabled",
+		}},
+		// A role refused by rule 1 is not said to be reserved as well.
+		{"a mismatched city-gm is not reserved", "encounter.md", func(bp *agent.AgentBlueprint) { bp.Role = "city-gm" }, nil, []string{
+			`error|role|role "city-gm" belongs to level "domain", not "task"`,
+		}},
 		{"object is reserved", "encounter.md", func(bp *agent.AgentBlueprint) {
 			bp.Level, bp.Role, bp.ScopeBinding.Type = "object", "entity-actor", nil
 			bp.AllowedEventTypes, bp.OwnedEntityTypes, bp.RulesRef, bp.AbsoluteLimitsRef = nil, nil, "", ""
@@ -854,6 +942,8 @@ func TestEnvFromProject(t *testing.T) {
 	write("blueprints/encounter-wolf.md", string(valid))
 	write("blueprints/player-gm.YAML", string(pure))
 	write("blueprints/README.md", "# Blueprints\n")
+	// A README that parses as a blueprint still gives no name (IsBlueprintFile).
+	write("blueprints/README.ru.yaml", strings.Replace(string(pure), "name: player-test-gm", "name: readme-test-gm", 1))
 	write("blueprints/notes.txt", "name: not-a-blueprint\n")
 	write("blueprints/nested/region.md", string(valid))
 	write("blueprints/folder.md/inner.md", string(valid))
@@ -909,6 +999,47 @@ func TestEnvFromProject(t *testing.T) {
 	}
 	if len(env.Blueprints) != 0 || len(env.Schemas) != 0 {
 		t.Errorf("empty project: blueprints %v, schemas %v", env.Blueprints, env.Schemas)
+	}
+}
+
+// Acceptance of T-222 (review #1 N-3, question 1 of the developer): one
+// function tells a blueprint from the other entries of a directory of
+// blueprints, a README among them.
+func TestIsBlueprintFile(t *testing.T) {
+	dir := t.TempDir()
+	want := map[string]bool{
+		"player-gm.md":      true,
+		"region.YAML":       true,
+		"world.yml":         true,
+		"readme-gm.md":      true,
+		"my.readme.md":      true,
+		"README.md":         false,
+		"readme.yaml":       false,
+		"ReadMe.ru.md":      false,
+		"README":            false,
+		"notes.txt":         false,
+		"player-gm.md.orig": false,
+	}
+	for name := range want {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "folder.md"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want["folder.md"] = false
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("%d entries, want %d: the file system folded names", len(entries), len(want))
+	}
+	for _, entry := range entries {
+		if got := agent.IsBlueprintFile(entry); got != want[entry.Name()] {
+			t.Errorf("IsBlueprintFile(%q) = %v, want %v", entry.Name(), got, want[entry.Name()])
+		}
 	}
 }
 

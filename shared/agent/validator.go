@@ -78,6 +78,21 @@ const (
 	reasonRequired      = "required"
 	reasonModelsSkipped = "models not checked"
 	reasonReserved      = "reserved level, spawn disabled"
+	reasonReservedRole  = "reserved role, spawn disabled"
+)
+
+// Codes of the findings a caller acts on (Issue.Code).
+const (
+	// CodeModelMissing is rule 7a: a phase names a model the provider does not
+	// offer. The validator reports it as an error; the runtime of the swarm
+	// lowers it to a warning, activates the agent and sends the calls of the
+	// phase to the template (swarm-llm-laws.md §13.2, decision 1).
+	CodeModelMissing = "model_missing"
+	// CodeModelsNotChecked is rule 7a without the models of the provider.
+	CodeModelsNotChecked = "models_not_checked"
+	// CodeFileMissing is rule 10: a reference names a file that is not in the
+	// project.
+	CodeFileMissing = "file_missing"
 )
 
 // maxSafeInteger is the largest integer a JSON number carries exactly between
@@ -188,7 +203,11 @@ type validator struct {
 }
 
 func (v *validator) add(severity Severity, field, reason string) {
-	v.issues = append(v.issues, Issue{File: v.bp.SourceFile, Field: field, Reason: reason, Severity: severity})
+	v.addCoded(severity, "", field, reason)
+}
+
+func (v *validator) addCoded(severity Severity, code, field, reason string) {
+	v.issues = append(v.issues, Issue{File: v.bp.SourceFile, Field: field, Reason: reason, Severity: severity, Code: code})
 }
 
 func (v *validator) errorf(field, format string, args ...any) {
@@ -530,12 +549,12 @@ func (v *validator) checkLLM() {
 		return
 	}
 	if v.env.Models == nil {
-		v.add(SeverityInfo, "llm", reasonModelsSkipped)
+		v.addCoded(SeverityInfo, CodeModelsNotChecked, "llm", reasonModelsSkipped)
 		return
 	}
 	for _, p := range named {
 		if !v.env.Models.Has(p.model) {
-			v.errorf(p.field+".model", "model %q is not offered by the provider", p.model)
+			v.addCoded(SeverityError, CodeModelMissing, p.field+".model", fmt.Sprintf("model %q is not offered by the provider", p.model))
 		}
 	}
 }
@@ -567,9 +586,12 @@ func (v *validator) checkPhase(p phaseView) {
 //
 // A role whose white list proposes no entity change (the narrators, the
 // reserved roles) owns nothing, whatever the row of its level covers: the row
-// of task is written for the encounter. The white list of the role is taken,
-// not the one of the blueprint, because an encounter changes entities through
-// the mechanics without listing entity.update.proposed itself.
+// of task is written for the encounter. allowed_event_types of a blueprint
+// lists the entity proposals of its role too (the encounter lists
+// entity.update.proposed, blueprints/encounter-wolf.md), but a blueprint may
+// narrow its list, and narrowing what it publishes is not giving up what its
+// role owns. So the right to own is read from the white list of the role,
+// which the blueprint cannot change, not from the list the blueprint wrote.
 func (v *validator) checkWhiteLists() {
 	allowed := AllowedEventTypes(v.level(), v.role())
 	for i, t := range v.bp.AllowedEventTypes {
@@ -640,7 +662,7 @@ func (v *validator) checkRef(field, ref, who string) {
 		return
 	}
 	if v.env.FileExists == nil || !v.env.FileExists(ref) {
-		v.errorf(field, "file %s does not exist", ref)
+		v.addCoded(SeverityError, CodeFileMissing, field, fmt.Sprintf("file %s does not exist", ref))
 	}
 }
 
@@ -660,7 +682,7 @@ func (v *validator) checkLawsRef(ref string) {
 	}
 	file := "laws/" + m[1] + ".v" + m[2] + ".yaml"
 	if v.env.FileExists == nil || !v.env.FileExists(file) {
-		v.errorf("laws_ref", "%q: file %s does not exist", ref, file)
+		v.addCoded(SeverityError, CodeFileMissing, "laws_ref", fmt.Sprintf("%q: file %s does not exist", ref, file))
 	}
 }
 
@@ -763,10 +785,15 @@ func (v *validator) checkPrompts() {
 	}
 }
 
-// Rule 14: a reserved level is valid, and nothing of it is spawned.
+// Rule 14: a reserved level or role is valid, and nothing of it is spawned.
+// The rules of its level apply all the same (swarm-llm-laws.md §13.2,
+// decision 2): turning the role on must not need an edit of its blueprint.
 func (v *validator) checkReserved() {
 	if IsReservedLevel(v.level()) {
 		v.add(SeverityInfo, "level", reasonReserved)
+	}
+	if v.pairKnown() && IsReservedRole(v.role()) {
+		v.add(SeverityInfo, "role", reasonReservedRole)
 	}
 }
 
@@ -843,9 +870,9 @@ func sortedKeys(m map[string]any) []string {
 // invariant checks and the models of the provider (nil: not checked). The
 // tool registry of MVP-1 is empty.
 //
-// A blueprint that does not parse gives no name here (a directory named like
-// a blueprint does not parse either); validating the directory reports it on
-// its own.
+// The files of root/blueprints are the ones IsBlueprintFile accepts. A
+// blueprint that does not parse gives no name here; validating the directory
+// reports it on its own.
 func EnvFromProject(root string, eventTypes []string, ownedEntityTypes func(level, role string) []string, invariants, models []string) (ValidationEnv, error) {
 	env := ValidationEnv{
 		EventTypes:       NewSet(eventTypes...),
@@ -872,9 +899,7 @@ func EnvFromProject(root string, eventTypes []string, ownedEntityTypes func(leve
 		}
 	}
 	for _, entry := range entries {
-		switch strings.ToLower(filepath.Ext(entry.Name())) {
-		case ".md", ".yaml", ".yml":
-		default:
+		if !IsBlueprintFile(entry) {
 			continue
 		}
 		if bp, err := ParseFile(filepath.Join(root, "blueprints", entry.Name())); err == nil && bp.Name != "" {
@@ -912,6 +937,28 @@ func EnvFromProject(root string, eventTypes []string, ownedEntityTypes func(leve
 // optionalDir reports whether dir is there. A project without it yet is an
 // empty one; something else in its place is an error, on every platform alike
 // (reading a file as a directory fails differently on Windows and Linux).
+// IsBlueprintFile reports whether an entry of a directory of blueprints is
+// read as a blueprint: a file (not a directory) with the extension .md, .yaml
+// or .yml, in any case, that is not a README. A README is the instruction for
+// the authors of blueprints kept next to them (T-204, S6): README.md,
+// readme.yaml, README.ru.md — the base name up to its first dot is "readme"
+// in any case. A blueprint named readme-gm.md is still a blueprint. Every
+// reader of a directory of blueprints — EnvFromProject, the registry of the
+// swarm, mvctl blueprint validate — uses this one function.
+func IsBlueprintFile(entry fs.DirEntry) bool {
+	if entry.IsDir() {
+		return false
+	}
+	name := entry.Name()
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".md", ".yaml", ".yml":
+	default:
+		return false
+	}
+	stem, _, _ := strings.Cut(name, ".")
+	return !strings.EqualFold(stem, "readme")
+}
+
 func optionalDir(dir string) (bool, error) {
 	info, err := os.Stat(dir)
 	switch {
