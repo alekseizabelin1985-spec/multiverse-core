@@ -2705,6 +2705,56 @@ fence (принят незакрытый, потеряна строка откр
 - F3 — `ctx.Err()` до `take` (M2 ревью);
 - F4 — задержка не ждёт таймер.
 
+<!-- dev-log T-205 -->
+## developer#3 · T-205 · A7 «Законы: `internal/laws`, `laws/dark-forest-world.v1.yaml`, `mvctl laws bump|show`» · 2026-09-13
+
+Ветка `task/T-205-laws` (от `epic/EPIC-003-swarm-llm-laws`, `586ded3`), папка `.worktrees/T-205`. Коммитов нет, по промпту они запрещены. Таблица DoD, мутанты и бэклог — в карточке `tasks/T-205.md`.
+
+**Сделано.**
+- `laws/dark-forest-world.v1.yaml` — `inv-01…inv-10` (`check` = id, ключ `mechanics.Invariant.ID`), `inv-11` (`check: laws_version_current`, ключ стража), `law-1`, `law-2`.
+- `internal/laws`:
+  - `document.go` — типы, enum статусов (без машины состояний), `KnownChecks`, строгий `Parse` с `*DocumentError` (`ErrInvalidDocument`, `ErrUnknownCheck`);
+  - `source.go` — `Source`, `FileSource`, интерфейс `ObjectSource`;
+  - `strain.go` — `Strain{Inc, Snapshot}`;
+  - `laws.go` — `WorldVersions` (решение 1f), `Service`, `*Keeper`: `Current/CurrentFrom/Get/Worlds/Versions/Problems/Health/Watch/Handle/Subscribe/Bump`.
+- `mvctl laws show|bump` в `cmd/mvctl/internal/laws`, регистрация — одной заменой строки в `commands_swarm.go`.
+- `MV_LAWS_DIR` в `shared/env/vars.go` и `.env.example`.
+
+**Решения по ходу.**
+- `check` инварианта равен его id: так требуют КД §10.4 и ADR-012 п. 5. Пример КД §12.1 с `dead_does_not_act` устарел.
+- Документ, который не загрузился, не роняет загрузку остальных: он становится `Problem`, `Get` его версии отдаёт причину, `Health` — `degraded` с `laws: unknown_check|invalid_document`.
+- Более новая версия, которая не загружается, — ошибка `Current`, а не молчаливый откат к старой.
+- `Bump` объявляет только документ, который лежит в каталоге законов и совпадает с файлом `--from`: `core` должен уметь загрузить объявленную версию. Базовая версия — из `WorldVersions`, без неё — старшая `approved` кроме объявляемой.
+- `world.laws.changed` — `NewRoot` (`source=mvctl`, `actor_kind=system`), `entity.update.proposed` — `Derive` от него, `cause=author`, `proposal_id=laws:{world}:{version}`.
+- `Watch` не блокирует подписку: буфер 16, переполнение — `Warn`.
+- `registry_swarm.go` не менялся: тип и издатели уже есть (T-214).
+
+**Отклонения.** Изменён файл EPIC-001 `cmd/mvctl/main_test.go` — две строки: `laws` перенесена из списка зарезервированных имён в реализованные. Без этого тест реестра падает на реализованной команде. Нужен просмотр tech-lead#1, как и для `shared/env/vars.go` и `.env.example`.
+
+**Тесты.**
+- `internal/laws` — 98.3 %:
+  - законы v1: `inv-01…inv-11`, ключи `check`;
+  - `Parse`: 19 отказов и все статусы;
+  - `FileSource`;
+  - `Current` на фейке `WorldVersions` и без него;
+  - неизвестный `check` → `unknown_check` в `Health`;
+  - `Handle`/`Watch`/`Subscribe` на `membus`;
+  - `Bump` на `membus` с валидацией схем, `source ∈ Publishers` и строкой `OwnershipRules`; 13 отказов без публикаций, сбой публикации;
+  - транзитивный обход импортов: нет `internal/*`, кроме самого пакета.
+- `cmd/mvctl/internal/laws` — 97.1 %: `show` на файле репозитория, JSON, находки, ошибки вызова, `bump` на `memory`.
+
+Прогоны:
+- `go build ./... && go vet ./...` — зелёные;
+- `go test -short -count=1 ./...` — все ok;
+- `go test -tags e2e ./test/e2e/...` — ok;
+- `golangci-lint run ./...` — 0 issues;
+- `mvctl contracts check` — зелёный, `mvctl env check` — 73 переменные;
+- `go run ./cmd/mvctl laws show` — exit 0;
+- `make test` — ok;
+- `gitleaks dir` по новым и изменённым файлам — чисто.
+
+Мутанты — в копии дерева в scratch, без `-overlay`: контрольный первым убит. Два выживших (M33, M38) закрыты тестами. M31 без `.golangci.yml` в копии прошёл линтер — копия пересобрана с конфигом, и depguard стал красным. Итог 39 из 39, копия удалена по точному пути.
+
 <!-- dev-log T-459 -->
 ### architect#2 · T-459 · документы EPIC-003 под C-07 v1.5 и решения приёмок T-210, T-202 · 2026-09-13
 
