@@ -52,6 +52,23 @@
       "required": ["id", "level", "blueprint"],
       "additionalProperties": false
     },
+    "EventRef": {
+      "type": "object",
+      "description": "Reference to an event: its id and, when the publisher knows it, its type (contracts.md C-07 v1.3). Added for new fields; the inline copies of the same shape in older schemas are left as they are.",
+      "properties": {
+        "event": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "type": { "type": "string", "minLength": 1 }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["event"],
+      "additionalProperties": false
+    },
     "Timestamp": {
       "type": "string",
       "format": "date-time",
