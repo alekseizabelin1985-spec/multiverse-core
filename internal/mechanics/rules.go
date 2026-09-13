@@ -750,9 +750,9 @@ func (r *Rules) Excluded(a Actor) bool {
 // Invariants are the laws in force for this rule set, by identifier, in the
 // order of the register (C-03, §5.7).
 //
-// Every Check is nil today: the identifiers, the places they are enforced in
-// and the contract test that compares them with laws/dark-forest-world.v1.yaml
-// come with the foundation, the logic comes with EPIC-002 (T-054). A caller
-// must therefore treat a nil Check as "not checked here", which State does
-// anyway for inv-07 and inv-08 and will keep doing afterwards.
+// The laws of a solo fight — inv-01, inv-02, inv-03, inv-09, inv-10 — carry a
+// Check (T-054); the laws of a group — inv-04, inv-05, inv-06 — get theirs with
+// increment I2 (T-066), and inv-07 and inv-08 never do, because they are decided
+// against the journal. A caller must therefore treat a nil Check as "not checked
+// here".
 func (r *Rules) Invariants() []Invariant { return slices.Clone(r.invariants) }

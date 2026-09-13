@@ -157,9 +157,11 @@ func TestLootAndDocumentAreCopies(t *testing.T) {
 	}
 }
 
-// TestInvariantsRegister pins what the foundation promises about the laws: ten
-// identifiers, in order, every one of them nameable from a rules file, and no
-// check implemented yet (T-054).
+// TestInvariantsRegister pins what the register promises about the laws: ten
+// identifiers, in order, every one of them nameable from a rules file, and a
+// check exactly where one is written (T-054): the five laws of a solo fight
+// have one, the three laws of a group wait for I2 (T-066), and the two laws of
+// the journal never get one.
 func TestInvariantsRegister(t *testing.T) {
 	r := load(t)
 
@@ -167,15 +169,36 @@ func TestInvariantsRegister(t *testing.T) {
 	if len(ids) != 10 {
 		t.Fatalf("%d invariants in the register, want 10", len(ids))
 	}
-	for i, inv := range r.Invariants() {
+	withCheck := map[string]bool{
+		InvDeadDoesNotAct:     true,
+		InvHPInRange:          true,
+		InvOneTrophyPerNPC:    true,
+		InvGroupPosition:      false, // I2, T-066
+		InvGroupSize:          false, // I2, T-066
+		InvOneScope:           false, // I2, T-066
+		InvHPMatchesDecision:  false, // the journal, for good
+		InvNoDecisionsUnasked: false, // the journal, for good
+		InvRespawnTTL:         true,
+		InvOnePosition:        true,
+	}
+	inForce := r.Invariants()
+	if len(inForce) != len(withCheck) {
+		t.Fatalf("%d invariants in force, want %d", len(inForce), len(withCheck))
+	}
+	for i, inv := range inForce {
 		if inv.ID != ids[i] {
 			t.Errorf("invariant %d is %s, want %s: the order of the register is the order in force", i, inv.ID, ids[i])
 		}
 		if len(inv.Where) == 0 {
 			t.Errorf("%s says nowhere it is enforced", inv.ID)
 		}
-		if inv.Check != nil {
-			t.Errorf("%s has a check: the logic belongs to EPIC-002 T-054", inv.ID)
+		want, known := withCheck[inv.ID]
+		if !known {
+			t.Errorf("%s is not one of the ten laws of MVP-1", inv.ID)
+			continue
+		}
+		if have := inv.Check != nil; have != want {
+			t.Errorf("%s has a check: %v, want %v", inv.ID, have, want)
 		}
 	}
 }
