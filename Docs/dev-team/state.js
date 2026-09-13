@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:35:35+03:00",
+  "updatedAt": "2026-09-13T20:39:02+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2890,9 +2890,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -9909,6 +9909,76 @@ window.DEVTEAM_STATE =
       "action": "Ревью #1 провайдера openai_compat",
       "startedAt": "2026-09-13T19:57:19+03:00",
       "finishedAt": "2026-09-13T20:35:35+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "Ревью #2",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Просмотр итерации 2",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-208",
+      "action": "Приёмка",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-222",
+      "action": "Ревью #1",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-209",
+      "action": "Ревью #1",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-463",
+      "action": "Ревью #1",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Владение, инварианты, дедуп",
+      "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -13541,6 +13611,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Итоги и решения по вопросам исполнителей: T-305 итерация 2 (пакет в памяти по player_id+action_key, повтор с теми же id, WithoutCancel; остаточный риск рестарта — КД §5.5) → ревью #2. T-208 ревью #1 — принять 0/0/1/2 (Mi-1 тест прокси зависит от порядка тестов) → приёмка. T-458 итерация 2 (метка InR"
+    },
+    {
+      "at": "2026-09-13T20:39:02+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Push после контрольного слияния H: develop 81eb173..020f192, epic/EPIC-001 3f34195..242d0f8, EPIC-002 281348a..862c8c0, EPIC-003 b9a169c..4c8da51, EPIC-004 d121a99..91867b0; gitleaks по 7 коммитам — no leaks found."
+    },
+    {
+      "at": "2026-09-13T20:39:02+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Запущены: ревью #2 T-305 (code-reviewer#2 TEAM-3), повторный просмотр T-458 (system-architect#1, заменяет ревью #2), приёмка T-208 (tech-lead#2, changelog 0.3.10), ревью #1 T-222 (code-reviewer#3 TEAM-2), T-209 (code-reviewer#1 TEAM-2), T-463 (code-reviewer#1 TEAM-1); разработка T-056 (developer#2 T"
     }
   ],
   "blockers": [],
