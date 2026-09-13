@@ -14,9 +14,9 @@
     "deleteMergedBranches": true
   },
   "parallelism": {
-    "maxTeams": 3,
-    "maxAgentsPerRole": 3,
-    "maxParallelAgents": 12
+    "maxTeams": 2,
+    "maxAgentsPerRole": 2,
+    "maxParallelAgents": 2
   },
   "models": {
     "profile": "balanced",

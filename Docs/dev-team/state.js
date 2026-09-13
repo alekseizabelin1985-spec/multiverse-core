@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:02:59+03:00",
+  "updatedAt": "2026-09-13T15:22:08+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2988,7 +2988,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-448",
           "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -8502,7 +8502,7 @@ window.DEVTEAM_STATE =
       "task": "T-448",
       "action": "Итерация 2: граница 2^53−1, тесты решений, форма Change",
       "startedAt": "2026-09-13T14:35:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8522,7 +8522,7 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race)",
       "startedAt": "2026-09-13T14:36:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -8562,7 +8562,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Итерация 2: ADR-029 ярлыки вызова, замечания ревью",
       "startedAt": "2026-09-13T14:40:05+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "developer#1",
@@ -8592,7 +8592,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Итерация 2: /data в образе, 503 с условиями, замечания ревью",
       "startedAt": "2026-09-13T14:45:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8602,7 +8602,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Приёмка T-201 shared/agent v2",
       "startedAt": "2026-09-13T14:52:04+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8612,7 +8612,7 @@ window.DEVTEAM_STATE =
       "task": "T-054",
       "action": "Приёмка T-054 инварианты соло",
       "startedAt": "2026-09-13T14:56:38+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8622,7 +8622,7 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Ревью #1: compose-lint без окружения CI",
       "startedAt": "2026-09-13T14:56:38+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8632,7 +8632,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "Приёмка T-449 документы пакета решений",
       "startedAt": "2026-09-13T15:01:32+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -8642,7 +8642,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Ревью #2: итерация 2 runtime/раскладка",
       "startedAt": "2026-09-13T15:01:32+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:22:08+03:00"
     }
   ],
   "events": [
@@ -11417,6 +11417,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-450 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/5/5. Паритет bash/pwsh на 198 URL побайтно, облачный гейт устойчив к враждебным входам. Ma-1 точка снимается до проверки октетов: 127.0.0.1. и 10.0.0.1. — local вопреки решению архитектора (cloud). Mi-1 нет строк числовых записей хоста; Mi-2 \\"
+    },
+    {
+      "at": "2026-09-13T15:22:08+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · итерация 2 (TEAM-1/developer#3): Ma-1 граница |x| ≤ 2^53−1 (включая 2^53+1 через JSON → invalid_op), Mi-1 три именованных теста решений, Mi-2 только HasOld/HasNew и ошибка MarshalJSON, N-1…N-3, пп. 1–6 решения system-architect (entity.created.proposal_id обязателен, JSONCompatible для attrib"
+    },
+    {
+      "at": "2026-09-13T15:22:08+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Лимит сессии API (HTTP 429, сброс 15:20 МСК): восемь агентов прерваны — приёмки T-201, T-054, T-449; итерации T-303 и T-439 (ADR-029); T-454; ревью T-455 и T-446 #2. Незаконченные правки остаются незакоммиченными в .worktrees/T-303, T-439, T-454 (и, возможно, записи приёмок в T-201/T-054/T-449) — пр"
     }
   ],
   "blockers": [],
