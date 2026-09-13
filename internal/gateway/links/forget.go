@@ -138,5 +138,8 @@ func (s *SQLite) deleteLink(ctx context.Context, link Link) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("links: forget: delete: %w", err)
 	}
+	if n > 0 {
+		s.deletions.Add(1)
+	}
 	return n > 0, nil
 }

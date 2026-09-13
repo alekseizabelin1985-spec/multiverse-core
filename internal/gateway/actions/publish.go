@@ -84,6 +84,15 @@ func BuildRestProposal(action eventbus.Event, ch readmodel.CharacterState) event
 	return proposal(action, ch, CauseRest, entity.Op{Op: entity.OpSet, Path: entity.AttrHP, Value: ch.HPMax})
 }
 
+// ProposalID is the proposal_id of the proposal of move or rest that the
+// action event actionEventID makes for the character playerID. The consumer
+// matches a refusal of State against it to find the player of the action
+// (T-307): the id is derived from the action and the character alone.
+func ProposalID(actionEventID, playerID string) string {
+	action := eventbus.Event{ID: actionEventID, Meta: eventbus.Meta{CorrelationID: actionEventID}}
+	return eventbus.Derive(action, TypeUpdateProposed, contracts.SourceGateway, nil, eventbus.WithCauseID(playerID)).ID
+}
+
 // proposal derives an atomic entity.update.proposed from the action, so that
 // the fact of State shares the correlation of the action. Its id comes from
 // the action and the character (C-01 v1.4), and it is the proposal_id too. The

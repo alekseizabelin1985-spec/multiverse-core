@@ -111,6 +111,10 @@ type World struct {
 	Version     int64
 	LawsVersion string
 	Locale      string
+	Weather     string
+	TimeOfDay   string
+	// Day is nil while the world has no day yet.
+	Day *int
 }
 
 // Region is the projection of a region (data-model.md §3.2).
@@ -256,11 +260,15 @@ func (m *Model) Region(worldID, regionID string) (Region, bool) {
 	if !ok || e.WorldID != worldID {
 		return Region{}, false
 	}
+	return regionOfEntity(e), true
+}
+
+func regionOfEntity(e *entity.Entity) Region {
 	r := Region{ID: e.ID, WorldID: e.WorldID, Name: e.Name, Version: e.Version}
 	r.Description, _ = e.Description()
 	r.NPCIDs, _ = e.NPCIDs()
 	r.PlayersPresent, _ = e.PlayersPresent()
-	return r, true
+	return r
 }
 
 // Worlds returns every world the projection knows, by id.
@@ -272,13 +280,48 @@ func (m *Model) Worlds() []World {
 		if e.Type != entity.TypeWorld {
 			continue
 		}
-		w := World{ID: e.ID, Name: e.Name, Version: e.Version}
-		w.LawsVersion, _ = e.LawsVersion()
-		w.Locale, _ = e.Locale()
-		worlds = append(worlds, w)
+		worlds = append(worlds, worldOfEntity(e))
 	}
 	slices.SortFunc(worlds, func(a, b World) int { return cmp.Compare(a.ID, b.ID) })
 	return worlds
+}
+
+// World returns a world.
+func (m *Model) World(id string) (World, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entityOf(id, entity.TypeWorld)
+	if !ok {
+		return World{}, false
+	}
+	return worldOfEntity(e), true
+}
+
+func worldOfEntity(e *entity.Entity) World {
+	w := World{ID: e.ID, Name: e.Name, Version: e.Version}
+	w.LawsVersion, _ = e.LawsVersion()
+	w.Locale, _ = e.Locale()
+	w.Weather, _ = e.Weather()
+	w.TimeOfDay, _ = e.TimeOfDay()
+	if day, ok := e.Day(); ok {
+		w.Day = &day
+	}
+	return w
+}
+
+// Regions returns the regions of a world, by id.
+func (m *Model) Regions(worldID string) []Region {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var regions []Region
+	for _, e := range m.entities {
+		if e.Type != entity.TypeRegion || e.WorldID != worldID {
+			continue
+		}
+		regions = append(regions, regionOfEntity(e))
+	}
+	slices.SortFunc(regions, func(a, b Region) int { return cmp.Compare(a.ID, b.ID) })
+	return regions
 }
 
 // Group returns a group.
