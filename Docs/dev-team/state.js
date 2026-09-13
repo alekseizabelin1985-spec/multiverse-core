@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:40:47+03:00",
+  "updatedAt": "2026-09-13T22:42:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4544,7 +4544,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-306",
           "title": "characters, worlds/players, session/turns, C-10",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
@@ -10134,7 +10134,7 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "characters, sessions, turns",
       "startedAt": "2026-09-13T21:44:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:42:44+03:00"
     },
     {
       "instance": "tech-writer#1",
@@ -10274,6 +10274,16 @@ window.DEVTEAM_STATE =
       "task": "T-464",
       "action": "Переменные в compose",
       "startedAt": "2026-09-13T22:40:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-306",
+      "action": "Ревью #1 персонажей, сессий, ходов",
+      "startedAt": "2026-09-13T22:42:44+03:00",
       "finishedAt": null
     }
   ],
@@ -14141,6 +14151,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-464 начата (devops-engineer#1): MV_STATE_WORLDS у core и MV_TELEGRAM_ACTION_KEY_SALT/COMMANDS_PER_MIN у бота в compose с умолчаниями манифеста; ветка task/T-464-compose-env-passthrough от 55ec4c4."
+    },
+    {
+      "at": "2026-09-13T22:42:44+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-306 выполнена TEAM-3/developer#1: characters (POST /v1/characters — 201/202 creating, снятие со связки через 60 с или при отказе State, идемпотентность, повтор с тем же proposal_id; GET /v1/players/{id}, GET /v1/worlds), session (открытие первым действием, простой 30 мин, started↔ended с откатом п"
+    },
+    {
+      "at": "2026-09-13T22:42:44+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам T-306: события C-10 на шине несут только обязательные поля схемы с идентификаторами (вариант а) — R2-M-1 A относится к файлам ops/metrics в Git, обезличивание при записи отчёта (DoD T-131/T-132); фикстура аналитики в internal/gateway/testdata/analytics принимается; с"
     }
   ],
   "blockers": [],
