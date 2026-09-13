@@ -290,3 +290,35 @@
 - **Остаточный риск.** Перезапуск процесса между публикациями пакета теряет пакет в памяти, и повтор публикует действие заново с новым id. Закреплено тестом `TestARestartBetweenPublicationsBuildsTheActionAgain`. Оценка риска — в карточке. Правило для КД §5.5 вносит architect#3.
 - **Проверки.** `go build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl env check`, `contracts check`, `make test` — зелёные. Мутанты R2, R3, R6–R9 ревьюера и 9 новых прогнаны в копиях дерева: контрольный зелёный, остальные красные. Копии удалены по точным путям.
 - Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
+
+### developer#2 · T-311 · `flow` и `render` · 2026-09-13
+
+Ветка `task/T-311-bot-flow-render` от ce7b35a (кончик эпика с T-310, T-318, правилом depguard `cmd-telegram-bot`, contracts v0.14). Подробности — раздел «Выполнение (developer)» в `tasks/T-311.md`. Статус — `review`.
+
+- **Сделано.**
+  - `cmd/telegram-bot/internal/render`: `notice.go` — четыре константы T-318 §1, перенесены программой, 2 341 символ; `help.go`; тексты онбординга и `/forget`; `ErrorText` по кодам КД §10.5; клавиатуры; `Delivery` с пометками нарратива и нарезкой больше 4 096 единиц UTF-16.
+  - `cmd/telegram-bot/internal/flow`: FSM онбординга, TTL 15 мин на `shared/clock`; кэш `chat_id → player_id` на 1 ч; игровые команды с `action_key`; `/forget` на любом шаге; `Reset`, `StepOf`.
+  - `internal/gateway/client`: `forget_incomplete` не повторяется, `APIError.RetryAfter`, doc `ForgetResult` без совета про `Resolve` (C-08 v1.5, T-456).
+  - `sender.ReplyPolicy` (M-2 ревью T-310).
+  - `access/gate_test.go` на `client.New` (ревью T-310).
+- **Решения.**
+  - Согласие ставится только кнопкой в `awaiting_consent`, а этот шаг — только после успешной отправки уведомления.
+  - После `consent` — повторный `resolve`.
+  - Отметка `forget_incomplete` по чату различает «конец того же забвения» и «нечего удалять».
+  - Golden-тексты — литералы в тестах; полный текст уведомления — длина и SHA-256.
+  - Мутанты текста из DoD — постоянный тест.
+- **Отклонения.**
+  - Р-2 A, Р-3 A, Mi-5 против КД §10.3 — по решениям оркестратора.
+  - Свободный текст в `ready` → список команд по US-008, а не `say` по КД.
+  - Клиент не повторяет `forget_incomplete` — по C-08 v1.5, а не по строке DoD из приёмки T-303.
+  - TTL — константы, без переменных окружения.
+  - Облако (T-320) и `/group` (T-353) не делались.
+- **Мутанты.** Копия в scratch, без `-overlay`, контрольный первым. 15 мутантов `flow`, `render`, клиента и `sender`: 14 красных. M4a выжил в первом проходе — тест усилен шлюзом и отправителем, не смотрящими на `ctx`, теперь красный. Выжил M4b: проверка `ctx` в `reply` дублирует `Handle` и `fail`. Копия и скрипты удалены по точным путям.
+- **Проверки.**
+  - `go build ./... && go vet ./...` — 0.
+  - `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/...` — ok; `updates` запустился напрямую, без `Access is denied`.
+  - `golangci-lint run ./...` — 0 issues.
+  - `mvctl env check` — 0.
+  - `make test` — exit 0, без `-race` (нет cgo); покрытие `flow` 87,1 %, `render` 92,1 %.
+- **Открытые вопросы.** КД §10.3 «текст → say» против US-008. Одна функция правила имени для бота и T-306. Строка DoD о повторе `forget_incomplete` клиентом.
+- Telegram API, Docker, стенд `:8888`, `.env` не трогал. `shared/*`, `.golangci.yml`, `go.mod`, контракты и КД не менял. Не коммитил.

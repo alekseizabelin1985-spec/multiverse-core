@@ -1,10 +1,11 @@
-// Package client is the Go client of the gateway HTTP API (C-08 v1.3), shared
+// Package client is the Go client of the gateway HTTP API (C-08 v1.5), shared
 // by the Telegram bot and the CI harness. The wire types are those of
 // internal/gateway/api.
 //
 // Every operation of C-08 is idempotent by construction or by action_key, so a
 // network error or 503 is repeated with the same body, and therefore with the
-// same action_key (component §6). A 4xx is never repeated.
+// same action_key (component §6). A 4xx is never repeated, and neither is
+// 503 forget_incomplete (C-08 v1.5).
 package client
 
 import (
@@ -105,6 +106,9 @@ type APIError struct {
 	Message   string
 	Details   map[string]any
 	RequestID string
+	// RetryAfter is the Retry-After header in whole seconds, 0 when the
+	// answer has none (rate_limited, forget_incomplete).
+	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -140,10 +144,11 @@ func (c *Client) Consent(ctx context.Context, req api.ConsentRequest) (api.Conse
 // The end state of /forget does not depend on how often it is sent: no link,
 // no character bound to the account. The answer does. When an attempt deleted
 // the link but its answer was lost, the repeat finds nothing and says
-// {deleted: false}. So Deleted=false with Repeated=true means "unknown whether
-// this call deleted anything": the caller must not tell the player "nothing to
-// delete". It checks the end state with Resolve (character_status none) and
-// reports the data as gone (T-311, UC-031, SEC-26).
+// {deleted: false}. So Deleted=false with Repeated=true is the end of the same
+// /forget: the caller tells the player the link is gone, not "nothing to
+// delete", and does not check it with Resolve. Resolve of an account without a
+// link inserts a pending_consent row with the external id, so such a check
+// would write the forgotten id back into links.db (T-311, SEC-04/05, US-009).
 type ForgetResult struct {
 	api.ForgetResponse
 	Repeated bool
@@ -153,6 +158,12 @@ type ForgetResult struct {
 // repeated like the other calls, because a /forget that silently did not
 // happen is worse than an ambiguous answer; the ambiguity is reported in
 // ForgetResult.Repeated.
+//
+// 503 forget_incomplete is the exception: the link is deleted, its wipe from
+// links.db is not confirmed, and every attempt under the reader that blocks it
+// holds the only connection of links.db for up to 5 s. The error is returned
+// at once with APIError.RetryAfter, and the caller asks the player to repeat
+// later (C-08 v1.5).
 func (c *Client) Forget(ctx context.Context, platform, externalID string) (ForgetResult, error) {
 	var out ForgetResult
 	req := api.ForgetRequest{ExternalPlatform: platform, ExternalID: externalID}
@@ -287,7 +298,7 @@ func (c *Client) call(ctx context.Context, req request, onSuccess func(status in
 	policy := c.policy()
 	for attempt := 0; ; attempt++ {
 		status, header, data, err := c.once(ctx, req, payload)
-		if c.repeat(ctx, req, policy, attempt, status, err) {
+		if c.repeat(ctx, req, policy, attempt, status, err) && !forgetIncomplete(status, data) {
 			if werr := c.pause(ctx, policy.Pause(attempt)); werr != nil {
 				return status, attempt + 1, fmt.Errorf("gateway %s %s: stopped before repeat %d (last attempt: %s): %w",
 					req.method, req.path, attempt+1, outcome(status, err), werr)
@@ -321,6 +332,16 @@ func (c *Client) repeat(ctx context.Context, req request, policy Backoff, attemp
 		return false
 	}
 	return err != nil || status == http.StatusServiceUnavailable
+}
+
+// forgetIncomplete says whether an answer is 503 forget_incomplete, which is
+// not repeated (C-08 v1.5).
+func forgetIncomplete(status int, data []byte) bool {
+	if status != http.StatusServiceUnavailable {
+		return false
+	}
+	var body api.ErrorResponse
+	return json.Unmarshal(data, &body) == nil && body.Error.Code == api.CodeForgetIncomplete
 }
 
 func (c *Client) policy() Backoff {
@@ -396,7 +417,7 @@ func (c *Client) timers() clock.Timers {
 // proxy page, an empty 502) still yields an APIError with the status, so the
 // caller branches on one type.
 func apiError(status int, header http.Header, data []byte) *APIError {
-	e := &APIError{Status: status, RequestID: header.Get(api.HeaderRequestID)}
+	e := &APIError{Status: status, RequestID: header.Get(api.HeaderRequestID), RetryAfter: retryAfter(header)}
 	var body api.ErrorResponse
 	if err := json.Unmarshal(data, &body); err == nil && body.Error.Code != "" {
 		e.Code, e.Message, e.Details = body.Error.Code, body.Error.Message, body.Error.Details
@@ -404,6 +425,21 @@ func apiError(status int, header http.Header, data []byte) *APIError {
 	}
 	e.Message = http.StatusText(status)
 	return e
+}
+
+// MaxRetryAfter bounds a Retry-After read from an answer, so that a huge
+// value does not overflow time.Duration (N-3 of review #1 of T-311).
+const MaxRetryAfter = 24 * time.Hour
+
+// retryAfter reads Retry-After as the gateway writes it, in whole seconds
+// (C-08 v1.5); the HTTP-date form and a value that is not a positive number
+// read as 0, and a value above MaxRetryAfter reads as MaxRetryAfter.
+func retryAfter(header http.Header) time.Duration {
+	secs, err := strconv.Atoi(strings.TrimSpace(header.Get(api.HeaderRetryAfter)))
+	if err != nil || secs <= 0 {
+		return 0
+	}
+	return time.Duration(min(secs, int(MaxRetryAfter/time.Second))) * time.Second
 }
 
 func decodeOn(out any, statuses ...int) func(int, []byte) error {
