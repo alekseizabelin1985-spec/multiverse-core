@@ -139,6 +139,14 @@ var (
 		OneOf("agent", "legacy"))
 	LawsBreachPhase = Declare("MV_LAWS_BREACH_PHASE", "false",
 		"enable the law breach phase (ADR-008); off for MVP-1", IsBool())
+	// LawsDir is read by mvctl laws and, once the context laws is wired, by
+	// cmd/multiverse; internal/laws reads no environment and takes the
+	// directory from its caller (FileSource.Dir). The
+	// default is relative on purpose, like rules/ of mechanics: a process
+	// started from the repository root finds laws/ there.
+	LawsDir = Declare("MV_LAWS_DIR", "laws",
+		"directory of the laws documents <world>.v<N>.yaml (C-12, ADR-008); "+
+			"relative to the working directory of the process")
 	// SwarmFake belongs to the process, not to a context: cmd/multiverse reads
 	// it when it builds the context swarm, because at I1-α there is no swarm
 	// context to read it in (ADR-001 addendum p. 8). It leaves with the hook

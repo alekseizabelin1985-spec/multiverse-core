@@ -2939,3 +2939,81 @@ Ma-1 закрыт: ADR-029 оформлен, КД §10.2/§13.4.2 и DoD T-203 �
 **Принять.** Critical 0 · Major 0 · Minor 6 · Nit 4.
 
 Код соответствует КД §7.3/§9.3 и DoD T-210: окна на `clock.NewManual`, восстановление через `Journal` равно живому прогону, учёт идемпотентен по id, форма отказа проходит схему. Сборка, `vet`, тесты и линтер зелёные, из 7 неэквивалентных мутантов убиты 5 (M3 — вероятностно), выжили M1 и M2. Mi-4 и N-1 закрываются правкой тестов и dev-log без повторного ревью: при приёмке tech-lead#2 проверяет, что M1 и M2 убиты. Mi-1 (формулировка), Mi-2, Mi-3, Mi-5, Mi-6 — решения tech-lead#2 и строки DoD T-212/T-227/T-250. Кода T-210 они не меняют, кроме опционального `SetBackgroundCap` из Mi-5.
+
+## T-205 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-2)
+
+### Границы ревью
+
+Ветка `task/T-205-laws`, папка `.worktrees/T-205`, база `586ded3`. Коммитов у задачи нет, ревьюировалось рабочее дерево:
+- новые файлы: `laws/dark-forest-world.v1.yaml`, `internal/laws/{document,source,strain,laws}.go` с тестами и `deps_test.go`, `cmd/mvctl/internal/laws/{laws,laws_test}.go`;
+- изменённые файлы: `cmd/mvctl/commands_swarm.go` (строка `laws`), `cmd/mvctl/main_test.go` (две строки), `shared/env/vars.go` и `.env.example` (`MV_LAWS_DIR`, CRLF сохранён), статус T-205 в `tasks.md`, карточка, запись `<!-- dev-log T-205 -->`.
+
+Файлы владения EPIC-003 (`internal/laws/**`, `laws/**`, `cmd/mvctl/internal/laws/**`, `commands_swarm.go`) — в пределах карты. Три файла требуют обязательного просмотра tech-lead#1 (`ownership.md` §3 п. 4 (в) и строка 9): `shared/env/vars.go`, `.env.example` (переменная объявлена тем же изменением, которое вводит её чтение) и `cmd/mvctl/main_test.go`. Правка `main_test.go` вынужденная и минимальная: без неё `TestReservedNamesAreHeld` падает на реализованной команде. `registry_swarm.go`, `ownership.go`, схемы и `.golangci.yml` не тронуты.
+
+Эталоны: раздел T-205 `tasks.md:147`–`:162`; design §3.1 A7 `:72`, `:222`; КД `swarm-llm-laws.md` §10.4 `:600`, §12.1–§12.3 `:634`–`:676`; ADR-012 п. 5; `contracts.md` C-02 v1.5 (`:347` — `mvctl laws bump` с `cause=author`, детерминированные `proposal_id`), C-12 v1.1 `:683`, решение 1f `:34`; схема `world.laws.changed.v1.json`; `registry_swarm.go:81`, `registry_state.go:13`; `ownership.go` (строки `author`/`system`); `internal/mechanics/invariants.go:27`–`:68`.
+
+### Прогоны
+
+- `go build ./... && go vet ./...` — зелёные.
+- `go test -short -count=1 ./internal/laws/... ./cmd/mvctl/...` — все пакеты ok. `-race` в этой среде не запускается (`CGO_ENABLED=0`), потокобезопасность разобрана по коду (ниже).
+- `golangci-lint run ./...` — 0 issues.
+- `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 схем; `env check` — 73 переменные.
+- `go run ./cmd/mvctl laws show` из корня — exit 0, v1, 13 законов, «current according to the files». `mvctl help` — у `laws` снята только пометка `[reserved, EPIC-003]`, остальные строки не изменились.
+- Из каталога `cmd/` (относительный `MV_LAWS_DIR=laws`) `laws show` и `laws bump` дают находку `[source]` и exit 1, без паники → N-3.
+- Мутанты и зонды — в копии дерева `scratch/t205rev-tree` (`go.mod`, `go.sum`, `.golangci.yml`, `cmd`, `internal`, `shared`, `schemas`, `laws`, `rules`, `testdata`, `config`), без `-overlay`. Копия до мутаций зелёная, контрольный мутант первым:
+
+| # | Мутант / зонд | Итог |
+|---|---|---|
+| M0 | контрольный: `effective_from.round_boundary: false` | убит (`TestBumpPublishesTheChangeAndTheProposal`) |
+| M1 | в `Bump` публикации переставлены: сначала предложение, потом `world.laws.changed` | убит (`TestBumpSaysWhatWasPublishedWhenThePublicationFails`) |
+| M2 | из `newestApproved` снята ветка «сломанная версия `except` пропускается» (`laws.go:295`–`:297`) | **выжил**: ветка недостижима → N-1 |
+| M3 | `Health`: признак `laws` берётся по последнему документу, а не «есть хоть один `unknown_check`» | **выжил** → Mi-4 |
+| M4 | `New` без `slices.Clone(checks)` | выжил, эквивалентный: срез вызывающего никто не меняет |
+| M5 | `Handle` не заполняет `Changed.World` | убит (2 теста) |
+| M6 | `bumpBase` без отказа «мир уже работает под этой версией» | убит (`TestBumpRefuses`) |
+| M8 | `Parse` с `KnownFields(false)` | убит (`TestParseRejects`) |
+| З1 | `Bump` с `created_at` в форме `+03:00`, `+00:00`, `2026-09-13 00:00:00`, `2026-09-13` (сравнение `reflect.DeepEqual` по `time.Time` с зоной) | все четыре проходят, ложного отказа «differs from» нет |
+| З2 | импорт `internal/mechanics` в `cmd/mvctl/internal/laws`; импорт `internal/laws` в `cmd/mvctl/internal/storage` | оба красные в depguard: первый по правилу `internal-laws`, второй по `internal-unlisted` → Mi-3 |
+
+Зонды удалены, копия удаляется по точному пути.
+
+### Разбор пунктов особого внимания
+
+1. **`Bump`, реестр и владение.** `world.laws.changed` строится через `NewRoot(TypeChanged, mvctl, world, nil, system, …)`, `entity.update.proposed` — через `Derive` от него (та же трасса, `actor_kind=system` унаследован, `meta.agent` нет). `mvctl` есть в `Publishers` обоих типов (`registry_swarm.go:82`, `registry_state.go:14`). Предложение одной сущности мира, `set laws_version`, `atomic=true`, `cause=author`, `proposal_id=laws:{world}:{version}`. Это соответствует C-02 v1.5 `:347` (предлагающий `author` при `source=mvctl`) и строкам `author`/`system` в `ownership.go` (любой тип, любой путь, причины `init|author`). Оба события проходят схемы на `membus` с `contracts.Default()`. `expected_version` для `laws_version` в C-02 не требуется. Порядок «сначала объявление, потом предложение» правильный: при обратном порядке State перевёл бы мир на версию, которую `core` ещё не перечитал. При сбое второй публикации ошибка называет id уже опубликованного события, а `mvctl` печатает только принятые шиной id (`recordingBus` пишет после успешного `Publish`; тест проверяет ровно один id). Повторный `bump` — путь восстановления: предложение State гасит по `proposal_id`, перечитывание идемпотентно. Сам повтор приемлем, но его семантика не описана → Mi-2.
+2. **Отклонения.**
+   - (1) `check` = id инварианта — верно: КД §10.4 и ADR-012 п. 5 нормативны, пример §12.1 устарел; в бэклог КД предложение уже есть.
+   - (3) `Bump` объявляет только документ каталога, совпадающий с `--from`. Принимаю: иначе объявлялась бы версия, которой нет у `core`. Последствие для развёртывания: `mvctl` на хосте должен видеть тот же `laws/`, что и контейнер `core` (бэклог про образ уже есть).
+   - (5) `Current` при незагружаемой новой версии — ошибка. В рантайме роя с `WorldVersions` это срабатывает только для мира без сущности (до bootstrap): версия из State читается через `Get` и на соседние сломанные файлы не смотрит. Для `mvctl laws show` это правильная находка. Принимаю.
+3. **`KnownChecks()` дублирует id механики.** Список совпадает с `invariants.go:27`–`:36`; `TestLawsSeeNoOtherContext` и depguard `internal-laws` границу держат (мутант M31 разработчика, З2). Риск расхождения закрывает T-238, но DoD T-238 `:855` сверяет id документа, а не `KnownChecks()`, и не говорит, откуда рой берёт `Config.Checks` → риск и предложение в бэклог ниже (inv-07/inv-08 держат `Check == nil` навсегда).
+4. **`Watch` и потокобезопасность.** Неизменяемые после `New` поля: `source`, `versions`, `checks`, `bus`, `log`. `worlds` и `problems` читаются и подменяются под `mu` (сборка — вне блокировки, подмена — целиком). `watchers` — под `watchMu`, отправка неблокирующая, `Warn` при переполнении. `Strain` — свой мьютекс, снимок — копия. `Get`/`newestApproved` отдают `clone`. Гонок данных по коду нет. Два замечания вкуса — N-4, N-5.
+5. **CLI.** `mvctl help` меняется только снятием пометки; правка `main_test.go` минимальна. Относительный `MV_LAWS_DIR` из другого каталога даёт понятную находку `[source]`, но сообщение дублирует префикс → N-3.
+6. **Время и окружение.** `time.Now`, `os.Getenv` и таймеров нет. `time` в CLI — только константа `bumpTimeout` для `context.WithTimeout`, это разрешено. Окружение читается через `env.WorldID`, `env.LawsDir`, `env.Bus`, `env.KafkaBrokers`. Время события ставит `eventbus.NewRoot`.
+
+### Замечания
+
+| # | Уровень | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `internal/laws/laws.go:270`–`:279`, `:240`–`:255`, `:385`–`:410` | **Окно между фактом State и перечитыванием.** `world.laws.changed` идёт в `world_events`, а `entity.updated{laws_version: vN+1}` — в `system_events`; порядок между топиками и группами не гарантирован. Если `WorldView` роя увидит новую версию раньше, чем `Handle` перечитает каталог, `Current(world)` вернёт `ErrUnknownVersion`: файл `vN+1` появился после старта `core`. На это время промпты и страж мира получают ошибку, хотя документ лежит на диске. | Одно из двух (решение tech-lead#2): (а) в `CurrentFrom`, когда `WorldVersions` называет версию, которой у хранителя нет (именно `ErrUnknownVersion`, не ошибка загрузки), один раз вызвать `Reload` и повторить `Get`; тест — `fakeVersions` переключён на `v2` после записи файла, без `Handle`, `Current` отдаёт `v2`; (б) строка DoD в T-234/T-228: `ErrUnknownVersion` от `Current` — временная ошибка, агент ждёт `Watch()` и повторяет. |
+| Mi-2 | Minor | `internal/laws/laws.go:417`–`:426`, `:510`–`:525`; `cmd/mvctl/internal/laws/laws.go:240` | **Повтор `bump` не описан.** CLI строит хранителя без `WorldVersions`, поэтому отказ «already runs under» из `mvctl` недостижим. Повтор после успешного `bump` публикует второй `world.laws.changed` с новым id и прежним `version_from` из файлов (`v1 → v2`, хотя мир уже на `v2`). Для State это безвредно (дедупликация по `proposal_id`), для роя тоже (перечитывание идемпотентно). Но потребитель, который ведёт историю законов (`memory` в `Consumers`), получит дубль перехода, и в коде и документах нигде не сказано, что так задумано. | В комментарии `Bump` и в карточке («Отклонения», п. 13) написать: повтор — штатный путь восстановления после частичного сбоя; `world.laws.changed` идемпотентно по `(world, laws.version_to)`, потребители гасят повтор по этой паре; `version_from` у `mvctl` берётся из файлов. Предложить system-architect#1 строку в C-12 «Гарантии» (бэклог). |
+| Mi-3 | Minor | `tasks/T-205.md:106`; `.golangci.yml:163`–`:175`, `:282`–`:291` | **Неверное утверждение в бэклоге.** «`cmd/mvctl` видит оба пакета» — неправда для `cmd/mvctl/internal/laws`: glob `**/internal/laws/**` правила `internal-laws` накрывает и пакет CLI, импорт `internal/mechanics` из него красный (зонд З2). Любой другой `cmd/mvctl/internal/*` попадает под `internal-unlisted` и не может импортировать даже `internal/laws`. Сейчас код зелёный только потому, что имя каталога совпало с glob. | Поправить пункт бэклога: `mvctl laws check` потребует правила depguard для `cmd/mvctl/internal/**` (EPIC-001, tech-lead#1) либо сверки в T-238. Отдельной строкой бэклога EPIC-001: правила `internal-*` по glob `**/internal/<ctx>/**` задевают `cmd/*/internal/<ctx>`. |
+| Mi-4 | Minor | `internal/laws/laws.go:353`–`:358`; `laws_test.go:186`–`:222` | Признак `/health` `laws: unknown_check` — пункт DoD, его потребляет T-239. Правило «хоть один `unknown_check` — значит `unknown_check`» не закреплено тестом: мутант M3 («решает последний документ») выжил. | Тест с двумя проблемами: `v2` с неизвестным `check` и следом по имени `v3` — битый YAML; `Details["laws"] == unknown_check`, `problems` — два сообщения. |
+| N-1 | Nit | `internal/laws/laws.go:295`–`:297` | Ветка «сломанная версия, равная `except`, пропускается» недостижима: `bumpBase` зовёт `newestApproved` только после успешного `Get(world, doc.Version)`, а `CurrentFrom` передаёт `except=""` (M2 выжил). | Убрать ветку или сказать в комментарии, от какого будущего вызова она страхует. |
+| N-2 | Nit | `shared/env/vars.go:142` | «LawsDir is read by internal/laws (FileSource)» — `internal/laws` окружение не читает, `FileSource.Dir` приходит от вызывающего. | «read by mvctl laws and, with the context laws, by cmd/multiverse». |
+| N-3 | Nit | `cmd/mvctl/internal/laws/laws.go:100`, `:242`; `internal/laws/source.go:68` | Из другого каталога: `[source] laws: laws: read the laws directory: open laws: …` — префикс `laws:` повторяется, не видно, относительно чего путь. | Субъект находки — `filepath.Abs(dir)`, в тексте — подсказка «MV_LAWS_DIR is relative to the working directory». |
+| N-4 | Nit | `internal/laws/laws.go:372`–`:378` | Отписки у `Watch` нет: каждый вызов держит канал до конца жизни хранителя. | В комментарии: «call once per consumer» — или вернуть функцию отписки. |
+| N-5 | Nit | `internal/laws/laws.go:188`–`:236` | Два одновременных `Reload` (например, `Bump` и `Handle` в одном процессе): у кого подмена последняя, тот и прав. Более старое чтение может затереть более новое. В `core` подписка последовательна, поэтому только вкус. | Сериализовать `Reload` отдельным мьютексом или написать в комментарии, что он не рассчитан на параллельные вызовы. |
+
+### Предложения в бэклог (не требуются в T-205)
+
+- **T-238 / T-234 (DoD).** `laws.KnownChecks()` равен `mechanics.InvariantIDs()` ∪ `{laws_version_current}`. Рой передаёт в `laws.Config.Checks` все id реестра механики, **включая `inv-07`/`inv-08` с `Check == nil`** (`invariants.go:44`–`:46`). Если собрать ключи только из invariants с непустым `Check`, `dark-forest-world.v1.yaml` не загрузится (`unknown_check`), и `Current` мира упадёт. Там же уточнить КД §10.4: «реализация» для сопоставления — id в реестре, а не непустой `Check`.
+- **C-12 (system-architect#1).** Строка в «Гарантиях»: `world.laws.changed` идемпотентно по `(world, laws.version_to)`; повтор `mvctl laws bump` допустим (Mi-2).
+- **EPIC-001 (tech-lead#1).** Правило depguard для `cmd/mvctl/internal/**` и сужение glob `internal-*` до корня модуля (Mi-3).
+- **`mvctl laws bump`.** Когда у CLI появится чтение `Journal`, отказывать в повторе, если в `world_events` уже есть `world.laws.changed` с тем же `version_to`, и брать `version_from` оттуда, а не из файлов.
+
+### Вердикт
+
+**Принять.** Critical 0 · Major 0 · Minor 4 · Nit 5.
+
+Код соответствует КД §12, C-02 v1.5, C-12 v1.1 и DoD T-205. Оба события `Bump` проходят схемы, издатель есть в реестре, строка владения разрешает `cause=author`, порядок публикаций и частичный сбой обработаны и покрыты тестами. Граница импортов закреплена тестом и depguard. Сборка, `vet`, тесты, линтер, `contracts check` и `laws show` зелёные. Из 7 неэквивалентных мутантов убиты 5, M2 указывает на мёртвую ветку.
+
+Mi-3, Mi-4, N-1, N-2 закрываются правкой текста и одного теста без повторного ревью: при приёмке tech-lead#2 проверяет, что M3 убит. Mi-1 и Mi-2 — решения tech-lead#2: правка в T-205 или строка DoD T-234 и C-12. Обязательный просмотр tech-lead#1 — `shared/env/vars.go`, `.env.example`, `cmd/mvctl/main_test.go`.
