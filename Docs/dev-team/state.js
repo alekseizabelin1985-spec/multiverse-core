@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:37:09+03:00",
+  "updatedAt": "2026-09-13T16:37:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3132,7 +3132,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-202",
           "title": "A2 · Реестр уровней levels.go и валидатор блупринтов",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T16:03:58+03:00",
           "finishedAt": null,
@@ -8947,7 +8947,7 @@ window.DEVTEAM_STATE =
       "task": "T-202",
       "action": "levels.go и валидатор блупринтов",
       "startedAt": "2026-09-13T16:03:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:52+03:00"
     },
     {
       "instance": "developer#2",
@@ -9027,6 +9027,16 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Итерация 2: порядок поставки shared/recording",
       "startedAt": "2026-09-13T16:37:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "Ревью #1: levels и валидатор блупринтов",
+      "startedAt": "2026-09-13T16:37:52+03:00",
       "finishedAt": null
     }
   ],
@@ -12012,6 +12022,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-457 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/5/6. Решения по существу верны, схемы и inv-01/В3/В4 сходятся с кодом. Ma-1 порядок поставки C-01 v1.9 невыполним для задач в работе (T-207 уже начата, T-055 заполняла бы Deps.Recording без поля; два владельца строки serve.go). Mi-1 маршрут ча"
+    },
+    {
+      "at": "2026-09-13T16:37:52+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-202 выполнена TEAM-2/developer#1: shared/agent/levels.go (AllowedEventTypes по ролям, таблицы владения нет) и validator.go (правила 1–14 и 7а, стабильный порядок находок, warning на числа за 2^53−1/NaN/даты), корпус invalid из 16 файлов с полной таблицей находок; 47 мутантов убиты, shared/agent 95"
     }
   ],
   "blockers": [],
