@@ -14286,3 +14286,161 @@ HEAD — предок `epic/EPIC-001-foundation`, коммитов вне вет
 4. `architecture/overview.md:5` помимо `LIVING_WORLDS_*` называет историческим `Docs/agent-gm-research/`. Этого каталога не было в
    списке кандидатов `Docs/archive/README.md` ни в HEAD, ни сейчас. Если решение A3 (`open-questions.md:754`) в силе,
    пункт стоит добавить в список кандидатов при следующей гигиенической задаче tech-writer.
+
+## T-441 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-441 (XS). Работа не закоммичена и лежит в `.worktrees/T-441`, ветка
+`task/T-441-no-false-parked-warn` от эпика `adadca5`. Коммитов в ветке нет. Эпик с тех пор ушёл вперёд на T-440 и
+T-437 (`c3bfcd5`), но они не трогают `shared/`, `cmd/` и `internal/`, поэтому код сравнивался с `adadca5` (`git diff
+HEAD`). Изменены `shared/eventbus/delivery.go` и `delivery_test.go`, раздел T-441 в `tasks.md`, запись в `dev-log.md`,
+добавлена карточка `tasks/T-441.md`. Других изменений в рабочей папке нет.
+
+Прочитаны:
+- раздел T-441 индекса, карточка, dev-log;
+- ревью #1 T-436 (Mi-1, откуда пришла задача);
+- C-01: «Паника обработчика» пп. 3–4 с цепочкой v1.6, «Остановка» v1.2/v1.7;
+- `metrics.md:114` (`service_panics`), NFR-033;
+- код: `delivery.go` целиком, `kafka.go` (`Subscribe`, `Close`, `write`, `writer`, `stopped`, `kafkaDeadLetters`),
+  `membus.go` (`stopping`, `Close`, `topic`, `deadLetters`), `shared/logging` (`LogDeadLetter`);
+- kafka-go v0.4.51 из кэша модулей: `writer.go` (`Close`, `enter`, `WriteMessages`) и `error.go` (`WriteErrors`).
+
+Мутанты делались в копии (`git ls-files -co --exclude-standard` без `services/` и `Docs/`) в scratch, без `-overlay`.
+Контрольный мутант шёл первым. После каждого мутанта файл восстановлен и сверен `cmp`, копия удалена по сохранённому
+точному пути. Интеграционный набор не запускался: Docker не нужен, вывод получен из исходника kafka-go (см. п. 3
+ответов).
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 2, Nit 1.
+
+Правка точно закрывает Mi-1 ревью T-436, и на соседних путях (`DeliverRaw`, ветка без приёмника) тоже.
+- Строка «parked» пишется только после успешной записи.
+- При неудачной записи строка «not parked» есть на каждом пути: и в ветке валидации, и в ветке паники.
+- Возврат, цепочка ошибки (C-01 v1.6) и решение о коммите побайтно прежние.
+- Warn/Error различаются по ошибке приёмника верно на обеих шинах.
+
+Minor-замечания касаются полноты теста и формата лога, поведение они не ломают.
+
+### Замечания
+
+#### Minor
+
+**Mi-1. `shared/eventbus/delivery_test.go:690-691`: тест проверяет классификацию только на «голых» сигнальных
+ошибках, а у kafka-адаптера `io.ErrClosedPipe` приходит обёрнутым.**
+- **Как в production.** `Kafka.write` оборачивает ошибку писателя: `fmt.Errorf("eventbus: write to %s: %w", …)`
+  (`kafka.go:402-403`). Ради этого случая `busClosed` и написан через `errors.Is`. `recordingSink` же возвращает
+  `io.ErrClosedPipe` и `ErrClosed` как есть.
+- **Проверено мутантами.**
+  - R1: `errors.Is(err, io.ErrClosedPipe)` → `err == io.ErrClosedPipe` (`delivery.go:212`) — **выживает**: unit-тесты
+    `shared/eventbus/...` зелёные, `golangci-lint` — 0 issues. На брокере такой код дал бы `Error` вместо `Warn` на
+    штатном `Close` (писатель закрыт между `Kafka.writer` и `WriteMessages`).
+  - R2: `errors.Is(err, ErrClosed)` → `err == ErrClosed` — тоже выживает. Сегодня это безвредно, потому что обе шины
+    возвращают `ErrClosed` без обёртки (`kafka.go:412`, `membus.go:476`). Но и это не закреплено.
+
+*Как исправить:* в таблице `sinks` сделать случай «kafka writer closed under it» таким, каким его отдаёт адаптер:
+`&recordingSink{err: fmt.Errorf("eventbus: write to %s: %w", TopicDeadLetters, io.ErrClosedPipe)}` при
+`sinkErr: io.ErrClosedPipe`. Проверки `errors.Is` и `strings.Contains` останутся верными. Можно добавить и обёрнутый
+`ErrClosed`. После правки R1 должен краснеть.
+
+**Mi-2. `shared/eventbus/delivery.go:227-228`: у новой строки уровня `Error` нет поля `handled`.**
+- **Правило.** NFR-033: у логов ошибок есть поле `handled: bool`, чтобы `service_panics` отделял ожидаемые ошибки.
+  `service_panics` считает строки `level=error` без `handled=true` (`metrics.md:114`).
+- **Как в соседнем коде.** Единственная другая `Error`-строка `Delivery` — `logPanic` — ставит `handled=false`
+  (`:333`). `BusMiddleware` и `LogDeadLetter` в `shared/logging` тоже ставят `handled`.
+- **Счёт метрики** от этого не меняется: без поля строка засчитывается так же, как с `handled=false`. И это верно:
+  несостоявшаяся запись на живой шине останавливает топик. Нарушен формат, а не смысл.
+
+*Как исправить:* в `logNotParked` добавить `slog.Bool("handled", false)`. Проще всего — всегда: событие не учтено ни
+при `Warn`, ни при `Error`. В тесте проверить `attrs["handled"] == "false"`.
+
+#### Nit
+
+**N-1. `shared/eventbus/delivery.go:207-209` (и имя подтеста `delivery_test.go:691`, карточка п. 3): «a kafka writer
+closed under the write» неточно.**
+- `kafka.Writer.Close` ждёт текущие записи (`writer.go:555-580`, `w.group.Wait()`). Запись, которая уже вошла в
+  `WriteMessages`, завершается, а не падает на `io.ErrClosedPipe`.
+- `io.ErrClosedPipe` получает только вызов, пришедший после пометки `closed` (`enter`, `writer.go:524-532`;
+  возврат — `:614-616`). Это значит: писатель взят из `Kafka.writer` до `Close`, а `WriteMessages` вызван после.
+
+*Как исправить:* «a kafka writer closed between Kafka.writer and WriteMessages refuses with io.ErrClosedPipe».
+
+### Ответы на особые вопросы
+
+1. **Корректность и порядок.** Сравнение с `adadca5` построчно:
+   - **Валидация** (`:98-100`). «event rejected on read» по-прежнему до записи — это причина, а не итог. `parked=""`.
+     При неудачной записи добавляется «not parked». Возврат прежний.
+   - **Паника** (`:113-117`). `Error` паники из `call` — до записи, как было. `parked=""`. При неудаче — `Error`
+     паники плюс «not parked». Число записей в `TestDeliverLogsAPanicAsAnErrorWithItsStack` и
+     `TestDeliverParksAPanicWhoseValueCannotBePrinted` прежнее (1).
+   - **Повторы исчерпаны** (`:130`) и **`DeliverRaw`** (`:138`). Строка переехала за `WriteDeadLetter`, текст и поля
+     прежние (`error` — та же причина: `lastErr` там не бывает `nil`, подмена на `ErrInvalidEnvelope` строку не
+     задевает).
+   - **`deadLetter`**. Ветка `DLQ == nil` и ветка ошибки записи возвращают те же `fmt.Errorf` с тем же `%w`/`%v`.
+     Лог на ветвление не влияет, ранних выходов не добавилось.
+   - **Пути «записано, но не parked» нет**: после `nil` от `WriteDeadLetter` строка пишется всегда, если `parked`
+     непуст. Для валидации и паники итоговой строки нет и не было — их причина уже в логе. **Пути «parked, но не
+     записано» нет**: строка стоит только после `nil`.
+2. **Warn/Error.**
+   - **membus.** `ErrClosed` из `topic()` возможен только при `st.closed`, а `closed=true` и `close(done)` ставятся
+     под одной блокировкой (`membus.go:433-437`, `:475-476`). Иная ошибка — `ErrNoTopic` (топика `dead_letters` нет у
+     закрытой раскладки) — это настоящий сбой, и он получает `Error`. Верно.
+   - **kafka.** `ErrClosed` — только из `Kafka.writer` на закрытой шине (`:411-412`). `io.ErrClosedPipe` — только от
+     закрытого писателя (п. 3). Сетевые сбои брокера приходят как `WriteErrors`. У `WriteErrors` нет `Unwrap`
+     (`error.go:696-721`), и `io.ErrClosedPipe` в нём не появляется. `Warn` настоящий сбой не прячет.
+   - **Причина не участвует.** `busClosed` смотрит только на ошибку приёмника, причина уходит `%v`. Паника значением
+     `io.ErrClosedPipe` при сбое на живой шине даёт `Error` — это покрыто тем, что цепочка v1.6 не несёт причину.
+   - Обёрнутые ошибки `errors.Is` различает, но тестом это не закреплено — Mi-1.
+3. **Допущение про kafka-go v0.4.51 подтверждено.**
+   - В не-тестовом коде модуля `io.ErrClosedPipe` встречается в `reader.go` (читатель), `compress/zstd` (не
+     используется: сжатие у писателя не задано, `kafka.go:417-428`) и в `writer.go:615`.
+   - `writer.go:615` — единственный путь писателя: `enter()` ложно только при `w.closed`, а его ставит только
+     `Writer.Close`. `Writer.Close` у нас вызывает только `Kafka.Close` (`kafka.go:370-372`).
+4. **Тесты.**
+   - Ветки покрыты: 2 пути × 5 исходов, плюс паника с закрытой шиной. Проверяются текст, уровень, `bus_closed`,
+     позиция, причина, ошибка записи и возврат (`nil` или ошибка приёмника).
+   - Тесты детерминированы: `noPause`, без горутин и времени.
+   - Мой контрольный мутант M0 (`func broken( {`) — красный: `delivery.go:358:14: syntax error`.
+   - R1 и R2 выживают — Mi-1.
+   - Мутанты исполнителя M1w–M5 соответствуют DoD («безусловный `Warn` до записи» краснеет). Не повторял: R1/R2
+     проверяли непокрытое место.
+   - Ветка валидации с неудачной записью отдельным кейсом не проверена. Код у неё общий с паникой, DoD её не требует.
+5. **Совместимость логов.**
+   - Тексты «event parked in dead letters» и «undecodable message parked in dead letters» не изменились.
+   - По репозиторию (`grep`) нет ни теста, ни документа, закрепляющего порядок этой строки относительно записи.
+   - `shared/logging.LogDeadLetter` пишет тот же текст уровнем `Error` с `handled=true`. Это отдельный помощник, в
+     шине не вызывается, правка его не касается.
+   - След `service_panics` (`logPanic`) не тронут.
+   - Новая `Error`-строка засчитывается в `service_panics` — по смыслу верно, по формату см. Mi-2.
+6. **Прогоны** (go1.26.8 windows/amd64, golangci-lint 2.13.2):
+   - `go build ./... && go vet ./...` — 0;
+   - `go vet -tags integration ./shared/eventbus/... ./shared/testkit/contract/` — 0;
+   - `go test -short -count=1 ./...` — все пакеты ok, 0 FAIL;
+   - `gofmt -l shared/eventbus` — пусто;
+   - `golangci-lint run ./shared/eventbus/...` и `--build-tags integration ./shared/eventbus/...
+     ./shared/testkit/contract/...` — 0 issues;
+   - `-race` недоступен (`-race requires cgo`), как и у исполнителя.
+   - Строки в `dev-log.md`, `tasks.md` и карточке — CRLF, число CR равно числу LF.
+
+### Предложения в бэклог
+
+1. EPIC-001 (владелец `shared/eventbus`), вне файлов задачи: окно гонки в `Kafka.Close`.
+   - **Как возникает.** `closed=true` ставится под `mu` (`kafka.go:348`), а `loopCtx` отменяется позже: после
+     `stopReaders()` (`:364`) и в отдельной горутине `context.AfterFunc` (`:206`). Если запись в `dead_letters` попадёт
+     в это окно, `Kafka.writer` вернёт `ErrClosed`, а `stopped(loopCtx, …)` (`:225`) его не узнает.
+   - **Итог.** `Subscribe` вернёт `write dead letter … bus is closed` вместо `nil` (C-01 «Остановка»). После T-441 в
+     логе при этом будет `Warn` с `bus_closed=true`. У membus окна нет: `closed` и `done` ставятся вместе.
+   - **Правка — одно из двух:** `stopped` принимает `errors.Is(err, ErrClosed)`, или адаптер проверяет `k.closing.Err()`.
+     Причина в цепочку не входит (v1.6), поэтому паника значением `ErrClosed` сюда не просочится. Нужен unit-тест на
+     `stopped` и мутант.
+   - Правка T-441 окно не создаёт и не расширяет.
+2. README `shared/eventbus`: одной строкой назвать, что пишет `Delivery` об исходе события (`parked` / `not parked`,
+   `bus_closed`). Сейчас это знает только код. Не срочно, по желанию владельца.
+
+### Риски и допущения
+
+- Вывод про `io.ErrClosedPipe` опирается на kafka-go v0.4.51. При смене версии `busClosed` нужно перепроверить по
+  `writer.go` (`enter`/`Close`).
+- Поведение на Redpanda не прогонялось: возврат и коммит не менялись, классификация проверена по исходнику обеих
+  шин.

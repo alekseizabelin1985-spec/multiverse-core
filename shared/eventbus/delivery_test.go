@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -651,6 +653,149 @@ func TestDeliverParksAPanicDuringShutdown(t *testing.T) {
 	}
 }
 
+// The log says an event was parked only once its dead letter is written. When
+// the write fails — after Close in particular, where the subscription returns
+// nil and the log line is the only trace — it says the event was not parked,
+// why, and that it will come again (review #1 of T-436, Mi-1).
+func TestDeliverLogsParkedOnlyOnceTheDeadLetterIsWritten(t *testing.T) {
+	const notParked = "event not parked in dead letters; it stays uncommitted and will be delivered again"
+	errSink := errors.New("dead letter topic unreachable")
+
+	paths := map[string]struct {
+		parked  string
+		deliver func(t *testing.T, d Delivery) error
+	}{
+		"retries spent": {
+			parked: "event parked in dead letters",
+			deliver: func(t *testing.T, d Delivery) error {
+				return d.Deliver(t.Context(), Position{Topic: TopicPlayerEvents, Offset: 21}, validEvent(t),
+					func(context.Context, Event) error { return errHandler })
+			},
+		},
+		"undecodable message": {
+			parked: "undecodable message parked in dead letters",
+			deliver: func(t *testing.T, d Delivery) error {
+				return d.DeliverRaw(t.Context(), Position{Topic: TopicPlayerEvents, Offset: 21},
+					[]byte(`{"id":`), errHandler)
+			},
+		},
+	}
+	sinks := map[string]struct {
+		sink     DeadLetterSink
+		sinkErr  error
+		level    slog.Level
+		closed   string
+		isParked bool
+	}{
+		"the write succeeds": {sink: &recordingSink{}, isParked: true},
+		// Both buses return ErrClosed as it is today (Kafka.writer, the topic of
+		// membus).
+		"membus or kafka closed": {sink: &recordingSink{err: ErrClosed}, sinkErr: ErrClosed, level: slog.LevelWarn, closed: "true"},
+		// A sink that wraps it must not turn an orderly stop into an Error.
+		"a closed bus, wrapped": {
+			sink:    &recordingSink{err: fmt.Errorf("eventbus: write to %s: %w", TopicDeadLetters, ErrClosed)},
+			sinkErr: ErrClosed, level: slog.LevelWarn, closed: "true",
+		},
+		// A kafka writer taken before Close and called after it: Kafka.write
+		// wraps the io.ErrClosedPipe of kafka-go exactly like this.
+		"kafka writer closed before the write": {
+			sink:    &recordingSink{err: fmt.Errorf("eventbus: write to %s: %w", TopicDeadLetters, io.ErrClosedPipe)},
+			sinkErr: io.ErrClosedPipe, level: slog.LevelWarn, closed: "true",
+		},
+		"the write fails on a running bus": {sink: &recordingSink{err: errSink}, sinkErr: errSink, level: slog.LevelError, closed: "false"},
+		"no sink":                          {level: slog.LevelError, closed: "false"},
+	}
+	for pathName, path := range paths {
+		for sinkName, s := range sinks {
+			t.Run(pathName+", "+sinkName, func(t *testing.T) {
+				deterministicSources(t)
+				logs := &recordingLog{}
+				d := testDelivery(s.sink)
+				d.Log = slog.New(logs)
+
+				err := path.deliver(t, d)
+
+				// What is returned, and so whether the offset is committed, does
+				// not change with the log.
+				switch {
+				case s.isParked && err != nil:
+					t.Fatalf("deliver = %v, want nil: the event is parked", err)
+				case !s.isParked && err == nil:
+					t.Fatal("deliver = nil, want the failure: the event was not parked")
+				case s.sinkErr != nil && !errors.Is(err, s.sinkErr):
+					t.Fatalf("deliver = %v, want the error of the sink", err)
+				}
+
+				records := logs.all()
+				if !s.isParked {
+					for _, rec := range records {
+						if rec.Message == path.parked {
+							t.Fatalf("log = %s %q although the dead letter was not written", rec.Level, rec.Message)
+						}
+					}
+				}
+				if len(records) != 1 {
+					t.Fatalf("%d log records, want 1: %v", len(records), messagesOf(records))
+				}
+				rec := records[0]
+				attrs := attrsOf(rec)
+				if attrs["offset"] != "21" || attrs["consumer"] != "core.state" {
+					t.Errorf("attrs = %v, want the position and the consumer", attrs)
+				}
+				if !strings.Contains(attrs["error"], errHandler.Error()) {
+					t.Errorf("error = %q, want the cause %q", attrs["error"], errHandler)
+				}
+				if s.isParked {
+					if rec.Message != path.parked || rec.Level != slog.LevelWarn {
+						t.Errorf("log = %s %q, want WARN %q", rec.Level, rec.Message, path.parked)
+					}
+					return
+				}
+				if rec.Message != notParked || rec.Level != s.level {
+					t.Errorf("log = %s %q, want %s %q", rec.Level, rec.Message, s.level, notParked)
+				}
+				if attrs["bus_closed"] != s.closed {
+					t.Errorf("bus_closed = %q, want %s", attrs["bus_closed"], s.closed)
+				}
+				// NFR-033: an error log says whether it was handled, and
+				// service_panics counts the ones that were not.
+				if got, ok := attrs["handled"]; !ok || got != "false" {
+					t.Errorf("handled = %q (present=%v), want false: the event is not accounted for", got, ok)
+				}
+				if s.sinkErr != nil && !strings.Contains(attrs["error"], s.sinkErr.Error()) {
+					t.Errorf("error = %q, want the failure of the write %q", attrs["error"], s.sinkErr)
+				}
+			})
+		}
+	}
+}
+
+// A panic whose dead letter cannot be written keeps its Error with the stack
+// and adds the line that the event was not parked: nothing claims it was.
+func TestDeliverLogsAPanicThatCouldNotBeParked(t *testing.T) {
+	deterministicSources(t)
+	logs := &recordingLog{}
+	d := testDelivery(&recordingSink{err: ErrClosed})
+	d.Log = slog.New(logs)
+
+	err := d.Deliver(t.Context(), Position{Topic: TopicPlayerEvents}, validEvent(t),
+		func(context.Context, Event) error { panic("boom") })
+
+	if !errors.Is(err, ErrClosed) {
+		t.Fatalf("deliver = %v, want ErrClosed", err)
+	}
+	records := logs.all()
+	if len(records) != 2 {
+		t.Fatalf("%d log records %v, want the panic and the failed write", len(records), messagesOf(records))
+	}
+	if records[0].Level != slog.LevelError || attrsOf(records[0])["panic"] != "boom" {
+		t.Errorf("first record = %s %q, want the ERROR of the panic", records[0].Level, records[0].Message)
+	}
+	if got := records[1]; got.Level != slog.LevelWarn || !strings.HasPrefix(got.Message, "event not parked") {
+		t.Errorf("second record = %s %q, want WARN that the event was not parked", got.Level, got.Message)
+	}
+}
+
 // panicInAHandler gives the stack a frame with a name the test can look for.
 func panicInAHandler() {
 	panic("a handler went wrong")
@@ -678,6 +823,14 @@ func (h *recordingLog) all() []slog.Record {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]slog.Record(nil), h.records...)
+}
+
+func messagesOf(records []slog.Record) []string {
+	messages := make([]string, 0, len(records))
+	for _, r := range records {
+		messages = append(messages, r.Level.String()+" "+r.Message)
+	}
+	return messages
 }
 
 func attrsOf(r slog.Record) map[string]string {

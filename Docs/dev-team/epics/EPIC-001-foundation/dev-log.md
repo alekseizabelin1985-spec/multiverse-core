@@ -8267,6 +8267,33 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - Проверка: подставной сервер в scratch (`127.0.0.1:18934`, `/health` → 404, id модели — путь Windows, переключаемые код прогрева, `/props` и `predicted_ms`), 4 сценария × 2 реализации, выход только в scratch. Утверждения DoD проверяет скрипт: 8 из 8 зелёных. CSV двух реализаций совпадают после маскирования латентностей и отметки времени. Прогрев без сервера — 4 id, включая кавычку в id и хвостовой обратный слеш.
 - Мутанты m1–m7 убиты, контроль m0 красный, тождественный m9 чист. m8 (снятие строки инвариантной культуры) выживает по построению: CSV и таблицу защищает `Format-BenchNumber`, который называет культуру сам, — объяснение и решение в карточке.
 - `bash -n scripts/llm-bench.sh` и парсер PowerShell чисты. Стенд владельца (`:8888`) не трогался — ни одного запроса, `make llm-*` не запускался, `.env` не открывался. Каталог scratch удалён по сохранённому пути. Не коммитил. Карточка — `tasks/T-434.md`.
+<!-- dev-log T-441 -->
+## developer#1 · T-441 · `Delivery`: «parked» только после записи в `dead_letters` · 2026-09-13
+
+Ветка `task/T-441-no-false-parked-warn` (от `adadca5`), TEAM-1, Opus. Подробности — карточка `tasks/T-441.md`, раздел «Выполнение».
+- **Что сделано** (`shared/eventbus/delivery.go`):
+  - строку «event parked in dead letters» (и «undecodable message parked…» у `DeliverRaw`) пишет `deadLetter` после успешной записи;
+  - запись не удалась или приёмника нет — «event not parked in dead letters; it stays uncommitted and will be delivered again» с полями события, `bus_closed` и ошибкой (ошибка записи плюс `cause: …`);
+  - уровень: `ErrClosed` или `io.ErrClosedPipe` в ошибке приёмника — `Warn` (штатный конец под `Close`), иначе — `Error` (подписка падает, топик стоит);
+  - возврат ошибок, коммит и Go-API не менялись.
+- **Решения по ходу.**
+  - Ветки валидации и паники строку «parked» не получают: их причина уже в логе, и число записей в тестах паники прежнее.
+  - Закрытость шины определяется по ошибке приёмника, а не по контексту: `Delivery` не видит `loopCtx` адаптера, а причина в цепочку ошибки не входит (C-01 v1.6).
+- **Тесты**: `TestDeliverLogsParkedOnlyOnceTheDeadLetterIsWritten` (`Deliver` и `DeliverRaw` × запись удалась / `ErrClosed` / `io.ErrClosedPipe` / сбой на живой шине / нет приёмника), `TestDeliverLogsAPanicThatCouldNotBeParked`.
+- **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути):
+  - M0 контрольный — красный (сборка);
+  - M1w (безусловный `Warn` до записи) и M1 (полный откат лога) — красные;
+  - M2 (`DeliverRaw`), M3 (всегда `Warn`), M4 (без `io.ErrClosedPipe`), M5 (строка успеха до записи) — красные;
+  - первая версия M1 уронила чужой тест разыменованием nil — не засчитана.
+- **Прогоны**: `go build ./... && go vet ./...` — 0; `gofmt` пусто; `go test -short -count=1 ./...` — 27 пакетов ok; `golangci-lint run ./...` и с `--build-tags integration` по `eventbus`/`contract` — 0 issues. Redpanda не поднималась: ветвление не менялось. `-race` недоступен.
+- Не коммитил.
+- **Итерация 2 по ревью #1 (вердикт «принять», исправлено до приёмки, 2026-09-13).**
+  - Mi-1: в тесте ошибки приёмника поданы так, как их отдают шины: голый `ErrClosed`, обёрнутый `ErrClosed` и `io.ErrClosedPipe`, обёрнутый как в `Kafka.write`. Голый `io.ErrClosedPipe` убран.
+  - Mi-2: `logNotParked` ставит `handled=false` на обоих уровнях (NFR-033), тест это требует.
+  - N-1: комментарий `busClosed` — `io.ErrClosedPipe` получает писатель, взятый до `Close` и вызванный после; идущую запись `Close` дожидается. Подтест переименован в «kafka writer closed before the write».
+  - Мутанты (новая копия в scratch, без `-overlay`, удалена по точному пути): M0 контрольный — красный (сборка); R1 и R2 ревьюера (`==` вместо `errors.Is`) — теперь красные, линтер на R1 — 0 issues; H1 (без `handled`) и H2 (`handled=!closed`) — красные. Первый запуск H2 остановился на `assert` (шаблон совпал и с `logPanic`), мутация не применялась; шаблон уточнён и мутант прогнан заново.
+  - Гонку в `Kafka.Close` не трогал (отдельная задача).
+  - Прогоны: `go build`/`go vet` (и `-tags integration` по `eventbus`/`contract`) — 0; `gofmt` пусто; `go test -short -count=1 ./...` — 27 ok; `golangci-lint` по `eventbus`, с `--build-tags integration` и по `./...` — 0 issues. Docker не запускался. Не коммитил.
 <!-- dev-log T-437 -->
 ## devops-engineer#1 · T-437 · `--alias` в llm-server, пин LLAMACPP_BUILD, ops/models.txt · 2026-09-13
 
