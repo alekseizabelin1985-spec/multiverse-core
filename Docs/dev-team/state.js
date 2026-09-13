@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:19:56+03:00",
+  "updatedAt": "2026-09-13T17:21:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3246,11 +3246,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T16:10:55+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9136,7 +9136,7 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Итерация 2: удержание ответа по статусу записи",
       "startedAt": "2026-09-13T16:57:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:21:31+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9196,6 +9196,16 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Ревью #1: readmodel и consumer",
       "startedAt": "2026-09-13T17:19:56+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Приёмка T-207 провайдеры fake и recorded",
+      "startedAt": "2026-09-13T17:21:31+03:00",
       "finishedAt": null
     }
   ],
@@ -12295,6 +12305,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-304 выполнена TEAM-3/developer#1: internal/gateway/readmodel (проекция по версиям, stale при разрыве, обе формы changed[] C-02 v1.5/v1.6 со сверкой хеша по entity.ApplyOps, конец встречи по первому из пары, bootstrap снапшота, Expect/Wait/AwaitFact на shared/clock) и consumer (догон журнала от кур"
+    },
+    {
+      "at": "2026-09-13T17:21:31+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние E (постоянное разрешение): epic/EPIC-001-foundation → develop (ff83f9e), состав — T-454, T-450, T-455. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с файлами владельца нет, ветка эпика сохранена. gitleaks по 66 коммитам, которых нет на origin (develop и че"
+    },
+    {
+      "at": "2026-09-13T17:21:31+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/0/1. Ma-1 (таблица C-07 совпадает с allOf схемы, удержание ответа по статусу), Mi-1…Mi-3, N-1…N-5 закрыты; 16 мутантов убиты, включая выживших в ревью #1. Nit: null как отсутствие поля. Приёмка — TEAM-2/tech-lead#2."
     }
   ],
   "blockers": [],
