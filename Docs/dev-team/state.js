@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:57:06+03:00",
+  "updatedAt": "2026-09-13T16:59:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2794,7 +2794,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-055",
           "title": "state — конвейер предложение → факт, источники в serve.go",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T16:20:10+03:00",
           "finishedAt": null,
@@ -8981,7 +8981,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "state: конвейер предложение → факт",
       "startedAt": "2026-09-13T16:20:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:59:05+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9121,6 +9121,16 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Итерация 2: удержание ответа по статусу записи",
       "startedAt": "2026-09-13T16:57:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Ревью #1: конвейер State",
+      "startedAt": "2026-09-13T16:59:05+03:00",
       "finishedAt": null
     }
   ],
@@ -12154,6 +12164,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-207 · ревью #1 (TEAM-2/code-reviewer#3): вернуть — 0/1/3/5. Ma-1: recorded отдаёт заблокированный текст записи quarantined/filter_error с response_raw (C-07 это поле запрещает; файлы записей схему не проверяют). Mi-1 длительность задержки fake не проверена (мутант d/2 выжил), Mi-2 Calls() при заве"
+    },
+    {
+      "at": "2026-09-13T16:59:05+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 выполнена TEAM-1/developer#3: internal/state — worker на мир с recover, посредник доставки (C-01 v1.6), Applier на копиях (публикация → замена → окно proposal_id; при сбое публикации ничего не сохраняется), memstore; паника → ErrWorldStopped шине; Stop отменяет подписку до закрытия шины; serve"
     }
   ],
   "blockers": [],
