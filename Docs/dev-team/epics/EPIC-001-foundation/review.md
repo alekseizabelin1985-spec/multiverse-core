@@ -16796,3 +16796,61 @@ R2-Mi-2 можно закрыть до старта T-061 и T-221.
 - Поведение скриптов проверено одним прогоном `llm_endpoint_classify` в bash. pwsh-двойник не запускался, его вывод принят равным по комментарию `llm-endpoint.sh` («the .psm1 does the same»).
 - `gitleaks dir` по копии не заменяет скан индекса. Подтверждение — `make secrets-scan` после коммита оркестратора.
 - Решение «группа — бот молчит» взято из карточки T-310 в `.worktrees/T-310`. Относится ли оно к T-456, решает оркестратор (Mi-2).
+
+## T-461 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+Папка `.worktrees/T-461`, ветка `task/T-461-depguard-telegram-bot`, база `a0d45d2`. Коммитов нет. Проверялась рабочая копия: `.golangci.yml` (+30 строк, удалений нет), запись `<!-- dev-log T-461 -->` в `dev-log.md` и новая карточка `tasks/T-461.md`. Основание: DoD карточки, раздел «Отметка владельца (tech-lead#1)» карточки T-310 (`.worktrees/EPIC-004`, подраздел «Правило depguard `cmd-telegram-bot`»). Модель Opus. `golangci-lint` v2.13.2 (пин `build/versions.env`).
+
+### Что проверено
+
+| # | Проверка | Итог |
+|---|---|---|
+| 1 | Текст по отметке владельца | Скрипт извлёк оба блока `yaml` из «Текст для `.golangci.yml`» карточки T-310. Каждый входит в `.golangci.yml` рабочей копии ровно один раз, побайтно. `git diff` — только эти 30 добавленных строк: исключение `.golangci.yml:173-174` в конце `files` правила `internal-unlisted` после `"!**/internal/replay/**"` и правило `cmd-telegram-bot` `:365-391` перед комментарием `cmd-others` `:393`. Разрешения `internal/gateway/client$` и `internal/gateway/api$` записаны с якорем `$`. Байтов CR нет, файл в LF, как база |
+| 2 | Не ослаблены существующие правила | depguard проверяет каждое правило, чьи `files` совпали, отдельно, и находка любого из них — отказ. Новое правило поэтому только добавляет запреты. Ослабить что-то может лишь отрицание в `internal-unlisted`. Оно снимает это правило с путей, где есть `/cmd/telegram-bot/`, но все такие пути покрывает `cmd-telegram-bot`, а он строже `internal-unlisted` везде, кроме двух разрешённых пакетов (N-2). `no-testkit-in-production`, `cmd-others`, правила контекстов T-445 и исключение `_test.go` не менялись (дифф). R1b и R4 ниже подтверждают, что `no-testkit-in-production` и `cmd-telegram-bot` действуют на вложенные пакеты бота |
+| 3 | Дыры | Шаблон `**/cmd/telegram-bot/**` требует `/` после `telegram-bot`, поэтому `cmd/telegram-bot-evil/**` под правило бота и под исключение не попадает (R2, R2b). Вложенный `internal` бота ловит `cmd-telegram-bot` (R4). Тесты бота под правилом (K0, R6). Пакет вне `cmd/telegram-bot` с совпадающим путём (`internal/zzprobe/cmd/telegram-bot`) ловится `cmd-telegram-bot` на всём `internal/*`, кроме `client` и `api` (R5, R5b; N-2). Тест бота доходит до шины через `shared/testkit/*` (R1; N-1). `cmd/telegram-bot-evil/x` с импортом `internal/state` не ловит ни одно правило, и так же было до T-461 (R2 на базовом конфиге). Это дыра всех новых `cmd/*`, не задачи — бэклог п. 1 |
+| 4 | Прогон на коде бота | Копия: `git worktree add --detach` на кончике `epic/EPIC-004-gateway-bot` (`c92eb22`, блоб `.golangci.yml` — `39c1839`, как база T-461) в scratch `t461r1-dg`, поверх — `.golangci.yml` из T-461. `golangci-lint config verify` — ok. Все линтеры: N0 `./cmd/telegram-bot/... ./internal/...` — 0 issues; N1 `./...` — 0 issues. Мутанты — таблица ниже |
+| 5 | Рабочая папка T-461 | `golangci-lint config verify` — exit 0; `golangci-lint run ./...` — 0 issues, exit 0 |
+| 6 | Отчёт и документы | Отчёт исполнителя совпадает с диффом. Запись dev-log и карточка — CRLF (8824/8824 и 67/67). Документы в ветке задачи — карточка и запись dev-log, как принято процессом команды (T-456 и др.); кода вне `.golangci.yml` нет |
+
+**Мутанты.** Скрипт Python, по одному мутанту на прогон `golangci-lint run --allow-parallel-runners --enable-only depguard --uniq-by-line=false <пакеты>`. Мутант — пустой импорт `_ "<пакет>"` первой строкой блока `import` (одно вхождение проверено) или новый пакет-проба в одном файле. После прогона файл возвращался из копии в памяти со сверкой байтов, пробы удалялись по точным путям. После всех мутантов `git status --short --untracked-files=all` копии — только `M .golangci.yml`. R1, R2 и R5b повторены на базовом `.golangci.yml` (`git checkout -- .golangci.yml`), потом новый конфиг возвращён и сверен `cmp` с рабочей папкой.
+
+| # | Файл · импорт | Пакеты | Ожидание | Итог (новый конфиг) | Базовый конфиг |
+|---|---|---|---|---|---|
+| K0 | `access/gate_test.go` · `shared/eventbus` (контрольный) | `./cmd/telegram-bot/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot`, `desc` запрета шины | — |
+| R1 | `access/gate_test.go` · `shared/testkit/contract` | то же | — | 0 issues | 0 issues |
+| R1b | `access/gate.go` · `shared/testkit/contract` | то же | `no-testkit-in-production` | 1, `no-testkit-in-production` | — |
+| R2 | проба `cmd/telegram-bot-evil/x` · проба `internal/state` | `./cmd/telegram-bot-evil/...` | — | 0 issues | 0 issues |
+| R2b | проба `cmd/telegram-bot-evil/internal/x` · `internal/gateway/client` | то же | `internal-unlisted` (исключение не протекает на `-evil`) | 1, `internal-unlisted` | — |
+| R3 | `access/gate.go` · проба `internal/gateway/client/sub` | `./cmd/telegram-bot/...` | `cmd-telegram-bot` (якорь `$`) | 1, `cmd-telegram-bot` | — |
+| R4 | проба `cmd/telegram-bot/internal/access/internal/deep` · `internal/mechanics` | то же | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R5 | проба `internal/zzprobe/cmd/telegram-bot` · `internal/mechanics` | `./internal/zzprobe/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R5b | проба `internal/zzprobe/cmd/telegram-bot` · `internal/gateway/client` | то же | — | 0 issues | 1, `internal-unlisted` |
+| R6 | `access/gate_test.go` · `internal/gateway/links` | `./cmd/telegram-bot/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R7 | `access/gate.go` · `shared/eventbus/membus` | то же | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| A1 | `access/gate.go` · `internal/gateway/client` | то же | 0 | 0 issues | — |
+
+В R2 проба `internal/state` создана только для того, чтобы импорт разрешился: на кончике EPIC-004 пакета `internal/state` нет. Копия удалена: `git worktree remove` по точному пути без `--force`, затем `git worktree prune`. В `git worktree list` записи `t461r1` нет, каталога нет. Скрипт и копия конфига в scratch удалены по точным именам.
+
+### Замечания
+
+| # | Уровень | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| N-1 | Nit | `.golangci.yml:376-378` (комментарий `cmd-telegram-bot`) | Комментарий говорит: «a test that needs internal/gateway/gatewaytest or membus gets a rule of its own». Но тест бота с импортом `shared/testkit/contract` проходит линтер (R1). Пакет сам импортирует `shared/eventbus` и `membus`, `shared/testkit/gateway` тоже тянет `membus`. Находку `no-testkit-in-production` снимает исключение `_test.go`, а `cmd-telegram-bot` `shared/testkit` не запрещает. depguard видит только прямые импорты, и на базовом конфиге R1 даёт тот же 0, так что это не регрессия. Текст — дословно отметка владельца, в T-461 его не менять | В T-461 — ничего. В бэклог system-architect: решить, можно ли тестам бота брать двойники `shared/testkit/*`, которые приносят шину. Для e2e T-315 на `testkit/gateway.Harness`, скорее всего, можно. Если нельзя — запрет `shared/testkit` в `cmd-telegram-bot` (исключение `_test.go` снимает только список `no-testkit-in-production`) и отдельное правило для тестов. Если можно — уточнить комментарий: «напрямую» |
+| N-2 | Nit | `.golangci.yml:174` | `!**/cmd/telegram-bot/**` снимает `internal-unlisted` с любого пути, где есть `/cmd/telegram-bot/`, в том числе внутри `internal/`. Пакет `internal/<неучтённый>/cmd/telegram-bot` может импортировать `internal/gateway/client` и `api` (R5b; на базовом конфиге — находка `internal-unlisted`). Остальное `internal/*` ему по-прежнему запрещено (R5). Путь надуманный, а глоб depguard сравнивается с абсолютным путём, поэтому привязать шаблон к корню модуля нельзя | Не править. Держать в памяти при разборе `internal-unlisted`: исключение бота — не контекст |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 0 · Nit: 2.
+
+Правило и исключение внесены побайтно по отметке tech-lead#1, с якорями `$`, на своём месте. Существующие правила не ослаблены, кроме надуманного случая N-2. На коде бота: как есть — 0 issues; шина, `membus`, `links`, `client/sub`, вложенный `internal` и тесты бота ловятся `cmd-telegram-bot`; `client` проходит; исключение не протекает на `cmd/telegram-bot-evil`. DoD 1–3 выполнены.
+
+### Предложения в бэклог
+
+1. system-architect: ловушка для новых `cmd/*` по образцу `internal-unlisted`. Сейчас пакет `cmd/<новый>` (R2: `cmd/telegram-bot-evil/x`) импортирует любой `internal/*` без находки, и на базовом конфиге так же. Например, правило `cmd-unlisted`: `files` `**/cmd/**` без `cmd/multiverse`, `cmd/mvctl` и `cmd/telegram-bot`, запрет `multiverse-core.io/internal`. Сначала сверить, какие `internal/*` импортирует `cmd/mvctl`.
+2. system-architect: N-1 — тесты бота и двойники `shared/testkit/*`, которые приносят шину (до T-315).
+
+### Риски и допущения
+
+- Код бота — кончик `epic/EPIC-004-gateway-bot` `c92eb22` на момент ревью. Когда T-311/T-312 добавят `main.go` и новые пакеты, прогон нужно повторить в их ревью.
+- Поведение depguard («каждое совпавшее правило проверяется отдельно») выведено из R4, R5 и R1b, а не из исходников depguard.
+- `--uniq-by-line=false` задан, чтобы находки двух списков на одной строке не схлопнулись. Во всех мутантах была одна находка или ни одной.
