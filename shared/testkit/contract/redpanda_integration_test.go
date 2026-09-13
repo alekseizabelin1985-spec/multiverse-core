@@ -16,6 +16,7 @@ import (
 	"github.com/segmentio/kafka-go"
 	"github.com/testcontainers/testcontainers-go"
 
+	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/testkit"
@@ -94,6 +95,28 @@ func TestBusContractOnRedpanda(t *testing.T) {
 				return nil, false, err
 			}
 			return spare, true, nil
+		},
+		Stalled: func() (contract.StalledBus, error) {
+			// A second client of the same broker, whose retry pauses run on
+			// manual timers nobody advances. What it parks lands in the one
+			// dead_letters of the broker.
+			stalled, err := eventbus.NewKafka(eventbus.KafkaConfig{
+				Brokers:  rp.Brokers(),
+				Registry: contracts.Default(),
+				Backoff:  contract.StalledBackoff(),
+				Timers:   clock.NewManual(testkit.Epoch).Timers(),
+			})
+			if err != nil {
+				return contract.StalledBus{}, err
+			}
+			return contract.StalledBus{
+				Bus:     stalled,
+				Journal: stalled,
+				DeadLetters: func(ctx context.Context) ([]eventbus.DeadLetter, error) {
+					return readDeadLetters(ctx, rp.Broker)
+				},
+				Release: func() { _ = stalled.Close() },
+			}, nil
 		},
 		Close: bus.Close,
 	})

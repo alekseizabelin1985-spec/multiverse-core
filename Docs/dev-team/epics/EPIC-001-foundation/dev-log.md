@@ -8807,3 +8807,23 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
   - `swarm-llm-laws.md`, код, схемы, `testdata/**`, `api/gateway.openapi.yaml` не менялись.
   - `gitleaks dir . --redact -c .gitleaks.toml` по копии 11 файлов рабочей копии (10 файлов задачи и `review.md` с записью ревьюера) с конфигурацией ветки — `no leaks found`; копия удалена по точному пути.
 - Не коммитил.
+
+<!-- dev-log T-460 -->
+## developer#2 · T-460 · `eventbus.Permanent` и `Policy.World` по C-01 v1.10 · 2026-09-13
+
+Ветка `task/T-460-permanent-policy-world` (от эпика `a0d45d2`), TEAM-1, Opus, `contract-change`. DoD — из карточки `tasks/T-456.md` (блок EPIC-001, итерация 2); подробности — карточка `tasks/T-460.md`, раздел «Выполнение».
+- **Что сделано.**
+  - `delivery.go`: `ErrPermanent`, `Permanent(err)` (`nil` → `nil`; `Unwrap` — `ErrPermanent` и причина; текст — текст причины). В `Deliver` после проверки `ctx.Err()` — `errors.Is(lastErr, ErrPermanent)` → письмо с `attempts` = номер вызова, затем `Error` с `handled=true` без `panic`/`stack`. Под отменой — `ctx.Err()`, письма нет. Паника не тронута.
+  - `registry.go`: `WorldRule` (`WorldOptional` = 0, `WorldRequired`), `Policy.World`, ветка в `Check` (`World == nil`, пустой `World.Entity.ID` → `ErrPolicyViolation`). `Route` и проверка при чтении получают правило через `Check`.
+  - `shared/testkit/contract`: кейсы `APermanentErrorIsParkedAtOnceWithoutAPause` и `APermanentErrorUnderCancellationIsDeliveredAgain`, поле `Target.Stalled` у обеих целей. README пакета — «Мир в конверте по политике типа», «Окончательная ошибка».
+- **Решения по ходу.**
+  - «Без пауз» проверяется на отдельной шине той же реализации с паузами `StalledBackoff` на ручных таймерах, которые никто не двигает: цели набора собраны с нулевыми паузами ради остальных кейсов, и там отличить «сразу» от «после паузы» нельзя. Чтобы кейс не стал пустым, в конце он показывает, что обычная ошибка на этой шине за 300 мс не повторяется.
+  - Текст письма = текст причины достигается `Error()` обёртки, а не распаковкой в `Deliver`: повторная обёртка `fmt.Errorf("…: %w", Permanent(c))` даёт в письме полный текст цепочки, как у обычной ошибки.
+  - Строка лога пишется только после успешной записи письма (как «parked» у T-441); неудачная запись — прежний «not parked», `handled=false`.
+  - Кейс окончательной ошибки проверяет и журнал (`ReadRange`), как кейс паники.
+  - `All()` реестра сверен дампом в копиях `a0d45d2` и ветки — 65 строк, совпали; ненулевого `World` нет.
+- **Тесты.** `permanent_test.go` (6), `policy_world_test.go` (3), `membus/policy_world_test.go` (2), два contract-кейса.
+- **Мутанты** (копии `t460-<имя>` в scratch, без `-overlay`, удалены по точным путям): M0 контрольный — зелёный; M1 «`Permanent` как обычная ошибка», M2 «парковка под отменой», M3 «пауза перед парковкой», M4 «`WorldRequired` не срабатывает», M5 «пустой id проходит», M6 «застывшая шина без пауз» — красные (unit и contract на membus; kafka под мутантами не гонялся — один интеграционный прогон).
+- **Прогоны.** `go build ./... && go vet ./...` — 0; `go vet -tags integration ./shared/...` — 0; `go test -short -count=1 ./...` — 27 пакетов ok; `golangci-lint run ./...` и `--build-tags integration` по `eventbus`/`contract` — 0 issues; `mvctl contracts check` — ok; `make test` — 0 (без `-race`, нет cgo). `go test -tags integration -count=1 -run TestBusContractOnRedpanda ./shared/testkit/contract/` — ok, оба новых кейса на Redpanda пройдены; контейнеров testcontainers до и после — нет.
+- **Открыто для оркестратора.** Тексты `ErrPermanent` и строки лога в C-01 не заданы — выбраны исполнителем. Обязательное поле `Target.Stalled` меняет публичный тип `shared/testkit/contract`.
+- `.env` не открывался, стенд `:8888` не трогался. Не коммитил, `git add` не делал.
