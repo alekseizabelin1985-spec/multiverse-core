@@ -224,9 +224,16 @@ def texts_at(value, paths):
     return found
 
 
+# 3 and not 2: python3 itself exits with 2 when it cannot open this file or
+# does not understand its own arguments, and then no "bench:" line has been
+# printed at all. The shell tells the two apart (T-405 review #1, N-4) and turns
+# both into exit 2 of the script, "cannot measure".
+FAIL_STATUS = 3
+
+
 def fail(message):
     sys.stderr.write("bench: %s\n" % message)
-    raise SystemExit(2)
+    raise SystemExit(FAIL_STATUS)
 
 
 def load_matrix(path):
@@ -722,11 +729,16 @@ resolve_build() {
   printf '%s' "${pin:-unknown}(pin)"
 }
 
+# A failing nvidia-smi (a driver that does not answer exits 9 and prints its
+# complaint to stdout) means "no VRAM figure", as in the PowerShell twin. Inside
+# the pipeline of before, pipefail turned that status into the status of
+# `vram=$(read_vram)` and set -e ended the whole run without a word, while the
+# twin carried on (found by the parity stand, T-405 iteration 2).
 read_vram() {
-  if command -v nvidia-smi >/dev/null 2>&1; then
-    nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null |
-      head -n 1 | tr -d '[:space:]'
-  fi
+  local out
+  command -v nvidia-smi >/dev/null 2>&1 || return 0
+  out=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null) || return 0
+  printf '%s\n' "$out" | head -n 1 | tr -d '[:space:]'
 }
 
 mkdir -p "$out_dir"
@@ -778,8 +790,19 @@ for config in "${config_list[@]}"; do
   unset p95_max group_p95_max group_advisory latin_max lang_pass_min valid_json_min
   # Through a file rather than <(...): a failing process substitution leaves the
   # variables unset, and the script would carry on with an empty endpoint.
-  py config "$matrix" "$config" >"$tmpdir/config.env" ||
+  #
+  # Exit 3 is fail() of the helper: it has already printed the reason, in the
+  # words the PowerShell twin uses ("configuration X is not in ... (have: ...)"),
+  # and a second line saying the same thing vaguely made the two outputs differ
+  # (found by the parity stand, T-405). Any other status is a crash of the
+  # helper — a matrix that is not JSON, or python3 itself refusing to start with
+  # its own exit 2 — and the line below is all the operator gets besides the
+  # message of Python.
+  py config "$matrix" "$config" >"$tmpdir/config.env" || {
+    status=$?
+    [ "$status" -eq 3 ] && exit 2
     die "configuration $config could not be read from $matrix"
+  }
   while IFS='=' read -r key value; do
     printf -v "$key" '%s' "$value"
   done <"$tmpdir/config.env"
@@ -897,7 +920,9 @@ for config in "${config_list[@]}"; do
 
       bodies_dir="$tmpdir/bodies-$config-$repeat-$phase"
       mkdir -p "$bodies_dir"
-      py bodies "$matrix" "$prompts" "$phase" "$model" "$cell_n" "$bodies_dir" >"$tmpdir/index.txt"
+      # fail() of the helper exits 3 and has said why; the contract of this
+      # script for "cannot measure" is 2, whatever the helper returned.
+      py bodies "$matrix" "$prompts" "$phase" "$model" "$cell_n" "$bodies_dir" >"$tmpdir/index.txt" || exit 2
 
       while IFS=$'\t' read -r idx prompt_id text_paths; do
         [ -n "$idx" ] || continue
