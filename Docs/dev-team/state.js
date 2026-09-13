@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:45:09+03:00",
+  "updatedAt": "2026-09-13T14:52:04+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3041,7 +3041,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T12:52:40+03:00",
           "finishedAt": null,
-          "reviewIterations": 2,
+          "reviewIterations": 3,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8552,7 +8552,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Ревью #3: итерация 3 shared/agent",
       "startedAt": "2026-09-13T14:39:15+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:52:04+03:00"
     },
     {
       "instance": "architect#2",
@@ -8592,6 +8592,16 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Итерация 2: /data в образе, 503 с условиями, замечания ревью",
       "startedAt": "2026-09-13T14:45:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Приёмка T-201 shared/agent v2",
+      "startedAt": "2026-09-13T14:52:04+03:00",
       "finishedAt": null
     }
   ],
@@ -11325,6 +11335,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Заведена T-456 (system-architect#1, contract-change, S–M, после T-449): C-08 v1.4 — 503 forget_incomplete с условиями, api-contracts.md §1.6, КД шлюза §3/§5.1/§6/§7.5/§9 по коду T-303, ADR-019 доп.; дедлайн чтения для long-poll (≥ wait_ms + 5 с или 0, вопрос из ревью T-446); строки DoD T-303/T-311/T"
+    },
+    {
+      "at": "2026-09-13T14:52:04+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · ревью #3 (TEAM-2/code-reviewer#1): принять — 0/0/0/2. Ma-2/Mi-5/Mi-6/N-1/N-2 закрыты; отступление «смещение даты не переводится в UTC» принято (безопаснее для контроля подмены T-26; хеш не зависит от пояса машины — 11 значений в 6 поясах). Nit: N-3 тест ключа null, N-4 флаг untyped. Приёмка "
     }
   ],
   "blockers": [],
