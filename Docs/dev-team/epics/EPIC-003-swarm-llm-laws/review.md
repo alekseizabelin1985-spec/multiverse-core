@@ -2871,3 +2871,113 @@ Mi-2 чинится тем же изменением. Остальные Minor �
 **Принять.** Critical 0 · Major 0 · Minor 3 · Nit 6.
 
 Ma-1 закрыт: ADR-029 оформлен, КД §10.2/§13.4.2 и DoD T-203 ссылаются на него. Mi-1…Mi-7 и N-1…N-5 исполнены, арифметика E и Qwen3.6 сходится, мутант 210 даёт красный тест. Mi-8 остаётся за tech-lead#2 при приёмке. Mi-9…Mi-11 — точность записи и стендовых проверок. Они правятся без повторного ревью: при приёмке tech-lead#2 или до подтверждения ADR-029 у system-architect#1. N-6…N-11 можно учесть в строках DoD исполнителей. T-203 может брать 160 / 185 / L 140 / 4 / 2 и `pattern` ярлыков.
+
+## T-202 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-2)
+
+### Границы ревью
+
+- **Ветка:** `task/T-202-levels-validator`, папка `.worktrees/T-202`, HEAD = база `d5237b0`. Коммитов у задачи нет, ревьюировалось рабочее дерево.
+  - Новые: `shared/agent/{levels,validator}.go`, `shared/agent/{levels,validator}_test.go`, `shared/agent/testdata/blueprints/invalid/` (16 файлов).
+  - Изменены: `testdata/blueprints/valid/domain-fair.md`, `dev-log.md`, `tasks/T-202.md`, строка статуса T-202 в `tasks.md`.
+  - `shared/contracts/**`, `.golangci.yml`, КД не тронуты.
+- **Входы:** раздел T-202 `tasks.md` (ревизия 4, T-416, строки приёмки T-201), карточка и запись `dev-log T-202`. КД `swarm-llm-laws.md` §4.1, §12.2, §13.1–13.2. `api-contracts.md` §2.4, §3.1–3.3, `data-model.md` §4. `contracts.md` C-02 v1.6 с кончика `epic/EPIC-001-foundation` (`:353`, числа от 2^53), C-11. ADR-015 п. 3, ADR-025. Код T-201 (`blueprint.go`, `parser.go`, `placeholders.go`, `content_hash_test.go`), `shared/contracts/ownership.go`.
+
+### Прогоны
+
+- `go build ./... && go vet ./...` — зелёные.
+- `go test -short -count=1 ./shared/agent/...` — ok, `shared/agent` 95.5 %, `shared/agent/tools` 68.1 %.
+- `golangci-lint run ./shared/agent/...` — 0 issues.
+- **Мутанты.** Копия `go.mod`, `go.sum`, `schemas`, `shared/{agent,clock,contracts,eventbus,jsonpath}` лежала в scratch (`t202rev-work`), без `-overlay`. До мутаций копия зелёная. Контрольный M0 (текст `reserved level, spawn disabled`) запущен первым и убит. Из 26 рабочих мутантов 24 убиты тестами, сборкой — ни один. Выжили два: M21 и M23, см. N-2.
+  - Убиты: glob целиком вместо сегментов, снятый белый список, `OwnedEntityTypes == nil` → «можно всё», границы 2^53−1 для int/float/uint64, пропуск `info`, `Models` всегда множество, снятый `IsLocal`, сортировка без поля, `laws_ref` без перевода в файл, снятый гейт роли.
+  - Убиты также: `warning` → `error` у подозрительных плейсхолдеров, `AllowedEventTypes` без проверки уровня, `dynamic` у любой роли, blank-импорт `shared/contracts` в `levels.go`, пропуск `time.Time` и `map[any]any`, `entity.update.proposed` у нарратора, `max_instances` нарратора, снятая предпроверка шаблона, пустой реестр считается «любой тип», переспрос запрещённой модели у провайдера, `object` не резервный.
+- **Проба в копии** (отдельный тест, в ветку не попал) подтвердила Mi-1, Mi-2, N-1 и N-3. Копия удалена по точному пути.
+
+### Отклонения исполнителя — оценка
+
+1. **Белые списки событий взяты из `api-contracts.md` §2.4 — корректно.** В `data-model.md` §4 только таблица владения, типов событий там нет. Сам §2.4 говорит: «`levels.go` держит только допустимые типы событий уровней».
+   - Сверено по ролям. `global-gm` — `world.*` и `entity.update.proposed`. `region-gm` — четыре типа и `entity.{create,update}.proposed`: строки `domain` в `ownership.go` с `Create` для `npc`/`encounter`. `encounter` — `dice.rolled`, `combat.decided`, `encounter.ended`, `entity.update.proposed`: строки `task` без `Create`. Нарраторы — `narrative.output`. Резервные роли — пусто.
+   - Каждый тип зарегистрирован, это проверяет тест.
+   - Текст «по `data-model.md` §4» в design §3.1 A2, КД §2 и `tasks.md` правят architect#2 и tech-lead#2.
+   - **`city-gm` = `region-gm`** — допустимо: роль вне MVP-1, КД правило 1 относит её к `domain`. Подтверждение — вопрос 2 для architect#2, возврата не требует.
+2. **`laws_ref` → `laws/<мир>.vN.yaml` — корректно.** Имя совпадает с `FileSource` КД §12.2 (`laws/{world}.v{N}.yaml`). Замечание к форме ссылки — N-3.
+3. **7а.**
+   - `info` только при названной модели — корректно: у блупринта без модели проверять нечего, строка DoD выполнена на `personal-gm`.
+   - Рантайм-`warning` не реализован. В DoD T-202 его нет, в КД есть. Форма API — вопрос 1 для architect#2, до T-204/T-222. Возврата не требует.
+4. **Роль не подходит к уровню → одна ошибка — корректно и безопасно.** Блупринт остаётся невалидным (`error` правила 1) и не активируется, белый список у такой пары не угадывается. Снятие гейта (M11) убивает корпус `rule-01`.
+5. **Проверки из столбца «Обяз.» §3.1.** Направление верное, но проверки взяты выборочно — Mi-1.
+6. **Владение по уровню.** Строка DoD выполнена буквально. Но у ролей, которые не предлагают изменений сущностей, статическая проверка пропускает лишнее — Mi-2. Правка C-02 для исправления не нужна.
+
+### Что проверено и сошлось
+
+- **Белые списки и владение не обходятся.**
+  - Белые списки: M2, M13, M18, M22 убиты.
+  - `allowed_event_types` сравнивается точно, glob в них не разворачивается: `"*"` — не тип реестра, `error`.
+  - `MatchEventType` работает по сегментам (M1 убит). `[.]` и `\.` распадаются на некорректные сегменты и дают `ErrBadPattern`. Предпроверка шаблона стоит до сравнения длины (M20).
+- **Пустое окружение → отказ.**
+  - `EventTypes`, `Blueprints`, `Tools`, `Schemas`, `Invariants`: `Set.Has` на `nil` возвращает `false`.
+  - `FileExists == nil` и `OwnedEntityTypes == nil` покрыты тестами (M3 убит).
+  - `Models == nil` → `info` (M6); пустой список ≠ `nil` (M7). `FileExists` не выходит за `root` по `..` и абсолютному пути (M8).
+- **Импорт `shared/contracts`.** Тест на `go list -deps ./...` тестовые импорты не видит. M15 (blank-импорт в `levels.go`) он ловит за 0.15 с. Часть «нет `internal/*`» дублирует depguard-правило `shared` и не мешает.
+  - Тест уместен: DoD допускает «в тесте или в правиле depguard», а `.golangci.yml` — файл EPIC-001.
+  - Правило depguard для `**/shared/agent/**` с `!$test` перенесло бы проверку в линтер без подпроцесса. Это решение tech-lead#1 (бэклог п. 5), возврата не требует.
+- **Детерминизм порядка.** Стабильная сортировка «файл → поле → серьёзность → причина» (M9 убит). В `checkValue` ключи обходятся отсортированными. `matchesRegistry` возвращает только `bool`, порядок обхода карты не утекает. В тесте 50 повторов. Порядок индексов от 10 — N-1.
+- **C-02 v1.6.** Допустимы |x| ≤ 2^53−1, граница включительная (M4, M5). Проверены:
+  - `uint64` (M25); float за границей; `-99999999999999999999` (yaml даёт float64); `0x20000000000000` (int);
+  - `NaN`/`±Inf`; вложенные списки и отображения; `time.Time` и `!!timestamp` (M16, M17);
+  - закавыченная дата предупреждения не даёт.
+  - Дубликаты ключей YAML отвергает парсер, поэтому склейки ключей через `fmt.Sprint` в `map[any]any` не бывает.
+- **Тест корпуса.** `slices.Equal` сравнивает полный отрендеренный список находок и `File` каждой находки. Файл вне таблицы и правило 1–14 без файла дают красный тест. Все 16 файлов прочитаны: каждый нарушает только своё правило. У `rule-01` обе находки — правило 1, у `rule-13` «`## system` обязателен» — тоже правило 13.
+- **`valid/domain-fair.md` не ослабляет T-201.**
+  - `TestContentHashChangesWithAnyByteOfTheContent` перебирает все байты файла. Байтов и полей под хешем стало больше, порог `parsed ≥ len/4` прежний.
+  - Три даты (`conditions`, два `ops`) на месте и теперь проверяются дважды: хешем и валидатором (`TestValidCorpus`).
+  - `TestValidCorpusSectionsUseOnlyKnownPlaceholders` проходит с новым `## system`.
+- **Правила 1–14 и 7а сверены с КД §13.2 построчно.** Всё соответствует, кроме Mi-1/Mi-2 и оговорённого рантайм-`warning`.
+  - `parent` у `global` запрещён, у `dynamic` имя не ищется в `Blueprints`.
+  - `intervals.active` обязателен у `domain`. `max_instances == 1` — по уровню и роли. Запрещённая модель не переспрашивается у провайдера.
+  - `rules_ref` — у `domain` и `encounter`, `absolute_limits_ref` — у трёх ролей `task`.
+  - Правило 13 — обе серьёзности, `## canon` и `## description` тоже. Правило 14 — `info`.
+- **Гигиена.** Go-файлы в LF (`eol=lf`). Корпус `invalid/` в рабочей копии LF при `text=auto` — как `valid/personal-gm.yaml`, парсер нормализует CRLF. `time.ParseDuration` не читает часы, `forbidigo` здесь ни при чём.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Суть | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `shared/agent/validator.go:362`–`:374` (`checkTTL`), `:376`–`:387` (`checkInstances`), `:586`–`:637` (`checkDomain`/`checkGlobal`) | **Обязательность по столбцу «Обяз.» §3.1 применена выборочно.** Карточка (п. 7) называет этот столбец основанием. Взяты `llm.phase2`, `llm.tick`, `invariants`, `parent`, но не взяты:<br>• `ttl` («Обяз.» = task/monitor);<br>• `constraints.max_instances` (да, все);<br>• `round` (да, encounter);<br>• `background_events[]` (да, global).<br>Проба: `personal-gm` без `ttl` — 0 находок; `encounter` с `max_instances: 0` или `-3`, без `round` и `ttl` — 0 находок; `global` без `background_events` — 0 находок. По КД §4.1 TTL — единственный стоп `personal-gm`. Такой блупринт проходит валидатор, и агент на каждый solo-scope живёт до рестарта. | Добавить `error`:<br>• `ttl` обязателен для level `task` (для резервного `monitor` — на выбор, тогда дописать `ttl` в `rule-14-reserved.md`);<br>• `max_instances ≥ 1` для всех уровней, правило 6 (`== 1`) остаётся для своих;<br>• `round` обязателен для role `encounter`;<br>• `background_events` непуст для `global`.<br>Строки — в `TestRules`. Валидный корпус и остальные файлы `invalid/` этим условиям уже удовлетворяют (сверено). Если какое-то поле намеренно не проверяется — назвать его в карточке п. 7. |
+| Mi-2 | Minor | `shared/agent/validator.go:519`–`:527`; `shared/agent/levels.go:69`–`:78` | **`owned_entity_types` у роли, которая ничего не предлагает, не ограничен.** Проба: `personal-gm` с `owned_entity_types: [player, npc, encounter]` — 0 находок, строка `task` написана для агента встречи. Источники говорят иначе:<br>• `data-model.md` §4: «Персональный GM — ничего»;<br>• `api-contracts.md` §3.1: у нарраторов `[]`;<br>• КД §13.2 п. 8: вид владения ключуется парой `(level, role)`, значит, сужение по роли заложено.<br>Сейчас это безвредно: белый список нарратора — только `narrative.output`. Но блупринт заявляет полномочия, которых у роли нет. Любая будущая проверка по `bp.OwnedEntityTypes` (страж §2.4 п. 5) их унаследует. | В `checkWhiteLists`: если в `AllowedEventTypes(level, role)` нет `entity.create.proposed` и `entity.update.proposed`, любой элемент `owned_entity_types` → `error` «role %s proposes no entity changes». Одна находка на элемент, без второй «outside the ownership row». Брать белый список **роли**, а не блупринта: `encounter-wolf` владеет через механику без `entity.update.proposed` в своём списке. Нужен тест. Ожидания `rule-08` поменяются, если сообщение для `world` станет новым. Если architect#2 решит, что владение — только по уровню, записать это в КД §13.2 п. 8 и закрыть замечание записью (вопрос 3). |
+| N-1 | Nit | `shared/agent/validator.go:127`–`:134` | Поле сортируется как строка: `allowed_event_types[10]` и `[11]` идут раньше `[2]` (проба на 12 элементах). Порядок детерминирован, но при 10+ элементах отчёт читается вразнобой. | Сравнивать хвостовые индексы `[n]` численно или сортировать по префиксу поля без индекса, сохраняя порядок выдачи внутри. |
+| N-2 | Nit | `shared/agent/validator.go:488`; `shared/agent/levels.go:54` | Два мутанта выжили. M21: убран `math.IsNaN` из проверки `temperature`, а `temperature: .nan` в YAML достижим. M23: `global-gm.scopeTypes = nil` — нет теста на чужой тип scope у `global-gm`, `region-gm`, `group-narrator`. | Две строки `TestRules`: `Temperature = NaN` → `error`; `global-world.md` с `scope_binding.type: [region]` → `does not fit role "global-gm"`. |
+| N-3 | Nit | `shared/agent/validator.go:560`–`:584` | `refFile` применяет `@vN` к любой ссылке, а `laws_ref` принимает любой существующий файл. Проба: `laws_ref: config/absolute-limits.yaml` и `rules_ref: laws/dark-forest-world@v1` — 0 находок. | Перевод `@vN` → файл делать только для `laws_ref` и требовать форму `laws/<id>@vN` (`api-contracts.md` §3.1, КД §12.1). Иначе — `error` «not a laws reference». |
+| N-4 | Nit | `shared/agent/validator.go:811`, `:794`, `:842`–`:853` | Три места по-разному обращаются с символическими ссылками:<br>• схемы (`WalkDir` + `d.Type().IsRegular()`) ссылку пропускают молча — будет `unknown schema`;<br>• блупринты (`ParseFile`) идут по ссылке;<br>• `FileExists` (`os.Stat`) идёт по ссылке, в том числе за пределы `root`, хотя комментарий обещает «regular files under root only». | Выровнять: `os.Stat` для схем, как у блупринтов. В комментарии `projectFileExists` написать «лексически внутри root» либо проверять `filepath.EvalSymlinks`. |
+
+### Вопросы — architect#2 (через оркестратора; возврата не требуют)
+
+1. **7а в рантайме** (КД §13.2: `warning`, `/health degraded {llm: model_missing}`).
+   - Вариант (а): поле окружения, например `ValidationEnv.ModelMissing Severity`, в T-222.
+   - Вариант (б): понижение серьёзности у вызывающего. Тогда нужен стабильный код находки: сейчас `Reason` — свободный текст с `%q`, и сравнение по нему хрупко.
+   - Решить до T-204, чтобы CLI и рантайм не разошлись.
+2. **`city-gm`**: белый список и тип scope как у `region-gm` или пусто до эпика городов.
+3. **Mi-2**: сужать ли `owned_entity_types` по роли (предложение ревью) или владение — строго по уровню.
+4. **Документы** — список исполнителя (карточка, бэклог п. 4) подтверждаю:
+   - шапка `ValidationEnv` и правило 8 (`levels.OwnedEntityTypes`) в КД §13.2;
+   - `laws_ref` → файл в правиле 10;
+   - источник белых списков в design §3.1 A2 и КД §2;
+   - сигнатура `EnvFromProject` в ADR-015 п. 3.
+
+### Предложения в бэклог
+
+1. **T-204.** `EnvFromProject` читает только `<root>/blueprints` без рекурсии. Если `mvctl blueprint validate <dir>` получит другой каталог, родители не найдутся. Одинаковые `name` молча схлопываются в `Set`, а `api-contracts.md` §3.1 требует уникальности. Нужна проверка уровня каталога.
+2. **T-204/T-222.** Один построитель `OwnedEntityTypes` из `contracts.OwnershipRules` (фильтр `Proposer == level`, без `AnyType`) вместо копий в CLI и рантайме. Там же — перевод `ParseError` → `Issue` (бэклог исполнителя п. 2).
+3. **architect#2.** В §13.2 нет двух правил:
+   - `immediate_broadcast` — КД §13.1: «только `world.*`/`region.*`»;
+   - роль не ограничивает `trigger.event_name` (проба: `group-narrator` на `llm.output` — 0 находок).
+   Решить, нужны ли эти правила.
+4. **`npc_table[].stats_ref`** — согласен с бэклогом исполнителя п. 3.
+5. **tech-lead#1.** Правило depguard `shared-agent` (deny `multiverse-core.io/shared/contracts`, files `**/shared/agent/**`, `!$test`) — задачей EPIC-001. Тест на `go list -deps` после этого можно оставить или снять.
+
+### Вердикт
+
+**Принять.** Critical 0 · Major 0 · Minor 2 · Nit 4.
+
+Строки DoD T-202 выполнены. Отклонения 1–4 корректны. Белые списки, glob и отказ при пустом окружении подтверждены мутантами. Порядок находок детерминирован. Предупреждения C-02 v1.6 соответствуют контракту и границе 2^53−1. Тест корпуса сравнивает полный список находок. Правка `domain-fair.md` тесты T-201 не ослабляет.
+
+Mi-1 и Mi-2 — пробелы статической проверки без обхода рантайм-границы (белый список событий держит). Их можно закрыть итерацией 2 или строками бэклога — по решению tech-lead#2 при приёмке. Mi-2 зависит от вопроса 3. N-1…N-4 — по желанию исполнителя.
