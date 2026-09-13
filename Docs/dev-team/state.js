@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:44:27+03:00",
+  "updatedAt": "2026-09-13T20:50:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4920,6 +4920,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-462.md"
+        },
+        {
+          "id": "T-467",
+          "title": "Стабилизировать флак TestTheSkirmishStopsSwingingWhenTheFightEnds (shared/testkit/gateway) под нагрузкой полного ./...",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-467.md"
         }
       ],
       "defects": [],
@@ -9938,7 +9951,7 @@ window.DEVTEAM_STATE =
       "task": "T-208",
       "action": "Приёмка",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:50:05+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -13639,6 +13652,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-458 · просмотр system-architect #2 (заменяет ревью #2 кода): одобрено — 0/0/0/2. У-1…У-4 закрыты (метка InReadJournal только на ReadRange, мутант «метка игнорируется» красный; шаблон с методом, 405 Allow: POST; форма Error; префиксы), Mi-1/Mi-2/N-1…N-5 ревью кода закрыты; текст C-01 v1.11 в карточ"
+    },
+    {
+      "at": "2026-09-13T20:50:05+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-208 принята TEAM-2/tech-lead#2: Mi-1 — проверка дозвона мимо прокси в дочернем процессе с cmd.Env (R2b и G1–G3 красные), N-1/N-2 комментарии; индекс 0.3.10, DoD T-212 (дедлайн опроса Health, источник моделей), критерии T-260/T-263 (переснять фикстуры). Итераций ревью — 1. До слияния — отметка tech"
+    },
+    {
+      "at": "2026-09-13T20:50:05+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Флак shared/testkit/gateway TestTheSkirmishStopsSwingingWhenTheFightEnds повторился (make test при приёмке T-208, ранее при T-303) — заведена T-467 (EPIC-004, стабилизация теста под нагрузкой полного ./...), counters.task = 467."
     }
   ],
   "blockers": [],
