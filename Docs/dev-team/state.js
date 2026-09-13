@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T11:59:08+03:00",
+  "updatedAt": "2026-09-13T12:09:07+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2104,19 +2104,6 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks.md"
         },
         {
-          "id": "T-439",
-          "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "todo",
-          "assignee": "architect#2",
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
-          "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
-        },
-        {
           "id": "T-440",
           "title": "Редакционно: overview.md §18.1 — порядок E → Qwen3.6 → C → A и правило выбора (доп. 3 ADR-005); владение infrastructure.md в ownership.md привести к факту",
           "status": "done",
@@ -2281,14 +2268,14 @@ window.DEVTEAM_STATE =
       "type": "epic",
       "size": "L",
       "team": "TEAM-1",
-      "wave": 0,
+      "wave": 1,
       "status": "active",
-      "stage": "planning",
+      "stage": "development",
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-002-state",
-      "next": "design.md → tasks.md (волны) → G3",
+      "branch": "epic/EPIC-002-state-mechanics",
+      "next": "T-051 ∥ T-050, затем T-052, T-053",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -2303,8 +2290,40 @@ window.DEVTEAM_STATE =
           "note": "без замечаний; 2-й developer на независимых задачах; T-254 снята; I1-α остаётся"
         }
       },
-      "tasks": [],
-      "defects": []
+      "tasks": [
+        {
+          "id": "T-051",
+          "title": "RNG и формулы — сверка и добор (воспроизводимость 1000×4, χ² d20, корреляция)",
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#1",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-051.md",
+          "branch": "task/T-051-rng-statistics",
+          "worktree": ".worktrees/T-051"
+        },
+        {
+          "id": "T-050",
+          "title": "shared/entity — сверка и добор, StatusTransitionAllowed(x,x) по C-02 v1.4",
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-050.md",
+          "branch": "task/T-050-entity-reconcile",
+          "worktree": ".worktrees/T-050"
+        }
+      ],
+      "defects": [],
+      "worktree": ".worktrees/EPIC-002"
     },
     {
       "id": "EPIC-003",
@@ -2318,8 +2337,8 @@ window.DEVTEAM_STATE =
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-003-swarm",
-      "next": "Ревью пары T-219/T-400 → T-220 рассказчик (3 из 6 видов нарратива) → T-255 хук",
+      "branch": "epic/EPIC-003-swarm-llm-laws",
+      "next": "решения system-architect по depguard → T-201, T-206, T-216; T-439; итерация T-215",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -3308,10 +3327,24 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-427.md"
+        },
+        {
+          "id": "T-439",
+          "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
+          "status": "todo",
+          "assignee": "architect#2",
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md"
         }
       ],
       "defects": [],
-      "epic": "EPIC-003"
+      "epic": "EPIC-003",
+      "worktree": ".worktrees/EPIC-003"
     },
     {
       "id": "EPIC-004",
@@ -3319,14 +3352,14 @@ window.DEVTEAM_STATE =
       "type": "epic",
       "size": "L",
       "team": "TEAM-3",
-      "wave": 0,
+      "wave": 1,
       "status": "active",
-      "stage": "planning",
+      "stage": "development",
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-004-gateway",
-      "next": "design.md → tasks.md (волны) → G3",
+      "branch": "epic/EPIC-004-gateway-bot",
+      "next": "T-301 ∥ T-302",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -3341,8 +3374,40 @@ window.DEVTEAM_STATE =
           "note": "без замечаний; 2-й developer на независимых задачах; T-254 снята; I1-α остаётся"
         }
       },
-      "tasks": [],
-      "defects": []
+      "tasks": [
+        {
+          "id": "T-301",
+          "title": "OpenAPI, DTO, таблица кодов, клиент gateway",
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-301.md",
+          "branch": "task/T-301-openapi-dto-client",
+          "worktree": ".worktrees/T-301"
+        },
+        {
+          "id": "T-302",
+          "title": "Хранилище gateway: SQLite, миграции goose",
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#2",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-302.md",
+          "branch": "task/T-302-store-migrations",
+          "worktree": ".worktrees/T-302"
+        }
+      ],
+      "defects": [],
+      "worktree": ".worktrees/EPIC-004"
     },
     {
       "id": "EPIC-005",
@@ -6387,6 +6452,66 @@ window.DEVTEAM_STATE =
       "task": "PROJECT",
       "action": "решения по контрактам и depguard перед волнами трёх команд",
       "startedAt": "2026-09-13T11:59:08+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-051",
+      "action": "T-051 RNG: сверка и добор",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "T-050 entity: сверка и добор",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "T-301 OpenAPI/DTO/клиент",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "T-302 хранилище и миграции",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "EPIC-002",
+      "action": "индекс и DoD EPIC-002 под v0.10",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "EPIC-004",
+      "action": "индекс и DoD EPIC-004 под дерево и gitflow",
+      "startedAt": "2026-09-13T12:09:07+03:00",
       "finishedAt": null
     }
   ],
