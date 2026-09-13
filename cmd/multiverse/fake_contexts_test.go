@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,13 +313,14 @@ const (
 //
 // The world comes over the bus, the way mvctl world init will bring it
 // (state-and-mechanics.md §4.10): the hook gives the fake no fixtures, so a
-// fight here opens only because the fake learnt the wolf from entity.created.
+// fight here opens only because the fake learnt the wolf from entity.created,
+// and the character walks in only once it has (learning).
 func TestTheProcessRunsTheFightsOfIAlpha(t *testing.T) {
 	told := make(map[string]int)
 	endings := make(map[string]int)
 	for i := range processFights {
 		t.Run(fmt.Sprintf("fight-%02d", i), func(t *testing.T) {
-			kinds, ending := fightThroughTheProcess(t, fmt.Sprintf("hk%02d", i), nil)
+			kinds, ending := fightThroughTheProcess(t, fmt.Sprintf("hk%02d", i), nil, factsAsTheyCome)
 			for kind, n := range kinds {
 				told[kind] += n
 			}
@@ -364,7 +367,7 @@ func TestTheProcessTellsTheDeathOfACharacter(t *testing.T) {
 			}
 		}
 	}
-	kinds, ending := fightThroughTheProcess(t, "hkdeath", lethal)
+	kinds, ending := fightThroughTheProcess(t, "hkdeath", lethal, factsAsTheyCome)
 	if kinds[swarm.KindDeath] != 1 || ending != "players_out" {
 		t.Errorf("%d death narratives and the encounter ended %q, want the one death of %s and players_out "+
 			"(narratives: %v). On this world the character lives only if the wolf misses all eight bites "+
@@ -373,11 +376,41 @@ func TestTheProcessTellsTheDeathOfACharacter(t *testing.T) {
 	}
 }
 
+// TestTheStandWaitsUntilTheFakeHasLearntTheWorld is fight-05 of CI run
+// 34754402826 made to happen every time (T-454). The facts of the world are
+// held back from the fake — a subscription to system_events slower than
+// /health — until the stand begins to wait for them. A stand that let the
+// character in on /health alone would send the entry into a region where the
+// fake knows nobody alive, no encounter would open, and the first blow would
+// go unanswered for the whole deadline of the harness, with the message of the
+// CI run. A stand that waits lets the facts through and fights as usual. What
+// is pinned is that the stand waits before the entry. The held facts only
+// stand for a slow runner, so the wait itself lets them through: a stand that
+// released them without waiting would pass here too, and is not what this
+// test is about.
+func TestTheStandWaitsUntilTheFakeHasLearntTheWorld(t *testing.T) {
+	fightThroughTheProcess(t, "hklate", nil, factsHeldUntilAwaited)
+}
+
+// factsOrder is how the facts of the initialised world reach the fake of the
+// hook in fightThroughTheProcess.
+type factsOrder int
+
+const (
+	// factsAsTheyCome delivers them the moment the bus hands them over.
+	factsAsTheyCome factsOrder = iota
+	// factsHeldUntilAwaited holds them until the stand begins to wait for them
+	// (learning.hold): a stand that lets the character in first has the entry
+	// answered by a fake that knows nobody in the region.
+	factsHeldUntilAwaited
+)
+
 // fightThroughTheProcess runs one skirmish through the process and returns
 // the narratives it told by kind and the reason the encounter ended ("" when
 // the character walked away from a fight still on). tweak, when given, changes
 // the fixture world before it is initialised and before the harness reads it.
-func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.Entity)) (map[string]int, string) {
+func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.Entity),
+	order factsOrder) (map[string]int, string) {
 	testkit.Deterministic(t, prefix)
 	clearVar(t, env.BusValidateOnRead.Name())
 	// The rule book of the fake is rules/dark-forest.yaml under the working
@@ -404,6 +437,10 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	doubles, cancelDoubles := context.WithCancel(context.Background())
 	stand := &stand{}
 	t.Cleanup(func() { cancelDoubles(); stand.wait() })
+	// open runs on the goroutine of process.run; the channel hands the watched
+	// transport over to the test explicitly instead of through a variable both
+	// goroutines touch.
+	opened := make(chan *learning, 1)
 	open := func(bus string, reg *contracts.Registry, timers clock.Timers, log *slog.Logger) (transport, error) {
 		tr, err := openBus(bus, reg, timers, log)
 		if err != nil {
@@ -415,12 +452,23 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 			_ = tr.Close()
 			return nil, err
 		}
-		return tr, nil
+		watched := newLearning(tr, stand.created, order == factsHeldUntilAwaited)
+		opened <- watched
+		return watched, nil
 	}
 	p := startProcess(t, contexts, open)
 	if code, health := p.health(t, func(code int, _ processHealth) bool { return code != 0 }); code != http.StatusOK {
 		t.Fatalf("/health = %d %q before the fight: %+v", code, health.Status, health.Details.Contexts)
 	}
+	var watched *learning
+	select {
+	case watched = <-opened:
+	default:
+		t.Fatal("/health answered, but the process never opened its bus through the stand")
+	}
+	// /health is ok as soon as the subscriptions of the fake run, not once they
+	// have read the world: the character walks in only after that.
+	watched.ready(t, p)
 	bus, ok := stand.bus.(*membus.Bus)
 	if !ok {
 		t.Fatalf("the process runs %T, want the in-process bus of --bus=memory", stand.bus)
@@ -442,13 +490,14 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	taken, err := h.Run(doubles, script)
 	if err != nil {
 		if len(eventsOfType(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterStarted)) == 0 {
-			// Nothing opened the fight. The likely cause is not the blow the
-			// harness reports but the world: the fake learns the wolf from
-			// entity.created on its own subscription, and C-01 orders no two
-			// topics, so the character can walk in first (review #1 of T-255, N-3).
-			t.Fatalf("the skirmish through the process: %v\nno encounter was opened: the likely cause is "+
-				"that the fake had not yet learnt %s from entity.created when %s entered — the world did "+
-				"not reach the stub before the character did", err, standWolf, standPlayer)
+			// Nothing opened the fight. The blow the harness reports is not the
+			// cause, and neither is the world reaching the fake after the
+			// character (review #1 of T-255, N-3): ready ruled that out before
+			// the entry (T-454). What is left is the entry itself or what the
+			// fake made of it.
+			t.Fatalf("the skirmish through the process: %v\nno encounter was opened, although the fake had "+
+				"learnt all of %v from entity.created before %s entered: the cause is the entry or what the "+
+				"fake made of it", err, stand.created, standPlayer)
 		}
 		t.Fatalf("the skirmish through the process: %v", err)
 	}
@@ -512,9 +561,28 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 		t.Errorf("dead letters: %v (err %v), want none", letters, err)
 	}
 
+	// The encounter announces the end only after the fact of the package that
+	// closes the fight, and it hears that fact on a subscription of its own:
+	// the harness and the narrator hear it on theirs, so Run can return and the
+	// narratives can all be out while encounter.ended is still on its way. Read
+	// at once, the end of a finished fight came back "" in 5 to 7 of 200 runs
+	// of the death under -cpu 1 (T-454). The package names the end in
+	// closed_by_event_id, and State applied it before the harness heard of it,
+	// so that id is what is awaited.
 	ending := ""
-	if ended := eventsOfType(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded); len(ended) > 0 {
-		ending, _ = ended[0].Path().GetString("reason")
+	encounterID, _ := started[0].Path().GetString("encounter.entity.id")
+	if closed, ok := stand.world.Get(encounterID); ok {
+		if endedBy, _ := closed.Attributes[entity.AttrClosedByEventID].(string); endedBy != "" {
+			waitUntil(t, "encounter.ended "+endedBy+" announced after its fact", func() bool {
+				for _, ev := range eventsOfType(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded) {
+					if ev.ID == endedBy {
+						ending, _ = ev.Path().GetString("reason")
+						return true
+					}
+				}
+				return false
+			})
+		}
 	}
 	if code, health := p.health(t, func(code int, _ processHealth) bool { return code != 0 }); code != http.StatusOK {
 		t.Errorf("/health = %d %q after the fight: %+v", code, health.Status, health.Details.Contexts)
@@ -536,6 +604,9 @@ type stand struct {
 	bus     eventbus.Bus
 	world   *state.FakeState
 	harness *gateway.Harness
+	// created is every entity bootstrap had State create: what the fake has to
+	// have learnt before a character enters.
+	created []string
 }
 
 // bootstrap starts FakeState on the bus and creates the world, the region and
@@ -592,6 +663,7 @@ func (s *stand) bootstrap(ctx context.Context, bus eventbus.Bus, fixtures []*ent
 			}
 		}
 	}
+	s.created = created
 	return nil
 }
 
@@ -746,6 +818,146 @@ func (r refusingTransport) Subscribe(ctx context.Context, topic, group string, h
 		return errRefusedGroup
 	}
 	return r.transport.Subscribe(ctx, topic, group, h)
+}
+
+// learning is the transport of the process watched from the side of the fake
+// of the hook: it knows when the encounter has folded the entity.created of
+// every entity the stand initialised, which is when a character may walk in.
+//
+// /health cannot tell. The fake reports ok as soon as its subscriptions run,
+// and C-01 orders no two topics: the entry on player_events can reach the
+// encounter before the wolf on system_events does, and an entry into a region
+// where the encounter knows nobody alive opens nothing. That is fight-05 of CI
+// run 34754402826 under -race (T-454). So the stand waits for the handler of
+// the fake to return on those facts — the moment the encounter holds the
+// entity under its lock — rather than for a length of time.
+type learning struct {
+	transport
+
+	mu      sync.Mutex
+	pending map[string]bool
+	learnt  chan struct{}
+	// refusal is the last error the handler of the fake returned on an
+	// entity.created: it tells a fact the fake refused from one that never
+	// reached it.
+	refusal error
+
+	// hold keeps entity.created from the encounter until gate opens, which is
+	// when the stand begins to wait (factsHeldUntilAwaited). A held fact whose
+	// subscription is cancelled is let go unhandled: the process is stopping.
+	hold bool
+	gate chan struct{}
+}
+
+func newLearning(tr transport, created []string, hold bool) *learning {
+	l := &learning{
+		transport: tr,
+		pending:   make(map[string]bool, len(created)),
+		learnt:    make(chan struct{}),
+		hold:      hold,
+		gate:      make(chan struct{}),
+	}
+	for _, id := range created {
+		l.pending[id] = true
+	}
+	if len(l.pending) == 0 {
+		close(l.learnt)
+	}
+	return l
+}
+
+// fold marks one entity as learnt by the encounter. Learnt means only that the
+// handler of the fake returned nil on its entity.created: Observe returns nil
+// on a fact it cannot read or of another world too, and such a fact still
+// counts. The stand creates neither, and a fake that dropped the wolf that way
+// would show as an encounter that never opened, not as a wait that never ends.
+func (l *learning) fold(id string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if !l.pending[id] {
+		return
+	}
+	delete(l.pending, id)
+	if len(l.pending) == 0 {
+		close(l.learnt)
+	}
+}
+
+// refuse remembers an error the handler of the fake returned on entity.created.
+func (l *learning) refuse(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.refusal = err
+}
+
+func (l *learning) missing() []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make([]string, 0, len(l.pending))
+	for id := range l.pending {
+		out = append(out, id)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// unlearnt says what is missing and why, for the message of ready: a refusal
+// of the fake when there was one, and otherwise that the facts never reached
+// its handler.
+func (l *learning) unlearnt() string {
+	missing := l.missing()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.refusal != nil {
+		return fmt.Sprintf("%v unlearnt; the fake refused entity.created, last with: %v", missing, l.refusal)
+	}
+	return fmt.Sprintf("%v unlearnt; the fake refused none of them, so they never reached its handler", missing)
+}
+
+// ready lets held facts through, blocks until the encounter has learnt the
+// whole initialised world, and fails the test when the process ends first or
+// the budget runs out. The stand calls it once, before any character enters.
+func (l *learning) ready(t *testing.T, r *running) {
+	t.Helper()
+	close(l.gate)
+	select {
+	case <-l.learnt:
+	case err := <-r.done:
+		r.stopped, r.err = true, err
+		t.Fatalf("the process ended before the fake learnt the world: %v", err)
+	case <-testkit.After(10 * time.Second):
+		t.Fatalf("the fake of the hook had not learnt the world from entity.created within 10s: %s", l.unlearnt())
+	}
+}
+
+// Subscribe watches the subscription of the encounter to system_events and
+// passes every other one through untouched.
+func (l *learning) Subscribe(ctx context.Context, topic, group string, h eventbus.Handler) error {
+	if group != swarm.EncounterGroup+"-"+eventbus.TopicSystemEvents {
+		return l.transport.Subscribe(ctx, topic, group, h)
+	}
+	return l.transport.Subscribe(ctx, topic, group, func(ctx context.Context, ev eventbus.Event) error {
+		if l.hold && ev.Type == state.TypeCreated {
+			select {
+			case <-l.gate:
+			case <-ctx.Done():
+				return nil
+			}
+		}
+		if err := h(ctx, ev); err != nil {
+			if ev.Type == state.TypeCreated {
+				l.refuse(err)
+			}
+			return err
+		}
+		// After the handler and not before: until Observe has returned, the
+		// entity is not in the view the entry is answered from.
+		if ev.Type == state.TypeCreated {
+			id, _ := ev.Path().GetString("entity.entity.id")
+			l.fold(id)
+		}
+		return nil
+	})
 }
 
 // --- reading the bus ---
