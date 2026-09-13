@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:28:17+03:00",
+  "updatedAt": "2026-09-13T22:40:47+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2591,22 +2591,22 @@ window.DEVTEAM_STATE =
         {
           "id": "T-463",
           "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
-          "status": "review",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T19:48:25+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T22:40:47+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 164,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-463.md"
         },
         {
           "id": "T-464",
           "title": "Devops: MV_STATE_WORLDS и MV_TELEGRAM_* в docker-compose (после T-055 и T-310 в develop, до T-390)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-13T22:40:47+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -2903,7 +2903,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
@@ -4616,14 +4616,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-311",
           "title": "Бот: flow и render",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T21:19:59+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T22:40:47+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
-          "spentMinutes": 0,
+          "spentMinutes": 74,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-311.md"
         },
@@ -4704,7 +4704,7 @@ window.DEVTEAM_STATE =
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.7",
           "spentMinutes": 0,
@@ -10214,7 +10214,7 @@ window.DEVTEAM_STATE =
       "task": "T-311",
       "action": "Приёмка flow и render",
       "startedAt": "2026-09-13T22:18:57+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:40:47+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10224,7 +10224,7 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Приёмка T-463 (вариант б)",
       "startedAt": "2026-09-13T22:23:08+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:40:47+03:00"
     },
     {
       "instance": "developer#2",
@@ -10234,7 +10234,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Итерация 3: скаляры после ApplyOps, строгий страж",
       "startedAt": "2026-09-13T22:27:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:40:47+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10244,6 +10244,36 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Ревью #2 документации",
       "startedAt": "2026-09-13T22:28:17+03:00",
+      "finishedAt": "2026-09-13T22:40:47+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Ревью #3",
+      "startedAt": "2026-09-13T22:40:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-317",
+      "action": "Приёмка документации",
+      "startedAt": "2026-09-13T22:40:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-464",
+      "action": "Переменные в compose",
+      "startedAt": "2026-09-13T22:40:47+03:00",
       "finishedAt": null
     }
   ],
@@ -14081,6 +14111,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-317 · итерация 2 (tech-writer#1): Ma-1 /health по факту кода (проверка БД — T-309), Ma-2 проверка webhook новым токеном через read -rs / Read-Host -AsSecureString и curl -K - без токена в URL и argv, запрет выкладывать docker compose config/inspect; Mi-1…Mi-11 и Nit сверены с кодом; сухой прогон r"
+    },
+    {
+      "at": "2026-09-13T22:40:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-311 принята TEAM-3/tech-lead#3: Mi-1…Mi-7 и N-1…N-6 закрыты (ответ не по контракту → «сервис недоступен», Split без пустых частей, Redact в логе, StepOf под мьютексом; нажатие согласия игроком с персонажем — уведомление без смены шага); индекс 0.1.5 — DoD T-311 по C-08 v1.5, T-312 (короткий таймау"
+    },
+    {
+      "at": "2026-09-13T22:40:47+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-463 принята tech-lead#1: вариант (б) — пометка «Код расходится» в C-15/ADR-005 сужается до llm-bench и строк успеха/health llm-server, раздел и карточка T-468; N-7 (mtime впереди — WARNING, P17/P18), N-8; make ci не удлинён (мутанты только в CI). Итераций ревью — 2. Коммит a7801e7 (бит исполнения "
+    },
+    {
+      "at": "2026-09-13T22:40:47+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · итерация 3 (developer#2): Ma-3 — статус и hp проверяются по сущности после ApplyOps, путь ниже скалярного атрибута модели — invalid_op на шаге 1; Mi-6 строгий страж (K5/K7 красные, 3 теста стенда ×20 зелёные); N-3 индекс без ведущих нулей; мутанты S1–S5, N3, K5–K7 красные. Ревью #3 — code-re"
+    },
+    {
+      "at": "2026-09-13T22:40:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-317 · ревью #2 (code-reviewer#3): принять — 0/0/2/2. Ma-1/Ma-2 закрыты (health по факту, webhook новым токеном через read -rs и curl -K -). Mi-12 нет готовой команды PowerShell (curl — псевдоним Invoke-WebRequest); Mi-13 порядок шагов runbook §6 (webhook до перезапуска). Решение оркестратора: отде"
+    },
+    {
+      "at": "2026-09-13T22:40:47+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-464 начата (devops-engineer#1): MV_STATE_WORLDS у core и MV_TELEGRAM_ACTION_KEY_SALT/COMMANDS_PER_MIN у бота в compose с умолчаниями манифеста; ветка task/T-464-compose-env-passthrough от 55ec4c4."
     }
   ],
   "blockers": [],
