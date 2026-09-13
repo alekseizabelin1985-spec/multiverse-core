@@ -8,10 +8,14 @@
 # quote an IPv6 host in YAML). The file is one YAML document: a second one
 # after --- is refused, not ignored.
 #
-# Local endpoints (loopback, host.docker.internal, RFC 1918) cost 0 whether or
-# not they are listed, and a non-zero price for one is refused at load. A
-# non-local (endpoint_host, model) that is not listed has NO price: the call
-# is an error for the cost accounting, not a free call.
+# Local endpoints — the class local of the rule "local address", C-15 v1.3 and
+# testdata/llm/local-endpoints.tsv: loopback, localhost and *.localhost,
+# host.docker.internal, a one-word compose service, RFC 1918, link-local, IPv6
+# ULA (T-451) — cost 0 whether or not they are listed, and a non-zero price for
+# one is refused at load. A non-local (endpoint_host, model) that is not listed
+# has NO price: the call is an error for the cost accounting, not a free call.
+# A trailing dot is part of the key where it changes the class: ollama. and
+# 127.0.0.1. are names of the cloud, not ollama and 127.0.0.1.
 #
 # cached_prompt_per_1k is optional: the price of prompt tokens served from the
 # provider's cache (usage.prompt_tokens_details.cached_tokens); absent, they

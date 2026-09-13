@@ -11,6 +11,7 @@
 
 | Раздел | Изменение | Основание |
 |---|---|---|
+| **v0.2.3 (T-456, system-architect#1; system-analyst не запущен)** §1.2, §1.6 | `DELETE /v1/links` и `DELETE /v1/admin/links/{player_id}`: `503 forget_incomplete` с `Retry-After` — связка удалена, стирание не подтверждено; шаги каскада — до удаления связки | `contracts.md` v0.14: C-08 v1.5 |
 | **v0.2.2 (T-444, system-architect#1; system-analyst не запущен)** §2.3.1, §2.3.2, §2.3.3, §2.3.7, §2.3.10, §2.3.16 | `group_move` снят из `cause` `group.*`; `scope` — только в конверте, из payload `round.opened` и `encounter.*` убран; `llm.output`: хеши `sha256:<hex>`, условная обязательность полей по статусу; `llm.output.rejected`: обязательность `budget`/`llm_output`/`element` по причине, опц. `background_ref`; `config.cloud_enabled`: `provider` заполняется всегда | `contracts.md` v0.11: C-01 v1.8, C-04 v1.4, C-06 v1.2, C-07 v1.3 |
 | **v0.2.1 (сведение 3, system-architect)** §1.2, §2.3.2, §2.3.4 | `/forget`: `entity.update.proposed {cause: forget}` от gateway (`status=abandoned`, только из `alive`), `group.left`/`group.leader_changed {cause: forget}`, `end_reason=forget` | C-02 v1.2, C-04 v1.1, C-08 v1.2 (З-1, З-2) |
 | v0.2.1 §1.3, §1.6, §1.7, §2.3.2 | `GroupView.leader_id: string \| null`, `group.leader_changed {leader: null}`, `409 no_leader` | C-04 v1.1, C-08 v1.2 (З-4) |
@@ -85,11 +86,11 @@
 
 #### `DELETE /v1/links` — удалить связку (`/forget`)
 Запрос: `{ "external_platform", "external_id" }`
-Ответ `200`: `{ "deleted": true, "player_id_detached": "player-A|null" }`; если связки нет — `200 { "deleted": false }` («нечего удалять»).
-Побочные эффекты (порядок — C-04 v1.1, сведение 3): outbox игрока очищен (`pending → dropped`); если персонаж `alive` — один `entity.update.proposed atomic=true cause=forget` (игрок `set status=abandoned` + при лидерстве группа `set leader_id`), затем `group.left {cause: forget}` и при необходимости `group.leader_changed {cause: forget, leader: …|null}`; активная сессия закрыта `end_reason=forget`; после этого связка удаляется физически. Персонаж `dead` — предложение не публикуется (терминальный статус); `creating` — предложение при получении `entity.created` без связки. Связь: UC-031, FR-061.
+Ответ `200`: `{ "deleted": true, "player_id_detached": "player-A|null" }`; если связки нет — `200 { "deleted": false }` («нечего удалять»). `503 forget_incomplete` *(изм. T-456, C-08 v1.5)*: связка удалена, стирание её байтов из файла связок не подтверждено; с заголовком `Retry-After`; пока стирание отложено, так отвечает любой `/forget`; `200 { "deleted": false }` после такого ответа — завершение того же забвения, а не «нечего удалять». Клиент не сообщает, что данные удалены, до ответа `200`.
+Побочные эффекты (порядок — C-04 v1.1, сведение 3): outbox игрока очищен (`pending → dropped`); если персонаж `alive` — один `entity.update.proposed atomic=true cause=forget` (игрок `set status=abandoned` + при лидерстве группа `set leader_id`), затем `group.left {cause: forget}` и при необходимости `group.leader_changed {cause: forget, leader: …|null}`; активная сессия закрыта `end_reason=forget`; после этого связка удаляется физически. Шаги до удаления выполняются первыми: ошибка шага оставляет связку, повтор `/forget` выполняет их заново *(изм. T-456, C-08 v1.5)*. Персонаж `dead` — предложение не публикуется (терминальный статус); `creating` — предложение при получении `entity.created` без связки. Связь: UC-031, FR-061.
 
 #### `DELETE /v1/admin/links/{player_id}` — удаление оператором
-Ответ как выше. Только `X-Client-Id` из списка операторских клиентов.
+Ответ как выше, включая `503 forget_incomplete`. Только `X-Client-Id` из списка операторских клиентов.
 
 ### 1.3. Миры и персонажи
 
@@ -210,6 +211,7 @@
 | 429 | `rate_limited` | 30 действий/мин на `player_id` (burst 5); ответ с `Retry-After` |
 | 501 | `not_implemented` | `GET /v1/clients/{client_id}/stream` в MVP-1 |
 | 503 | `bus_unavailable`, `state_unavailable` | зависимость недоступна — действие **не** принято, `action_key` не записан |
+| 503 | `forget_incomplete` | `DELETE /v1/links`, `DELETE /v1/admin/links/{player_id}`: связка удалена, стирание из `links.db` не подтверждено; с `Retry-After`; пока стирание отложено — на любой `/forget`; `200 {deleted: false}` после него — завершение того же забвения (C-08 v1.5; изм. T-456) |
 
 ### 1.7. Группы (чтение)
 `GET /v1/groups/{group_id}` → состав, лидер, позиция, встреча (`GroupView{group_id, leader_id: string | null, members[]{player_id, name, participation, status}, position, encounter?, state}`; `leader_id = null` — живых участников нет, сведение 3 З-4). Связь: UC-014.

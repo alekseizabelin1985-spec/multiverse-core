@@ -35,7 +35,14 @@
 #   - "host:" with an empty port, brackets around anything but an IPv6 address, and
 #     a percent sign in the host (an escape or an IPv6 zone) are invalid;
 #   - only 0.0.0.0 of 0.0.0.0/8 is the any-address; 0.0.0.1 is the cloud;
-#   - the IPv4-compatible ::127.0.0.1 and NAT64 64:ff9b::/96 are not mapped forms.
+#   - the IPv4-compatible ::127.0.0.1 and NAT64 64:ff9b::/96 are not mapped forms;
+#   - one trailing dot is dropped, a second one is an empty label and the name is
+#     kept whole: localhost.. is the cloud (C-15 v1.5, T-451);
+#   - a percent sign is looked for in the authority only: an escape in the path is
+#     not in the host (T-451);
+#   - a character outside printable ASCII anywhere in the value is invalid (C-15
+#     v1.5); such a URL cannot be written in this file, and the parity stand holds
+#     those cases (endpoints.go).
 #
 # Format: lines starting with # and empty lines are skipped; the first other line is
 # the header; then one case per line, three fields separated by one TAB: the URL
@@ -80,6 +87,7 @@ http://127.0.0.1:80	local	a written port counts, even the default of the scheme
 https://127.0.0.1:443	local	a written port counts, even the default of the scheme
 http://127.0.0.1:008888	local	leading zeros of a port are not significant
 http://127.0.0.1:65535	local	the upper end of the port range
+http://127.0.0.1:8080/a%20b	local	a percent escape in the path, not in the host
 https://api.openai.com/v1	cloud	a public name
 https://api.openai.com	cloud	a cloud address keeps the default port of the scheme
 http://ollama.local:11434	cloud	any name with a dot, .local included
@@ -118,6 +126,19 @@ http://[::127.0.0.1]:8080	cloud	IPv4-compatible, not IPv4-mapped
 http://[64:ff9b::7f00:1]:8080	cloud	NAT64 64:ff9b::/96 is not a mapped form
 http://[::ffff:8.8.8.8]:443	cloud	IPv4-mapped public address
 http://[::ffff:100.64.0.1]:8080	cloud	IPv4-mapped CGNAT
+http://api.localhost.evil.com:8080	cloud	*.localhost is anchored at the end: a name that goes on after localhost
+http://api.localhost.evil.com.:8080	cloud	*.localhost is anchored at the end, with the root dot as well
+http://x!y.localhost:8080	cloud	a label of *.localhost holds [a-z0-9_-] only, from its start
+http://evilhost.docker.internal:8080	cloud	host.docker.internal is the whole name, not a suffix
+http://a.host.docker.internal:8080	cloud	a subdomain of host.docker.internal is not the alias
+http://localhost.evil.com:8080	cloud	a name that starts with localhost. is not localhost
+http://xlocalhost.:8080	cloud	a one-word name that ends in localhost, with the root dot: not localhost.
+http://localhost..:8080	cloud	a second trailing dot is an empty label: the name is kept whole
+http://api.localhost..:8080	cloud	*.localhost with an empty label at the end
+http://host.docker.internal..:8080	cloud	the container alias with an empty label at the end
+http://224.0.0.1:8080	cloud	IPv4 multicast is not a local class
+http://[ff02::1]:8080	cloud	IPv6 link-local multicast ff02::/16 is not link-local unicast fe80::/10
+http://255.255.255.255:8080	cloud	the IPv4 limited broadcast is not a local class
 http://0.0.0.0:8888	invalid	the IPv4 any-address: a server listens there, a client cannot call it
 http://[::]:8888	invalid	the IPv6 any-address
 http://[0:0:0:0:0:0:0:0]:8888	invalid	the IPv6 any-address, uncompressed
@@ -157,6 +178,7 @@ http://[localhost]:8888	invalid	brackets around a name
 http://[1:2:3:4:5:6:7::8]:8888	invalid	nine groups with ::
 http://[fe80::1%25eth0]:8080	invalid	the zone of an IPv6 literal
 http://ol%61ma:11434	invalid	a percent escape in the host
+http://ol%C3%A9ma:8080	invalid	a percent escape beyond ASCII in the host, which url.Parse would unescape
 http://localhost\evil.com:8080	invalid	a backslash in the host, which url.Parse refuses
 http://127.0.0.1\.evil.com:80	invalid	a backslash after a loopback address, which url.Parse refuses
 http://local^host:8080	invalid	a caret in the host, which url.Parse refuses

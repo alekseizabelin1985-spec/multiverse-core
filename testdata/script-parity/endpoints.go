@@ -44,12 +44,19 @@ const endpointTableMinRows = 40
 var endpointAnswers = []string{"local", "cloud", "invalid"}
 
 // endpointStandCases are the cases the format of the table cannot hold — a URL
-// with a space — run after the rows, by both halves, under the same checks. Go's
-// url.Parse refuses a space in a host (T-450 review #1 Mi-2). A case that can
-// be written in the table belongs there, not here.
+// with a space or with a character outside printable ASCII — run after the rows,
+// by both halves, under the same checks. Go's url.Parse refuses a space in a host
+// (T-450 review #1 Mi-2); a character outside printable ASCII is invalid anywhere
+// in the value (C-15 v1.5, T-451). A case that can be written in the table
+// belongs there, not here.
 var endpointStandCases = []endpointCase{
 	{url: "http://local host:8888", want: "invalid", reason: "a space in the host, which url.Parse refuses"},
 	{url: "http://127.0.0.1 .evil.com:80", want: "invalid", reason: "a space after a loopback address, which url.Parse refuses"},
+	{url: "http://\uff4c\uff4f\uff43\uff41\uff4c\uff48\uff4f\uff53\uff54:8080", want: "invalid", reason: "a full-width localhost is outside printable ASCII"},
+	{url: "http://127\u30020\u30020\u30021:8080", want: "invalid", reason: "ideographic full stops in a dotted quad are outside printable ASCII"},
+	{url: "http://localhost\u3002:8080", want: "invalid", reason: "an ideographic full stop as the root dot is outside printable ASCII"},
+	{url: "http://local\u00adhost:8080", want: "invalid", reason: "a soft hyphen, invisible, is outside printable ASCII"},
+	{url: "http://l\u0585calhost:8080", want: "invalid", reason: "an Armenian letter that looks like o is outside printable ASCII"},
 }
 
 type endpointCase struct {

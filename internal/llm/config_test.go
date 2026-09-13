@@ -99,10 +99,12 @@ func TestLoadConfigTrimsTheV1Tail(t *testing.T) {
 		"http://127.0.0.1:8888/v1/":        "http://127.0.0.1:8888",
 		" http://host.docker.internal:1 ":  "http://host.docker.internal:1",
 		"https://api.example.com/v1":       "https://api.example.com",
-		"http://10.0.0.5/proxy/llm/v1":     "http://10.0.0.5/proxy/llm",
-		"http://10.0.0.5/v10":              "http://10.0.0.5/v10",
+		"http://10.0.0.5:80/proxy/llm/v1":  "http://10.0.0.5:80/proxy/llm",
+		"https://api.example.com/v10":      "https://api.example.com/v10",
 		"http://[::1]:8080/v1":             "http://[::1]:8080",
 		"http://192.168.1.2:8888/prefixv1": "http://192.168.1.2:8888/prefixv1",
+		// T-451 review #2 Mi-R2-1: a percent escape in the path is kept.
+		"http://127.0.0.1:8888/a%20b/v1": "http://127.0.0.1:8888/a%20b",
 	} {
 		cfg, err := LoadConfig(source("MV_LLM_URL", raw))
 		if err != nil {
@@ -131,6 +133,73 @@ func TestLoadConfigRequiresTheURLOnlyForProvidersThatUseIt(t *testing.T) {
 		}
 		if name, addr := cfg.Endpoint(); name != "" || addr != "" {
 			t.Errorf("provider %s: Endpoint = (%q, %q), want none", p, name, addr)
+		}
+	}
+}
+
+// An address variable of ASCII whitespace only is an empty one (T-451 review #2
+// N-R2-1): addressFrom trims it as shared/env trims any other value, so every
+// provider answers it exactly as it answers "".
+func TestAnAddressOfWhitespaceOnlyIsAnEmptyAddress(t *testing.T) {
+	for _, tc := range []struct{ provider, name string }{
+		{ProviderFake, env.LLMURL.Name()},
+		{ProviderRecorded, env.LLMURL.Name()},
+		{ProviderOpenAICompat, env.LLMURL.Name()},
+		{ProviderOllama, env.OllamaURL.Name()},
+	} {
+		empty, errEmpty := LoadConfig(source("MV_LLM_PROVIDER", tc.provider, tc.name, ""))
+		for _, blank := range []string{" ", " \t ", "\r\n", "\v\f"} {
+			cfg, err := LoadConfig(source("MV_LLM_PROVIDER", tc.provider, tc.name, blank))
+			if fmt.Sprint(err) != fmt.Sprint(errEmpty) {
+				t.Errorf("provider %s, %s=%q: err = %v; the empty value gives %v", tc.provider, tc.name, blank, err, errEmpty)
+			}
+			if cfg.URL != empty.URL || cfg.OllamaURL != empty.OllamaURL {
+				t.Errorf("provider %s, %s=%q: URL %q, OllamaURL %q; the empty value gives %q, %q",
+					tc.provider, tc.name, blank, cfg.URL, cfg.OllamaURL, empty.URL, empty.OllamaURL)
+			}
+		}
+	}
+	if cfg, err := LoadConfig(source("MV_LLM_PROVIDER", ProviderFake, env.LLMURL.Name(), " \t ")); err != nil || cfg.URL != "" {
+		t.Errorf("provider fake, MV_LLM_URL of whitespace: URL %q, err %v; want no address and no error", cfg.URL, err)
+	}
+}
+
+// slog prints the host of the address under the rule of the refusals: an
+// address with an @ anywhere does not show its host, because the head of a
+// password can stand where url.Parse sees one (T-451 review #2; acceptance).
+func TestLogValueDoesNotPrintTheHostOfAnAddressWithAnAt(t *testing.T) {
+	const secret = "FAKEPW123"
+	logged := func(cfg Config) string {
+		var buf bytes.Buffer
+		slog.New(slog.NewJSONHandler(&buf, nil)).Info("config", "llm", cfg)
+		return buf.String()
+	}
+	for _, cfg := range []Config{
+		{Provider: ProviderOpenAICompat, URL: "http://FAKEPW123:2024/x@10.0.0.5:8080"},
+		{Provider: ProviderOpenAICompat, URL: "https://FAKEPW123.example:443/v1@api.openai.com"},
+		{Provider: ProviderOllama, OllamaURL: "http://fakepw123/x@127.0.0.1:11434"},
+	} {
+		out := logged(cfg)
+		if strings.Contains(strings.ToUpper(out), secret) {
+			t.Errorf("slog of %+v prints the password: %s", cfg, out)
+		}
+		if !strings.Contains(out, `"endpoint_host":"withheld`) {
+			t.Errorf("slog of %+v does not say the host is withheld: %s", cfg, out)
+		}
+	}
+	loaded, err := LoadConfig(source(env.LLMURL.Name(), "http://FAKEPW123:2024/x@10.0.0.5:8080"))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if out := logged(loaded); strings.Contains(strings.ToUpper(out), secret) {
+		t.Errorf("slog of a loaded Config prints the password: %s", out)
+	}
+	for addr, host := range map[string]string{
+		"http://127.0.0.1:8888/v1":   "127.0.0.1",
+		"https://API.Example.com/v1": "api.example.com",
+	} {
+		if out := logged(Config{Provider: ProviderOpenAICompat, URL: addr}); !strings.Contains(out, `"endpoint_host":"`+host+`"`) {
+			t.Errorf("slog of %s does not print its host %s: %s", addr, host, out)
 		}
 	}
 }
@@ -263,21 +332,31 @@ func TestTimeoutsFor(t *testing.T) {
 	}
 }
 
+// The cases of the rule are the table (TestIsLocalEndpointAnswersTheTable).
+// These are the spellings around a trailing dot and a name that looks like a
+// reserved one, which the table does not hold and canonicalHost decides.
 func TestIsLocalEndpoint(t *testing.T) {
 	local := []string{
-		"http://127.0.0.1:8888", "http://127.10.0.1", "http://localhost:1234/v1", "http://LOCALHOST.:1",
-		"http://[::1]:8080", "http://[::ffff:127.0.0.1]:1", "http://host.docker.internal:8888",
-		"http://[::ffff:10.0.0.1]:1", "http://[::ffff:192.168.0.1]:1", "http://[::ffff:172.20.0.1]:1",
-		"http://10.0.0.1", "http://10.255.255.255", "http://172.16.0.1", "http://172.31.255.255",
-		"https://192.168.0.10:443/v1",
+		"http://LOCALHOST.:1", "http://API.Localhost.:1/v1", " http://ollama:11434 ",
+		"http://[::FFFF:172.20.0.1]:1", "https://192.168.0.10:443/v1",
 	}
 	remote := []string{
-		"https://api.openai.com/v1", "https://api.deepseek.com", "http://8.8.8.8",
-		"http://172.15.255.255", "http://172.32.0.1", "http://11.0.0.1", "http://192.169.0.1",
-		"http://169.254.169.254", "http://0.0.0.0:8888", "http://[fd00::1]:1", "http://[2001:db8::1]",
-		"http://ollama:11434", "http://10.0.0.1.example.com", "http://localhost.example.com",
-		"http://host.docker.internal.evil.com",
+		"https://api.deepseek.com", "http://11.0.0.1:1", "http://10.0.0.1.example.com",
+		"http://localhost.example.com", "http://host.docker.internal.evil.com", "http://a..localhost:1",
+		"http://localhost..:1", "http://.localhost:1", "http://ollama..:1", "http://10.0.0.1..:1",
+		"http://api.example.com.:1", "http://1ollama:1", "http://_ollama:1",
+		// T-451 review #1 Mi-3: the anchors of the rules of a name. Without $ in
+		// *.localhost, without ^ in it, and host.docker.internal read as a
+		// suffix, each of these would be local.
+		"http://api.localhost.evil.com:1", "http://api.localhost.evil.com.:1", "http://x!y.localhost:1",
+		"http://evilhost.docker.internal:1", "http://localhost.evil.com:1", "http://a.host.docker.internal:1",
+		// T-451 review #2 N-R2-1: the dot is dropped from localhost. only, not
+		// from a one-word name that ends in localhost.
+		"http://xlocalhost.:1",
 	}
+	// T-451 review #2 Mi-R2-1: a percent sign is looked for in the authority
+	// only; an escape in the path is not in the host.
+	local = append(local, "http://127.0.0.1:8888/a%20b/v1")
 	for _, u := range local {
 		if ok, err := IsLocalEndpoint(u); err != nil || !ok {
 			t.Errorf("IsLocalEndpoint(%q) = %v, %v; want true", u, ok, err)
@@ -288,9 +367,9 @@ func TestIsLocalEndpoint(t *testing.T) {
 			t.Errorf("IsLocalEndpoint(%q) = %v, %v; want false", u, ok, err)
 		}
 	}
-	for _, u := range []string{"", "127.0.0.1:8888", "ftp://127.0.0.1", "http://"} {
-		if _, err := IsLocalEndpoint(u); err == nil {
-			t.Errorf("IsLocalEndpoint(%q) has no error", u)
+	for _, u := range []string{"", "http://", "http://?", "http://LOCALHOST.", "http://[::FFFF:0:0]:1"} {
+		if _, err := IsLocalEndpoint(u); !errors.Is(err, ErrConfig) || errors.Is(err, ErrCloudDisabled) {
+			t.Errorf("IsLocalEndpoint(%q) = %v, want a configuration error", u, err)
 		}
 	}
 }
@@ -456,9 +535,19 @@ func TestCheckCloudGateOnAHandMadeConfig(t *testing.T) {
 		{"credentials", Config{Provider: ProviderOpenAICompat, URL: "http://user:hunter2pass@127.0.0.1:8888"}, "credentials"},
 		{"query", Config{Provider: ProviderOpenAICompat, URL: "http://127.0.0.1:8888?x=hunter2pass"}, "query"},
 		{"empty query", Config{Provider: ProviderOpenAICompat, URL: "http://127.0.0.1:8888?"}, "query"},
+		// Without an @ in the value the sentence still names the host it is about.
+		{"query names the host", Config{Provider: ProviderOpenAICompat, URL: "http://127.0.0.1:8888/v1?x=hunter2pass"}, "host 127.0.0.1"},
+		{"no port names the host", Config{Provider: ProviderOllama, OllamaURL: "http://ollama/v1"}, "host ollama has no port"},
+		{"an @ hides the host", Config{Provider: ProviderOpenAICompat, URL: "http://hunter2pass/x@127.0.0.1:8888"}, "not printed"},
 		{"fragment", Config{Provider: ProviderOpenAICompat, URL: "http://127.0.0.1:8888#hunter2pass"}, "fragment"},
 		{"not a URL", Config{Provider: ProviderOpenAICompat, URL: "127.0.0.1:8888"}, "http(s)"},
+		// T-451 review #1 N-1: the scheme is written, the // is missing.
+		{"one slash after the scheme", Config{Provider: ProviderOpenAICompat, URL: "http:/127.0.0.1:8080"}, "no // after"},
+		{"no slash after the scheme", Config{Provider: ProviderOllama, OllamaURL: "http:127.0.0.1:8080"}, "no // after"},
 		{"no port on loopback", Config{Provider: ProviderOpenAICompat, URL: "http://127.0.0.1"}, "no port"},
+		{"no port on a compose service", Config{Provider: ProviderOllama, OllamaURL: "http://ollama/"}, "no port"},
+		{"the any-address", Config{Provider: ProviderOpenAICompat, URL: "http://0.0.0.0:8888"}, "any-address"},
+		{"the IPv6 any-address", Config{Provider: ProviderOllama, OllamaURL: "http://[::]:11434"}, "any-address"},
 		{"port out of range", Config{Provider: ProviderOllama, OllamaURL: "http://127.0.0.1:70000"}, "1-65535"},
 	} {
 		err := tc.cfg.CheckCloudGate()
@@ -481,13 +570,17 @@ func TestCheckCloudGateOnAHandMadeConfig(t *testing.T) {
 }
 
 // Iteration 2 (review N-1, the rule of llm-endpoint.sh): a port, when written,
-// is 1-65535; an address a local runtime answers on names its port.
+// is 1-65535; an address a local runtime answers on names its port. Since
+// T-451 that is every local address (C-15 v1.3): an address of the LAN and a
+// service of compose too.
 func TestLoadConfigChecksThePort(t *testing.T) {
 	for _, raw := range []string{
 		"http://127.0.0.1", "http://127.0.0.1/v1", "http://localhost", "https://LOCALHOST./v1",
 		"http://host.docker.internal", "http://[::1]/v1", "http://0.0.0.0", "http://[::]",
 		"http://127.0.0.1:", "http://127.0.0.1:0", "http://127.0.0.1:65536", "http://127.0.0.1:99999",
 		"https://api.example.com:0/v1", "http://10.0.0.5:123456", "https://api.example.com:/v1",
+		"http://192.168.1.2/v1", "http://10.0.0.5", "http://ollama/v1", "https://api.localhost",
+		"http://169.254.1.1", "http://[fd00::1]/v1", "http://[fe80::1]",
 	} {
 		if _, err := LoadConfig(source("MV_LLM_URL", raw)); !errors.Is(err, ErrConfig) {
 			t.Errorf("MV_LLM_URL=%q: err = %v, want ErrConfig", raw, err)
@@ -495,7 +588,8 @@ func TestLoadConfigChecksThePort(t *testing.T) {
 	}
 	for _, raw := range []string{
 		"http://127.0.0.1:1", "http://127.0.0.1:65535", "http://[::1]:8080",
-		"https://api.example.com/v1", "http://api.example.com", "http://192.168.1.2/v1", "http://10.0.0.5",
+		"https://api.example.com/v1", "http://api.example.com", "http://192.168.1.2:80/v1", "http://ollama:11434",
+		"http://ollama.:80", "http://127.0.0.1.",
 	} {
 		if _, err := LoadConfig(source("MV_LLM_URL", raw)); err != nil {
 			t.Errorf("MV_LLM_URL=%q: %v", raw, err)
@@ -511,6 +605,13 @@ func TestEndpointHostIsCanonical(t *testing.T) {
 		"http://[::FFFF:10.0.0.1]:1":       "10.0.0.1",
 		"https://API.Example.COM./v1":      "api.example.com",
 		"http://[0:0:0:0:0:0:0:1]:8888/v1": "::1",
+		// T-451: the trailing dot is kept where dropping it changes the class.
+		"http://LOCALHOST.:1":            "localhost",
+		"http://api.localhost.:1":        "api.localhost",
+		"http://host.docker.internal.:1": "host.docker.internal",
+		"http://127.0.0.1.:8888":         "127.0.0.1.",
+		"http://0.0.0.0.:8888":           "0.0.0.0.",
+		"http://Ollama.:11434":           "ollama.",
 	} {
 		if got, err := EndpointHost(raw); err != nil || got != want {
 			t.Errorf("EndpointHost(%q) = %q, %v; want %q", raw, got, err, want)
