@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:57:19+03:00",
+  "updatedAt": "2026-09-13T20:35:35+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2565,13 +2565,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-460",
           "title": "eventbus.Permanent и Policy.World (C-01 v1.10) с contract-тестом на обе шины (после T-456)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T20:35:35+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 39,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-460.md"
         },
@@ -2591,7 +2591,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-463",
           "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T19:48:25+03:00",
           "finishedAt": null,
@@ -3163,7 +3163,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-458",
           "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
@@ -3346,7 +3346,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3356,7 +3356,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-209",
           "title": "B4 · Парсер ответа, компиляция схем, проверка языка",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
@@ -3630,7 +3630,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-222",
           "title": "R1 · Реестр блупринтов и индекс scope",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
@@ -4515,7 +4515,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-305",
           "title": "actions: валидация, идемпотентность, лимит, InputFilter",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T18:25:18+03:00",
           "finishedAt": null,
@@ -9828,7 +9828,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Итерация 2: повтор action_key без дубликата",
       "startedAt": "2026-09-13T19:38:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -9858,7 +9858,7 @@ window.DEVTEAM_STATE =
       "task": "T-460",
       "action": "Приёмка T-460",
       "startedAt": "2026-09-13T19:47:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -9868,7 +9868,7 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Хранение бэкапов 30 дней и маскировка значения",
       "startedAt": "2026-09-13T19:48:25+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "developer#3",
@@ -9878,7 +9878,7 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Парсер ответа LLM, схемы, язык",
       "startedAt": "2026-09-13T19:54:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "developer#1",
@@ -9888,7 +9888,7 @@ window.DEVTEAM_STATE =
       "task": "T-222",
       "action": "Реестр блупринтов и индекс scope",
       "startedAt": "2026-09-13T19:54:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "developer#3",
@@ -9898,7 +9898,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Итерация 2: метка ReadJournal, шаблон маршрута, форма Error",
       "startedAt": "2026-09-13T19:56:12+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9908,7 +9908,7 @@ window.DEVTEAM_STATE =
       "task": "T-208",
       "action": "Ревью #1 провайдера openai_compat",
       "startedAt": "2026-09-13T19:57:19+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:35:35+03:00"
     }
   ],
   "events": [
@@ -13517,6 +13517,30 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Очередь system-architect пополнена из T-208: признак оценки токенов (Estimated) в llm.Response (C-15) и схеме llm.output.tokens; откуда шлюз берёт модели блупринтов для Health (T-212). Фикстуры openai_compat переснять со стенда в T-260/T-263."
+    },
+    {
+      "at": "2026-09-13T20:35:35+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-460 принята tech-lead#1: Mi-2 (одна строка лога паники, handled=false, R6 красный), Mi-1 (фикстуры правила (г) с миром + 2 теста), N-1 (StalledBackoff() — функция); тексты ErrPermanent подтверждены system-architect в просмотре T-458. Итераций ревью — 1. Коммит 94b562a; конфликт tasks.md (раздел T-"
+    },
+    {
+      "at": "2026-09-13T20:35:35+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение пользователя о потоке веток (заменяет «push автоматически» и «push только в исключительных ситуациях»): ветку задачи task/T-NNN пушим → локальный merge в epic/* и push эпика → локальный merge эпика в develop и push develop → main только к релизу. PR не создаются; удалённые ветки задач остают"
+    },
+    {
+      "at": "2026-09-13T20:35:35+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние H (постоянное разрешение): epic/EPIC-001-foundation → develop, состав — T-460 (Permanent, Policy.World), T-461 (depguard cmd-telegram-bot). make ci BASE=develop на 242d0f8 — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация develop → EPIC-002/003/004 без"
+    },
+    {
+      "at": "2026-09-13T20:35:35+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Итоги и решения по вопросам исполнителей: T-305 итерация 2 (пакет в памяти по player_id+action_key, повтор с теми же id, WithoutCancel; остаточный риск рестарта — КД §5.5) → ревью #2. T-208 ревью #1 — принять 0/0/1/2 (Mi-1 тест прокси зависит от порядка тестов) → приёмка. T-458 итерация 2 (метка InR"
     }
   ],
   "blockers": [],
