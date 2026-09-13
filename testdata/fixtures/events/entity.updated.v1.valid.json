@@ -1,0 +1,21 @@
+{
+  "entity": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "version": 24,
+  "changed": [
+    {
+      "path": "inventory[0]",
+      "new": {
+        "item_id": "item-1",
+        "kind": "wolf-pelt",
+        "name": "волчья шкура",
+        "source": {
+          "entity": { "id": "wolf-alpha", "type": "npc" },
+          "event_id": "01JG0000000000000000000003"
+        }
+      }
+    }
+  ],
+  "cause": "combat",
+  "proposal_id": "01JG0000000000000000000010",
+  "applied_at": "2026-01-01T00:05:00Z"
+}

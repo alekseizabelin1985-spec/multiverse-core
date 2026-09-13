@@ -81,8 +81,8 @@ type Request struct {
 // Params is the sampling of one request, sent per request so that the server
 // defaults (the thinking profile of llama-server) never decide it.
 //
-// A zero field means "not set": a provider leaves it out of the request and
-// the server default applies. That is what keeps a v1 caller, which knows
+// A zero field means "not set": a provider sends its default of the phase
+// (openai_compat) or leaves the field out. That is what keeps a v1 caller, which knows
 // Temperature, MaxTokens and Think only, working unchanged against v1.1
 // (C-15 "Гарантии"). The JSON names are those of llm.output.params, which
 // records the sampling as sent.

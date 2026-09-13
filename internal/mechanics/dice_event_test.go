@@ -239,3 +239,42 @@ func playerAttacked() eventbus.Event {
 			"target": ref("wolf-alpha", entity.TypeNPC, "Вожак"),
 		})
 }
+
+// TestResolveRollsBecomeValidDiceRolled publishes what Resolve returned the way
+// C-03 tells a caller to — one dice.rolled per roll, derived from the cause —
+// for every kind that rolls and on both sides of every check. A roll Resolve
+// can return and the bus refuses would be a fight nobody could audit.
+func TestResolveRollsBecomeValidDiceRolled(t *testing.T) {
+	r := load(t)
+	published := map[string]bool{}
+	for i := range 60 {
+		cause := playerAttacked()
+		player, wolf := fighters(t, r)
+		for _, action := range []Action{
+			attackOf(player, wolf),
+			biteOf(player, wolf),
+			{Kind: ActionFreeAttack, Actor: wolf.ID, Target: player.ID},
+			{Kind: ActionFlee, Actor: player.ID, LivingEnemies: 1 + i%2},
+		} {
+			_, rolls, err := r.Resolve(cause.ID, 0, action, actorsMap(player, wolf))
+			if err != nil {
+				t.Fatalf("resolve %s: %v", action.Kind, err)
+			}
+			roller := actorsMap(player, wolf)[action.Actor]
+			for _, roll := range rolls {
+				ev := eventbus.Derive(cause, "dice.rolled", contracts.SourceSwarm,
+					DiceRolledPayload(roll, entity.Ref{ID: roller.ID, Type: roller.Type}),
+					eventbus.WithAgent(eventbus.AgentRef{ID: "encounter-1", Level: "task", Blueprint: "encounter-dark-forest"}))
+				if err := contracts.Validate(ev); err != nil {
+					t.Fatalf("%s roll %+v is not a valid dice.rolled: %v", action.Kind, roll, err)
+				}
+				published[roll.Purpose] = true
+			}
+		}
+	}
+	for _, purpose := range []string{PurposeHit, PurposeDamage, PurposeNPCHit, PurposeNPCDamage, PurposeFlee} {
+		if !published[purpose] {
+			t.Errorf("no roll of purpose %s was published: the test did not reach it", purpose)
+		}
+	}
+}

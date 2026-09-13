@@ -473,7 +473,10 @@ func TestNPCTargetIsTheFirstLivingByID(t *testing.T) {
 
 	// The order the candidates arrive in must not matter, and everyone the
 	// rules exclude has to be skipped even though they sort first.
-	target := m.NPCTarget(wolf, []*mech.Actor{later, abandoned, out, idle, earlier, alive})
+	target, err := m.NPCTarget(wolf, []*mech.Actor{later, abandoned, out, idle, earlier, alive})
+	if err != nil {
+		t.Fatalf("npc target: %v", err)
+	}
 	if target == nil {
 		t.Fatal("nobody was picked out of two living candidates")
 	}
@@ -481,11 +484,55 @@ func TestNPCTargetIsTheFirstLivingByID(t *testing.T) {
 		t.Errorf("picked %s, want the first living by id (%s)", target.ID, alive.ID)
 	}
 
-	if m.NPCTarget(wolf, []*mech.Actor{earlier, idle, abandoned, nil}) != nil {
-		t.Error("picked somebody out of a list with nobody left to bite")
+	// Nobody left to bite is an answer, not an error (C-03 v1.2, UC-008 A2).
+	for name, candidates := range map[string][]*mech.Actor{
+		"nobody left": {earlier, idle, abandoned},
+		"empty list":  nil,
+	} {
+		if target, err := m.NPCTarget(wolf, candidates); target != nil || err != nil {
+			t.Errorf("%s: answered (%v, %v), want (nil, nil)", name, target, err)
+		}
 	}
-	if m.NPCTarget(wolf, nil) != nil {
-		t.Error("picked somebody out of an empty list")
+
+	// A defect of the caller is an error, and not the answer "nobody".
+	if _, err := m.NPCTarget(nil, []*mech.Actor{alive}); err == nil {
+		t.Error("picked a target for no npc without an error")
+	}
+	if _, err := m.NPCTarget(wolf, []*mech.Actor{alive, nil}); err == nil {
+		t.Error("a nil candidate passed without an error")
+	}
+}
+
+// TestAFallenNPCLeavesTheLootOfItsKind: the stub reports the trophy the real
+// Resolve reports, by the kind of the NPC (Actor.Kind, T-053).
+func TestAFallenNPCLeavesTheLootOfItsKind(t *testing.T) {
+	m := load(t)
+	player, wolf := actorsOf(t, m)
+	wolf.HP = 1
+
+	out, _, err := m.Resolve(causeFor(t, fixed.VerdictHit, 0), 0,
+		mech.Action{Kind: mech.ActionAttack, Actor: player.ID, Target: wolf.ID},
+		actorMap(player, wolf))
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if !out.TargetDead {
+		t.Fatalf("a hit on a wolf at 1 hp did not kill it: %+v", out)
+	}
+	if want := m.Rules().Loot(wolf.Kind); len(want) == 0 || !reflect.DeepEqual(out.Loot, want) {
+		t.Errorf("loot %v, the rules give a %s %v", out.Loot, wolf.Kind, want)
+	}
+
+	player.HP = 1
+	bitten, _, err := m.Resolve(causeFor(t, fixed.VerdictHit, 0), 0,
+		mech.Action{Kind: mech.ActionNPCAttack, Actor: wolf.ID, Target: player.ID},
+		actorMap(player, wolf))
+	if err != nil {
+		t.Fatalf("resolve the bite: %v", err)
+	}
+	if !bitten.TargetDead || len(bitten.Loot) != 0 {
+		t.Errorf("a character at 1 hp bitten: target_dead %v, loot %v; want dead and no loot",
+			bitten.TargetDead, bitten.Loot)
 	}
 }
 

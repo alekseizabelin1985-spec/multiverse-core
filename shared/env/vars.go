@@ -134,6 +134,11 @@ var (
 		"memory service address; empty switches memory off (degradation FR-035)")
 	SnapshotEveryFacts = Declare("MV_SNAPSHOT_EVERY_FACTS", "200",
 		"state writes a snapshot every N facts", IsInt())
+	// StateWorlds is read by internal/state when the context starts: one worker
+	// per world, the single writer of that world (EPIC-002 design.md §4.3, T-055).
+	StateWorlds = Declare("MV_STATE_WORLDS", "dark-forest-world",
+		"comma separated worlds the context state serves, one worker each; "+
+			"proposals of any other world are passed over")
 	GMPath = Declare("MV_GM_PATH", "agent",
 		"game master path; the feature flag of the migration off the legacy orchestrator (S5)",
 		OneOf("agent", "legacy"))

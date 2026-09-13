@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/eventbus"
 )
 
 // A map iterates in a different order every time it is built, so building the
@@ -120,6 +121,155 @@ func TestStateHashFollowsTheState(t *testing.T) {
 
 	if after := entity.StateHash([]*entity.Entity{wounded}); after == before {
 		t.Fatal("StateHash did not move when a character took damage")
+	}
+}
+
+// roundtrip is an entity after a snapshot: encoded the way State writes it and
+// decoded the way recovery reads it.
+func roundtrip(t *testing.T, e *entity.Entity) *entity.Entity {
+	t.Helper()
+	encoded, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back entity.Entity
+	if err := json.Unmarshal(encoded, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return &back
+}
+
+// textStamp encodes itself through MarshalText, the way a net.IP or a custom
+// identifier type does.
+type textStamp string
+
+func (s textStamp) MarshalText() ([]byte, error) { return []byte("stamp:" + string(s)), nil }
+
+// dangerLevel is a number in Go and a word on the wire: its kind says int, its
+// MarshalJSON says otherwise, and the wire believes the method.
+type dangerLevel int
+
+func (l dangerLevel) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"level": int(l), "name": "wolf-pack"})
+}
+
+// tagSet is a list in Go and a comma-joined string on the wire.
+type tagSet []string
+
+func (s tagSet) MarshalText() ([]byte, error) { return []byte(strings.Join(s, ",")), nil }
+
+// T-050. A world assembled in Go — a bootstrap from fixtures, an op that
+// appended an entity.Item — and the same world read back from its snapshot hash
+// the same (§3.3, §4.4): StateHash(e) == StateHash(roundtrip(e)) for every Go
+// shape an attribute can hold. Before, a struct kept its fields in declaration
+// order, a typed nil list or map was written empty, a float32 was widened to
+// the float64 nearest it, and a []byte or a type with its own encoding was
+// written by its kind — each of them a divergence a recovery would report and
+// nobody caused (review #1, Mi-1).
+//
+// Integers past ±2^53 are not here on purpose: JSON loses them, and what to do
+// about it is a decision of system-architect (backlog of the review).
+func TestStateHashOfAGoBuiltWorldMatchesItsWireForm(t *testing.T) {
+	flee := 2
+	fleePtr := &flee
+	var noTarget *string
+	forms := map[string]any{
+		"int32":                   int32(7),
+		"uint16":                  uint16(10),
+		"int64":                   int64(-3),
+		"pointer":                 &flee,
+		"pointer to a pointer":    &fleePtr,
+		"nil pointer":             noTarget,
+		"float32 exact":           float32(1.5),
+		"float32 inexact":         float32(0.1),
+		"float32 large":           float32(3.4e38),
+		"float64 inexact":         0.1,
+		"struct":                  pelt(),
+		"list of structs":         []entity.Item{pelt()},
+		"list of strings":         []string{"wolf-alpha", "wolf-beta"},
+		"nil list of strings":     []string(nil),
+		"empty list":              []string{},
+		"nil list of any":         []any(nil),
+		"nil list of objects":     []map[string]any(nil),
+		"map of ints":             map[string]int{"wolf-beta": 3, "wolf-alpha": 4},
+		"nil map of ints":         map[string]int(nil),
+		"nil map of any":          map[string]any(nil),
+		"map with int keys":       map[int]string{2: "b", 10: "a"},
+		"array":                   [2]int{1, 2},
+		"bytes":                   []byte("pelt"),
+		"nil bytes":               []byte(nil),
+		"raw JSON":                json.RawMessage(`{"z":1,"a":[true,null]}`),
+		"text marshaler":          textStamp("dawn"),
+		"number with MarshalJSON": dangerLevel(3),
+		"list with MarshalText":   tagSet{"hunted", "wounded"},
+		"time":                    proposedAt.In(time.FixedZone("MSK", 3*60*60)),
+		"scope ref":               eventbus.ScopeRef{ID: "player-A", Type: "solo"},
+		"nested in a list":        []any{[]string(nil), float32(0.1), map[string]int(nil)},
+		"nested in an object":     map[string]any{"bytes": []byte{0, 255}, "at": float32(0.2)},
+	}
+
+	ref := entity.Ref{ID: "player-A", Type: entity.TypePlayer}
+	for name, value := range forms {
+		t.Run(name, func(t *testing.T) {
+			built := entity.New(ref, "dark-forest-world", "Аня", map[string]any{"value": value}, proposedAt)
+			back := roundtrip(t, built)
+			inMemory, onDisk := string(entity.CanonicalJSON(built)), string(entity.CanonicalJSON(back))
+			if inMemory != onDisk {
+				t.Fatalf("CanonicalJSON differs between the entity and its snapshot:\nin memory %s\non disk   %s", inMemory, onDisk)
+			}
+			if entity.StateHash([]*entity.Entity{built}) != entity.StateHash([]*entity.Entity{back}) {
+				t.Fatal("StateHash differs between the entity and its snapshot")
+			}
+		})
+	}
+
+	// All of them at once, and the one literal that says the keys of a struct
+	// are sorted like those of any other object.
+	all := entity.New(ref, "dark-forest-world", "Аня", forms, proposedAt)
+	if entity.StateHash([]*entity.Entity{all}) != entity.StateHash([]*entity.Entity{roundtrip(t, all)}) {
+		t.Fatal("StateHash differs between the whole entity and its snapshot")
+	}
+	if encoded := string(entity.CanonicalJSON(all)); !strings.Contains(encoded, `{"acquired_at":"2026-09-09T10:15:00Z","item_id":`) {
+		t.Fatalf("CanonicalJSON = %s, want the keys of a struct sorted like any other object", encoded)
+	}
+}
+
+// The reproduction of review #1, Mi-1, on the path State actually takes: a set
+// of a typed nil list, committed, snapshotted and recovered. The hash before and
+// after the snapshot has to be one, and repeating the same set has to be the
+// same no-op on the original and on the recovered entity — otherwise the
+// recovered State moves a version the original did not (NFR-061).
+//
+// The nils jsonpath.Clone rebuilds as empty containers are here too: Commit
+// stores them empty, so the repeat compares an empty container with the nil of
+// the proposal, and the two have to read as one.
+func TestASetOfANilListHashesTheSameAfterASnapshot(t *testing.T) {
+	nils := map[string]any{
+		"[]string":         []string(nil),
+		"map[string]int":   map[string]int(nil),
+		"[]any":            []any(nil),
+		"map[string]any":   map[string]any(nil),
+		"[]map[string]any": []map[string]any(nil),
+	}
+	for name, value := range nils {
+		t.Run(name, func(t *testing.T) {
+			original := player(t)
+			set := entity.Op{Op: entity.OpSet, Path: entity.AttrPlayersPresent, Value: value}
+			attrs, changed := applyOK(t, original, set)
+			original.Commit(attrs, changed, entity.LastChange{ProposalID: "p-1", AppliedAt: proposedAt})
+
+			recovered := roundtrip(t, original)
+			if a, b := entity.StateHash([]*entity.Entity{original}), entity.StateHash([]*entity.Entity{recovered}); a != b {
+				t.Fatalf("StateHash %s before the snapshot, %s after it", a, b)
+			}
+
+			_, again := applyOK(t, original, set)
+			_, againRecovered := applyOK(t, recovered, set)
+			if len(again) != 0 || len(againRecovered) != 0 {
+				t.Fatalf("repeating the set changed %+v on the original and %+v on the recovered entity, want nothing on both",
+					again, againRecovered)
+			}
+		})
 	}
 }
 

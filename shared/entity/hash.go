@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"crypto/sha256"
+	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"math"
@@ -83,26 +84,54 @@ func writeCanonical(buf *bytes.Buffer, value any) {
 }
 
 // writeCanonicalOther covers the values a type switch cannot list: every width
-// of integer and float, and anything else that only encoding/json knows how to
-// write (a time.Time in an attribute, say).
+// of integer and float, the lists and maps a Go caller builds, and anything else
+// that only encoding/json knows how to write (a time.Time in an attribute, say).
+//
+// Each of them is written as the value the wire gives back, because that is
+// what the same entity holds once it has been read from a snapshot: a typed nil
+// list or map is null there, not an empty one; a float32 is the decimal the
+// encoder wrote, not the float64 the conversion widens it to; a []byte is a
+// base64 string; a type with its own MarshalJSON or MarshalText is whatever it
+// says it is. Nothing that comes off the wire takes any of these branches, so
+// the canonical form of a decoded value is the one it always was.
 func writeCanonicalOther(buf *bytes.Buffer, value any) {
+	if encodesItself(value) {
+		writeCanonicalEncoded(buf, value)
+		return
+	}
 	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		buf.WriteString(strconv.FormatInt(rv.Int(), 10))
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		buf.WriteString(strconv.FormatUint(rv.Uint(), 10))
-	case reflect.Float32, reflect.Float64:
+	case reflect.Float32:
+		writeCanonicalEncoded(buf, value)
+	case reflect.Float64:
 		writeCanonicalFloat(buf, rv.Float())
 	case reflect.Slice, reflect.Array:
+		if rv.Kind() == reflect.Slice && rv.IsNil() {
+			writeCanonicalNilSlice(buf, value)
+			return
+		}
+		if rv.Kind() == reflect.Slice && rv.Type().Elem().Kind() == reflect.Uint8 {
+			writeCanonicalEncoded(buf, value)
+			return
+		}
 		list := make([]any, rv.Len())
 		for i := range list {
 			list[i] = rv.Index(i).Interface()
 		}
 		writeCanonicalArray(buf, list)
 	case reflect.Map:
-		if rv.Type().Key().Kind() != reflect.String {
+		if rv.IsNil() {
 			buf.WriteString("null")
+			return
+		}
+		if rv.Type().Key().Kind() != reflect.String {
+			// The encoder writes integer keys as strings; the object it
+			// produces is the one a snapshot holds.
+			writeCanonicalEncoded(buf, value)
 			return
 		}
 		object := make(map[string]any, rv.Len())
@@ -118,16 +147,65 @@ func writeCanonicalOther(buf *bytes.Buffer, value any) {
 		}
 		writeCanonical(buf, rv.Elem().Interface())
 	default:
-		// A struct, or something else that only the encoder understands. It
-		// cannot reach here from the wire, and ApplyOps refuses anything the
-		// encoder itself refuses, so a failure here is a nil that hashes.
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			buf.WriteString("null")
-			return
-		}
-		buf.Write(encoded)
+		writeCanonicalEncoded(buf, value)
 	}
+}
+
+// writeCanonicalNilSlice writes a typed nil list the way the entity ends up
+// holding it.
+//
+// For most types that is null, which is what the wire makes of it and what
+// the entity keeps: a []string(nil) survives Clone and Commit as it is. The
+// exception is []map[string]any, which jsonpath.Clone rebuilds as an empty
+// list — and with it []any and map[string]any, which writeCanonical meets
+// before this point and writes as [] and {} for the same reason. An entity
+// never holds a nil of those three once Commit has copied its attributes, so
+// hashing that nil as null would make a set of the same value look like a
+// change on every repeat.
+func writeCanonicalNilSlice(buf *bytes.Buffer, value any) {
+	if _, rebuilt := value.([]map[string]any); rebuilt {
+		buf.WriteString("[]")
+		return
+	}
+	buf.WriteString("null")
+}
+
+// encodesItself says whether encoding/json writes a value through a method of
+// its own rather than by its kind: json.RawMessage, time.Time, and any type
+// with MarshalJSON or MarshalText on its value. A method on the pointer alone
+// is not asked for a value held in an interface, and it is not asked here.
+func encodesItself(value any) bool {
+	switch value.(type) {
+	case json.Marshaler, encoding.TextMarshaler:
+		return true
+	}
+	return false
+}
+
+// writeCanonicalEncoded writes a value only the encoder understands — a struct
+// such as the entity.Item a proposer appends, or a time.Time — as the value it
+// becomes once it has been through the wire and back.
+//
+// Writing the encoder's output as it stands would keep the fields of a struct
+// in declaration order, and the same item read back from a snapshot is a map
+// whose keys are sorted: one entity, two hashes, and a recovery that reports a
+// divergence nobody caused. Decoding the output first makes the struct and its
+// wire form one value under the one rule of CanonicalJSON.
+//
+// The value cannot reach here from the wire, and ApplyOps refuses anything the
+// encoder itself refuses, so a failure here is a nil that hashes.
+func writeCanonicalEncoded(buf *bytes.Buffer, value any) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		buf.WriteString("null")
+		return
+	}
+	var decoded any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		buf.WriteString("null")
+		return
+	}
+	writeCanonical(buf, decoded)
 }
 
 func writeCanonicalObject(buf *bytes.Buffer, object map[string]any) {

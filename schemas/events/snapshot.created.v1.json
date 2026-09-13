@@ -18,7 +18,11 @@
           "additionalProperties": { "type": "integer", "minimum": 0 }
         },
         "laws_version": { "type": "string", "minLength": 1 },
-        "state_hash": { "type": "string", "minLength": 1 },
+        "state_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "entity.StateHash of the snapshot: sha256: and 64 lowercase hex digits (ADR-011 p. 2). A consumer compares it before it trusts the object, so a hash in any other spelling never matches."
+        },
         "size_bytes": { "type": "integer", "minimum": 0 },
         "key": { "type": "string", "minLength": 1 }
       },
