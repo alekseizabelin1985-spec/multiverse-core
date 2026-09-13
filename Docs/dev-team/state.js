@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:37:02+03:00",
+  "updatedAt": "2026-09-13T15:38:28+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4336,7 +4336,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -8712,7 +8712,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Итерация 2 (возобновление): /data, 503 с условиями",
       "startedAt": "2026-09-13T15:25:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:38:28+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8802,6 +8802,16 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Ревью #2: ADR-029 и потолок нарратива",
       "startedAt": "2026-09-13T15:37:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Ревью #2: итерация 2 links/HTTP",
+      "startedAt": "2026-09-13T15:38:28+03:00",
       "finishedAt": null
     }
   ],
@@ -11619,6 +11629,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Заведена T-457 (system-architect#1, EPIC-001, contract-change, S): очередь решений архитектора — (1) подтверждение поправок ADR-016/ADR-017 по ADR-029 и C-07 v1.4 поле ref у unknown_entity (или reason=other насовсем); (2) T-054: touched — id, players_present вне инварианта, выход погибшего из участи"
+    },
+    {
+      "at": "2026-09-13T15:38:28+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · итерация 2 (TEAM-3/developer#1, возобновление): M-1 /data (nonroot, 0700) в build/Dockerfile и абзац runbook о пересоздании тома gateway-data (не выполнялось; на стенде нужно make image && make up && make health — это стек владельца); 503 forget_incomplete по условиям архитектора (Retry-Afte"
     }
   ],
   "blockers": [],
