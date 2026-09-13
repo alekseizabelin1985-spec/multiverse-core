@@ -491,3 +491,224 @@ DoD выполнен по всем пунктам. Каждая невалидн
 - `testkit.Deterministic` в `changes_encounter_test.go:228` меняет глобальный источник id
   шины. Сейчас в пакете нет `t.Parallel`, и это безопасно. Добавление `t.Parallel` в
   `internal/mechanics` сделает тест недетерминированным.
+
+---
+
+## T-060 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Папка `.worktrees/T-060`, ветка `task/T-060-replay-eventclock`, HEAD `2196b58`. Коммитов вне
+родителя нет. Ветка эпика ушла вперёд на 2 коммита (T-050, `03c551d`): там `shared/entity`,
+`dev-log.md`, `review.md`, и с `serve.go` и `internal/replay` пересечений нет. Изменения не
+закоммичены:
+
+| Действие | Путь |
+|---|---|
+| A | `internal/replay/{eventclock,timers,cursor,journal,recording,middleware}.go` |
+| A | `internal/replay/{clock,cursor,recording,middleware}_test.go` |
+| M | `cmd/multiverse/serve.go` (+71/−17: `timeOf`, `runTime`, `process.run`, лог старта) |
+| A | `cmd/multiverse/replay_test.go` |
+| M | `Docs/dev-team/epics/EPIC-002-state-mechanics/{dev-log.md,tasks/T-060.md}` |
+
+Артефакты в `Docs/` внутри папки задачи — по указанию оркестратора, замечанием не считаются.
+Файлы — в границах раздела T-060 индекса (`internal/replay/**`, `cmd/multiverse/serve.go`).
+Тесты сборки лежат в `cmd/multiverse`, как требует сверка 2026-09-13.
+
+Основание:
+- раздел T-060 в `tasks.md` ветки эпика: DoD и замена по T-416;
+- карточка с отклонениями 1–4;
+- C-01 v1.4–v1.7: «Источники конструкторов», «Таймеры повторной доставки», `Delivery`;
+- C-07: ключ записи и `meta.replay`;
+- C-14: порядок догона;
+- `state-and-mechanics.md` §6.1–§6.2 и §7.3;
+- ADR-001 доп. п. 2, ADR-003 п. 4, 6;
+- `shared/eventbus/{sources,delivery,types}.go`, `membus`;
+- `.golangci.yml`: depguard `internal-replay`, `cmd-others`; forbidigo.
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 3 · Nit: 4.
+
+Все четыре пункта DoD закрыты и доказаны тестами. Решение C-01 v1.4 «шина освобождена»
+выполнено и закреплено тестом. Мутант ревьюера это подтвердил: тест на зависание краснеет.
+Minor — пробелы доказательности и один вводящий в заблуждение комментарий. Их можно
+исправить в этой ветке до слияния или вынести в бэклог — решение за tech-lead#1.
+
+**Для приёмки tech-lead#1 (мягкий режим, обязательно).** `cmd/multiverse/serve.go`
+правлен в ветке задачи. Проверено:
+- Правка минимальна. Live-путь по поведению не изменился. `timeOf` для live возвращает
+  `clock.Real{}`/`clock.RealTimers{}` и контекстам, и шине, как прежний
+  `deps.Clock, deps.Timers = clock.Real{}, clock.RealTimers{}` + `openBus(…, deps.Timers)`.
+  Обёртки транспорта и `SetClock` в live нет.
+- Флаги `--mode`/`--recording`/`--id-source` по-прежнему разбирает `parseServe`, разбор не
+  менялся. `--recording` без replay отказывается там же (serve.go:162–165).
+- При конфликте с T-055 (тот же `process.run`) слияние разрешает developer#1 (индекс). Точки
+  встречи: serve.go:284–294, где ставятся источники, и `defer eventbus.SetClock(nil)`.
+
+### Проверенные пункты
+
+**1. C-01 v1.4, таймеры.**
+- serve.go:300: шине идёт `times.bus` = `clock.RealTimers{}` в обоих режимах.
+- serve.go:283: контексты в replay получают `*replay.EventClock` и `replay.NullTimers{}`.
+- Тест `TestTheModeDecidesTheTimeOfTheContextsAndNotOfTheBus` (шпион `openBus`) проверяет
+  оба режима.
+- Мутант M1 ревьюера (шине — `times.timers`) даёт красный
+  `TestReplayRedeliversAFailingHandlerWithoutHanging`: «no dead letter within 10s after
+  1 calls». Процесс при этом не виснет на остановке: `Delivery.wait` слушает `ctx.Done()`.
+
+**2. `EventClock`.**
+- `Observe`: `now = max(now, t)` под мьютексом. Настенных часов не читает: forbidigo и
+  AST-тест `TestThePackageReadsNoWallClock`, который ловит и обход через `clock.Real`.
+- Событие с тем же временем часы не сдвигает, событие «в прошлом» игнорирует
+  (`TestEventClockIsMonotonicAndMovesOnlyByEvents`, шаги 2–4).
+- Нулевое время не откатывает часы.
+- Одна оговорка — Mi-3 ниже.
+
+**3. `Recording` и `Writer`.**
+- Round-trip побайтовый для записи, сделанной `Writer` (`json.Marshal`, ключи map
+  отсортированы).
+- Декодирование совпадает с шиной (`json.Unmarshal` в `eventbus.Event`, как `kafka.go:392`
+  и `membus.go:455`). Потерь точности нет: `seed` в `dice.rolled` — строка.
+- Ключ `LLMOutputKey(cid, agent.id, phase, attempt)` совпадает с C-07
+  `(meta.correlation_id, meta.agent.id, phase, attempt)`, с ADR-003 п. 4 и с
+  `swarm-llm-laws.md` «`providers/recorded`». Кодирование с длиной перед частью — то же,
+  что у `WithCauseID` (C-01 v1.5). «Побеждает первая запись» соответствует «записан до
+  использования».
+- Нечитаемая запись отказывает до открытия шины: serve.go:279–282 стоят раньше
+  `SetClock` и `openBus`. Тест `TestReplayRefusesAnUnreadableRecording` проверяет, что
+  шпион шины не вызывался. Путь «битый JSON» на уровне процесса отдельно не проверен, но
+  идёт по той же ветке ошибки `OpenRecording`. На уровне пакета номер строки проверяется.
+- Чтение целиком в память для DoD допустимо: DoD о потоковом чтении молчит, а §6.1
+  описывает `Recording` как JSONL сценария. Строка ограничена 16 МиБ. Процесс сейчас
+  читает запись только ради `Start()`/`Len()` и сразу отпускает её. Потоковое чтение — в
+  бэклог, когда появятся многочасовые записи.
+
+**4. Middleware.**
+- `Observe` вызывается до обработчика, `Meta.Replay = true` ставится на копии события
+  (middleware.go:27–31). Журнал и `dead_letters` получают событие как опубликованное:
+  `Meta` — значение, есть проверка в `TestWithMiddlewareDrivesTheClockOnEveryReadPath`.
+- Middleware стоит внутри `Delivery`: валидация при чтении идёт раньше, повторы проходят
+  через него снова.
+- Утечки `meta.replay` в live нет: обёртка ставится только при `times.events != nil`, а
+  `Middleware(live)` — тождество (`TestMiddlewareInLiveModeChangesNothing`, мутант
+  исполнителя M18).
+- Наследование производными: `eventbus.Derive` копирует `Replay: parent.Meta.Replay`
+  (`shared/eventbus/types.go:196`), что соответствует C-07. Но тестом свойство не
+  закреплено нигде в модуле — Mi-2.
+
+**5. `eventbus.SetClock` глобально.** Гонки сегодня нет:
+- в `cmd/multiverse` нет `t.Parallel()`, а `onLoopback` вызывает `t.Setenv`, который
+  параллельность запрещает;
+- пакеты тестов идут отдельными бинарниками;
+- live-путь `SetClock` не вызывает, поэтому `fightThroughTheProcess` с
+  `testkit.Deterministic` (fake_contexts_test.go:380) не затрагивается.
+
+Затирание возможно только в будущем тесте, который ставит `Deterministic` и затем гоняет
+процесс в replay. После прогона такой тест потеряет ручные часы. Оценка — латентный риск,
+не блокирует. Решение — в T-055 вместе с остальными источниками (N-4).
+
+**6. Лог старта.** В лог попадают только `recording` (путь, заданный оператором) и
+`recorded_events` (число). Содержимого записи в логе нет: ни `response_raw`, ни текста
+игрока. Приватность соблюдена.
+
+**7. Вопрос исполнителя «кто публикует записанные события в шину».** Рекомендация: никто,
+и публикатора в процессе не заводить.
+- По §6.2, C-07 и ADR-003 п. 4 запись — таблица ответов для `RecordedProvider`, а не поток
+  входа.
+- В replay «новых `llm.output` не издаётся». `tick.fired`/`round.closed` читаются из
+  журнала шины.
+- Входы сценария подаёт харнесс по HTTP API (`testing/strategy.md`, строка e2e).
+- Восстановление по C-14 догоняет журнал шины (`Journal`), а не `Recording`.
+- Публикация `Recording.Events()` в `membus` дала бы вторые `llm.output` и задвоила бы
+  факты.
+
+Вопрос исполнителя вскрывает настоящий пробел, но не в T-060: как запись доходит до
+потребителя. Подробности — «Вопросы к system-architect».
+
+**8. Прогоны ревьюера** (папка задачи):
+- `go build ./... && go vet ./...` — 0;
+- `go test -short -count=1 ./...` — все пакеты ok;
+- `go test -tags e2e -count=1 -timeout 10m ./test/e2e/...` — ok (15,4 с);
+- `golangci-lint run ./...` — 0 issues, со второй попытки после «parallel golangci-lint
+  is running»;
+- `make test` — exit 0; `internal/replay` 97,3 % (145/149), `internal/mechanics` 94,9 %;
+- `gofmt -l internal/replay cmd/multiverse` — пусто; `git diff --check` — чисто.
+
+### Мутанты ревьюера
+
+Копия дерева в scratch (`tar` без `.git`, `Docs`, `services`), без `-overlay`. Перед
+мутантами проверено: базовый прогон копии зелёный. Копии удалены по сохранённому точному
+пути.
+
+| Мутант | Итог |
+|---|---|
+| M0 (контрольный): `Observe` не двигает часы (`if false && …`) | красный: 3 теста пакета + `TestReplayMovesTheClock…` |
+| M1: шина в replay получает `times.timers` (`NullTimers`) | красный: `TestReplayRedelivers…` висит 10 с, 1 вызов обработчика |
+| M2: `Observe` после обработчика, а не до | красный: `TestWithMiddlewareDrivesTheClock…`, `TestReplayMovesTheClock…` |
+| M3 (зонд): в `serve.go` обёрнут только `Deps.Journal`, `Deps.Bus` — сырой транспорт | **выжил** → Mi-1 |
+| M4 (зонд): `Derive` не наследует `Replay` (`shared/eventbus/types.go:196` → `false`) | **выжил** во всём модуле, включая e2e → Mi-2 |
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/multiverse/replay_test.go:143–174` | Сборка проверяет обёртку только на пути `Deps.Journal.ReadRange`. Путь `Deps.Bus.Subscribe`, по которому будут читать почти все контексты, на уровне процесса не проверен. Мутант M3 (`Deps.Bus` без middleware) выживает. Пакетный тест проверяет `WithMiddleware`, но не проводку в `serve.go:308–311`. | В `TestReplayMovesTheClockOfTheContextsByTheEventsTheyRead` добавить чтение через `deps.Bus.Subscribe` с той же проверкой часов и `meta.replay`. Минимум — утверждение, что `deps.Bus` и `deps.Journal` — один и тот же объект после обёртки. |
+| Mi-2 | Minor | `internal/replay/middleware_test.go:56–154`; обещание в `middleware.go:14–15` | Комментарий middleware опирается на свойство «производные события наследуют метку через `eventbus.Derive`» (C-07), но ни один тест модуля его не держит. Мутант M4 выживает во всём модуле, включая e2e. | В пакетный тест middleware добавить обработчик, который делает `eventbus.Derive(ev, …)`, и проверить `derived.Meta.Replay == true`. Правка только в файлах T-060, `shared/eventbus` не трогается. |
+| Mi-3 | Minor | `internal/replay/middleware.go:11–13` | Комментарий «whatever the handler asks the clock is the time of the event it is handling» верен только при одном читателе. Часы одни на процесс, `now = max`. При нескольких подписках (разные топики, воркеры State) обработчик старого события видит время более позднего, а какое именно — зависит от планировщика горутин. Реализация соответствует §6.1, но комментарий обещает больше, и автор контекста может положиться на `Clock.Now()` вместо `ev.Timestamp` в пути, который попадает в байты события. | Переписать комментарий: часы стоят на самом позднем событии, которое видел любой обработчик процесса. Обработчику, которому нужно время своего события, брать `ev.Timestamp` (или `Derive`, наследующий его). Вопрос о детерминизме — к system-architect, ниже. |
+| N-1 | Nit | `internal/replay/recording.go:97–104`, `cmd/multiverse/serve.go:397` | `Start` берёт время первой строки, а не минимальное. В `llm_records` порядок строк — порядок публикации, а время наследуется от причины, так что первая строка не обязательно самая ранняя. Монотонные часы, стартовавшие позже, проигнорируют более ранние события. | Брать минимум `Timestamp` по записи или записать в doc-комментарии, что запись упорядочена по времени, и проверять это при чтении. |
+| N-2 | Nit | `internal/replay/recording.go:176–178, 194–204` | Комментарий `Writer`: «must be on disk when it is used (C-07)». Без `f.Sync()` запись только в кэше ОС: падение процесса она переживёт, падение машины — нет. Гарантия C-07 касается события шины `llm.output`, а не файла. | Смягчить комментарий («handed to the OS before Append returns») или вызывать `Sync` в `Append`, если писатель станет частью пути «записать до использования». |
+| N-3 | Nit | `internal/replay/recording.go:57–73` | Если чтение оборвалось посреди строки с ошибкой ввода-вывода (не `EOF`), сначала разбирается обрывок. Наружу уходит ошибка JSON, а причина — ошибка чтения — теряется. | При `err != nil && !errors.Is(err, io.EOF)` вернуть ошибку чтения до `json.Unmarshal`. |
+| N-4 | Nit | `cmd/multiverse/serve.go:292–293` | `defer eventbus.SetClock(nil)` возвращает настенные часы, а не те, что стояли до прогона. Сегодня безвредно (п. 5), но T-055 поставит рядом `SetIDSource`/`SetRegistry` и получит тот же вопрос. | Решить в T-055 одним способом для всех трёх источников: процесс ставит их из `Deps` и не снимает, а тесты ставят свои после старта, либо у `eventbus` появляется чтение текущих источников (`contract-change`). Отмечено исполнителем в карточке, подтверждаю. |
+
+### Вопросы к system-architect (через оркестратора; не блокируют T-060)
+
+1. **Как запись попадает к `RecordedProvider`.** По §6.2 он работает «над
+   `Recording.Index("llm.output", …)`». Но ADR-001 доп. п. 2 и depguard (`.golangci.yml`,
+   `cmd-others`, правила `internal-*` с `deny internal`) разрешают импорт `internal/replay`
+   только `cmd/multiverse`. `internal/llm/providers/recorded` не может импортировать ни
+   `Recording`, ни `LLMOutputKey`. В `runtime.Deps` поля для записи нет (C-01 v1.3), и путь
+   `--recording` до контекста `llm` сейчас не доходит.
+
+   Поэтому предложение исполнителя «EPIC-003 берёт `replay.LLMOutputKey`»
+   (`tasks/T-060.md:107`) по правилам импорта невыполнимо. Если оставить как есть, в
+   EPIC-003 появится второй ключ — ровно тот риск, о котором предупреждает исполнитель.
+
+   Варианты:
+   - (а) вынести формат записи и ключ в `shared/` (например, `shared/recording`) —
+     изменение карты владения;
+   - (б) процесс строит провайдер и передаёт его контексту `llm` — изменение `Deps`, C-01;
+   - (в) `providers/recorded` читает JSONL сам, а ключ фиксируется golden-тестом с обеих
+     сторон.
+2. **Детерминизм `Clock.Now()` в обработчиках replay при нескольких читателях** (Mi-3).
+   Нужно ли правило «в обработчике время — только `ev.Timestamp`», закреплённое в C-01 или
+   §6.2? Или часы должны быть свои на каждого читателя?
+3. **Время корневых событий в e2e-replay.** Действия харнесса по HTTP в replay получают
+   время `EventClock`, то есть время последнего прочитанного события, а не время живого
+   прогона. INT-05 требует «последовательность доменных событий побайтово идентична».
+   Нужно определить, откуда берётся `timestamp` корней в replay: из запроса харнесса, из
+   записи или исключается из сравнения. Решение — EPIC-005/T-061 с архитектором, в T-060
+   не решается.
+
+### Предложения в бэклог
+
+1. T-055: общий способ ставить и снимать `SetClock`/`SetIDSource`/`SetRegistry` (N-4).
+   Тест процесса в replay после `testkit.Deterministic`.
+2. `internal/replay`: потоковое чтение записи для многочасовых сессий. `Recording`
+   отдаёт итератор, `Index` строится за один проход.
+3. EPIC-001 (`shared/eventbus`): тест «`Derive` наследует `Meta.Replay`» рядом с тестами
+   конструкторов. Mi-2 закрывает это со стороны T-060, но свойство принадлежит конверту.
+   Текст C-01 в перечне копируемых `Derive` полей не называет `Replay`, хотя код его
+   копирует. Это редакционная правка контракта.
+4. Решить, допустим ли `--mode=replay` без `--recording`. Сейчас часы стоят на
+   `0001-01-01`, и корни штампуются этим временем. Возможно, нужен отказ старта или
+   явная запись в логе (tech-lead#1).
+
+### Риски
+
+- Текстовые конфликты при слиянии в ветку эпика. `dev-log.md` и `review.md` дописаны в
+  конец и в этой ветке, и в T-050 (`03c551d`). Разрешается склейкой разделов.
+- Конфликт `serve.go` с T-055 в `process.run` (serve.go:279–311) — ожидаемый, назван в
+  индексе.
+- `meta.replay` сериализуется без `omitempty`. Сравнение replay-вывода с живой записью
+  (EPIC-005) должно учитывать, что флаг меняет байты. Исполнитель это отметил.
