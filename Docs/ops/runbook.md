@@ -281,7 +281,10 @@ ok (this server has no /health; judged by the endpoint the contract needs)`.
 поправить `MV_LLM_MODEL_FILE` в `.env` (single-режим) или включить `ROUTER=1`
 (модель тогда выбирается полем `model` в блупринте, когда блупринты появятся,
 EPIC-003) → `make llm-up` → `make llm-health` (новое имя должно быть в
-`/v1/models`) → обновить `LLM_MODEL_DEFAULT` в `build/versions.env`.
+`/v1/models`) → обновить `LLM_MODEL_DEFAULT` в `build/versions.env`. Имя
+модели в single-режиме — имя файла без `.gguf`: его отдаёт `--alias`, который
+ставит `make llm-up` (T-437); сервер, поднятый вручную без `--alias`, отдаёт путь
+к файлу, и модель блупринта с ним не сверится.
 
 **Обновление билда llama.cpp.** Отдельной задачей: скачать релиз → `make llm-down`
 → заменить бинарник (старый сохранить) → `llama-server --version` → обновить

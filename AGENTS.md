@@ -115,7 +115,7 @@ shared/logging/       # slog с обязательными полями
 shared/runtime/       # HTTP-сервер процесса, Context{Start/Stop/Health}
 shared/clock/         # Clock/Timers (реальные и управляемые)
 shared/agent/         # каркас роя агентов GM (целевой рантайм — internal/swarm)
-shared/testkit/       # membus, contract-тест шины, фейки для тестов/e2e
+shared/testkit/       # contract-тест шины, фейки для тестов/e2e (membus — в shared/eventbus/)
 schemas/events/       # JSON-схемы событий
 rules/dark-forest.yaml # детерминированная механика
 testdata/fixtures/    # фикстуры мира

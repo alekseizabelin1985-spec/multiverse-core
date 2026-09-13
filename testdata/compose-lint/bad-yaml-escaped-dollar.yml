@@ -1,0 +1,13 @@
+# Rule 8 and a YAML escape (T-429; T-413 review #1 N-1, probe n03). In a
+# double-quoted YAML string `\x24` is the dollar sign: YAML hands compose the
+# text `${MV_CORE_ADMIN_CLIENTS}`, and compose v5.2.0 interpolates it — with
+# .env silent the note below is empty. The line reader saw no `$` in the line
+# and let it pass; `config --no-interpolate` shows the value YAML produced.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: "\x24{MV_CORE_ADMIN_CLIENTS}"

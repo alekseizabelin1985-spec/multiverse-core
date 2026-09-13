@@ -259,10 +259,11 @@ type process struct {
 // or reads the journal in its Stop — a final snapshot pointer, a cursor — needs
 // the bus open to do it.
 //
-// A panic in a Start is not such a path: runtime.StartAll does not recover, so
-// the deferred Close runs during the unwinding while the contexts started
-// before it are still up. The process dies of the panic either way (NFR-012);
-// turning it into an error belongs to StartAll (review #1 of T-410, N-1).
+// A panic in a Start is such a path as well: runtime.StartAll turns it into a
+// failed start and stops the contexts started before it, so the deferred Close
+// still runs last (review #1 of T-410, N-1; T-415). A panic in a Stop is
+// recovered the same way by runtime.StopAll: the contexts after it in the
+// reverse order still stop before the bus closes (T-430).
 func (p process) run(ctx context.Context, release func()) error {
 	log := p.log
 	opts := p.opts
@@ -338,7 +339,7 @@ func (p process) run(ctx context.Context, release func()) error {
 	if err := srv.Stop(stopCtx); err != nil {
 		log.Error("http shutdown", slog.String("error", err.Error()))
 	}
-	for _, err := range runtime.StopAll(stopCtx, contexts) {
+	for _, err := range runtime.StopAll(stopCtx, contexts, log) {
 		log.Error("stop", slog.String("error", err.Error()))
 	}
 	return serveErr
@@ -347,7 +348,7 @@ func (p process) run(ctx context.Context, release func()) error {
 func shutdown(contexts []runtime.Context, log *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
 	defer cancel()
-	for _, err := range runtime.StopAll(ctx, contexts) {
+	for _, err := range runtime.StopAll(ctx, contexts, log) {
 		log.Error("stop", slog.String("error", err.Error()))
 	}
 }

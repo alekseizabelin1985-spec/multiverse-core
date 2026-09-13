@@ -1,0 +1,15 @@
+# Rule 8 and a `#` inside a block scalar (T-429; T-413 review #1 N-1, probe
+# n04b). Every line of a `|` block is text, the one starting with `#`
+# included, and compose v5.2.0 interpolates it. The line reader read the other
+# lines of a block but cut this one as a YAML comment.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+# expect-text: it is part of a larger string here
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: |
+        the admin clients:
+        # ${MV_CORE_ADMIN_CLIENTS}

@@ -1,0 +1,4 @@
+config,provider,placement,model,phase,num_ctx,kv_cache,n,first_call_ms,p50_ms,p95_ms,prompt_tok,completion_tok,cached_tok,tps,valid_json_ratio,cjk_ratio,latin_ratio,lang_pass_ratio,vram_used_mb,llamacpp_build,verdict,repeat,started_at
+E,openai_compat,native,Qwen3.8,tick,221696,unknown,10,770,3213,9803,4719,862,1674,44.5,1.0,0.0,0.0,1.0,20894,b10441(pin),n/a,1,2026-09-11T23:27:56
+E,openai_compat,native,Qwen3.8,phase2,221696,unknown,10,770,2996,7602,4204,935,1566,48.1,1.0,0.0,0.0,1.0,20894,b10441(pin),fail,1,2026-09-11T23:27:56
+E,openai_compat,native,Qwen3.8,phase2-group3,221696,unknown,10,770,5021,9753,4870,1458,1548,47.7,1.0,0.0,0.0,1.0,20894,b10441(pin),fail*,1,2026-09-11T23:27:56

@@ -121,7 +121,7 @@
 |---|---|---|---|---|---|
 | Д-1 | **G3 (объединённый)** | до старта M0+ / M1 | пользователь | состав MVP-1 при последовательной работе; отрезание 005-memory и Should I2; T-254; T-320; I1-α; практика коммитов; тестеры для S2 | объём вех M9…M13 |
 | Д-2 | Профиль `legacy` | конец M0 (T-008) | devops + tech-lead#2 | поднимается ли `legacy` (narrative-orchestrator + semantic-memory + chroma) или включается запасной критерий S5 | M5 (T-240), M9 (T-252), INT-14 |
-| Д-3 | **F-8 baseline** | конец M0 / начало M0+ (T-013), подтверждение — T-260 | architect#1 + пользователь (стенд) | конфигурация моделей E → C → A; строка «провайдер: `openai_compat` \| `ollama`» в `baseline.md` | T-203 (модели в блупринтах), **T-254 (делать или снять)**, пороги NFR-002/022/090 |
+| Д-3 | **F-8 baseline** | конец M0 / начало M0+ (T-013), подтверждение — T-260 | architect#1 + пользователь (стенд) | конфигурация моделей по ADR-005 доп. 3 (E → Qwen3.6-35B-A3B → C → A; редакционно, T-440); строка «провайдер: `openai_compat` \| `ollama`» в `baseline.md` | T-203 (модели в блупринтах), **T-254 (делать или снять)**, пороги NFR-002/022/090 |
 | Д-4 | `enum validation_status` | до T-215 (M0+) | system-architect (сведение 3) | 11 значений `data-model.md` §7.2 или 7 значений ADR-017 | T-215, T-211, T-213, T-217 |
 | Д-5 | З-1…З-5 (EPIC-004) | до старта M2 | BA + system-analyst + architect#1/#3 | `end_reason=forget`, статус `abandoned`, `leader_id: null`, имя env allowlist, З-3 (облако в C-08) | T-301, T-302, T-314, T-352, T-355, **T-320** |
 | Д-6 | Отрезание Should | приёмка M7 (I1) | пользователь + PM | 005-memory (M13), Should I2 EPIC-003 (T-248…T-250), T-241 в I2 | срок G4 |
@@ -139,8 +139,8 @@
 | до M0 | — | отзыв ключа `sk-…` из `shared/oracle/README.md` (подтвердить факт отзыва в `journal.md`); отзыв токенов из `.mcp.env` |
 | M0, подволна 0.2 | T-004 (`make minio-image`, `minio --version`, `mc admin info`) | **форк `minio/minio` в аккаунт `alekseizabelin1985-spec`** — до T-004, иначе `MINIO_REPO` не найден; **вывод `llama-server --version`** для пина `LLAMACPP_BUILD` в `build/versions.env` |
 | M0, подволна 0.3 | T-008 (`make up` → `make health`; 8 топиков с retention; профиль `legacy`) | — |
-| M0, подволна 0.4 | T-012 (CI) | **branch protection** на `main` и `integration/mvp-1` (required checks — шесть job'ов), операция в UI GitHub |
-| M0, подволны 0.4–0.5 | **T-013 (F-8)** — матрица замера LLM, 3 прогона, `baseline.md` | запуск `llama-server` по `scripts/llm-server.ps1`, прогон `make bench` вручную (U-12); решение по U-2/U-8 (E → C → A) |
+| M0, подволна 0.4 | T-012 (CI) | **branch protection** на `main` и `integration/mvp-1` (required checks — задания workflow `go`; после T-401 их восемь: `unit, integration, e2e, race, contracts, security, compose-lint, image`; какие отмечать обязательными, решает владелец, рекомендация — все, кроме `image`, `infrastructure.md` §3.1), операция в UI GitHub |
+| M0, подволны 0.4–0.5 | **T-013 (F-8)** — матрица замера LLM, 3 прогона, `baseline.md` | запуск `llama-server` по `scripts/llm-server.ps1`, прогон `make bench` вручную (U-12); решение по U-2/U-8 (правило и порядок — ADR-005 доп. 3; редакционно, T-440) |
 | M0, 0.5/0.7 | T-014 (`make test-integration` на Docker Desktop), T-019 («запуск за 5 команд» на чистой машине) | — |
 | M1 | T-058 (`mvctl world init --bus kafka` против поднятого `core`), T-057 (integration MinIO) | — |
 | M2 | **T-390** — токен бота, allowlist Telegram user id, том данных | **создать бота в @BotFather, выдать токен, указать свой Telegram user id для allowlist** |

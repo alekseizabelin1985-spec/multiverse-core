@@ -1,0 +1,12 @@
+# A clean file for rule 1 (T-429 review #1 Mi-1): third-party images from the
+# pins of build/versions.env, one merged from an anchor and one written
+# `image :`. Both are found as written, so rule 1 sees the variable and not
+# only the tag it interpolated to.
+x-qdrant: &qdrant
+  image: ${QDRANT_IMAGE:?set QDRANT_IMAGE in build/versions.env}
+
+services:
+  qdrant:
+    <<: *qdrant
+  neo4j:
+    image : ${NEO4J_IMAGE:?set NEO4J_IMAGE in build/versions.env}

@@ -63,6 +63,20 @@ func TestBusContractOnMembus(t *testing.T) {
 			// have a log of its own, and nothing published into it.
 			return bus.Lenient(), func() {}, nil
 		},
+		Spare: func() (eventbus.Bus, bool, error) {
+			// A second membus has a log of its own, and its Close takes the log
+			// with it: an in-memory transport does not outlive its bus, so
+			// nothing it left behind can be read afterwards.
+			spare, err := membus.New(membus.Config{
+				Registry: contracts.Default(),
+				Topics:   platformTopics(),
+				Backoff:  noPause,
+			})
+			if err != nil {
+				return nil, false, err
+			}
+			return spare, false, nil
+		},
 		Close: bus.Close,
 	})
 }

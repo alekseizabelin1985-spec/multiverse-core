@@ -93,7 +93,7 @@
 
 | Потребитель | Нужно на старте волны 1 | Заглушка по §17 | Владелец заглушки | Есть на старте волны 1? |
 |---|---|---|---|---|
-| все | C-01 шина, реестр, схемы `_common` | `testkit/membus`, `shared/contracts` | EPIC-001 | да (F-4a/F-5t) |
+| все | C-01 шина, реестр, схемы `_common` | `testkit/membus` (с T-418 — `shared/eventbus/membus`), `shared/contracts` | EPIC-001 | да (F-4a/F-5t) |
 | TEAM-2 (I1b), TEAM-3 | C-02 факты State | `testkit.FakeState` | **EPIC-002** (`shared/testkit/state`) | **нет** — EPIC-002 стартует одновременно |
 | TEAM-2 (роль `encounter`) | C-03 типы `mechanics.*` (компиляция) + `FixedMechanics` | `testkit.FixedMechanics` + `rules/dark-forest.yaml` | **EPIC-002** | **нет**; без пакета `internal/mechanics` с типами `Actor/Action/Outcome/Roll` роль встречи не компилируется |
 | TEAM-2, TEAM-1 | C-04 генератор `player.*` | `testkit.Harness` | **EPIC-004** | **нет** |

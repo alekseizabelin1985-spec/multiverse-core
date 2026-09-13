@@ -1,0 +1,14 @@
+# Rule 8 and a `#` on the continuation line of a quoted string (T-429; T-413
+# review #1 N-1, probe n13). YAML folds the two lines into one value,
+# `the admin clients: # ${MV_CORE_ADMIN_CLIENTS}`, and compose v5.2.0
+# interpolates it. The line reader did not know the quote was still open and
+# cut the second line as a comment.
+#
+# expect-rule: 8
+# expect-text: ${MV_CORE_ADMIN_CLIENTS} has neither a default nor
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      ADMIN_NOTE: "the admin clients:
+        # ${MV_CORE_ADMIN_CLIENTS}"

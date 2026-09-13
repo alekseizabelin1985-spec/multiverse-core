@@ -1,0 +1,15 @@
+# Rule 8: not a literal, but not the one allowed form either — the value comes
+# from another variable. ${MV_LLM_SLOTS:-1} is a correct interpolation of its
+# own (the manifest's default of MV_LLM_SLOTS is 1, so nothing else fires), yet
+# the OLLAMA_NUM_PARALLEL of .env is dropped exactly as a literal would drop it
+# (contracts.md §16 p. 5, v0.9: one form only; T-432).
+#
+# expect-rule: 8
+# expect-text: OLLAMA_NUM_PARALLEL takes its value from '${MV_LLM_SLOTS:-1}', not from OLLAMA_NUM_PARALLEL itself
+# expect-text: rule 8 accepts ${OLLAMA_NUM_PARALLEL:-1}
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_NUM_PARALLEL: ${MV_LLM_SLOTS:-1}

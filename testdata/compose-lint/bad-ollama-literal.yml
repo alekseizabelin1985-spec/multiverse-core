@@ -1,0 +1,15 @@
+# Rule 8: an OLLAMA_* the manifest declares with a default (DeclareExternal in
+# shared/env/infra.go) written as a literal, with no interpolation. The 4 is
+# not the 1 of infra.go, but that is not the point: .env cannot override a
+# literal, so the OLLAMA_NUM_PARALLEL an operator sets there never reaches the
+# container (contracts.md §16 p. 5, v0.9, T-431 variant (b); T-432).
+#
+# expect-rule: 8
+# expect-text: OLLAMA_NUM_PARALLEL carries the literal '4'
+# expect-text: rule 8 accepts ${OLLAMA_NUM_PARALLEL:-1}, the default of shared/env/infra.go
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+    environment:
+      OLLAMA_NUM_PARALLEL: 4

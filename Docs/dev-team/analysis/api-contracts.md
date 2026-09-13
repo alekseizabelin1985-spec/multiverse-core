@@ -256,7 +256,7 @@
 | Политики топиков (`Spec.Policy`) | `player_events`: только `meta.actor_kind ∈ human\|ci\|sim`, `meta.agent == nil`; `llm_records`, `system_events(tick.*, agent.*)`, `narrative_output`, `combat.decided`: `meta.agent` обязателен | проверяется при публикации и при чтении |
 | Часы | `shared/clock.Clock{Now}`, `Timers{After, Every}`; `time.Now()` в `internal/*` запрещён; в replay — `EventClock`/`NullTimers` | таймеры в replay не срабатывают (NFR-061) |
 
-Заглушка: `shared/testkit/membus` — in-memory шина **и журнал** с той же семантикой (порядок, офсеты, `End`, дубли по флагу `--chaos=duplicate`).
+`membus` (`shared/eventbus/membus`, с T-418; вторая реализация C-01, а не заглушка) — in-memory шина **и журнал** с той же семантикой (порядок, офсеты, `End`, дубли по флагу `--chaos=duplicate`).
 
 ### 2.1. Конверт события и `meta`
 

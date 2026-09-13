@@ -71,6 +71,12 @@ type Target struct {
 	// MV_BUS_VALIDATE_ON_READ: without it the suite only ever sees the flag
 	// switched on, and a context passing it inverted would look correct here.
 	Lenient func() (bus eventbus.Bus, release func(), err error)
+	// Spare builds a second bus of the same implementation, which a case may
+	// close on its own while the target stays open. Shared reports whether the
+	// spare writes to the transport of the target, so that what it left behind
+	// can still be read through the target after its Close: true for a broker,
+	// false for membus, whose spare has a log of its own that goes with it.
+	Spare func() (bus eventbus.Bus, shared bool, err error)
 	// Close closes the bus under test. The case that uses it runs last and
 	// nothing runs after it, so a target that must survive the suite may leave
 	// it nil and skip that case.
@@ -108,6 +114,9 @@ func Run(t *testing.T, target Target) {
 	if target.Duplicate == nil || target.Lenient == nil {
 		t.Fatal("contract: the target must provide Duplicate and Lenient")
 	}
+	if target.Spare == nil {
+		t.Fatal("contract: the target must provide Spare")
+	}
 
 	cases := []struct {
 		name string
@@ -122,6 +131,7 @@ func Run(t *testing.T, target Target) {
 		{"JournalStopsAtTheEndOfTheJournal", journalStopsAtTheEnd},
 		{"JournalTailFollowsUntilTheContextIsDone", journalTailFollows},
 		{"AGroupResumesFromItsCursor", groupResumesFromItsCursor},
+		{"ANewGroupStartsAtTheFirstOffset", newGroupStartsAtTheFirstOffset},
 		{"DedupDropsTheRepeatedDelivery", dedupDropsTheRepeat},
 		{"TwoStepDedupRemembersOnlyAfterTheSideEffect", twoStepDedupAfterTheSideEffect},
 		{"AnUncommittedEventIsDeliveredAgain", uncommittedIsDeliveredAgain},
@@ -131,6 +141,7 @@ func Run(t *testing.T, target Target) {
 		{"UndecodableMessageGoesToDeadLetters", undecodableGoesToDeadLetters},
 		{"RetriesThenDeadLetterAndTheStreamMovesOn", retriesThenDeadLetter},
 		{"AHandlerPanicIsParkedWithoutRetry", handlerPanicIsParkedWithoutRetry},
+		{"CloseUnderAFailingHandlerIsAnOrderlyStop", closeUnderAFailingHandler},
 		{"SubscribeReturnsNilOnAnOrderlyStop", subscribeReturnsNilOnStop},
 		{"PublishOfOneEventIsNotBatched", publishOfOneEventIsNotBatched},
 		// The big body is left until after the other dead-letter cases: every
@@ -436,6 +447,88 @@ func groupResumesFromItsCursor(t *testing.T, target Target) {
 	if got[0].payloadName() != "after" {
 		t.Fatalf("the resumed subscription received %q, want \"after\": a group starts where it left off, not at the beginning",
 			got[0].payloadName())
+	}
+}
+
+// newGroupStartsAtTheFirstOffset: a consumer group that did not exist when an
+// event was published still gets it, because a new group reads its topic from
+// the first offset, not from the end (C-01 v1.2, ADR-022). It is what lets a
+// consumer announce itself without waiting for its subscription to be live —
+// testkit/state does exactly that — and the reason no interface of the bus has
+// a readiness handshake.
+//
+// "Not from the end" alone is too weak a check: a group that began anywhere
+// between the start of the topic and the events of this case would deliver
+// them just the same, and the cases that publish before they subscribe already
+// catch a group that begins at the end. So the first delivery of the group is
+// compared with where the journal says the topic begins. That makes this the
+// one case that looks behind its own baseline, on purpose.
+func newGroupStartsAtTheFirstOffset(t *testing.T, target Target) {
+	r := newRun(t, target)
+	topic := eventbus.TopicPlayerEvents
+	base := r.end(topic)
+
+	const n = 3
+	for i := range n {
+		r.publish(r.looked(strconv.Itoa(i)))
+	}
+
+	// Where the topic begins is read off the journal rather than written down
+	// as 0: offsets are what the journal half of C-01 defines, and the case
+	// states how the subscription half relates to it.
+	readCtx, cancel := context.WithTimeout(t.Context(), Timeout)
+	defer cancel()
+	begins := int64(-1)
+	if _, err := target.Journal.ReadRange(readCtx, topic, 0, base+n, func(ctx context.Context, _ eventbus.Event) error {
+		if pos, ok := eventbus.PositionFromContext(ctx); ok && begins < 0 {
+			begins = pos.Offset
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("ReadRange of %s from offset 0: %v", topic, err)
+	}
+	if begins < 0 {
+		t.Fatalf("the journal delivered nothing of %s below offset %d, where this case alone published %d events", topic, base+n, n)
+	}
+
+	// The group of this run is new: nothing has subscribed under it, and it is
+	// only named here, after every event of the case is in the topic.
+	var mu sync.Mutex
+	first := int64(-1)
+	var ours []received
+	sub := r.subscribeWith(topic, func(ctx context.Context, ev eventbus.Event) error {
+		pos, ok := eventbus.PositionFromContext(ctx)
+		if !ok {
+			t.Error("the subscription called the handler without a position in the context")
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if first < 0 {
+			first = pos.Offset
+		}
+		if ev.Key() == r.world {
+			ours = append(ours, received{ev: ev, pos: pos})
+		}
+		return nil
+	})
+	defer sub.stop(t)
+
+	waitFor(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(ours) >= n
+	}, fmt.Sprintf("the %d events published before the group existed", n))
+
+	mu.Lock()
+	defer mu.Unlock()
+	if first != begins {
+		t.Fatalf("the new group %s began at offset %d, but %s begins at %d: a new group reads from the first offset",
+			r.group, first, topic, begins)
+	}
+	for i, got := range ours[:n] {
+		if want := strconv.Itoa(i); got.payloadName() != want || got.pos.Offset != base+int64(i) {
+			t.Fatalf("event %d of the case is %q at offset %d, want %q at %d", i, got.payloadName(), got.pos.Offset, want, base+int64(i))
+		}
 	}
 }
 
@@ -949,6 +1042,200 @@ func checkPanicLetter(t *testing.T, dl eventbus.DeadLetter, panicValue string) {
 	}
 }
 
+// closeUnderAFailingHandler: the bus is closed while a handler is failing on
+// an event, at the moment the fate of that event is being decided — on the
+// last retry, and on a panic. Close is an orderly stop for such a subscription
+// as for any other, so Subscribe returns nil (C-01 v1.2), and the event is not
+// lost: it is either parked in dead_letters or left uncommitted and delivered
+// again to the next subscription of its group. Which of the two, and after
+// how many calls, the contract leaves open (ADR-023, "what T-395 may assert"),
+// and the case does not look.
+//
+// Each handler holds its last call until the bus is closed, and that hold —
+// not a pause — is what puts the end of the delivery on a closed bus. Without
+// it the window between the last call and the write to dead_letters is
+// microseconds wide, and a bus that turned the failed write into an error
+// there stayed green (review #2 of T-014, Minor-3).
+//
+// The hold carries a second assertion, and this one is exact: while it holds,
+// the handler reports the state of its own context once Close has returned.
+// The contract wants nil there — Close ends the wait on the transport, not the
+// work of the handler (C-01 v1.7 p. 3). It is the only anchor that
+// distinguishes the two, and the kafka adapter was red on it until T-436.
+//
+// The case closes a spare bus, not the target. The Close case runs last and
+// its anchor rests on the subscriptions it has; this one needs the target
+// open afterwards, to read through it what the closed bus left behind.
+func closeUnderAFailingHandler(t *testing.T, target Target) {
+	r := newRun(t, target)
+	spare, shared, err := target.Spare()
+	if err != nil {
+		t.Fatalf("build the spare bus: %v", err)
+	}
+	defer func() { _ = spare.Close() }()
+
+	release := make(chan struct{})
+	failing := []*failingReader{
+		{name: "failing", ev: r.looked("fails on every call"), holdOn: Retries + 1},
+		{name: "panicking", ev: r.looked("panics"), holdOn: 1, panics: true},
+	}
+	for _, f := range failing {
+		if err := spare.Publish(t.Context(), f.ev); err != nil {
+			t.Fatalf("publish on the spare bus: %v", err)
+		}
+	}
+	for _, f := range failing {
+		f.group = r.group + "-" + f.name
+		f.held = make(chan struct{}, 1)
+		f.afterClose = make(chan error, 1)
+		f.sub = r.subscribeOnGroup(spare, eventbus.TopicPlayerEvents, f.group, f.handler(release))
+	}
+	defer func() {
+		for _, f := range failing {
+			f.sub.cancel()
+		}
+	}()
+
+	deadline := testkit.Wall().Now().Add(Timeout)
+	for _, f := range failing {
+		select {
+		case <-f.held:
+		case <-testkit.After(deadline.Sub(testkit.Wall().Now())):
+			t.Fatalf("the %s handler never reached its last call", f.name)
+		}
+	}
+
+	if err := spare.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	close(release)
+	for _, f := range failing {
+		select {
+		case err := <-f.sub.done:
+			if err != nil {
+				t.Errorf("Subscribe returned %v when the bus closed under the %s handler, want nil: closing the bus is an orderly stop",
+					err, f.name)
+			}
+		case <-testkit.After(Timeout):
+			t.Fatalf("Close left the subscription of the %s handler running after %s", f.name, Timeout)
+		}
+	}
+
+	// Close ends the wait on the transport — the fetch of the next message and
+	// the commit — and nothing else (C-01 v1.7 p. 3, ADR-023 p. 4 and its
+	// execution note of 2026-09-12). The context a handler is given is the
+	// context of the caller of Subscribe, and a handler held across Close must
+	// find it alive: it may be halfway through a PUT into object storage, and
+	// C-02 publishes the fact only once that write is done. Whoever may
+	// interrupt the work is the one who cancels it — the process stops the
+	// context of the subscription before it closes the bus.
+	for _, f := range failing {
+		select {
+		case err := <-f.afterClose:
+			if err != nil {
+				t.Errorf("the context of the %s handler was %v once Close had returned, want nil: Close ends the wait on the transport, not the work of the handler",
+					f.name, err)
+			}
+		default:
+			t.Errorf("the %s handler never reported the state of its context after Close", f.name)
+		}
+	}
+
+	if !shared {
+		t.Logf("%s: the spare took its transport with it, so what became of the events cannot be read", target.Name)
+		return
+	}
+	for _, f := range failing {
+		r.checkNotLost(t, f)
+	}
+}
+
+// failingReader is one subscription of the case that closes the bus under a
+// failing handler.
+type failingReader struct {
+	name string
+	ev   eventbus.Event
+	// holdOn is the call the handler holds until the bus is closed: the last
+	// attempt for an error, the first and only one for a panic.
+	holdOn int64
+	panics bool
+	group  string
+	held   chan struct{}
+	sub    *subscription
+	calls  atomic.Int64
+	// afterClose carries ctx.Err() of the held handler, read once Close has
+	// returned. It is the anchor of C-01 v1.7 p. 3 (see the case).
+	afterClose chan error
+}
+
+func (f *failingReader) handler(release <-chan struct{}) eventbus.Handler {
+	return func(ctx context.Context, ev eventbus.Event) error {
+		if ev.ID != f.ev.ID {
+			return nil
+		}
+		if f.calls.Add(1) < f.holdOn {
+			return errors.New("contract: the handler fails on this event")
+		}
+		select {
+		case f.held <- struct{}{}:
+		default:
+		}
+		// The fuse, as in backlogReader: a case that fails before it closes
+		// the bus must not hold the subscription past its own budget.
+		select {
+		case <-release:
+			// The case closes the bus and only then closes release, so Close
+			// has returned by the time this line runs: whatever Close does to
+			// the context of a handler, it has done it already.
+			select {
+			case f.afterClose <- ctx.Err():
+			default:
+			}
+		case <-testkit.After(Timeout):
+		}
+		if f.panics {
+			panic("contract: the handler panics while the bus closes")
+		}
+		return errors.New("contract: the handler fails while the bus closes")
+	}
+}
+
+// checkNotLost waits for the event a closed bus left undecided to turn up on
+// the transport again: parked in dead_letters under its group, or delivered to
+// the next subscription of that group, which the target stands in for.
+func (r *run) checkNotLost(t *testing.T, f *failingReader) {
+	t.Helper()
+	again := make(chan struct{}, 1)
+	sub := r.subscribeOnGroup(r.target.Bus, eventbus.TopicPlayerEvents, f.group, func(_ context.Context, ev eventbus.Event) error {
+		if ev.ID == f.ev.ID {
+			select {
+			case again <- struct{}{}:
+			default:
+			}
+		}
+		return nil
+	})
+	defer sub.stop(t)
+
+	waitFor(t, func() bool {
+		select {
+		case <-again:
+			return true
+		default:
+		}
+		letters, err := r.target.DeadLetters(t.Context())
+		if err != nil {
+			t.Fatalf("read dead letters: %v", err)
+		}
+		for _, dl := range letters {
+			if dl.Consumer == f.group && dl.Original.ID == f.ev.ID {
+				return true
+			}
+		}
+		return false
+	}, fmt.Sprintf("the event the %s handler left behind, parked or delivered again", f.name))
+}
+
 // subscribeReturnsNilOnStop: a subscription cancelled by its caller is a
 // shutdown, not a failure — decision Mi-1 on the review of T-005, and the one
 // semantic difference that would otherwise make every context log an error on
@@ -1400,10 +1687,16 @@ func (r *run) subscribeWithGroup(topic, group string, h eventbus.Handler) *subsc
 // needs the validation flag in its other position.
 func (r *run) subscribeOn(bus eventbus.Bus, topic string, h eventbus.Handler) *subscription {
 	r.t.Helper()
+	return r.subscribeOnGroup(bus, topic, r.group, h)
+}
+
+// subscribeOnGroup is subscribeOn in a consumer group of the case's choosing.
+func (r *run) subscribeOnGroup(bus eventbus.Bus, topic, group string, h eventbus.Handler) *subscription {
+	r.t.Helper()
 	sub := &subscription{done: make(chan error, 1)}
 	ctx, cancel := context.WithCancel(context.WithoutCancel(r.t.Context()))
 	sub.cancel = cancel
-	go func() { sub.done <- bus.Subscribe(ctx, topic, r.group, h) }()
+	go func() { sub.done <- bus.Subscribe(ctx, topic, group, h) }()
 	return sub
 }
 

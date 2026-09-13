@@ -286,36 +286,52 @@ func (b *Bus) Subscribe(ctx context.Context, topicName, groupName string, h even
 		if b.stopping(ctx) {
 			return nil
 		}
-		// The cursor is held across the delivery so that one group handles one
-		// event at a time, as a single-partition topic does.
-		g.mu.Lock()
-		offset := g.next
-		changed := t.changed()
-		body, ok := t.at(offset)
-		if !ok {
-			g.mu.Unlock()
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-b.st.done:
-				return nil
-			case <-changed:
-				continue
-			}
-		}
-		pos := eventbus.Position{Topic: topicName, Offset: offset}
-		err := b.deliver(ctx, delivery, pos, body, h)
-		if err == nil {
-			g.next = offset + 1
-		}
-		g.mu.Unlock()
+		changed, err := b.deliverNext(ctx, t, g, delivery, topicName, h)
 		if err != nil {
 			if b.stopping(ctx) {
 				return nil
 			}
 			return err
 		}
+		if changed == nil {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-b.st.done:
+			return nil
+		case <-changed:
+		}
 	}
+}
+
+// deliverNext hands the record at the cursor of the group to the handler and
+// moves the cursor once it is accounted for. At the end of the log it delivers
+// nothing and returns the channel that closes on the next append.
+//
+// The cursor is held across the delivery so that one group handles one event
+// at a time, as a single-partition topic does, and it is released by a
+// deferred call: a handler may end its goroutine with runtime.Goexit —
+// t.FailNow in the handler of a test — and that is not a panic Delivery turns
+// into an error, so a lock released only on the way back would stay taken and
+// hang every other subscription of the group (review #1 of T-426; T-415). The
+// cursor does not move then, and the event goes to the next subscription.
+func (b *Bus) deliverNext(ctx context.Context, t *topic, g *group, d eventbus.Delivery,
+	topicName string, h eventbus.Handler) (<-chan struct{}, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	offset := g.next
+	changed := t.changed()
+	body, ok := t.at(offset)
+	if !ok {
+		return changed, nil
+	}
+	if err := b.deliver(ctx, d, eventbus.Position{Topic: topicName, Offset: offset}, body, h); err != nil {
+		return nil, err
+	}
+	g.next = offset + 1
+	return nil, nil
 }
 
 // ReadRange delivers [from, min(to, End)) in increasing offset order and
