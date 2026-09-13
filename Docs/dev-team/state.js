@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:18:30+03:00",
+  "updatedAt": "2026-09-13T23:24:00+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -10386,7 +10386,7 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Приёмка персонажей, сессий, ходов",
       "startedAt": "2026-09-13T23:00:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:24:00+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10426,6 +10426,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Приёмка T-056 и отметка по FakeEncounter",
       "startedAt": "2026-09-13T23:14:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-306",
+      "action": "Отметка владельца MV_GATEWAY_*",
+      "startedAt": "2026-09-13T23:24:00+03:00",
       "finishedAt": null
     }
   ],
@@ -14377,6 +14387,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-464 принята tech-lead#1: Mi-1 правило 3 советует необязательным секретам ${KEY:-}, N-1 комментарий законно пустых секретов, N-2 правила 3 и 8 печатают <withheld> вместо значения секрета (фикстуры с expect-absent, мутанты M1–M7); раздел и карточка T-469 (MV_GATEWAY_* и MV_GM_PATH шлюзу, MV_ANTHROPI"
+    },
+    {
+      "at": "2026-09-13T23:24:00+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-306 принята TEAM-3/tech-lead#3: Mi-1 уборка резервов seq под блокировкой трекера (M2/M2b), Mi-3 sweeper персонажей снимает связку под блокировкой и возвращает её, если факт успел прийти (M6/M6b/M6c), Mi-4 ValidCharacterName отвергает пробелы по краям, обрезает вызывающий (по api-contracts §1.3), M"
     }
   ],
   "blockers": [],
