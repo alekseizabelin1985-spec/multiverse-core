@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:02:27+03:00",
+  "updatedAt": "2026-09-13T19:18:49+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2535,13 +2535,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-456",
           "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/system-architect#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T19:18:49+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 96,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-456.md",
           "branch": "task/T-456-c08-forget-incomplete",
@@ -2565,6 +2565,32 @@ window.DEVTEAM_STATE =
         {
           "id": "T-460",
           "title": "eventbus.Permanent и Policy.World (C-01 v1.10) с contract-тестом на обе шины (после T-456)",
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-13T19:18:49+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-460.md"
+        },
+        {
+          "id": "T-461",
+          "title": "Правило depguard cmd-telegram-bot в .golangci.yml по тексту отметки T-310 (предусловие T-311)",
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T19:18:49+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-461.md"
+        },
+        {
+          "id": "T-463",
+          "title": "Devops: удаление архивов make backup старше 30 дней; маскировка значения в llm_endpoint_judge и LlmEndpoint.psm1; MV_STATE_WORLDS и MV_TELEGRAM_* в compose",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -2573,7 +2599,7 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-460.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-463.md"
         }
       ],
       "defects": [],
@@ -3176,11 +3202,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-203",
           "title": "A3 · Пять блупринтов MVP-1 и схемы schemas/agent/",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T18:40:06+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3277,9 +3303,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-208",
           "title": "B3a · Провайдер openai_compat (llama-server) — **провайдер по умолчанию",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
@@ -4240,13 +4266,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-451",
           "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
-          "finishedAt": null,
-          "reviewIterations": 1,
+          "finishedAt": "2026-09-13T19:18:49+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 92,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-451.md",
           "branch": "task/T-451-local-endpoint-go",
@@ -4450,7 +4476,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-305",
           "title": "actions: валидация, идемпотентность, лимит, InputFilter",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T18:25:18+03:00",
           "finishedAt": null,
@@ -4522,14 +4548,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T16:39:05+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T19:18:49+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.4",
-          "spentMinutes": 0,
+          "spentMinutes": 144,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md",
           "branch": "task/T-310-bot-core",
@@ -4842,6 +4868,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-393.md"
+        },
+        {
+          "id": "T-462",
+          "title": "go-telegram/bot v1.27.0 с редакцией «error decode update» в privacy; пакет updates переименовать (Windows блокирует updates.test.exe)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-462.md"
         }
       ],
       "defects": [],
@@ -9450,7 +9489,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "actions: валидация, идемпотентность, публикация player.*",
       "startedAt": "2026-09-13T18:25:18+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -9550,7 +9589,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Отметка владельца и правило depguard cmd-telegram-bot",
       "startedAt": "2026-09-13T18:50:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9560,7 +9599,7 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Приёмка T-451",
       "startedAt": "2026-09-13T18:50:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9580,7 +9619,7 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Приёмка T-456 contracts v0.14",
       "startedAt": "2026-09-13T18:51:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "security-engineer#1",
@@ -9590,7 +9629,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Ревью SEC-26 текста уведомления FR-009",
       "startedAt": "2026-09-13T18:51:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9600,7 +9639,7 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Ревью #1 блупринтов MVP-1",
       "startedAt": "2026-09-13T18:59:56+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:18:49+03:00"
     },
     {
       "instance": "developer#3",
@@ -9610,6 +9649,66 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Запись сессии: shared/recording, ReadJournal, Deps.Recording",
       "startedAt": "2026-09-13T19:02:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "Ревью #1 действий gateway",
+      "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-203",
+      "action": "Итерация 2: allowed_event_types, тесты",
+      "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "business-analyst#1",
+      "role": "business-analyst",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Итерация 2 по ревью безопасности",
+      "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-460",
+      "action": "Permanent и Policy.World, contract-тест",
+      "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-461",
+      "action": "Правило depguard cmd-telegram-bot",
+      "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-208",
+      "action": "Провайдер openai_compat",
+      "startedAt": "2026-09-13T19:18:49+03:00",
       "finishedAt": null
     }
   ],
@@ -13009,6 +13108,60 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по T-458: одна задача M, при нехватке сессии — остановка после зелёной части А и разбиение оркестратором; git mv в папке задачи разрешён и обязателен. Вопрос к system-architect: ReadJournal поверх middleware T-060 в replay сдвигает EventClock и помечает meta.replay → возможен 40"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 · отметка tech-lead#1: есть. Переменные MV_TELEGRAM_* корректны, go-telegram/bot v1.25.0 без транзитивных зависимостей (MIT); текст правила depguard cmd-telegram-bot проверен на копии. Обновление до v1.27.0 — отдельной задачей (с v1.26 библиотека пишет сырое обновление с внешними ID в лог). Ко"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-305 выполнена TEAM-3/developer#1: internal/gateway/actions (Validate по КД §5.4, идемпотентность в idempotency_keys, лимит bucket burst 5 + 30/мин, InputFilter noop, публикация player.* через NewRoot и предложений через Derive, gm.created при legacy), маршрут POST /v1/players/{id}/actions; OpenAPI"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 · ревью безопасности (security-engineer#1): вернуть — M-1 make backup архивирует тома Redpanda/MinIO без удаления старых архивов (реплика живёт дольше 30 дней); M-2 Qdrant/Neo4j/ChromaDB не удаляют по сроку; Mi-1/Mi-2/Mi-6 правки текста и grep-подстрок; Mi-3/Mi-4/Mi-5/Mi-7/Mi-8 — бэклог. Решен"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-451 принята TEAM-2/tech-lead#2: Mi-R2-1, N-R2-1 закрыты тестами; LogValue при @ скрывает хост; в local-endpoints.tsv 15 строк, 5 не-ASCII случаев — в стенде паритета (формат TSV — печатаемый ASCII); scripts-parity 143 случая PASS. Итераций ревью — 2. Коммит b0dde45; конфликт tasks.md (шапка 0.3.8,"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-456 принята tech-lead#1: Mi-1 — пометка «код расходится» (скрипты T-450 печатают значение, бэклог devops) в C-15 и ADR-005 побайтно одинаково; Mi-2 — КД §10.2 п. 2: в группе бот молчит; N-1…N-5 (ErrHandlerPanic по delivery.go, T-460 везде). N-4 — строки T-211/T-212/T-250 для tech-lead#2 в карточке"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние G (постоянное разрешение): epic/EPIC-001-foundation → develop (5f277d2), состав — T-456 (contracts.md v0.14: C-01 v1.10, C-02 v1.7, C-07 v1.6, C-08 v1.5, C-15 v1.5). make ci BASE=develop — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация develop → EPIC-"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 · ревью #1 (TEAM-2/code-reviewer#3): вернуть — 0/1/3/3. Ma-1: в allowed_event_types нет событий, которые роли публикуют по дизайну (encounter — dice.rolled, entity.update.proposed; domain — entity.create/update.proposed; global — entity.update.proposed), Emitter T-223 отклонил бы их. Исключени"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Заведены задачи, counters.task = 463: T-461 (EPIC-001, depguard cmd-telegram-bot, предусловие T-311), T-462 (EPIC-004, go-telegram/bot v1.27.0 с редакцией «error decode update», переименование пакета updates из-за блокировки updates.test.exe на Windows), T-463 (EPIC-001 devops: удаление архивов бэка"
+    },
+    {
+      "at": "2026-09-13T19:18:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Очередь вопросов system-architect: C-15 — «@ в пути» (http://admin:2024/pw@10.0.0.5:8080) → invalid?; ReadJournal поверх middleware T-060 (сдвиг EventClock, 409 clock_behind); где живёт e2e бота на FakeGateway/membus (depguard cmd-telegram-bot запрещает их в тестах); единица response_len в C-07 (бай"
     }
   ],
   "blockers": [],
