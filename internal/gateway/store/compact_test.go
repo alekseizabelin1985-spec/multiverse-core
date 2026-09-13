@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"multiverse-core.io/internal/gateway/store"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
 
 // forgottenID is a Telegram user id shaped test value; it is not a real
@@ -23,7 +24,7 @@ const forgottenID = "7391846205"
 // is a byte search in Go, the strings(1) of the task card without the shell.
 func TestCompactLinksWipesAForgottenIDFromTheFileAndTheWAL(t *testing.T) {
 	ctx := context.Background()
-	dir := tempDir(t)
+	dir := sqlitedir.Temp(t)
 	db := openLinks(t, dir)
 	path := store.LinksPath(dir)
 
@@ -107,7 +108,7 @@ func TestCompactLinksWipesAForgottenIDFromTheFileAndTheWAL(t *testing.T) {
 // error, or /forget would report the ID gone while the WAL still holds it.
 func TestCompactLinksReportsABlockedCheckpoint(t *testing.T) {
 	ctx := context.Background()
-	dir := tempDir(t)
+	dir := sqlitedir.Temp(t)
 	db := openLinks(t, dir)
 	insertLink(t, db, "telegram", forgottenID, "link-forgotten", "player-forgotten")
 

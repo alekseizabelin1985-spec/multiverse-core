@@ -62,6 +62,10 @@ paths:
       description: |
         Creates a pending_consent link with a new link_id on the first call and
         updates last_seen_at on every call. link_id is not returned (SEC-03).
+        notice_due is true for a new or pending_consent link and when the
+        previous visit was 30 days ago or more. character_status is none while
+        the link has no character. external_platform other than telegram and an
+        empty external_id answer 400 invalid_request.
       x-nolog: true
       parameters:
         - $ref: '#/components/parameters/ActorKind'
@@ -86,7 +90,15 @@ paths:
       operationId: consentLink
       tags: [links]
       summary: Record the notice, the consent and the age confirmation
-      description: Any of the three flags not true answers 400 consent_incomplete and the link stays pending_consent.
+      description: |
+        Any of the three flags not true answers 400 consent_incomplete: an
+        existing link stays pending_consent, and an account without a link
+        gets none (nothing stores its external ID). A complete consent sets
+        notice_shown_at to shown_at and consent_at, age_confirmed_at to the time
+        of the gateway; a repeat keeps the first three times (they are the
+        evidence of the consent) and only updates last_seen_at. A complete
+        consent for an account that was never resolved creates its link.
+        shown_at missing answers 400 invalid_request.
       x-nolog: true
       parameters:
         - $ref: '#/components/parameters/ActorKind'
@@ -115,10 +127,44 @@ paths:
         Cascade of C-04 v1.3 in this order: the outbox of the player is dropped;
         a living character gets status=abandoned (and a new leader or none for
         its group), group.left {cause: forget}; the active session ends with
-        end_reason=forget; the link is deleted physically. Without a link the
-        answer is 200 {deleted: false, player_id_detached: null}; player_id_detached
-        is always present and null when no character was detached. The semantics
-        is refined by T-303 (SEC-26).
+        end_reason=forget; the link is deleted physically. A step that fails
+        stops the cascade before the deletion, so a repeat runs it again.
+
+        What is deleted (SEC-26, threat-model §4.8): the row of the link — the
+        external ID, player_id, world_id, the times of the notice, the consent
+        and the age confirmation, last_seen_at, the internal link_id — and the
+        stored answers of POST /v1/characters under that link. The deletion is
+        physical before the answer: secure_delete zeroes the cells, the free
+        pages are vacuumed and the WAL is checkpointed and truncated, so the
+        external ID is left neither in the file nor in its WAL, and nothing
+        finds the external account by player_id any more.
+
+        What stays: the character under its pseudonymous player_id (abandoned,
+        or dead) in the world state and snapshots; the game history by player_id
+        in the event journal until its retention (30 days, LLM records 90,
+        analytics 180) and in the memory indexes built from it; sessions and
+        turns of gateway.db by player_id; the encrypted backup of the links file
+        for at most 30 days. A new /start after /forget is a new player with a
+        new player_id.
+
+        Answers: 200 {deleted: true, player_id_detached} when a link was deleted,
+        player_id_detached null when it had no character (the client says there
+        was nothing to delete); 200 {deleted: false, player_id_detached: null}
+        without a link, which is also the answer to a repeat of a /forget that
+        already succeeded.
+
+        503 forget_incomplete, unlike bus_unavailable, does not mean that nothing
+        was done: the link is deleted, but the wipe of its bytes from the file of
+        links is not confirmed. Causes: a reader outside the gateway, such as a
+        backup, holding the file past the busy timeout, or the deadline of the
+        request. The data must not be reported as gone. While that wipe stays
+        pending, every /forget answers 503 forget_incomplete, the repeats of the
+        same account and the /forget of other accounts, with or without a link;
+        the call that finishes the wipe answers as usual. The answer carries
+        Retry-After; the client repeats, and a 200 {deleted: false} after a 503
+        is the end of the same /forget, not "nothing to delete". The gateway
+        also finishes the wipe itself: its sweeper retries every minute, and
+        every start of the gateway compacts the file of links.
       x-nolog: true
       parameters:
         - $ref: '#/components/parameters/ActorKind'
@@ -137,6 +183,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/admin/links/{player_id}:
     delete:
@@ -613,8 +660,16 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
           example: { error: { code: not_implemented, message: Не реализовано. } }
     Unavailable:
-      description: 'A dependency is down; the action is not accepted and action_key is not stored, the client repeats with the same key. Codes: bus_unavailable, state_unavailable.'
-      x-error-codes: [bus_unavailable, state_unavailable]
+      description: |
+        A dependency is down; the action is not accepted and action_key is not stored, the client repeats with the same key.
+        Codes: bus_unavailable, state_unavailable, forget_incomplete (DELETE /v1/links: the link is deleted, the wipe
+        from the file of links is not confirmed; the data is not reported as gone, the client repeats /forget after
+        Retry-After, see forgetLink).
+      x-error-codes: [bus_unavailable, state_unavailable, forget_incomplete]
+      headers:
+        Retry-After:
+          description: Sent with forget_incomplete only; seconds before the client repeats /forget.
+          schema: { type: integer, minimum: 1 }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }

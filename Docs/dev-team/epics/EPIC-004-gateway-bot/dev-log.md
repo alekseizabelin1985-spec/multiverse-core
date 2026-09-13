@@ -5,6 +5,53 @@
 
 ---
 
+<!-- dev-log T-303 -->
+## developer#1 · T-303 · связки (links), каркас HTTP-слоя и контекст gateway · 2026-09-13
+
+Ветка `task/T-303-links-http-layer` (родитель — `epic/EPIC-004-gateway-bot`), TEAM-3, Opus. Подробности, таблица DoD и мутантов — карточка `tasks/T-303.md`, раздел «Выполнение».
+
+- **Что сделано.**
+  - `internal/gateway/links` — `Store` и `SQLite` над `links.db`: `Resolve`, `Consent`, `AttachPlayer`, `ByExternal`, `ByPlayer`, `RouteFor`, `CharacterRequest`/`SaveCharacterRequest`, `Forget`/`ForgetByPlayer` с `ForgetHooks`, `Compact`, `Sweep`; `Link` печатается как `redacted` (slog, fmt); `NewPlayerID`/`NewLinkID` из `Deps.IDs`.
+  - `internal/gateway/api` — `Handlers` и `GatewayRouter` для `resolveLink`/`consentLink`/`forgetLink` (вычеркнуты из `notYetMounted`); `middleware.go` — цепочка component §5.1 (request_id и access-лог, recover, client/actor_kind/client_mismatch, 64 КиБ, nolog-политика, точка rate limit, pollguard, дедлайн запроса); `errors.go` — `503 forget_incomplete`, `WriteJSON`.
+  - `internal/gateway/handlers` — обработчики связок; `internal/gateway/context.go` — контекст `gateway` (`Routes`, `Start`, `Stop`, `Health`, sweeper `links.db` в `live`).
+  - `api/gateway.openapi.yaml` — семантика `/forget` (SEC-26), `notice_due`, согласие, `503`.
+  - EPIC-001 в мягком режиме ревизии 4: `cmd/multiverse/contexts.go` — настоящая фабрика `gateway` вместо заглушки; тестовые помощники `onLoopback` и `emptyWorldEnv` дают временный `MV_GATEWAY_DATA_DIR`; `TestStubIsHealthyAndDoesNothing` пропускает `gateway`.
+- **Решения по ходу.**
+  - Обработчики вынесены из `api` в `handlers`: `api` импортирует бот, а обработчик связок тянет драйвер SQLite.
+  - Request id и access-лог — внешний слой, recover — второй: `500` паники тоже с `X-Request-Id` и в логе. Nolog — политика операции в access-логе: только `request_id` и `code` (у строки паники ещё `handled=false`).
+  - Заблокированный checkpoint после `/forget`: связка удалена, `ErrCompactionPending`, ответ `503 forget_incomplete`, `/health` — `degraded`. Повтор (клиент повторяет `503` сам) доделывает сжатие, страховка — sweeper (1 мин — отложенное, 1 ч — полное) и `Stop`.
+  - Хуки каскада — до `DELETE`: упавший хук оставляет связку для повтора. В T-303 хуков и предложений нет; `proposal_id = forget:{player_id}` и «`dead_entity` → 200» — строка для T-314/T-355.
+  - `link_id`/`player_id` — из `Deps.IDs` (воспроизводимы при `sequence`), ULID не нужен; `X-Request-Id` — `uuid.NewString`, чтобы запросы не сдвигали последовательность.
+  - Серверные таймауты — T-446; в T-303 дедлайн 5 с на контексте запроса всем, кроме `api.LongPollOperations` — точка подключения T-307.
+  - Открытие БД в `Start` — под `context.WithoutCancel`; `objstore.New` не нужен до T-304.
+- **Отклонения.** Пакет `handlers` вместо `api/handlers_links.go`; порядок recover/request_id; сигнатуры стора (`Resolution`, `ConsentForm`, `ForgetResult`, `now` в запросах персонажа); новый код `503 forget_incomplete` (C-08 — запрос system-architect); DoD `serve --contexts=gateway --bus=memory` дословно невыполним (`serve.go` требует `all` для `memory`) — проверено тестом процесса с одним контекстом `gateway` и e2e; `.env.example` и `vars.go` не менялись — новых переменных нет.
+- **Проверки.** `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` — 0 issues; `mvctl env check` — 0; `mvctl privacy scan testdata/` — чисто; `make test` — exit 0. Покрытие: `gateway` 81 %, `api` 97 %, `handlers` 100 %, `links` 84 %. Мутанты — 37 засчитаны, все красные (в копии дерева в scratch, без `-overlay`; копия удалена по точному пути).
+- Интеграционные тесты, Docker, `make up`, стенд `:8888` не трогал, `.env` не открывал, `tasks.md` эпика не правил. Не коммитил.
+
+## developer#1 · T-303 · итерация 2 (ревью #1) · 2026-09-13
+
+Ветка `task/T-303-links-http-layer`, TEAM-3, Opus. Итерация по ревью #1 (0/1/6/7), решению system-architect#1 по `503 forget_incomplete` и решению оркестратора по M-1. Запуск был прерван лимитом API и возобновлён после сверки `git status`, `diff` и времени файлов. Подробности, ответ по каждому пункту и сигнатуры для T-456 — карточка `tasks/T-303.md`, «Итерация 2».
+
+- **Что сделано.**
+  - M-1: `build/Dockerfile` создаёт `/data` владельцем `nonroot` (65532) с правами `0700` (в builder `mkdir`, в runtime `COPY --chown --chmod`). В `Docs/ops/runbook.md` раздел 2 — абзац о пересоздании тома `gateway-data`, созданного до T-303; команда описана, не выполнялась.
+  - 503 `forget_incomplete` по решению architect: `Retry-After: 5`, пока сжатие отложено, 503 получает любой `/forget`, OpenAPI описывает смысл «связка удалена, стирание не подтверждено». В `Start` одно безусловное `Compact` до обслуживания (Mi-2).
+  - Mi-1: `DELETE … AND player_id IS ?` с проверкой `RowsAffected`; если персонаж сменился, каскад идёт заново (≤ 3 попыток); параллельный `/forget` получает `deleted:false`.
+  - Mi-4: неполное согласие без связки ничего не создаёт.
+  - Mi-5: ошибка старта называет `MV_GATEWAY_DATA_DIR`; README и комментарий `.env.example` описывают запуск на хосте.
+  - Mi-6: `Link.MarshalJSON` → `"redacted"`.
+  - Mi-3 и Nit: тесты `degraded`, сжатия в `Stop`, границы 64 КиБ, порядка client → body_limit; `Stop` закрывает БД при истёкшем дедлайне; проверка `nil` отметок согласия; общий `shared/testkit/gateway/sqlitedir.Temp`; контроль в тесте `Sweep`.
+- **Решения по ходу.**
+  - `Retry-After` = `busy_timeout` (5 с): раньше повтор, скорее всего, встретит того же читателя.
+  - Сжатие при старте идёт и в replay (это не таймер) и старт не валит: неудача ставит отметку.
+  - `Stop` при неостановленном sweeper'е не сжимает: соединение может быть занято. БД закрываются всегда.
+  - `sqlitedir` — отдельный пакет только на stdlib, чтобы тесты `store` не тянули харнесс `shared/testkit/gateway`.
+- **Отклонения.**
+  - `contexts.go`, `shared/env/vars.go`, `Makefile`, `CLAUDE.md` и общие документы C-08 не менялись. Правка `build/Dockerfile` (EPIC-001) — по решению оркестратора, отметку даёт tech-lead#1.
+  - N-3 не менялся: нет в поручении, вынесен в бэклог.
+  - Окно снятия отметки параллельным сжатием (риск «г» ревью) оставлено риском.
+- **Проверки.** `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` — 0 issues; `mvctl env check` — 0; `mvctl privacy scan testdata/` — чисто; `make test` — exit 0. Покрытие: `gateway` 88 %, `api` 97 %, `handlers` 100 %, `links` 85 %. Мутанты — 16 засчитаны, все красные, включая K1–K4 ревью (копия дерева в scratch, без `-overlay`; копия удалена по точному пути).
+- Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
+
 <!-- dev-log T-302 -->
 ## developer#2 · T-302 · хранилище gateway: SQLite и миграции · 2026-09-13
 

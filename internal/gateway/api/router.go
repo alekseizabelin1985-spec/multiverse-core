@@ -46,27 +46,40 @@ func (r *Router) Handle(operationID, method, path string, h http.Handler) {
 
 // Handlers are the handlers of the gateway operations, one field per
 // operationId: the field is the operationId with its first letter in upper
-// case (ResolveLink serves resolveLink). The struct is empty until the handler
-// tasks add their fields (T-303 links, T-305 actions, T-306 characters, T-307
-// deliveries, T-352 groups, T-354 rounds, T-356 service routes and the admin
-// proxy). openapi_test.go fills every field and checks that GatewayRouter
-// mounts each of them under its operationId, as the spec says.
-type Handlers struct{}
+// case (ResolveLink serves resolveLink). Later tasks add their fields (T-305
+// actions, T-306 characters, T-307 deliveries, T-352 groups, T-354 rounds,
+// T-356 service routes and the admin proxy). openapi_test.go fills every field
+// and checks that GatewayRouter mounts each of them under its operationId, as
+// the spec says.
+type Handlers struct {
+	ResolveLink http.Handler
+	ConsentLink http.Handler
+	ForgetLink  http.Handler
+}
 
 // GatewayRouter is the route table of the gateway context: the one
 // constructor openapi_test.go compares with api/gateway.openapi.yaml. A task
 // that adds a handler adds its field to Handlers, its Handle call here and
 // removes its operation from notYetMounted in the test.
-func GatewayRouter(Handlers) *Router {
-	return NewRouter()
+func GatewayRouter(h Handlers) *Router {
+	r := NewRouter()
+	r.Handle("resolveLink", http.MethodPost, "/v1/links/resolve", h.ResolveLink)
+	r.Handle("consentLink", http.MethodPost, "/v1/links/consent", h.ConsentLink)
+	r.Handle("forgetLink", http.MethodDelete, "/v1/links", h.ForgetLink)
+	return r
 }
 
 // Routes returns the routes in registration order.
 func (r *Router) Routes() []Route { return slices.Clone(r.routes) }
 
-// Mount registers every route on mux as a "METHOD path" pattern.
-func (r *Router) Mount(mux *http.ServeMux) {
+// Mount registers every route on mux as a "METHOD path" pattern, its handler
+// wrapped in mw; the first middleware is the outermost.
+func (r *Router) Mount(mux *http.ServeMux, mw ...Middleware) {
 	for _, rt := range r.routes {
-		mux.Handle(rt.Method+" "+rt.Path, rt.Handler)
+		h := rt.Handler
+		for i := len(mw) - 1; i >= 0; i-- {
+			h = mw[i](rt, h)
+		}
+		mux.Handle(rt.Method+" "+rt.Path, h)
 	}
 }

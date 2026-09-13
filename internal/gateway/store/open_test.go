@@ -11,6 +11,7 @@ import (
 
 	"multiverse-core.io/internal/gateway/store"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
 
 func TestDataDirReadsTheManifestVariable(t *testing.T) {
@@ -73,7 +74,7 @@ func TestOpenAppliesThePragmas(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			dir := tempDir(t)
+			dir := sqlitedir.Temp(t)
 			db := tc.open(t, dir)
 			checkPragmas(t, db, tc.want)
 			if got := db.Stats().MaxOpenConnections; got != 1 {
@@ -110,7 +111,7 @@ func checkPragmas(t *testing.T, db *sql.DB, want map[string]string) {
 // by a PRAGMA once it has tables, and SQLite says nothing. Such a file would
 // keep a forgotten ID in its free pages, so Open must refuse it.
 func TestOpenLinksRefusesAFileWithoutIncrementalVacuum(t *testing.T) {
-	path := store.LinksPath(tempDir(t))
+	path := store.LinksPath(sqlitedir.Temp(t))
 	plain, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +139,7 @@ func TestOpenRefusesABadPath(t *testing.T) {
 		// Checked before the file system sees the path: on Windows '?' is not a
 		// valid file name character at all, on Linux it would create a file
 		// the driver never opens.
-		{filepath.Join(tempDir(t), "links.db?mode=ro"), "contains '?'"},
+		{filepath.Join(sqlitedir.Temp(t), "links.db?mode=ro"), "contains '?'"},
 	}
 	for _, tc := range cases {
 		db, err := store.OpenLinks(context.Background(), tc.path)
@@ -155,7 +156,7 @@ func TestOpenRefusesABadPath(t *testing.T) {
 
 func TestOpenCreatesThePrivateDirectoryAndFiles(t *testing.T) {
 	skipWithoutPOSIXModes(t)
-	dir := filepath.Join(tempDir(t), "data")
+	dir := filepath.Join(sqlitedir.Temp(t), "data")
 	links := openLinks(t, dir)
 	insertLink(t, links, "ci", "player-A", "link-a", "player-a")
 	openGateway(t, dir)
@@ -170,7 +171,7 @@ func TestOpenRefusesWiderModes(t *testing.T) {
 	skipWithoutPOSIXModes(t)
 
 	t.Run("directory", func(t *testing.T) {
-		dir := filepath.Join(tempDir(t), "data")
+		dir := filepath.Join(sqlitedir.Temp(t), "data")
 		if err := os.Mkdir(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -183,7 +184,7 @@ func TestOpenRefusesWiderModes(t *testing.T) {
 		}
 	})
 	t.Run("file", func(t *testing.T) {
-		dir := tempDir(t)
+		dir := sqlitedir.Temp(t)
 		if err := os.Chmod(dir, 0o700); err != nil {
 			t.Fatal(err)
 		}

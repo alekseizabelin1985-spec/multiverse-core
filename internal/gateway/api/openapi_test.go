@@ -238,9 +238,6 @@ func TestOpenAPIAdminSectionIsReservedForT239(t *testing.T) {
 // the list can only shrink, and when it is empty the route table equals the
 // spec.
 var notYetMounted = map[string]string{
-	"resolveLink":      "T-303",
-	"consentLink":      "T-303",
-	"forgetLink":       "T-303",
 	"postAction":       "T-305",
 	"listWorlds":       "T-306",
 	"createCharacter":  "T-306",
@@ -342,6 +339,26 @@ func TestOpenAPIRoutesMatchRouter(t *testing.T) {
 	for _, id := range servedByProcess {
 		if _, ok := spec[id]; !ok {
 			t.Errorf("%s is listed in servedByProcess but is not in the spec", id)
+		}
+	}
+}
+
+// The operations the middleware keeps out of the log are those the spec marks
+// x-nolog, and the long-poll the middleware exempts from the request timeout
+// is an operation of the spec.
+func TestMiddlewarePoliciesNameOperationsOfTheSpec(t *testing.T) {
+	doc := loadSpec(t)
+	var noLog, all []string
+	for _, op := range operations(t, doc) {
+		all = append(all, op.OperationID)
+		if op.Node["x-nolog"] == true {
+			noLog = append(noLog, op.OperationID)
+		}
+	}
+	equalSets(t, "api.NoLogOperations vs x-nolog of the spec", api.NoLogOperations(), noLog)
+	for _, id := range api.LongPollOperations() {
+		if !slices.Contains(all, id) {
+			t.Errorf("long-poll operation %s is not in the spec", id)
 		}
 	}
 }
@@ -473,6 +490,7 @@ var codesOfContract = map[string]int{
 	"not_implemented":        501,
 	"bus_unavailable":        503,
 	"state_unavailable":      503,
+	"forget_incomplete":      503,
 }
 
 // TestErrorTableIsTheListOfTheContract holds errors.go to the reference list

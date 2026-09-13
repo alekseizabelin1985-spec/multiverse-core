@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 
+	"multiverse-core.io/internal/gateway"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -10,7 +11,12 @@ import (
 // profiles work before internal/* exists. Each owner replaces its stub with a
 // real runtime.Register in its own branch (design.md §4.1):
 // state, mechanics, replay — EPIC-002; llm, laws — EPIC-003;
-// gateway — EPIC-004; memory — EPIC-005.
+// memory — EPIC-005.
+//
+// gateway is real since T-303 (EPIC-004): it keeps its place in the order below
+// and is registered once, from here, with the factory newGateway. The package
+// internal/gateway does not register itself — a second registration of the
+// name panics.
 //
 // swarm is the exception until T-256 removes the hook of I1-α. It keeps its
 // place in the order below but is not built here: its factory is newSwarm of
@@ -21,7 +27,7 @@ import (
 //
 // The order below is the documented start order of the platform
 // (foundation.md §2): contexts without dependencies keep it as a tie-break.
-var platformContexts = []string{"state", "laws", "mechanics", "llm", swarmContext, "gateway", "memory"}
+var platformContexts = []string{"state", "laws", "mechanics", "llm", swarmContext, gateway.Name, "memory"}
 
 // swarmContext is the name of the context the hook of fake_contexts.go builds.
 const swarmContext = "swarm"
@@ -33,14 +39,22 @@ func init() {
 }
 
 // factoryOf is the factory a context of the platform is registered with: the
-// stub below for every context whose owner has not implemented it, and the
-// hook for swarm.
+// stub below for every context whose owner has not implemented it, the hook
+// for swarm and the real context for gateway.
 func factoryOf(name string) func() runtime.Context {
-	if name == swarmContext {
+	switch name {
+	case swarmContext:
 		return newSwarm
+	case gateway.Name:
+		return newGateway
 	}
 	return newStub(name)
 }
+
+// newGateway builds the gateway context over the process environment. Its
+// variables (MV_GATEWAY_DATA_DIR and the client lists) are read in its Start,
+// not here, for the reason newSwarm gives.
+func newGateway() runtime.Context { return gateway.New(nil) }
 
 func newStub(name string) func() runtime.Context {
 	return func() runtime.Context { return stub{name: name} }
