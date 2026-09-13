@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T11:21:37+03:00",
+  "updatedAt": "2026-09-13T11:28:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2205,14 +2205,36 @@ window.DEVTEAM_STATE =
         {
           "id": "T-442",
           "title": "Тексты после T-437: ADR-005 УИ п. 6, baseline.md §5, _model_ids в матрице",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "architect#1",
           "startedAt": "2026-09-13T10:45:49+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "card": "epics/EPIC-001-foundation/tasks/T-442.md",
           "branch": "task/T-442-t437-followup-texts",
-          "worktree": ".worktrees/T-442"
+          "worktree": ".worktrees/T-442",
+          "finishedAt": "2026-09-13T11:27:10+03:00",
+          "spentMinutes": 37,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:45",
+              "to": "13.09 10:53",
+              "duration": "8m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 10:57",
+              "to": "13.09 11:21",
+              "duration": "23m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 11:21",
+              "to": "13.09 11:27",
+              "duration": "5m"
+            }
+          ]
         },
         {
           "id": "T-443",
@@ -6246,6 +6268,16 @@ window.DEVTEAM_STATE =
       "task": "T-442",
       "action": "приёмка T-442",
       "startedAt": "2026-09-13T11:21:37+03:00",
+      "finishedAt": "2026-09-13T11:27:10+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "PROJECT",
+      "action": "план перезапуска трёх команд",
+      "startedAt": "2026-09-13T11:28:44+03:00",
       "finishedAt": null
     }
   ],
