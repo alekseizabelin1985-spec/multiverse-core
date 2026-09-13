@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:09:21+03:00",
+  "updatedAt": "2026-09-14T02:10:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4624,7 +4624,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -4638,7 +4638,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10656,7 +10656,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Ревью #1: FakeGateway и HTTPHarness",
       "startedAt": "2026-09-14T01:55:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:10:24+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -10676,7 +10676,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Решения по восьми вопросам T-309",
       "startedAt": "2026-09-14T01:55:22+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:10:24+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10736,6 +10736,26 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Приёмка T-471 и отметка владельца EPIC-003",
       "startedAt": "2026-09-14T02:09:21+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Итерация 2: гонка записи хода, Close, тексты prod",
+      "startedAt": "2026-09-14T02:10:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Итерация 2: И2-1…И2-5 по решениям architect#3",
+      "startedAt": "2026-09-14T02:10:24+03:00",
       "finishedAt": null
     }
   ],
@@ -14903,6 +14923,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-469 · итерация 2 (devops-engineer#1): шесть переменных T-306/T-307 в gateway и READERS, десять MV_GATEWAY_* в .github/ci.env; Mi-1 мёртвая ветка env_file удалена (+ good-фикстура), Mi-2 фикстуры --contexts=all и неизвестного контекста, Mi-3 фикстура литерала MV_ANTHROPIC_API_KEY, N-1 Makefile «nin"
+    },
+    {
+      "at": "2026-09-14T02:10:24+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 · ревью #1 (code-reviewer#3): принять — 0/0/4/4. Границы импорта, Harness v0, FakeGateway и HTTPHarness в порядке. Mi-1 — реальный дефект шлюза (T-305): actions.Service.publish публикует действие раньше записи хода, нарратив до записи не завершает ход (подтверждено мутантом с задержкой 30 мс)."
+    },
+    {
+      "at": "2026-09-14T02:10:24+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 · решения architect#3: MV_GATEWAY_REPLAY_WAIT не вводится (пункт DoD снят); projection=stale снимается по snapshot.created component=state; core_admin — с T-356; форма /health плоская (уровень КД); сверка хеша в работе не нужна в I1; снапшоты шлюза в replay не пишутся (NFR-061); мир без laws_v"
     }
   ],
   "blockers": [],
