@@ -186,7 +186,9 @@ var definitions = []Spec{
 	// publishable in the legacy profile alone and go away with it at S5.
 	legacyEvent("player.moved", eventbus.TopicPlayerEvents),
 	legacyEvent("player.used_skill", eventbus.TopicPlayerEvents),
-	legacyEvent("gm.created", eventbus.TopicSystemEvents),
+	// With MV_GM_PATH=legacy the gateway publishes gm.created beside the
+	// services of the profile (contracts.md C-04 v1.4).
+	legacyEvent("gm.created", eventbus.TopicSystemEvents, SourceGateway),
 	legacyEvent("gm.deleted", eventbus.TopicSystemEvents),
 	legacyEvent("gm.merged", eventbus.TopicSystemEvents),
 	legacyEvent("gm.split", eventbus.TopicSystemEvents),
@@ -266,13 +268,15 @@ func topicEvent(topic, typ, owner string, publishers, consumers []string) Spec {
 }
 
 // legacyEvent describes a type of the as-is code kept alive by the legacy
-// profile: no payload schema, no meta, no topic policy.
-func legacyEvent(typ, topic string) Spec {
+// profile: no payload schema, no meta, no topic policy. The services of the
+// profile publish it; publishers names the new sources that publish it beside
+// them.
+func legacyEvent(typ, topic string, publishers ...string) Spec {
 	return Spec{
 		TypeSpec:   eventbus.TypeSpec{Topic: topic, SchemaVersion: 1, Deprecated: true},
 		Type:       typ,
 		Owner:      OwnerFoundation,
-		Publishers: []string{SourceLegacy},
+		Publishers: append([]string{SourceLegacy}, publishers...),
 		Consumers:  []string{SourceLegacy},
 		Since:      "as-is",
 	}

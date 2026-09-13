@@ -9,5 +9,5 @@
   "scope": { "id": "solo:player-A", "type": "solo" },
   "ttl_expires_at": "2026-01-01T01:00:00Z",
   "lod": "rule-only",
-  "content_hash": "3b1acde9f0a5c4d2e6178b0f39c5a7d4128e6b03fa9152d7c4e08b6a31df5027"
+  "content_hash": "sha256:3b1acde9f0a5c4d2e6178b0f39c5a7d4128e6b03fa9152d7c4e08b6a31df5027"
 }

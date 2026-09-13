@@ -43,6 +43,7 @@ linters:
             - "**/shared/**"
             - "!**/shared/testkit/mechanics/**"
             - "!**/shared/testkit/swarm/**"
+            - "!**/shared/testkit/gateway/**"
           deny:
             - pkg: multiverse-core.io/internal
               desc: "shared/* must not import internal/*; a context depends on shared, never the other way round (ADR-001 p. 3)"
@@ -80,6 +81,10 @@ linters:
         # next to the kafka adapter (T-418, ADR-001 addendum 2026-09-11).
         # That makes shared/eventbus/** code of the binary too, so it is under
         # the ban: an import of testkit there would reach the binary silently.
+        #
+        # internal/gateway/gatewaytest is a double of the same kind that lives
+        # next to what it doubles (FakeGateway, ADR-001 addendum, boundary 1e),
+        # so it is banned from shipped code on the same terms.
         no-testkit-in-production:
           files:
             - "**/internal/**"
@@ -89,6 +94,8 @@ linters:
           deny:
             - pkg: multiverse-core.io/shared/testkit
               desc: "shared/testkit is for tests: production code (internal/*, cmd/*, shared/eventbus/* including membus) must not import a double (ADR-001 p. 3). The one exception is cmd/multiverse/fake_contexts.go (testkit/swarm, the hook of I1-α, T-255; removed by T-256)"
+            - pkg: multiverse-core.io/internal/gateway/gatewaytest
+              desc: "internal/gateway/gatewaytest (FakeGateway) is for tests: production code (internal/*, cmd/*, shared/eventbus/*) must not import it (ADR-001 addendum, boundary 1e)"
 
         # The hook of I1-α: one file, one package, and the trailing $ so that
         # swarmx or swarm/anything does not pass by prefix (depguard matches
@@ -107,6 +114,10 @@ linters:
           deny:
             - pkg: multiverse-core.io/shared/testkit
               desc: "fake_contexts.go may import shared/testkit/swarm, the stub of I1-α, and nothing else of shared/testkit (T-255; removed by T-256)"
+            # The file is excluded from no-testkit-in-production as a whole,
+            # so the ban on the gateway double is repeated here.
+            - pkg: multiverse-core.io/internal/gateway/gatewaytest
+              desc: "fake_contexts.go is shipped code: it must not import internal/gateway/gatewaytest (FakeGateway, ADR-001 addendum, boundary 1e)"
 
         # The combat double, for the same reason and on the same terms as the
         # mechanics double above: FakeEncounter resolves a fight, so it has to
@@ -122,9 +133,26 @@ linters:
             - "**/shared/testkit/swarm/**"
           allow:
             - multiverse-core.io/internal/mechanics$
+            - multiverse-core.io/internal/swarm/template$
           deny:
             - pkg: multiverse-core.io/internal
-              desc: "the combat double may see internal/mechanics and no other context (ADR-001 p. 3)"
+              desc: "the combat double may see internal/mechanics and internal/swarm/template and no other context (ADR-001 p. 3, addendum boundary 1d)"
+
+        # The gateway double drives the real client against the wire types of
+        # C-10 (ADR-001 addendum, boundary 1e): it speaks internal/gateway/api
+        # and uses internal/gateway/client, one package each, with the trailing
+        # $ for the reason given at shared-testkit-mechanics. The rule shared
+        # does not apply here, this one does instead.
+        shared-testkit-gateway:
+          list-mode: lax
+          files:
+            - "**/shared/testkit/gateway/**"
+          allow:
+            - multiverse-core.io/internal/gateway/client$
+            - multiverse-core.io/internal/gateway/api$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "the gateway double may see internal/gateway/client and internal/gateway/api and no other package of internal/* (ADR-001 addendum, boundary 1e)"
 
         # The trap for contexts that have no rule of their own yet: without it a
         # new internal/<ctx> would inherit no boundary at all and could import
@@ -151,12 +179,19 @@ linters:
         # matches allow entries by prefix, and internal/mechanicsx must not pass
         # as mechanics. A subpackage a context needs is added as a second entry
         # (…/mechanics/) on purpose (review #1 of T-415, N-4).
+        #
+        # A context names its own package the same way, as two entries: <ctx>$
+        # and <ctx>/. A bare prefix let internal/statex pass as state (review #1
+        # of T-445, Mi-2). depguard compares an import with the nearest entry
+        # below it in sort order only, so a prefix entry and a narrower $ entry
+        # under the same prefix in one list shadow each other: keep them apart.
         internal-state:
           list-mode: lax
           files:
             - "**/internal/state/**"
           allow:
-            - multiverse-core.io/internal/state
+            - multiverse-core.io/internal/state$
+            - multiverse-core.io/internal/state/
             - multiverse-core.io/internal/mechanics$
           deny:
             - pkg: multiverse-core.io/internal
@@ -168,33 +203,78 @@ linters:
           files:
             - "**/internal/mechanics/**"
           allow:
-            - multiverse-core.io/internal/mechanics
+            - multiverse-core.io/internal/mechanics$
+            - multiverse-core.io/internal/mechanics/
           deny:
             - pkg: multiverse-core.io/internal
               desc: "mechanics is a pure library: contexts depend on it, not the other way round (ADR-001 addendum p. 2)"
 
         # swarm is the only context allowed to use mechanics, laws and llm as
         # libraries — each of them one package, with the trailing $ for the
-        # reason given at internal-state.
+        # reason given at internal-state. Of llm it sees the root, prompt and
+        # guardian (ADR-001 addendum, boundary 1c); parser is not among them —
+        # the swarm names a schema by a string. filter and the providers stay
+        # behind the gateway of llm.
         internal-swarm:
           list-mode: lax
           files:
             - "**/internal/swarm/**"
+            - "!**/internal/swarm/**_test.go"
           allow:
-            - multiverse-core.io/internal/swarm
+            - multiverse-core.io/internal/swarm$
+            - multiverse-core.io/internal/swarm/
             - multiverse-core.io/internal/mechanics$
             - multiverse-core.io/internal/laws$
             - multiverse-core.io/internal/llm$
+            - multiverse-core.io/internal/llm/prompt$
+            - multiverse-core.io/internal/llm/guardian$
           deny:
             - pkg: multiverse-core.io/internal
-              desc: "swarm uses mechanics, laws and llm as libraries; it changes the world by proposing entity operations over the bus (C-02, ADR-001 p. 3)"
+              desc: "swarm uses mechanics, laws, llm, llm/prompt and llm/guardian as libraries; it changes the world by proposing entity operations over the bus (C-02, ADR-001 p. 3, addendum boundary 1c)"
+
+        # The tests of swarm see what its shipped code sees plus the fake
+        # provider of llm, one package. The pair production rule / test rule
+        # is written as two rules on purpose: depguard sees files, not build
+        # kinds, and an exclusion by text would open every _test.go of swarm to
+        # any package whose name merely contains the one allowed.
+        internal-swarm-tests:
+          list-mode: lax
+          files:
+            - "**/internal/swarm/**_test.go"
+          allow:
+            - multiverse-core.io/internal/swarm$
+            - multiverse-core.io/internal/swarm/
+            - multiverse-core.io/internal/mechanics$
+            - multiverse-core.io/internal/laws$
+            - multiverse-core.io/internal/llm$
+            - multiverse-core.io/internal/llm/prompt$
+            - multiverse-core.io/internal/llm/guardian$
+            - multiverse-core.io/internal/llm/providers/fake$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "tests of swarm may add internal/llm/providers/fake to what swarm itself sees, and nothing else (ADR-001 addendum, boundary 1c)"
+
+        # template is a leaf (ADR-001 addendum, boundary 1d): the combat double
+        # of shared/testkit may import it, and a template that imported a
+        # context would hand the double that context through the back door.
+        # The package itself is allowed for its external tests.
+        internal-swarm-template:
+          list-mode: lax
+          files:
+            - "**/internal/swarm/template/**"
+          allow:
+            - multiverse-core.io/internal/swarm/template$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "internal/swarm/template is a leaf package: it imports no internal/* (ADR-001 addendum, boundary 1d)"
 
         internal-llm:
           list-mode: lax
           files:
             - "**/internal/llm/**"
           allow:
-            - multiverse-core.io/internal/llm
+            - multiverse-core.io/internal/llm$
+            - multiverse-core.io/internal/llm/
           deny:
             - pkg: multiverse-core.io/internal
               desc: "llm is a library of swarm and memory, not the other way round (ADR-001 p. 3)"
@@ -204,7 +284,8 @@ linters:
           files:
             - "**/internal/laws/**"
           allow:
-            - multiverse-core.io/internal/laws
+            - multiverse-core.io/internal/laws$
+            - multiverse-core.io/internal/laws/
           deny:
             - pkg: multiverse-core.io/internal
               desc: "laws is a library of swarm, not the other way round (ADR-001 p. 3)"
@@ -214,31 +295,67 @@ linters:
           files:
             - "**/internal/gateway/**"
           allow:
-            - multiverse-core.io/internal/gateway
+            - multiverse-core.io/internal/gateway$
+            - multiverse-core.io/internal/gateway/
           deny:
             - pkg: multiverse-core.io/internal
               desc: "gateway publishes player events on the bus and reaches memory over HTTP (C-04, C-10)"
 
+        # The client of C-10 is a leaf over the wire types (ADR-001 addendum,
+        # boundary 1e): the gateway double of shared/testkit imports it, so it
+        # must not bring the rest of the gateway along. The package itself is
+        # allowed for its external tests.
+        internal-gateway-client:
+          list-mode: lax
+          files:
+            - "**/internal/gateway/client/**"
+          allow:
+            - multiverse-core.io/internal/gateway/client$
+            - multiverse-core.io/internal/gateway/api$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "internal/gateway/client imports internal/gateway/api and no other package of internal/* (ADR-001 addendum, boundary 1e)"
+
         # memory may use llm for embeddings only: the root package (Provider,
         # Request, Response) and providers.Registry (ADR-001 addendum p. 7).
+        # providers is one package with the trailing $: without it
+        # providers/openai_compat and providers/fake passed by prefix. The fake
+        # provider is for the tests of memory, in the rule below.
         internal-memory:
           list-mode: lax
           files:
             - "**/internal/memory/**"
+            - "!**/internal/memory/**_test.go"
           allow:
-            - multiverse-core.io/internal/memory
+            - multiverse-core.io/internal/memory$
+            - multiverse-core.io/internal/memory/
             - multiverse-core.io/internal/llm$
-            - multiverse-core.io/internal/llm/providers
+            - multiverse-core.io/internal/llm/providers$
           deny:
             - pkg: multiverse-core.io/internal
               desc: "memory indexes the bus and may use only llm.Provider/Request/Response and providers.Registry (ADR-001 addendum p. 7)"
+
+        internal-memory-tests:
+          list-mode: lax
+          files:
+            - "**/internal/memory/**_test.go"
+          allow:
+            - multiverse-core.io/internal/memory$
+            - multiverse-core.io/internal/memory/
+            - multiverse-core.io/internal/llm$
+            - multiverse-core.io/internal/llm/providers$
+            - multiverse-core.io/internal/llm/providers/fake$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "tests of memory may add internal/llm/providers/fake to what memory itself sees, and nothing else (ADR-001 addendum p. 7, boundary 1c)"
 
         internal-replay:
           list-mode: lax
           files:
             - "**/internal/replay/**"
           allow:
-            - multiverse-core.io/internal/replay
+            - multiverse-core.io/internal/replay$
+            - multiverse-core.io/internal/replay/
           deny:
             - pkg: multiverse-core.io/internal
               desc: "replay drives the process through shared/runtime.Deps (ADR-001 addendum p. 2)"
@@ -284,10 +401,18 @@ linters:
       # The other half of no-testkit-in-production: a test may use the doubles,
       # a shipped file may not. depguard sees files, not build kinds, so the
       # kind is said here.
+      #
+      # The text names the list, and only that ban is lifted: the rules of the
+      # contexts and of shared still hold in tests. gatewaytest itself lives in
+      # internal/, so an exclusion by package name alone would let the test of
+      # any context, or of shared, import it past its own boundary (ADR-001
+      # addendum, boundary 1e; review #1 of T-445, Ma-1). gatewaytest is one
+      # package, anchored by the quote that closes the import in the message;
+      # shared/testkit keeps its subpackages.
       - path: _test\.go$
         linters:
           - depguard
-        text: multiverse-core.io/shared/testkit
+        text: "^import 'multiverse-core[.]io/(shared/testkit(/[^']*)?|internal/gateway/gatewaytest)' is not allowed from list 'no-testkit-in-production'"
 
       # Code carried over unchanged when the workspace became one module
       # (T-003, foundation.md §11). Formatting is enforced everywhere; the

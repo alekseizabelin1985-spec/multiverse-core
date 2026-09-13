@@ -944,3 +944,31 @@
   - Владелец `shared/eventbus`, редакционно: комментарии `membus.go:88-90` и `:174-178` говорят, что читатель kafka-адаптера под `Close` падает «with the cancellation or with io.ErrClosedPipe». На деле выборка на закрытом читателе отвечает `io.EOF`, а отказ `dead_letters` — `ErrClosed`. Поправить при ближайшей правке файла.
   - Когда у kafka-адаптера появится подменяемый читатель (интерфейс над `FetchMessage`/`CommitMessages`): unit-тест цикла `Subscribe` с отказом `dead_letters` при живом `loopCtx`. Сегодня то, что циклы решают «остановлен» через `stopped`, держит только недетерминированный кейс contract-набора (мутант R3 ревью выживает). Тестовую точку в production-коде ради этого не заводить.
   - Проверить, может ли `io.EOF` прийти из `w.partitions` (kafka-go v0.4.51 `writer.go:651-654`) в ошибке записи `dead_letters` на живой шине: `stopped` принимает `io.EOF` в любом месте цепочки (унаследовано, T-443 путь не расширяет).
+
+### T-445: Ревизия контрактов 4 — линтер, реестр, схемы · Размер: M · Статус: done · Волна 1 · contract-change
+- **Причина**: решения system-architect#1 от 2026-09-13 по сверкам планов EPIC-003/004 и ревью T-214/T-215 (`journal.md`, 2026-09-13; ревизия контрактов 4). Границы depguard 1c–1e расходились с планами роя, памяти и шлюза. Хеши записей модели и блупринта были строкой любой формы. Условная обязательность полей `llm.output` и `llm.output.rejected` жила только в тексте (Ma-1 ревью T-215, Mi-2 ревью T-009). У `gm.created` не было издателя-шлюза, который нужен плану EPIC-004 (T-305). Тексты контрактов (contracts.md v0.11, C-04 v1.4, C-07 v1.3, дополнение ADR-001) правит T-444, здесь их не трогали.
+- **Состав**:
+  - `.golangci.yml`: 1c — `internal-swarm` плюс `llm/prompt$`, `llm/guardian$`, тесты роя отдельным правилом `internal-swarm-tests` с `llm/providers/fake$`; `internal-memory` сужено до `providers$`, `fake$` — в `internal-memory-tests`. 1d — `shared-testkit-swarm` плюс `internal/swarm/template$`, листовое `internal-swarm-template`. 1e — `shared-testkit-gateway` (`gateway/client$`, `gateway/api$`), исключение в `shared`, листовое `internal-gateway-client`, запрет `internal/gateway/gatewaytest` в `no-testkit-in-production` и расширение исключения `_test.go`.
+  - Схемы: `sha256:<64 hex>` у `prompt_hash`, `response_hash`, `content_hash`. `allOf` из `if/then` в `llm.output` по таблице C-07 v1.3 и в `llm.output.rejected` (`budget_exceeded`/прочие, `unknown_entity`). Новое поле `background_ref`. `$defs.EventRef` в `_common.json`.
+  - Реестр: `gm.created` — издатели `legacy` и `core/gateway` (`legacyEvent` с дополнительными издателями).
+  - Тесты и фикстуры: `blockv_test.go`, новый `llmrecord_test.go`, `registry_test.go` (`TestLegacyPublishers`), фикстуры `agent.*` и `llm.output*`, README фикстур.
+- **DoD**:
+  1. Каждое новое или изменённое правило depguard краснеет своим мутантом (8 мутантов решения и дополнительные), законные импорты зелёные. Мутанты — в копии дерева в scratch, контрольный первым, без `-overlay`.
+  2. Хеш без префикса, в верхнем регистре, длиной 63 отвергается.
+  3. По каждой ветке `if/then` есть валидный и невалидный случай; мутант удаления ветки погибает.
+  4. `go build ./... && go vet ./...`, `go run ./cmd/mvctl contracts check`, `go test -short -count=1 ./...`, `golangci-lint run ./...` (и `--build-tags integration`), `make contracts` — зелёные; `gitleaks dir` по изменённым файлам чист.
+- **Ссылки**: карточка `tasks/T-445.md`; решения — `journal.md` 2026-09-13 (system-architect#1, ревизия контрактов 4); ревью T-215 (Ma-1) — `journal.md` 2026-09-13; образец мутантов depguard — T-255 (`EPIC-003-swarm-llm-laws/dev-log.md`, §6, L1–L6); тексты — T-444.
+- **Исполнитель**: developer#3 (TEAM-1, Opus). Ветка `task/T-445-depguard-registry-schemas`. Закрывает Ma-1 ревью T-215.
+- **(итерация 2, 2026-09-13)** Ревью #1 — вернуть (0/1/2/1). По открытому вопросу system-architect выбрал (б). Исправлено:
+  - Ma-1 — исключение `_test.go` привязано к правилу `no-testkit-in-production` и к пакету `gatewaytest` целиком;
+  - Mi-1 — запрет `gatewaytest` добавлен в `cmd-multiverse-fake-contexts`;
+  - Mi-2 — собственный пакет в правилах `internal-*` записан как `<ctx>$` + `<ctx>/`;
+  - N-1 — комментарии `blockv_test.go`.
+
+  Подробно — карточка, «Итерация 2».
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/1/2/1) и итерации 2, которую проверил при приёмке: мутанты M0, A1 (L16), A3 (`gatewaytestx`), B1 (`swarmx`), C1 (`fake_contexts.go`) красные своими правилами, законные G1 (`swarm/template`) и A5 зелёные, текст исключения сверен с находкой golangci-lint 2.13.2 (A9, A5'). Правки T-445 поверх деревьев EPIC-002/003/004 — сборка, тесты и depguard зелёные. Слияние: с T-201 (`.golangci.yml`) текстового конфликта нет; с T-052 (README фикстур) — один конфликт, рецепт в карточке. При приёмке исправлено имя файла в README фикстур (`blockv_test.go` → `llmrecord_test.go`). Подробно — карточка, «Приёмка (tech-lead)».
+- **Бэклог (из ревью #1 T-445, 2026-09-13)** — отдельные задачи, не блокируют:
+  - system-architect#1, T-444, до слияния. Дополнение ADR-001 от 2026-09-13, п. 3, называет шаблон `**/internal/swarm/**/*_test.go`, а он в depguard не покрывает тесты в корне пакета. В `.golangci.yml` записан `**/internal/swarm/**_test.go`. Текст привести к коду — передано в T-444.
+  - Свести случаи `llm.output` из `TestBlockVPayloadRejects` (`blockv_test.go`) и таблиц `llmrecord_test.go` в одну таблицу при ближайшей правке `shared/contracts`.
+  - При следующем исключении depguard по образцу 1c–1e включать в стандартный набор мутант «тест другого контекста импортирует новый пакет». Дыру Ma-1 поймал именно такой мутант (L16), а в восьми мутантах решения его не было.
+  - **Для EPIC-004 (T-301, T-308) — знать заранее.** После варианта (б) правила контекстов действуют в `_test.go` и для `gatewaytest`. Поэтому тесты `internal/gateway/client` (правило `internal-gateway-client`) и тесты любого другого контекста не могут импортировать `FakeGateway`: мутанты A1 и A10 итерации 2 красные. Тест клиента против `FakeGateway` пишется в `internal/gateway/gatewaytest` или в `test/` (e2e), как и сказано в дополнении ADR-001 п. 5.

@@ -14884,3 +14884,233 @@ T-435 и записи прошлого не тронуты; матрица ва�
   (`enter`/`Close`) и `reader.go` (`CommitMessages`).
 - Ревью дописано в `review.md` рабочей папки T-443. В эпике `review.md` с тех пор переупорядочен (`145999e`), при
   слиянии возможен конфликт в этом файле.
+
+## T-445 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-445 (M, `contract-change`). Работа не закоммичена и лежит в `.worktrees/T-445`, ветка
+`task/T-445-depguard-registry-schemas` от эпика `0fff090`, коммитов в ветке нет. Изменены `.golangci.yml`, пять схем
+(`_common.json`, `llm.output`, `llm.output.rejected`, `agent.spawned`, `agent.blueprint_reloaded`),
+`shared/contracts/{registry.go, registry_test.go, blockv_test.go}`, пять фикстур и README фикстур. Добавлены
+`shared/contracts/llmrecord_test.go`, раздел T-445 в `tasks.md`, запись в `dev-log.md` и карточка `tasks/T-445.md`.
+Других изменений в рабочей папке нет.
+
+Прочитаны:
+- решения system-architect#1 для T-445 (scratch `rev4_decisions_B.md`);
+- тексты T-444 из рабочей папки `.worktrees/T-444`: в ветке `task/T-444-contracts-revision-4` они ещё не закоммичены.
+  Это C-07 v1.3 (`contracts.md:527-556`), дополнение ADR-001 от 2026-09-13 (п. 3–5) и строка `contracts.md:700` про
+  `providers/fake`;
+- depguard v2.2.1 из кэша модулей: `settings.go:133-159` (`fileMatch`, `importAllowed`), `:215-248`
+  (`strInGlobList`, `strInPrefixList`), `depguard.go:71-79`;
+- карточка исполнителя целиком: таблицы мутантов L/P/D/S, отклонения, открытый вопрос.
+
+Ответ system-architect#1 на открытый вопрос пришёл во время ревью через оркестратора. Выбран вариант (б): исключение
+`_test.go` снимает только запрет `no-testkit-in-production`, и L16 должен падать. Кроме того, собственный пакет в
+правилах контекстов записывается как `internal/<ctx>$` + `internal/<ctx>/`, а в `cmd-multiverse-fake-contexts`
+добавляется запрет `gatewaytest`. Всё это внесено ниже замечаниями Ma-1, Mi-1 и Mi-2.
+
+Мутанты делались в копии дерева в scratch (`git ls-files -co --exclude-standard` без `services/`, `Docs/`, `.claude/`,
+`.qwen/` и `*env`), без `-overlay`. В копии заведены пустые пакеты: `internal/llm` с `prompt`, `guardian`, `filter`,
+`parser`, `providers`, `providers/{fake,fakex,fake/sub,openai_compat}`; `internal/laws`; `internal/swarm` с `runtime`,
+`template`, `template/sub`; `internal/swarmx`; `internal/gateway` с `api`, `client`, `links`, `gatewaytest`;
+`internal/memory`. Контрольный мутант шёл первым. Правка `fake_contexts.go` и `.golangci.yml` в копии возвращалась
+копированием из рабочей папки и сверялась `cmp`. Копия удалена по сохранённому точному пути.
+
+### Вердикт
+
+**ВЕРНУТЬ** — Critical 0, Major 1, Minor 2, Nit 1.
+
+Схемы, реестр, хеши, `EventRef`, тесты и фикстуры сделаны точно по решению и C-07 v1.3. Замечаний к ним нет, кроме
+Nit. Правила depguard 1c, 1d, 1e и сужение `internal-memory` работают: все мутанты решения красные своим правилом,
+законные импорты зелёные. Отклонение шаблона `**_test.go` верное.
+
+Возврат из-за одного места. Расширенное исключение `_test.go` снимает в тестах границы контекстов и слоя `shared`
+для любого импорта `gatewaytest`. Это противоречит дополнению ADR-001 п. 5 (Ma-1). Исполнитель реализовал решение
+буквально и сам вынес это открытым вопросом. Архитектор выбрал (б). Mi-1 и Mi-2 — решения архитектора, принятые в
+ту же итерацию.
+
+### Замечания
+
+#### Critical
+
+Нет.
+
+#### Major
+
+**Ma-1. `.golangci.yml:384-387`: исключение `_test.go` снимает в тестах любую находку depguard про `gatewaytest`, а не
+только запрет `no-testkit-in-production`.**
+
+Регулярка `multiverse-core.io/(shared/testkit|internal/gateway/gatewaytest)` сопоставляется с текстом находки любого
+правила. Поэтому в `_test.go` молчат все правила, которые запрещают `internal/*`. В копии:
+- тест роя импортирует `internal/gateway/gatewaytest` — **0 issues**. Это L16 исполнителя: находку
+  `internal-swarm-tests` скрывает исключение;
+- тест `shared/jsonpath` импортирует `internal/gateway/gatewaytest` — **0 issues**. Правило `shared` («shared/* не
+  импортирует internal/*», ADR-001 п. 3) в тестах для этого пакета тоже снято;
+- регулярка без якоря, так что под исключение попадают и `gatewaytestx`, и `gatewaytest/<что угодно>`.
+
+Для `shared/testkit` такого эффекта не было: ни одно правило `internal-*` не запрещает `shared/*`. Для
+`internal/gateway/gatewaytest` эффект есть, потому что пакет сам лежит в `internal/`. Так нарушается дополнение
+ADR-001 от 2026-09-13, п. 5 (T-444): «запрет стоит рядом с `no-testkit-in-production`, тестам разрешено… e2e, которому
+нужен `FakeGateway`, живёт вне `internal/<контекст>`: правила контекстов действуют и на тестовые файлы». Против этого
+же предостерегает комментарий самого конфига у `internal-swarm-tests` (`:222-226`): «an exclusion by text would open
+every _test.go of swarm to any package whose name merely contains the one allowed».
+
+*Как исправить* (вариант (б), решение system-architect#1): привязать исключение к правилу.
+```yaml
+      - path: _test\.go$
+        linters:
+          - depguard
+        text: "multiverse-core.io/(shared/testkit|internal/gateway/gatewaytest)[^']*' is not allowed from list 'no-testkit-in-production'"
+```
+Проверено в копии именно с этой строкой:
+- тест роя с `gatewaytest` — красный, `internal-swarm-tests`;
+- тест `shared/jsonpath` с `gatewaytest` — красный, `shared`;
+- тест `cmd/mvctl` с `gatewaytest` — зелёный;
+- тест `internal/memory` и тест роя с `shared/testkit/state` — зелёные;
+- `golangci-lint run --enable-only depguard ./...` по всей копии без мутантов — 0 issues.
+
+Комментарий над исключением (`:381-383`) дополнить: снимается ровно запрет `no-testkit-in-production`, правила
+контекстов и `shared` в тестах действуют. L16 перевести в таблице мутантов карточки в «красный».
+
+#### Minor
+
+**Mi-1. `.golangci.yml:93`, `:108-116`: `cmd/multiverse/fake_contexts.go` может импортировать `gatewaytest`.**
+Файл исключён из `no-testkit-in-production` целиком, поэтому новый запрет `gatewaytest` (`:97-98`) на него не
+действует. Правило `cmd-multiverse-fake-contexts` запрещает только `shared/testkit`. В копии в `fake_contexts.go`
+добавлен импорт `internal/gateway/gatewaytest` — **0 issues**. Это production-файл бинарника, то есть ровно то, что
+запрет 1e должен закрыть. Исполнитель назвал случай в «Рисках». Minor, а не Major: файл временный и уходит с T-256.
+*Как исправить* (решение архитектора): в `cmd-multiverse-fake-contexts.deny` добавить
+`multiverse-core.io/internal/gateway/gatewaytest` с `desc` о FakeGateway. Мутант — импорт `gatewaytest` в
+`fake_contexts.go` краснеет этим правилом.
+
+**Mi-2. `.golangci.yml:232`, `:325` (новые правила) и `:183`, `:195`, `:212`, `:262`, `:272`, `:282`, `:313`, `:338`:
+собственный пакет контекста в `allow` записан без `$`, то есть префиксом.**
+В копии production-файл роя импортирует `internal/swarmx` — **0 issues**. Дыра старая (бэклог исполнителя п. 1), но
+T-445 перенёс её в два новых правила, `internal-swarm-tests` и `internal-memory-tests`. Архитектор решил закрыть её в
+этой итерации.
+*Как исправить:* во всех правилах `internal-*` вместо `multiverse-core.io/internal/<ctx>` записать две строки,
+`multiverse-core.io/internal/<ctx>$` и `multiverse-core.io/internal/<ctx>/`. Мутанты: `internal/swarmx` из роя —
+красный; законный `internal/swarm/runtime` и `internal/swarm/template` из роя — зелёный.
+
+Осторожно с одной особенностью depguard (`settings.go:224-247`): `strInPrefixList` сверяет импорт только с
+ближайшей снизу по сортировке записью списка. Префиксная запись и более узкая запись с `$` под тем же префиксом в
+одном `allow` затеняют друг друга. Пример: `internal/swarm/` и `internal/swarm/template$` в одном списке. Тогда
+`internal/swarm/x`, который сортируется после `template`, сверится с `template$` и будет отвергнут. Сегодня таких пар
+нет, но после правки законный импорт подпакета своего контекста стоит проверить мутантом в каждом изменённом правиле.
+
+#### Nit
+
+**N-1. `shared/contracts/blockv_test.go:22-31`: doc-комментарий `blockVExamples` прилип к блоку `const`.**
+Абзац о хешах вставлен между комментарием таблицы и `var blockVExamples`. Весь комментарий теперь документирует
+`const (exampleHashA, exampleHashB)`, а у таблицы его нет. Фраза «so that an example cannot pass by a publisher copying
+one hash into every field» обещает то, чего схема не проверяет: равенство хешей в разных полях ничем не запрещено.
+*Как исправить:* разделить на два комментария (`const` — о форме хешей; `var` — прежний текст) и убрать или
+переформулировать довод про копирование.
+
+### Ответы на пункты постановки
+
+1. **Правила depguard соответствуют решению.**
+   - 1c: `internal-swarm` + `llm/prompt$`, `llm/guardian$`, без `parser$`; `internal-swarm-tests` + `providers/fake$`.
+   - Сужение памяти: `providers$`, `fake$` только в `internal-memory-tests`.
+   - 1d: `shared-testkit-swarm` + `swarm/template$`, листовое `internal-swarm-template`.
+   - 1e: `shared-testkit-gateway` (`client$`, `api$`) и `!**/shared/testkit/gateway/**` в `shared`; листовое
+     `internal-gateway-client`; запрет `gatewaytest` в `no-testkit-in-production`.
+   - Мутанты в копии, контрольный первым:
+
+     | # | Мутант | Результат |
+     |---|---|---|
+     | R0 | контрольный: `internal/memory` (production) → `internal/gateway/links` | красный, `internal-memory` |
+     | R1 | production-файл роя → `llm/providers/fake` | красный, `internal-swarm` |
+     | R2 | `internal/memory` → `llm/providers/openai_compat` | красный, `internal-memory` |
+     | R3 | `shared/testkit/gateway` → `internal/gateway/links` | красный, `shared-testkit-gateway` |
+     | R4 | `shared/testkit/swarm` → `internal/swarm/template/sub` | красный, `shared-testkit-swarm` |
+     | C1 | `internal/gateway/client` → `internal/gateway/links` | красный, `internal-gateway-client` |
+     | C2 | `internal/swarm/template` → `internal/mechanics` | красный, `internal-swarm-template` |
+     | C3 | `internal/memory` (production) → `gatewaytest` | красный |
+     | X4 | `cmd/mvctl` (production) → `gatewaytest` | красный, `no-testkit-in-production` |
+     | G1 | production роя → `llm`, `prompt`, `guardian`, `mechanics`, `laws`, `swarm/template` | зелёный |
+     | G2 | тест в корне `internal/swarm` → `providers/fake` | зелёный |
+     | G3 | тест в `internal/swarm/runtime` → `providers/fake`, `prompt` | зелёный |
+     | G4 / G5 | `shared/testkit/gateway`, файл и тест → `gateway/client`, `gateway/api` | зелёный |
+     | C4 | внешний тест `client_test` → `gateway/client`, `gateway/api` | зелёный |
+     | F3 | тест `internal/memory` → `providers`, `providers/fake` | зелёный |
+     | X1 | тест роя → `gatewaytest` (L16) | **зелёный** — Ma-1 |
+     | X3 | тест `shared/jsonpath` → `gatewaytest` | **зелёный** — Ma-1 |
+     | X2 | production роя → `internal/swarmx` | **зелёный** — Mi-2 |
+     | X5 | `cmd/multiverse/fake_contexts.go` → `gatewaytest` | **зелёный** — Mi-1 |
+
+     Первый прогон C1 и одного из мутантов варианта (б) упал с «parallel golangci-lint is running»: в то же время
+     линтер запускал другой агент. Эти прогоны повторены и засчитаны только по повтору.
+2. **Шаблоны файлов.** depguard компилирует `files` через `gobwas/glob` с разделителем `/` (`settings.go:73`) и
+   сопоставляет с `filepath.ToSlash` полного пути (`depguard.go:71`). `**_test.go` матчит тест в корне пакета (G2) и на
+   любой глубине (G3). Production-файлы с `_test` в середине имени не матчит: `internal/swarm/zz_mut_test_helper.go`
+   → `providers/fake` — красный, `internal-swarm` (F1); `internal/memory/x_test_util.go` → `providers/fake` — красный,
+   `internal-memory` (F2). Отклонение от шаблона решения `**/internal/swarm/**/*_test.go` обосновано: там после `**`
+   обязателен `/`, и тест в корне пакета под шаблон не попадает (D1 исполнителя). Текст дополнения ADR-001 п. 3 в T-444
+   называет прежний шаблон — см. бэклог п. 1.
+3. **Схемы `llm.output` и `llm.output.rejected` реализуют таблицу C-07 v1.3 точно.**
+   - `llm.output`: шесть `if/then` в `allOf` — по одному на строку таблицы, каждое «обязательно» и «запрещено» на
+     месте. Строка 5 — `required error` и оба запрета; строка 6 — `not required error` при статусе, отличном от
+     `error`.
+   - Лишних отказов нет. `invalid` проходит и без `filter` (базовая запись `llmRecord("invalid")`), и с `filter`
+     `pass` (отдельный случай). С `filter` `block`/`error` схема `invalid` тоже пропускает — так и решено: стадия
+     конвейера проверяется в шлюзе (T-211/T-213). Документ без `validation_status` не получает лишних ошибок от
+     веток: `if` с `required` не срабатывает.
+   - `llm.output.rejected`: `if budget_exceeded then {budget, без llm_output} else {llm_output, без budget}` — ровно
+     два пункта решения. `unknown_entity` → `element` + `oneOf[entity, background_ref]`. В C-07 v1.3
+     (`contracts.md:546`) сказано «обязательны `element` и одно из двух». Читаю как «ровно одно»: обоснование в
+     контракте про замену `entity` на ссылку на событие, а не про их сочетание. `oneOf` это и выражает, случай «naming
+     both» закреплён. Разночтения с текстом не вижу. `background_ref` при других причинах не запрещён — контракт
+     называет поле опциональным и не запрещает его.
+   - Тесты `llmrecord_test.go`: по каждой ветке валидный и невалидный случай. Базовая запись для каждого статуса сама
+     проверена как валидная, так что каждый невалидный случай ломает одну вещь. Мутанты S1–S17 исполнителя это
+     подтверждают. Все случаи удалённого `TestQuarantinedRecordKeepsNoText` есть в таблице, включая `filter_error`:
+     прежний пример с `filter.status=block` теперь закономерно невалиден.
+4. **Хеши.** Шаблон `^sha256:[0-9a-f]{64}$` стоит во всех трёх полях: `llm.output.v1.json:27-37`,
+   `agent.spawned.v1.json:18-22`, `agent.blueprint_reloaded.v1.json:11-15`. Фикстуры обновлены. Грэп по
+   `content_hash|prompt_hash|response_hash|9f2c4d|1a2b3c` (Go, JSON, JSONL, YAML; без `services/`, `Docs/`, `.claude/`)
+   хеша старой формы не нашёл. Исключение одно — `agent.spawned.v1.invalid.json:12`, число 17918835045097094771. Это
+   намеренный дефект «не строка», и с новым шаблоном он ломает по-прежнему одно правило: `pattern` к числу не
+   применяется. Go-кода, который пишет эти хеши, в дереве нет. Единственный писатель `sha256:` — `shared/entity/hash.go:63`,
+   форма та же. В рабочих папках EPIC-003/004, T-052, T-206, T-301 старые хеши есть только в тех же общих фикстурах
+   (придут слиянием), Go-кода там нет.
+5. **`gm.created`.** `Publishers` = `legacy`, `core/gateway` (`registry.go:189-191`). `legacyEvent` собирает новый
+   срез через `append([]string{SourceLegacy}, publishers...)`, общего массива между типами нет. `TestLegacyPublishers`
+   закрепляет издателей и потребителей всех легаси-типов. Проверок издателя, которые отвергали бы шлюз для
+   `Deprecated`-типа, в `Validate` нет (`contracts.go:155-157`). `mvctl contracts check` — 65 типов, 8 топиков,
+   58 файлов схем, код 0.
+6. **`EventRef`.** В `_common.json` только добавлен `$defs.EventRef` (`{event:{id, type?}}`, `additionalProperties:
+   false` на обоих уровнях). Других правок форм `event{id,type}` в diff нет, существующие копии не тронуты.
+   `background_ref` ссылается на `$defs.EventRef`.
+7. **Прогоны** (go1.26.8 windows/amd64, golangci-lint 2.13.2) в `.worktrees/T-445`:
+   - `go build ./... && go vet ./...` — 0;
+   - `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 файлов схем, код 0;
+   - `go test -short -count=1 ./...` — 0 FAIL;
+   - `golangci-lint run ./...` — 0 issues; `golangci-lint run --build-tags integration ./...` — 0 issues;
+   - `make contracts` — код 0 (contracts check, env check — 67 переменных, `TestSchemasValid` ok);
+   - `-race` недоступен (нет cgo). Docker, `make up/down`, `make test-integration`, стенд `:8888` не трогались, `.env`
+     не открывался.
+
+### Предложения в бэклог
+
+1. system-architect#1, T-444 (до слияния): дополнение ADR-001 от 2026-09-13, п. 3, называет шаблон
+   `**/internal/swarm/**/*_test.go`. Для depguard он не покрывает тесты в корне пакета. В коде верно записан
+   `**/internal/swarm/**_test.go`. Привести текст к коду.
+2. Согласен с п. 2 бэклога исполнителя: свести случаи `llm.output` из `TestBlockVPayloadRejects` и `llmrecord_test.go`
+   в одну таблицу при ближайшей правке.
+3. При следующем исключении depguard по образцу 1c–1e добавлять к набору мутантов «тест другого контекста
+   импортирует новый пакет». L16 поймал именно такой мутант; мутанты решения (8 штук) его не содержали.
+
+### Риски и допущения
+
+- После Ma-1 (вариант (б)) правила контекстов и листовые правила действуют на `_test.go` и для `gatewaytest`. Тогда
+  тесты `internal/gateway/client` (правило `internal-gateway-client`) и тесты любого другого контекста не смогут
+  поднять `FakeGateway`. По дополнению ADR-001 п. 5 это и задумано: e2e живёт вне `internal/<контекст>`. Но EPIC-004
+  (T-301 клиент, T-308 `FakeGateway`) должен знать это заранее: тест клиента против `FakeGateway` пишется в
+  `internal/gateway/gatewaytest` или в `test/`, а не в `client`.
+- Пакетов `internal/swarm`, `internal/llm/*`, `internal/gateway/*`, `internal/memory` в дереве нет, правила проверены
+  на заглушках. Особенность depguard со сравнением по ближайшей записи (Mi-2) может проявиться, когда появятся
+  настоящие подпакеты. Первый `golangci-lint run` в эпиках-владельцах это покажет.
+- Текст C-07 v1.3 и дополнение ADR-001 взяты из незакоммиченной рабочей папки T-444. Если T-444 изменит
+  формулировку до слияния, сверку п. 3 повторить.
