@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:24:50+03:00",
+  "updatedAt": "2026-09-13T16:37:09+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2456,7 +2456,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-450",
           "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -2505,13 +2505,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-454",
           "title": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race) и флак fight-05 в TestTheProcessRunsTheFightsOfIAlpha",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T14:36:44+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:37:09+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 108,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-454.md",
           "branch": "task/T-454-ci-race-testkit-state-fight05",
@@ -2548,11 +2548,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4371,14 +4371,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:37:09+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
-          "spentMinutes": 0,
+          "spentMinutes": 179,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-303.md",
           "branch": "task/T-303-links-http-layer",
@@ -8807,7 +8807,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Итерация 2: точка у IPv4, строки таблицы",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "architect#2",
@@ -8967,7 +8967,7 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "Приёмка T-454 гонка и флак CI",
       "startedAt": "2026-09-13T16:12:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "developer#3",
@@ -8987,7 +8987,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Ревью #1: решения архитектора C-01/C-05/C-07",
       "startedAt": "2026-09-13T16:20:10+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8997,7 +8997,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Повторная отметка владельца: В-1, В-2",
       "startedAt": "2026-09-13T16:20:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:37:09+03:00"
     },
     {
       "instance": "developer#3",
@@ -9007,6 +9007,26 @@ window.DEVTEAM_STATE =
       "task": "T-210",
       "action": "Бюджет вызовов LLM",
       "startedAt": "2026-09-13T16:24:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Ревью #2: таблица «локальный адрес»",
+      "startedAt": "2026-09-13T16:37:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Итерация 2: порядок поставки shared/recording",
+      "startedAt": "2026-09-13T16:37:09+03:00",
       "finishedAt": null
     }
   ],
@@ -11968,6 +11988,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Начата T-210 (TEAM-2/developer#3, S, подволна C): бюджет вызовов LLM internal/llm/budget.go — зависимость T-206 слита; счётчик провайдера — локальная заглушка теста до слияния T-207."
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 принята tech-lead#1: Mi-1 закрыт unit-тестами обёртки learning (мутанты R1/R3/R6' красные 10/10), N-1…N-3; make ci BASE=epic — rc=0. Коммит e2e7a49; при finish — конфликт хвоста tasks.md (T-449/T-456/T-446 выше T-454). Слита в epic/EPIC-001-foundation (cd7ec02). Итераций ревью — 1."
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303: повторная отметка tech-lead#1 — согласовано (В-1 проверен файлом-заглушкой и контрольным overlay-мутантом, C:\\data не менялся; В-2 runbook безопасен). Коммит cb3df71 (первый прогон TEST_CMD уронил флак shared/testkit/gateway TestTheSkirmishStopsSwingingWhenTheFightEnds «1 proposals were refus"
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · итерация 2 (devops-engineer#2): M-1 точка снимается только у зарезервированных имён (127.0.0.1., 192.168.1.10., 0.0.0.0. → cloud), Mi-1…Mi-5, N-1/N-2/N-4/N-5; таблица 121 случай; T02 сверяет текст ошибки; бюджет драйвера 5 мин (тайм-аут на Windows маскировался под «убит»). Ревью #2 — TEAM-1/"
+    },
+    {
+      "at": "2026-09-13T16:37:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/5/6. Решения по существу верны, схемы и inv-01/В3/В4 сходятся с кодом. Ma-1 порядок поставки C-01 v1.9 невыполним для задач в работе (T-207 уже начата, T-055 заполняла бы Deps.Recording без поля; два владельца строки serve.go). Mi-1 маршрут ча"
     }
   ],
   "blockers": [],
