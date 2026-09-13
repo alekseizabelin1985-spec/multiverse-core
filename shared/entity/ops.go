@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -295,10 +296,17 @@ func writeReason(err error) string {
 
 // sameIdentity says whether two list elements are the same thing: objects by
 // their item_id, player_id or npc_id when both carry one, everything else by
-// value.
+// what they mean on the wire.
+//
+// Both halves look at the wire form, not at the Go value. A list read off the
+// wire holds maps and float64, while a proposer built in Go appends an
+// entity.Item and removes an int: compared as Go values, the second append of
+// one trophy is a second trophy (inv-03), and removing 3 from [3] is silently
+// nothing. The ids themselves are strings in every shape, so they compare as
+// they are.
 func sameIdentity(a, b any) bool {
-	am, aok := a.(map[string]any)
-	bm, bok := b.(map[string]any)
+	am, aok := asObject(a)
+	bm, bok := asObject(b)
 	if aok && bok {
 		for _, key := range dedupeKeys {
 			av, ahas := am[key]
@@ -308,13 +316,44 @@ func sameIdentity(a, b any) bool {
 			}
 		}
 	}
-	return reflect.DeepEqual(a, b)
+	return sameCanonical(a, b)
+}
+
+// asObject reads a list element as a JSON object: a map read off the wire as it
+// is, and a struct or a map built in Go as the object the wire will make of it.
+// Anything that is not an object on the wire — a scalar, a list, a time.Time —
+// is not one here either.
+func asObject(v any) (map[string]any, bool) {
+	if object, ok := v.(map[string]any); ok {
+		return object, true
+	}
+	if v == nil {
+		return nil, false
+	}
+	switch reflect.Indirect(reflect.ValueOf(v)).Kind() {
+	case reflect.Struct, reflect.Map:
+	default:
+		return nil, false
+	}
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	var object map[string]any
+	if err := json.Unmarshal(encoded, &object); err != nil || object == nil {
+		return nil, false
+	}
+	return object, true
 }
 
 func hasSameIdentity(list []any, value any) bool {
-	if _, ok := value.(map[string]any); !ok {
-		// Only objects with an id are deduplicated: a list of scalars is a
-		// list, and appending the same tag twice is the caller's business.
+	if _, ok := asObject(value); !ok {
+		// Only objects are deduplicated: a list of scalars is a list, and
+		// appending the same tag twice is the caller's business. An object
+		// with an item_id, player_id or npc_id is a repeat when an element
+		// carries the same id; an object without one is a repeat only when an
+		// element is equal to it whole, canonically ({"at": 2} and
+		// {"at": 2.0} are equal).
 		return false
 	}
 	return slices.ContainsFunc(list, func(item any) bool { return sameIdentity(item, value) })
@@ -333,7 +372,8 @@ func jsonCompatible(v any) bool {
 
 // asInt64 reads a JSON number that is a whole number. A payload decoded from
 // the wire holds float64, code built in Go holds int, and both mean the same
-// hit points.
+// hit points. A number outside int64 is not one: converting it would wrap it
+// into a different number, and a wrong hit point is worse than a refused one.
 func asInt64(v any) (int64, bool) {
 	switch n := v.(type) {
 	case int:
@@ -347,7 +387,7 @@ func asInt64(v any) (int64, bool) {
 	case int64:
 		return n, true
 	case uint:
-		return int64(n), true
+		return uintToInt64(uint64(n))
 	case uint8:
 		return int64(n), true
 	case uint16:
@@ -355,7 +395,7 @@ func asInt64(v any) (int64, bool) {
 	case uint32:
 		return int64(n), true
 	case uint64:
-		return int64(n), true
+		return uintToInt64(n)
 	case float32:
 		return floatToInt64(float64(n))
 	case float64:
@@ -368,7 +408,19 @@ func asInt64(v any) (int64, bool) {
 	}
 }
 
+func uintToInt64(n uint64) (int64, bool) {
+	if n > math.MaxInt64 {
+		return 0, false
+	}
+	return int64(n), true
+}
+
+// floatToInt64 checks the range before converting: a float64 conversion out of
+// the range of int64 is implementation-defined in Go, not an error.
 func floatToInt64(f float64) (int64, bool) {
+	if f < math.MinInt64 || f >= math.MaxInt64 {
+		return 0, false
+	}
 	i := int64(f)
 	if float64(i) != f {
 		return 0, false
