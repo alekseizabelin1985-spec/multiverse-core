@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:48:25+03:00",
+  "updatedAt": "2026-09-13T19:50:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4675,14 +4675,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-318",
           "title": "Текст уведомления FR-009 (BA + tech-writer)",
-          "status": "review",
+          "status": "done",
           "assignee": "business-analyst#1",
           "startedAt": "2026-09-13T18:33:01+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T19:50:13+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.5",
-          "spentMinutes": 0,
+          "spentMinutes": 76,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-318.md"
         },
@@ -9812,7 +9812,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Приёмка текста FR-009",
       "startedAt": "2026-09-13T19:38:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:50:13+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -13391,6 +13391,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-463 начата (TEAM-1/devops-engineer#1), части (а) удаление архивов бэкапа и копий SQLite старше 30 дней по возрасту отдельной командой для ежедневного задания и (б) маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1; ветка task/T-463-backup-retention-endpoint-mask от 3f34195."
+    },
+    {
+      "at": "2026-09-13T19:50:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 принята TEAM-3/tech-lead#3: N-1 точным текстом, 24 подстроки уникальны (длина 2341), Р-3 A подтверждён (согласие только кнопкой в awaiting_consent), R2-M-1 A к исполнению (в метрики не пишутся session.id, player_id, scope.id); DoD T-311 (8 строк), T-390 (4), T-317 (1); У-1…У-9 разнесены по нос"
+    },
+    {
+      "at": "2026-09-13T19:50:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам приёмки T-318: DoD T-320 — флаг облака обновляется перед первой игровой командой сессии диалога (У-9); DoD T-314 — e2e «/start → /forget confirm без согласия → в links.db и WAL нет внешнего ID» (У-8); «выпуск к посторонним» — любой игрок кроме владельца, включая тест"
+    },
+    {
+      "at": "2026-09-13T19:50:13+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Push выполнен (правило разрешения добавлено пользователем): develop 447b892..81eb173, epic/EPIC-001 dcdb530..3f34195, EPIC-002 4119170..281348a, EPIC-003 69db467..b9a169c, EPIC-004 734ae03..d121a99. gitleaks по 119 коммитам вне origin (без слияний) — no leaks found. Контроль CI на develop — gh run l"
     }
   ],
   "blockers": [],
