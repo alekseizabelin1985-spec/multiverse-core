@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:06:59+03:00",
+  "updatedAt": "2026-09-13T23:07:57+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2669,9 +2669,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-470",
           "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T23:07:57+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10394,6 +10394,16 @@ window.DEVTEAM_STATE =
       "action": "Итерация 4: условия system-architect У-1/У-2",
       "startedAt": "2026-09-13T23:06:59+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-470",
+      "action": "contracts.md v0.15",
+      "startedAt": "2026-09-13T23:07:57+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -14326,6 +14336,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по T-056: У-1 и У-2 плюс Mi-8/N-4 ревью #3 — итерация 4 T-056 (developer#2); норма rest hp == hp_max и строка system — отдельно после текста C-02 v1.8. Заведены задачи, counters.task = 471: T-470 (EPIC-001, system-architect — документы по просмотру T-056: C-02 v1.8, C-03 v1.4, C"
+    },
+    {
+      "at": "2026-09-13T23:07:57+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 начата (system-architect#1): contracts.md v0.15 — C-01 v1.11 (решение А5 по T-458), C-02 v1.8, C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), сужение пометки C-15/ADR-005 до llm-bench и строк успеха llm-server (T-468); КД State §4, data-model §3.3, ADR-001; попутно — соль в законно п"
     }
   ],
   "blockers": [],
