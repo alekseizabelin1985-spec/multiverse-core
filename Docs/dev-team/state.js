@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:39:05+03:00",
+  "updatedAt": "2026-09-13T16:41:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3275,7 +3275,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-210",
           "title": "B5a · Бюджет вызовов LLM",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#3",
           "startedAt": "2026-09-13T16:24:50+03:00",
           "finishedAt": null,
@@ -9011,7 +9011,7 @@ window.DEVTEAM_STATE =
       "task": "T-210",
       "action": "Бюджет вызовов LLM",
       "startedAt": "2026-09-13T16:24:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:41:05+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9061,6 +9061,16 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Ядро бота",
       "startedAt": "2026-09-13T16:39:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-210",
+      "action": "Ревью #1: бюджет вызовов LLM",
+      "startedAt": "2026-09-13T16:41:05+03:00",
       "finishedAt": null
     }
   ],
@@ -12058,6 +12068,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Начаты T-304 (TEAM-3/developer#1: readmodel и consumer gateway) и T-310 (TEAM-3/developer#2: ядро бота — config, access, updates, sender, commands, privacy) — зависимости T-301…T-303 слиты в эпик."
+    },
+    {
+      "at": "2026-09-13T16:41:05+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-210 выполнена TEAM-2/developer#3: internal/llm/budget.go — окна по (world, level, phase, provider), фон B/час на мир (global+domain, все провайдеры; B=0 — ни одного вызова), интерактив N/мин (0 — выключен), Allow → BudgetExceededError с budget{kind,limit,window}, Observe/Handle по llm.output с иде"
     }
   ],
   "blockers": [],
