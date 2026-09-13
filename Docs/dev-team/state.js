@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:03:22+03:00",
+  "updatedAt": "2026-09-13T17:07:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3288,13 +3288,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-210",
           "title": "B5a · Бюджет вызовов LLM",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#3",
           "startedAt": "2026-09-13T16:24:50+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T17:07:44+03:00",
           "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 41,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md",
           "subwave": "C",
@@ -9114,7 +9114,7 @@ window.DEVTEAM_STATE =
       "task": "T-210",
       "action": "Приёмка T-210 бюджет LLM",
       "startedAt": "2026-09-13T16:52:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:07:44+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -12205,6 +12205,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Заведена T-458 «запись сессии» (EPIC-002, M, TEAM-1, после приёмки T-457 и слияния T-055): shared/recording (git mv из internal/replay), ReadJournal, Deps.Recording и чтение записи в serve.go, маршрут часов replay, EventClock.Advance, тест «Derive наследует Replay»; файлы EPIC-001 — с просмотром tec"
+    },
+    {
+      "at": "2026-09-13T17:07:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-210 принята TEAM-2/tech-lead#2: Mi-4 (M1/M2 убиты), N-1…N-4 закрыты при приёмке; решения владельца: Mi-2 Allow перед каждой попыткой, отказ на повторе — rejected budget_exceeded + ErrBudget (DoD T-212; правка КД §9.2 шаг 1 — architect#2); Mi-3 синхронный Observe (T-212) и MV_SWARM_LLM_WORKERS ≠ 1 "
     }
   ],
   "blockers": [],
