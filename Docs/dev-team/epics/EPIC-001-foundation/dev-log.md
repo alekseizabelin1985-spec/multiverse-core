@@ -8807,3 +8807,18 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
   - `swarm-llm-laws.md`, код, схемы, `testdata/**`, `api/gateway.openapi.yaml` не менялись.
   - `gitleaks dir . --redact -c .gitleaks.toml` по копии 11 файлов рабочей копии (10 файлов задачи и `review.md` с записью ревьюера) с конфигурацией ветки — `no leaks found`; копия удалена по точному пути.
 - Не коммитил.
+
+<!-- dev-log T-461 -->
+## developer#1 · T-461 · правило depguard `cmd-telegram-bot` в `.golangci.yml` · 2026-09-13
+
+Ветка `task/T-461-depguard-telegram-bot`, Opus. Таблица прогонов — карточка `tasks/T-461.md`.
+- **Что сделано.**
+  - `.golangci.yml`: правило `cmd-telegram-bot` (перед `cmd-others`) и исключение `!**/cmd/telegram-bot/**` в `internal-unlisted` — текстом из отметки владельца T-310. Оба блока сверены скриптом с карточкой T-310: входят по одному разу, побайтно; файл остался в LF.
+- **Решения по ходу.**
+  - Копия для проверки — кончик `epic/EPIC-004-gateway-bot` `c92eb22`, а не `abfc04b` из карточки T-310: после отметки в эпик слит develop. `.golangci.yml` там — тот же блоб `39c1839`.
+  - Добавлен контроль K1 (правило без исключения в `internal-unlisted`, импорт `client` → находка `internal-unlisted`): он показывает, что зелёный A1 держится на исключении.
+- **Проверки.**
+  - `golangci-lint config verify` — ok; `golangci-lint run ./...` в рабочей папке — 0 issues.
+  - Копия EPIC-004 с новым конфигом: `./...` и `./cmd/telegram-bot/... ./internal/...` — 0 issues; мутант `shared/eventbus` и мутант `internal/gateway/links` — по одной находке `cmd-telegram-bot`; контроль `internal/gateway/client` — 0.
+  - После мутантов `gate.go` и `.golangci.yml` копии возвращены и сверены `cmp`, `git status` копии пуст; `git worktree remove` по точному пути, `git worktree prune`.
+- Не коммитил.
