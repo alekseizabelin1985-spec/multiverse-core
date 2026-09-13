@@ -3697,6 +3697,212 @@ Docker, `make up/down`, интеграционные тесты, `.env` и ст�
 - Зонд проверял класс и тексты, а не то, куда уйдёт запрос: однословное имя разрешается по DNS среды (Docker DNS или search-домены), и это сознательно вне класса (C-15).
 - Мутанты Q1–Q6, U1–U3 и N1 разработчика приняты по описанию и сверке с кодом, без повторного прогона.
 
+## T-203 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-2)
+
+### Границы ревью
+
+Ветка `task/T-203-mvp1-blueprints`, папка `.worktrees/T-203`, база `7a8c100`. Коммитов нет, ревьюировалось рабочее дерево: `git diff 7a8c100` (две фикстуры `llm.output.v1.*`, карточка, `dev-log.md`) и неотслеживаемые `blueprints/` (пять блупринтов, `blueprints_test.go`) и `schemas/agent/` (четыре схемы). Вне путей владения EPIC-003 правок нет; `shared/agent/**`, `tasks.md`, КД, `contracts.md` не менялись.
+
+Источники: раздел T-203 и §10 п. 7 `tasks.md`; карточка `tasks/T-203.md`; КД `swarm-llm-laws.md` §4.1, §5.4, §11.4, §13.1–§13.4.2, §15.1–§15.2, таблица §20 (`:1116`); ADR-015, ADR-016, ADR-017, ADR-028, ADR-029; `contracts.md` C-05, C-07 v1.5, C-13 (`:802`); `api-contracts.md` §2.4, §3.1, §3.3; `ops/metrics/baseline.md` §5; код `shared/agent/{levels,validator}.go`, `.golangci.yml`, `build/Dockerfile`, `.dockerignore`.
+
+### Прогоны
+
+| Команда | Итог |
+|---|---|
+| `go build ./...`, `go vet ./...` | зелёные |
+| `go test -short -count=1 ./blueprints/... ./shared/agent/... ./shared/contracts/... ./test/fixtures/...` | все `ok` |
+| `go test -v -run TestBlueprintsValidate$ ./blueprints/` | три `t.Logf` — `absolute_limits_ref` у `encounter-wolf`, `player-gm`, `group-narrator` (T-216), других находок нет |
+| `golangci-lint run ./blueprints/...` | 0 issues |
+| `go run ./cmd/mvctl contracts check` | 65 типов, 8 топиков, 58 схем |
+
+### DoD
+
+| Пункт | Итог |
+|---|---|
+| `agent.Validate` — 0 `error` | да, с оговоркой: `absolute_limits_ref` до T-216 (см. «Исключение правила 10») |
+| Модель E, `thinking: false`, поля провайдера нет | да, у всех четырёх фаз с моделью; указатель на `baseline.md` §5 рядом с моделью |
+| Схемы компилируются `jsonschema/v6`; `enum` тика — полный набор уровня | да; отступление от буквы TL2-7 — Mi-1 |
+| `domain-dark-forest.md` заменяет пример `shared/agent/examples` | да |
+| Плейсхолдеры только из словаря | да (правило 13 без `error` и `warning`); смысловой вопрос дублирования — Mi-2 |
+| Фаза — `{model, temperature, max_tokens, thinking, schema_ref}`, `temperature: 0.7`, `KnownFields` | да; у тика ещё `lod_default` (КД §13.1) |
+| Потолок E (T-439): 160/160, 185, 4/2, `pattern` ярлыков, `$comment`, L = 140, три инварианта | да: совпадает со строкой E КД §13.4.1 (`:796`), ADR-029 п. 3; формы `eK`/`bK` — `^e[1-9][0-9]?$`, `^b[1-9][0-9]?$` |
+| `temperature: 0.7` во всех фазах с LLM | да |
+| Фикстуры `llm.output.v1.*` по `narrative.json`, `max_tokens: 160`, `response_len` | да; `response_raw` валиден по `narrative.json`, ярлыка в `text` нет, `response_hash` — настоящий SHA-256, обе фикстуры проходят `test/fixtures` и `shared/contracts` |
+| `maxLength: 128` у id схем тика, 129 невалиден | да, `entity.id` и `affects[].id` (`tick-region.json`); у `tick-global.json` id нет |
+
+**Блупринты против КД §13.3 и скелетов §3.3.** Модели, `temperature`, `thinking`, `max_tokens` нарраторов, фраза «1–2 предложения, до ~140 символов» (ровно одно вхождение в каждом `## phase2`), `round{60s, 2}` (совпадает с `rules/dark-forest.yaml:68-70`), `budget: 4`, `respawn_ttl: 24h`, `npc_table`, `encounter{detect_on: tick, chance: "0.25"}` (= `encounter_chance` фикстуры региона), `## description` (= описание фикстуры региона), `invariants` inv-01…inv-10 (= законы и `mechanics.InvariantIDs()`), `trigger: player.*` у `player-gm`, `parent: region-gm, dynamic` у нарраторов — совпадают. `absolute_limits_ref` у `encounter-wolf` добавлен по правилу 10 КД §13.2 — обосновано.
+
+**`response_len` в байтах.** Единица в C-07 не названа, но код уже считает байты: `internal/llm/providers/recorded/recorded_test.go:48` и `replay_test.go:53` пишут `len(raw)`, при `error` C-07 требует `response_len: 0`. Фикстура согласована с существующим кодом. Блокирующего вопроса к system-architect нет, уточнение единицы — пункт бэклога 4.
+
+**Исключение правила 10 (решение оркестратора 1).** `pendingReference` (`blueprints_test.go:197-207`) пропускает находку, только если выполнены четыре условия: серьёзность `error`, поле `absolute_limits_ref`, файл из `pendingFiles` отсутствует, `Reason` дословно равен `file <путь> does not exist`. Исключение пишется в `t.Logf` с номером задачи. Любая другая находка — `t.Errorf`, в том числе `warning` и `info` (кроме одной `info` на `llm` в офлайн-тесте). Мутанты подтверждают три свойства:
+- другие `error` не маскируются: M1 — ссылка на другой отсутствующий файл, красный;
+- исключение снимается само: M4 — при появившемся `config/absolute-limits.yaml` тест зелёный и строк `T-216` в `-v` нет;
+- после снятия находки снова видны: M4b — файл есть, ссылка неверна, красный.
+
+Смена текста `Reason` в валидаторе ведёт к красному тесту, а не к ложному зелёному. Остаток — N-1.
+
+**Место теста (решение оркестратора 2).** Оставить `blueprints/blueprints_test.go`.
+- *Владение:* `blueprints/**` — путь EPIC-003 (`ownership.md:21`). Строки `test/blueprints/**` в карте нет: перенос потребовал бы правки `ownership.md` (EPIC-001).
+- *depguard:* ни одно правило не матчит ни `blueprints/**`, ни `test/**`, так что по импортам варианты равны. `no-testkit-in-production` покрывает только `internal/**`, `cmd/**`, `shared/eventbus/**`; тест `shared/testkit` не импортирует.
+- *Сборка:* каталог без не-тестовых `.go`, поэтому `go build ./...` пакет не видит, `go vet ./...`, `go test ./...` и `golangci-lint` — видят. `make test` с порогом покрытия (`internal/*`) пакет не задевает.
+- *Образ:* `build/Dockerfile` сейчас копирует в финальный слой только `/out/`, и `_test.go` в образ не попадает. Когда T-447 добавит копирование `blueprints/`, файл попадёт, если копировать каталог целиком. Функционально это безвредно: `EnvFromProject` и парсер читают только `.md/.yaml/.yml`. Но в образе платформы исходнику теста не место — пункт бэклога 1.
+
+### Мутанты (копия дерева в scratch `t203r1-mutants`, без `-overlay`; копия до мутаций — зелёная)
+
+| # | Мутация | Итог |
+|---|---|---|
+| M0 (контрольный) | `player-gm` `max_tokens: 160 → 150` | убит: `TestNarrativeCap/{row_E, invariants/player-gm}`, `TestLLMOutputFixturesAnswerByNarrativeSchema/{valid,invalid}` |
+| M1 | `player-gm` `absolute_limits_ref: config/absolute-limits.yml` | убит: `TestBlueprintsValidate/player-gm`, `…Offline/player-gm` — исключение не маскирует чужой файл |
+| M2 | `narrative.json` `mentions.items.pattern` `^e[0-9][0-9]?$` | убит: `TestNarrativeSchemaInstances/label_e0` |
+| M3 | `tick-region.json` — снят `maxLength` у `affects[].id` | убит: `TestTickRegionSchemaInstances/affects_id_of_129` |
+| M4 / M4b | появился `config/absolute-limits.yaml`; затем при нём ссылка `player-gm` на `.yml` | M4 — зелёный без строк T-216 (исключение снято); M4b — убит |
+| M5 | `tick-global.json` — снят `additionalProperties: false` у элемента `events[]` | **выжил** — N-2 |
+| Z1 (зонд, не мутант) | `entity.update.proposed` у global; `entity.create.proposed`, `entity.update.proposed` у domain; `dice.rolled`, `entity.update.proposed` у encounter | зелёный: правка Ma-1 данными совместима с валидатором и тестом |
+| Z2 (зонд) | вставка `top_p` с битым отступом вместо ключа | `ParseBytes` возвращает ошибку разбора YAML, а не `unknown field` — N-3 |
+
+Копия удалена по точному пути.
+
+### Замечания
+
+| # | Серьёзность | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Ma-1 | Major | `blueprints/global-dark-forest-world.md:22`, `domain-dark-forest.md:23`, `encounter-wolf.md:13` | `allowed_event_types` уже, чем публикации самих ролей по дизайну. КД §5.4 (`:423`): «все публикации агентов идут через `Emitter.Emit`: тип ∉ `allowed_event_types` … → `ErrLevelViolation`», T-223 проверяет `allowed_event_types`/`owned_entity_types`. При этом:<br>• агент встречи публикует `dice.rolled` ×4 и `entity.update.proposed` (КД §15.1 `:923-924`, C-05 п. 1–2, `api-contracts.md` §2.3.5), а в блупринте только `combat.decided, encounter.ended`;<br>• GM региона публикует `entity.update.proposed` (КД §15.2 `:965`) и `entity.create.proposed` встречи (ADR-028 п. 1, C-05 п. 4), в блупринте их нет;<br>• глобальный GM — `entity.update.proposed(world)` (`api-contracts.md` §2.4 `:485`), в блупринте нет.<br>Файлы противоречат и сами себе: `owned_entity_types` у всех трёх непуст, а предлагать сущности `allowed_event_types` не даёт. Прочитанные буквально, эти блупринты не дают встрече ни бросков, ни урона, а региону — открыть встречу. Скелеты §3.3 писались до `dice.rolled` у встречи и ADR-028; соглашение контрактов — предложения входят в `allowed_event_types` (C-13 `:802`: `[entity.update.proposed, object.*]`). Валидатор этого не видит: правило 8 сверяет `owned_entity_types` с белым списком роли `levels.go`, а не блупринта | Одно из двух, выбор — architect#2 через оркестратора, до T-223:<br>(а) **данными в T-203 (предпочтительно):** global — `+ entity.update.proposed`; domain — `+ entity.create.proposed, entity.update.proposed`; encounter — `+ dice.rolled, entity.update.proposed`. Все типы ⊆ белых списков `levels.go`, валидатор и тест зелёные (зонд Z1), `enum` тика не меняется (`notByTick`). Строка в dev-log об отступлении от скелетов §3.3 и уведомление architect#2 для КД §13.3/`api-contracts.md` §3.3;<br>(б) **решением:** КД §5.4 и DoD T-223 явно говорят, что `Emitter` сверяет тип с белым списком роли `levels.go`, а `entity.*.proposed` — только с `owned_entity_types`. Тогда `allowed_event_types` блупринта сужает лишь вывод LLM (правило 5 стража). Правки T-203 нет, Ma-1 закрывается строкой DoD T-223 и правкой КД |
+| Mi-1 | Minor | `blueprints_test.go:497-531`; КД §20 `:1116`, `consolidation.md:219`, `tasks.md:1234` | Отступление от TL2-7 («валидатор проверяет `allowed ⊆ enum`») разобрано. Для региона буква невыполнима: `encounter.started` публикует правило обнаружения, а не модель. Проверка разработчика — `enum` = белый список роли без `entity.*.proposed` и `encounter.started`, плюс `enum ⊆ allowed_event_types`. Вместе с правилом 8 (`allowed ⊆ белый список`) она даёт `allowed ∖ {не для тика} ⊆ enum`, то есть исправленную форму TL2-7, и ещё гарантирует, что пересечение в рантайме ничего не выбросит (КД §13.4 `:783`). По существу проверка **корректна и сильнее буквы**, после правки Ma-1 (а) буква нарушилась бы ещё сильнее. Но проверка живёт только в тесте пяти файлов: новый регион (S6, README T-204) её от `mvctl blueprint validate` не получит, а три документа по-прежнему обещают её валидатору | Не блокирует T-203. architect#2: переформулировать TL2-7 в КД §13.4/§20 («`enum` файла ⊆ `allowed_event_types`; типы роли, которые публикует не модель, — `encounter.started`, `entity.*.proposed` — вне `enum`») и решить, нужна ли проверка в валидаторе. `ValidationEnv.Schemas` знает только имена файлов, поэтому это решение о поле окружения (T-222/T-204) |
+| Mi-2 | Minor | `player-gm.md:33, 39-44`, `group-narrator.md:40-44`, `domain-dark-forest.md:49-51, 58-59`, `global-dark-forest-world.md:54`; КД §11.4 `:633` | Секции `## phase2`/`## tick` подставляют `{state}`, `{events}`, `{canon}`, `{absence}`, `{region.description}`, а сборщик промпта КД §11.4 сам выводит `<canon>`, `<state>`, `<events>`, `<absence>` и кладёт `## phase2` в `<task>` «с подстановкой плейсхолдеров». При буквальной реализации T-218 самая тяжёлая часть промпта попадёт в него дважды. Промпт длиннее ~420 токенов замера увеличивает «прочее», а от него зависит N (КД §13.4.1 `:833`). Кроме того, `{player.name}`, `{region.*}`, `{canon}` в `## system` делают кэшируемую часть `system` зависимой от игрока и региона. Короткое уведомление «все персонажи — взрослые…» повторяет `<absolute_limits>` (`prompt_notice`). Блупринты следуют `api-contracts.md` §3.3 (он перечисляет эти плейсхолдеры для `## phase2`), так что расхождение — между двумя документами, а не ошибка исполнителя | До T-218 — вопрос architect#2: либо `## phase2`/`## tick` содержат только задание (`{world.weather}`, `{encounter.round}`, фраза с L), а данные идут секциями сборщика; либо сборщик не дублирует секции, чьи плейсхолдеры есть в `<task>`. Если выбран первый вариант — правка текста секций данными (T-218 или T-260), тест T-203 её переживёт (L и фраза остаются) |
+| Mi-3 | Minor | `global-dark-forest-world.md:17`, `domain-dark-forest.md:19`; `tick-region.json:30-57` | `max_tokens: 512` у тиков не рассчитан. У `tick-region` — до трёх `summary` по 300 символов (≈ 450 токенов при c_min 2,0), `entity.id` до 128 символов, а `affects[]` и `ops[]` без `maxItems`, `value` — любой JSON. Грамматика `json_schema` массивы не останавливает, так что упор в 512 даёт обрез → `schema_invalid` → повтор → шаблон и расход бюджета фона (4 вызова в час на мир). На E 512 токенов — ≈ 12,5 с генерации при `MV_LLM_SLOTS=1`. Если уступка планировщика не прерывает уже идущую генерацию, нарратив игрока, пришедший во время тика, ждёт её конца (NFR-002). Промпт «одной фразой» типичный ответ держит, тест `max_tokens` тиков не проверяет | Не блокирует T-203 (скелеты §3.3, фон, есть откат на правила). В бэклог architect#2/T-260: потолок тика по образцу §13.4.1 с порогом латентности «тик не держит слот дольше X»; `maxItems` у `affects[]`/`ops[]` и, возможно, меньший `summary.maxLength`; строка теста на `max_tokens` тиков после расчёта |
+| N-1 | Nit | `blueprints_test.go:60-66, 194-207` | После T-216 `pendingFiles` и `pendingReference` станут мёртвым кодом: исключение перестанет срабатывать, но останется в тексте | В DoD T-216 рядом со строкой «тест T-203 проходит без исключения» — «`pendingFiles` пуст или удалён вместе с `pendingReference`» |
+| N-2 | Nit | `blueprints_test.go:455-489` | Нет случая «лишнее поле в элементе `events[]`» ни для `tick-global`, ни для `tick-region`: мутант M5 выжил. `additionalProperties: false` на уровне `entity` покрыт (`entity with a type`), на уровне события — нет | Добавить по строке `{"events":[{"type":…,"summary":"x","ops":[],"extra":1}]}` → invalid в обе таблицы |
+| N-3 | Nit | `blueprints_test.go:324-332` | Тест принимает любую `*agent.ParseError`, в том числе синтаксическую ошибку YAML (зонд Z2: `mapping values are not allowed in this context`). Сейчас вставка корректна, но смена отступов в файле при сохранившемся якоре сделает проверку ложно зелёной | Проверять и текст: `strings.Contains(err.Error(), key+": unknown field")` (для фазы — `llm.phase2.`+key) |
+
+### Вердикт
+
+**Вернуть** · Critical 0 · Major 1 · Minor 3 · Nit 3.
+
+Работа качественная: DoD выполнен, числа T-439 сходятся со строкой E и инвариантами, исключение правила 10 узкое и снимается само, мутанты M0–M4 убиты. Возврат — только из-за Ma-1: `allowed_event_types` трёх блупринтов не пропускают публикации, которые дизайн назначает этим ролям. Ma-1 закрывается либо трёхстрочной правкой данных (вариант (а), повторное ревью — только этих строк и dev-log), либо записанным решением architect#2 по варианту (б) без правки T-203. Mi-1…Mi-3 и Nit не блокируют; Nit можно закрыть той же итерацией или при приёмке.
+
+### Открытые вопросы (architect#2 через оркестратора)
+
+1. Ma-1: что сверяет `Emitter` T-223 — `allowed_event_types` блупринта (тогда правка (а)) или белый список роли `levels.go` (тогда (б))?
+2. Mi-1: новая формулировка TL2-7 и нужна ли проверка `enum` против блупринта в валидаторе.
+3. Mi-2: данные в `## phase2`/`## tick` плейсхолдерами или секциями сборщика; плейсхолдеры игрока и региона в кэшируемом `## system`.
+
+### Предложения в бэклог
+
+1. **T-447** (или EPIC-001, владелец `.dockerignore`): при копировании `blueprints/` в образ исключить `*_test.go` — копировать `blueprints/*.md` или добавить `blueprints/**/*_test.go` в `.dockerignore`.
+2. **T-260 / architect#2**: потолок `max_tokens` тиков и `maxItems` у `affects[]`/`ops[]` (Mi-3); тест на `max_tokens` тиков.
+3. **T-216**: строка DoD N-1.
+4. **system-architect#1** (не срочно): назвать единицу `response_len` в C-07 — байты UTF-8, как уже считает `providers/recorded`.
+5. Из карточки исполнителя, поддерживаю: `npc_table[].stats_ref` против `rules/dark-forest.yaml` в `blueprints_test.go` (I1b); фикстура региона `blueprint_ref: domain-dark-forest@1.0` → `1.1` (EPIC-001).
+
+### Риски и допущения
+
+- Ma-1 оценён по тексту КД §5.4, §15, ADR-028 и C-05; кода `Emitter` ещё нет. Если architect#2 выберет (б), замечание снимается без правки T-203.
+- Исключение правила 10 опирается на дословный текст `Reason` валидатора. Смена текста в T-222 (поле `Issue.Code`) делает тест красным, а не ложно зелёным. После T-222 исключение стоит перевести на код находки, если T-216 к тому времени не придёт.
+- Прогон `make test`, `make secrets-scan` и `gitleaks` ревьюер не повторял: изменения — данные, схемы и тест без секретов; исполнитель прогнал `gitleaks dir` по новым файлам.
+
+## T-203 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-2)
+
+### Границы ревью
+
+Повторная итерация: проверены исправления по ревью #1 и регрессия от них. Ветка `task/T-203-mvp1-blueprints`, папка `.worktrees/T-203`, база `7a8c100`, коммитов нет. Рабочее дерево: `git diff 7a8c100` (фикстуры `llm.output.v1.*` не менялись с итерации 1, карточка, `dev-log.md`, `review.md`) и неотслеживаемые `blueprints/`, `schemas/agent/`. Итерация 2 изменила `allowed_event_types` и комментарий над ним в `encounter-wolf.md:13-16`, `domain-dark-forest.md:23-26`, `global-dark-forest-world.md:22-25`, а в `blueprints_test.go` добавила `publishedByDesign`, `TestBlueprintsListWhatTheirRolesPublish`, случаи N-2, проверку N-3 и комментарий N-1. `shared/agent/**`, КД, `contracts.md`, `tasks.md` не менялись.
+
+Решения оркестратора: Ma-1 закрывается вариантом (а); Mi-1…Mi-3 переданы architect#2, код по ним в задаче не меняется, в карточке достаточно записи (есть: «Ответы на замечания», «Открытые вопросы»); исключение правила 10 допустимо до T-216.
+
+Источники: КД `swarm-llm-laws.md` §5.4 (`:423`), §15.1 (`:923-924`), §15.2 (`:964-965`); ADR-028 п. 1 (`:24`); `contracts.md` C-05 п. 1–2, п. 4 и блок «Заглушка» (`:571-572`); `api-contracts.md` §2.4 (`:485`); `shared/agent/levels.go`, `shared/agent/validator.go:564-604`, `shared/agent/parser.go:376-413`; `shared/contracts/ownership.go`, `registry_state.go`.
+
+### Прогоны
+
+| Команда | Итог |
+|---|---|
+| `go build ./...`, `go vet ./...` | зелёные |
+| `go test -short -count=1 ./blueprints/... ./shared/agent/... ./test/fixtures/...` | все `ok` |
+| `go test -count=1 -v -run` по `TestBlueprintsValidate$`, `TestBlueprintsListWhatTheirRolesPublish`, `TestSamplingAndProvider…` в `./blueprints/` | все PASS; три `t.Logf` об `absolute_limits_ref` (T-216), других находок нет |
+| `golangci-lint run ./blueprints/...` | 0 issues |
+| `go run ./cmd/mvctl contracts check` | 65 типов, 8 топиков, 58 файлов схем |
+
+### Ma-1: сверка добавленных типов
+
+| Блупринт | Тип | Дизайн | `levels.go` | `OwnershipRules` | Итог |
+|---|---|---|---|---|---|
+| `encounter-wolf` | `dice.rolled` | КД §15.1 `:923` (`GE dice.rolled ×4`); C-05 «Заглушка» `:572`; `api-contracts.md` §2.4 `:485` | `encounter`: есть | — (не предложение) | верно |
+| `encounter-wolf` | `entity.update.proposed` | КД §15.1 `:924` (`atomic, cause: combat`); C-05 п. 1–2; §2.4 `:485` | `encounter`: есть | `task`: `player`, `npc`, `encounter`, без `Create` | верно |
+| `domain-dark-forest` | `entity.create.proposed` | ADR-028 п. 1; C-05 п. 4 и «Заглушка» `:571`; §2.4 `:485` (`entity.*.proposed(region, npc, encounter)`) | `region-gm`: есть | `domain`: `npc`, `encounter` с `Create: true` | верно |
+| `domain-dark-forest` | `entity.update.proposed` | КД §15.2 `:965` (`npc.position, cause: tick`) | `region-gm`: есть | `domain`: `region`, `npc`, `encounter` | верно |
+| `global-dark-forest-world` | `entity.update.proposed` | §2.4 `:485` (`entity.update.proposed(world)`) | `global-gm`: есть | `global`: `world` (`weather`, `time_of_day`, `day`, …) | верно |
+
+Лишних прав нет. Встрече `entity.create.proposed` не выдан: его нет ни в КД, ни в §2.4, ни в белом списке `encounter`, а строка `task` в таблице владения не даёт `Create`. Мутант R1 это подтверждает: правило 8 делает тест красным. Региону сверх дизайна ничего не выдано: его `allowed_event_types` побайтно равен `domainEvents` и списку §2.4. Глобальному GM не выдан `entity.create.proposed`. Нарраторы не менялись. `enum` схем тика не менялся, и `TestTickEnumsFollowTheWhiteLists` после правки зелёный без изменений: `notByTick` исключает `entity.*.proposed`. Комментарии над списками ссылаются на КД §5.4 и источники. Отступление от скелетов `api-contracts.md` §3.3 записано в dev-log («Отклонения от дизайна») и в открытых вопросах карточки к architect#2. **Ma-1 закрыт.**
+
+Регрессия: комментарий правила 8 в `shared/agent/validator.go:568-572` («an encounter changes entities through the mechanics without listing entity.update.proposed itself») теперь расходится с данными. Поведение правила верно, так как оно берёт белый список роли. Файл не входит в задачу, исполнитель отправил пункт в бэклог T-222. Поддерживаю.
+
+### `TestBlueprintsListWhatTheirRolesPublish`
+
+**Ложно зелёного результата на текущих данных нет.** Разобраны пути:
+- набор ключей таблицы сверяется с `mvp1Blueprints` через `Fatalf`, поэтому пропущенный или лишний блупринт даёт красный результат;
+- `agent.AllowedEventTypes` возвращает `nil`, если пара «уровень–роль» неверна. Тогда каждая строка таблицы даёт `Errorf`, то есть красный результат, а не зелёный;
+- `MatchEventType(pattern, eventType)` вызывается в правильном порядке аргументов. При перепутанном порядке совпадений не было бы, и три блупринта с непустым `owned_entity_types` покраснели бы;
+- `bp.AllowedEventTypes` и `bp.OwnedEntityTypes` читаются тем же парсером (`yaml:"allowed_event_types"`, `yaml:"owned_entity_types"`), что и в рантайме.
+
+Мутанты M9–M12 исполнителя и мой R1 убиты.
+
+**Слабые места — проверки только в одну сторону** (замечания Mi-4 и N-4):
+1. `owned_entity_types` проверяется только условием «непуст ⇒ есть `entity.*.proposed`». Обратного условия и сверки состава нет. Если убрать или сузить список (R2a–R2d), тест и валидатор остаются зелёными. По КД §5.4 (`:423`) `Emitter` отвергает `entity.*.proposed` с типом сущности ∉ `owned_entity_types`, поэтому такой блупринт снова не даёт встрече урона, а региону — встречи. Это зеркальный Ma-1.
+2. Таблица сверяется с `allowed_event_types` и белым списком только как подмножество. Если белый список роли в `levels.go` расширить вместе с блупринтом (R4: встрече добавлен `entity.create.proposed`), тест остаётся зелёным. От лишних прав сейчас защищает только правило 8, то есть сам `levels.go`.
+
+**Риск неполноты `publishedByDesign`.** Таблица — ручная копия документов. Если дизайн назначит роли новую публикацию, автоматически это не поймать: тест не читает КД. Дешёвое снижение риска — сделать проверку равенством трёх наборов: `allowed_event_types` = `publishedByDesign[name]` = `AllowedEventTypes(level, role)`. В MVP-1 на каждую роль ровно один блупринт, и сейчас все три набора совпадают у всех пяти файлов. Новая публикация по дизайну обычно сначала попадает в белый список `levels.go` (T-222/T-223, по `api-contracts.md` §2.4). После неё тест станет красным, пока таблицу и блупринт не дополнят со ссылкой на раздел. Лишнее право (R4) тоже станет красным. Если блупринт когда-нибудь намеренно сузит список роли (город, второй регион), исключение записывается в таблицу явно. Это две строки кода.
+
+Зонд P1 в копии дерева: проверка равенства трёх наборов плюс «при `entity.*.proposed` в таблице `owned_entity_types` = `ownedFromContracts(level)`». Исходные данные зелёные, M0 и R1 убиты, R2a–R2d и R4 теперь тоже убиты.
+
+### N-2 и N-3
+
+- **N-2 закрыт.** Добавлены случаи `extra field of an event`, `extra field of an op`, `extra field of the answer` в обе таблицы тика и `affects with a type` в региональную (`blueprints_test.go:474-476`, `:499-502`). Мутанты M5 и M5r убиты.
+- **N-3 закрыт.** Тест сверяет `pe.Field == c.field` и `pe.Reason == "unknown field"` (`:336`). Зонд Z2 (вставка с отступом 3) убит на четырёх подтестах фазы. Мутанты R3 и R3b в парсере (`Field` = голый ключ; путь без родителя) убиты. `provider` верхнего уровня при R3 правильно остаётся зелёным. Замечание: `errors.As` находит первую `ParseError` в `errors.Join`, а при единственном неизвестном ключе она одна. Этого достаточно.
+- **N-1 закрыт** в пределах теста: комментарий `:61-65`. Строка DoD T-216 — предложение tech-lead#2 в карточке.
+
+### Мутанты (копия дерева в scratch `t203r2-mutants`, без `-overlay`; скрипт проверял, что якорь встречается ровно один раз, и возвращал байты; копия зелёная до и после)
+
+| # | Мутация | Итог |
+|---|---|---|
+| M0 (контрольный, первым) | `player-gm` `max_tokens: 160 → 150` | убит: `TestNarrativeCap/{row_E, invariants/player-gm}`, `TestLLMOutputFixturesAnswerByNarrativeSchema/{valid,invalid}` |
+| R1 | `encounter-wolf` + `entity.create.proposed` | убит: `TestBlueprintsValidate/encounter-wolf`, `…Offline/encounter-wolf` (правило 8) |
+| R2a / R2b / R2c | без `owned_entity_types` у `encounter-wolf` / `domain-dark-forest` / `global-dark-forest-world` | **выжили** — Mi-4 |
+| R2d | `encounter-wolf` `owned_entity_types: [encounter]` | **выжил** — Mi-4 |
+| R3 | `parser.go:405` `pe.Field = key` (без пути) | убит: `TestSamplingAndProviderAreNotBlueprintFields/llm.phase2.{top_p,top_k,min_p,presence_penalty}` |
+| R3b | путь неизвестного ключа без родительского сегмента (`llm.top_p`) | убит: те же четыре подтеста |
+| R4 | R1 и `entity.create.proposed` в белом списке `encounter` (`levels.go`) | **выжил** — N-4 |
+| M5 / M5r | снят `additionalProperties: false` у элемента `events[]` в `tick-global.json` / `tick-region.json` | убиты: `TestTickGlobalSchemaInstances/extra_field_of_an_event`, `TestTickRegionSchemaInstances/extra_field_of_an_event` |
+| Z2 (зонд) | вставка ключей фазы с отступом 3 | убит: `TestSamplingAndProviderAreNotBlueprintFields/llm.phase2.*` (4 подтеста) |
+| P1 (зонд исправления) | в тесте: равенство трёх наборов и `owned_entity_types` = `ownedFromContracts(level)` при предложениях в таблице | исходные данные зелёные; M0, R1, R2a–R2d, R4 убиты |
+
+Копия и скрипт удалены по точным путям.
+
+### Замечания
+
+| # | Серьёзность | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-4 | Minor | `blueprints/blueprints_test.go:546-552`; данные `encounter-wolf.md:18`, `domain-dark-forest.md:27`, `global-dark-forest-world.md:26` | Защита от повторения Ma-1 односторонняя. Проверяется «`owned_entity_types` непуст ⇒ есть `entity.*.proposed`», но не «предлагает ⇒ владеет нужным». Если `owned_entity_types` удалён или сужен, зелёные и валидатор T-202, и тест (R2a–R2d выжили). По КД §5.4 `:423` `Emitter` отвергает предложение с типом сущности ∉ `owned_entity_types`, а такой блупринт в рантайме не даёт встрече урона, региону — встречи и NPC, глобальному GM — погоды. Данные сейчас верны: замечание о дыре в тесте, а не о дефекте поставки | Если в `publishedByDesign[name]` есть `entity.*.proposed`, требовать `slices.Sorted(bp.OwnedEntityTypes) == slices.Sorted(ownedFromContracts(bp.Level, bp.Role))`. Для MVP-1 это `task` → `encounter, npc, player`, `domain` → `encounter, npc, region`, `global` → `world`. Для нарраторов пустой список уже требует правило 8. Проверено зондом P1: R2a–R2d убиты, данные зелёные. Можно закрыть при приёмке или первой задачей, которая трогает `blueprints_test.go` (I1b, `stats_ref`) |
+| N-4 | Nit | `blueprints_test.go:538-545` | Сверка «таблица ⊆ белого списка» и «таблица ⊆ `allowed_event_types`» не ловит расширение прав через `levels.go` вместе с блупринтом (R4 выжил). Неполноту таблицы относительно дизайна тест не видит вовсе. Сейчас все три набора совпадают у всех пяти блупринтов | Сравнивать равенством: `slices.Sorted(bp.AllowedEventTypes)` = `slices.Sorted(publishedByDesign[name])` = `whiteList`. Тогда новая публикация роли в `levels.go` краснеет, пока таблицу и блупринт не дополнят со ссылкой на дизайн. Намеренное сужение в будущем блупринте записывается в таблицу явно. Проверено зондом P1: R4 убит |
+
+Mi-1, Mi-2, Mi-3 ревью #1 переданы architect#2 решением оркестратора. Ответы и риск Mi-3 записаны в карточке, в счёт этой итерации они не входят.
+
+### Вердикт
+
+**Принять** · Critical 0 · Major 0 · Minor 1 · Nit 1.
+
+Ma-1 закрыт правкой данных по варианту (а). Каждый добавленный тип подтверждён КД, ADR-028, C-05, `api-contracts.md` §2.4, белым списком роли и строкой владения. Лишних прав нет (R1). N-1, N-2, N-3 закрыты, M5, M5r и Z2 теперь краснеют. Регрессий от правок нет. Mi-4 и N-4 — дыры в новом тесте, а не в данных. Обе закрываются одной правкой в несколько строк, проверенной зондом P1, и не блокируют задачу.
+
+### Предложения в бэклог
+
+1. **T-203 при приёмке или I1b (`stats_ref` в `blueprints_test.go`):** Mi-4 и N-4 — равенство трёх наборов и `owned_entity_types` по таблице владения.
+2. **T-222** (владелец `shared/agent`): комментарий правила 8 `validator.go:568-572` про встречу без `entity.update.proposed` (из карточки исполнителя, поддерживаю).
+3. **T-223** (`Emitter`): в DoD — тест роли, который публикует каждую строку `publishedByDesign` через `Emitter` с настоящими блупринтами из `blueprints/`. Так рантайм проверит то же, что статическая таблица.
+4. Пункты ревью #1 (`.dockerignore`/T-447, DoD T-216, единица `response_len`, `stats_ref`, `blueprint_ref @1.0 → 1.1`) остаются в силе.
+
+### Риски и допущения
+
+- Ma-1 и Mi-4 оценены по тексту КД §5.4: кода `Emitter` ещё нет. Если architect#2 при правке КД §13.3 и `api-contracts.md` §3.3 решит, что `Emitter` сверяет `owned_entity_types` по таблице владения, а не по блупринту, Mi-4 снижается до Nit.
+- Отступление `allowed_event_types` от скелетов §3.3 ждёт отражения в КД и `api-contracts.md` у architect#2. Уведомление идёт через оркестратора, в дереве T-203 документы дизайна не менялись.
+- `make test`, `make secrets-scan` и `gitleaks` ревьюер не повторял. Итерация 2 меняет данные блупринтов и тест, секретов нет, исполнитель прогнал `gitleaks dir blueprints`.
+
 ## T-208 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-2)
 
 ### Границы ревью

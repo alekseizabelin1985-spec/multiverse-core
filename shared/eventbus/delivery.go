@@ -25,6 +25,36 @@ var DefaultBackoff = []time.Duration{100 * time.Millisecond, 500 * time.Millisec
 // room for base64 and for the envelope around it.
 const MaxDeadLetterRaw = 512 << 10
 
+// ErrPermanent marks an error of a handler that no retry can mend in any
+// process (C-01 v1.10). Handlers do not return it bare: they wrap the cause
+// with Permanent.
+var ErrPermanent = errors.New("eventbus: permanent handler error")
+
+// Permanent marks err as final: Deliver parks the event at once instead of
+// retrying it, as long as the context of the subscription is alive. It is
+// meant for a defect of the event itself — an envelope or a payload that
+// breaks the contract and that the handler recognised, validation on read
+// being off for instance. A dependency that is down, a timeout, a cancelled
+// context and any state of the receiver, a stopped world included, are not
+// final: after a restart the same event may well succeed, and parking it
+// would lose what the new process was meant to finish.
+//
+// errors.Is reports both ErrPermanent and the cause, errors.As reaches the
+// cause, and the text is the text of the cause, which is what the dead letter
+// carries. Permanent(nil) is nil.
+func Permanent(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &permanentError{cause: err}
+}
+
+type permanentError struct{ cause error }
+
+func (e *permanentError) Error() string { return e.cause.Error() }
+
+func (e *permanentError) Unwrap() []error { return []error{ErrPermanent, e.cause} }
+
 // DeadLetter is the envelope of dead_letters: the event that could not be
 // handled, why, and by whom.
 type DeadLetter struct {
@@ -91,6 +121,11 @@ type Delivery struct {
 // retry, and the panic is logged at Error level with its stack. Without the
 // catch the event that brought the process down would be redelivered after the
 // restart and bring it down again, together with every context it hosts.
+//
+// An error marked with Permanent is parked at once as well, after the call
+// that returned it, but only while the context is alive (C-01 v1.10). Under a
+// cancelled context it is left uncommitted like any other error: a process
+// that is stopping cannot tell a bad event from one it did not finish.
 func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler) error {
 	ctx = ContextWithPosition(ctx, pos)
 
@@ -123,11 +158,36 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 		if ctx.Err() != nil {
 			// The subscription is shutting down: leave the event
 			// uncommitted so that it is redelivered, rather than burning
-			// its retries against a cancelled context.
+			// its retries against a cancelled context. This comes before the
+			// permanent error on purpose: State leaves a proposal whose facts
+			// were not published uncommitted on Stop, and the next process
+			// publishes them (T-055); parked, they would never go out.
 			return ctx.Err()
+		}
+		if errors.Is(lastErr, ErrPermanent) {
+			return d.parkPermanent(ctx, pos, ev, lastErr, attempt+1)
 		}
 	}
 	return d.deadLetter(ctx, pos, ev, lastErr, len(backoff)+1, nil, "event parked in dead letters")
+}
+
+// parkPermanent parks the event a handler failed on for good. The Error line
+// is written only once the dead letter is: handled=true says the event is
+// accounted for, and a failed write is reported by deadLetter as not parked.
+// It carries neither panic nor stack, which is what keeps it out of
+// service_panics.
+func (d Delivery) parkPermanent(ctx context.Context, pos Position, ev Event, cause error, attempts int) error {
+	if err := d.deadLetter(ctx, pos, ev, cause, attempts, nil, ""); err != nil {
+		return err
+	}
+	if d.Log != nil {
+		d.Log.ErrorContext(ctx, "event handler failed permanently; the event is parked in dead letters without a retry",
+			append(d.eventAttrs(ev, pos),
+				slog.Int("attempts", attempts),
+				slog.Bool("handled", true),
+				slog.Any("error", cause))...)
+	}
+	return nil
 }
 
 // DeliverRaw parks a message that could not be decoded into an event. There is
