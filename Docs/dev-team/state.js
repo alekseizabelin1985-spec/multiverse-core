@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:50:52+03:00",
+  "updatedAt": "2026-09-13T20:52:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3356,11 +3356,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-209",
           "title": "B4 · Парсер ответа, компиляция схем, проверка языка",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3634,7 +3634,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9961,7 +9961,7 @@ window.DEVTEAM_STATE =
       "task": "T-222",
       "action": "Ревью #1",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:52:06+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9971,7 +9971,7 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Ревью #1",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:52:06+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -10011,6 +10011,26 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Приёмка T-458 и индекс EPIC-002",
       "startedAt": "2026-09-13T20:50:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-209",
+      "action": "Итерация 2: обрезанный ответ не восстанавливается",
+      "startedAt": "2026-09-13T20:52:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-222",
+      "action": "Приёмка реестра блупринтов",
+      "startedAt": "2026-09-13T20:52:06+03:00",
       "finishedAt": null
     }
   ],
@@ -13680,6 +13700,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-458 · отметка tech-lead#1: есть. Deps.Recording без цикла импорта, литералы Deps во всех эпиках именованные; serve.go читает запись один раз, маршрут часов только в replay; .golangci.yml сливается с EPIC-001 (T-461) и остальными эпиками без конфликтов. Н-1 параметр replayOptions затеняет пакет; Н-"
+    },
+    {
+      "at": "2026-09-13T20:52:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-222 · ревью #1 (TEAM-2/code-reviewer#3): принять — 0/0/4/4. DoD выполнен; Mi-1 блупринт с отвергнутым child_blueprint остаётся активным (регион откроет встречу без агента); Mi-2/Mi-3 тесты зависят от дерева или не ловят отвергнутый резервный; Mi-4 неверный корень отвергает все блупринты молча. При"
+    },
+    {
+      "at": "2026-09-13T20:52:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-209 · ревью #1 (TEAM-2/code-reviewer#1): вернуть — 0/1/4/3. Ma-1: объект из незакрытой обёртки массива или из незакрытого <think> вырезается, и обрезанный ответ проходит как валидный. Mi-1 </think> внутри строки JSON; Mi-2 шаблон id пропускает Wi-Fi/Hello-World; Mi-4 ключ ответа в InstanceLocation"
     }
   ],
   "blockers": [],
