@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:16:20+03:00",
+  "updatedAt": "2026-09-13T18:20:10+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4289,7 +4289,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-459",
           "title": "Документы EPIC-003 под C-07 v1.5 и решения T-457: ADR-029 принято, КД роя §9.1/§9.2/§13.4, DoD T-203/T-211/T-212/T-213, ответы по валидатору T-202 (architect#2)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -9398,7 +9398,7 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Итерация 2: Call.Guard и порядок T-211/T-212/T-213",
       "startedAt": "2026-09-13T18:15:25+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:20:10+03:00"
     },
     {
       "instance": "developer#1",
@@ -9428,6 +9428,16 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Приёмка T-055 конвейер State",
       "startedAt": "2026-09-13T18:16:20+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-459",
+      "action": "Ревью #2: распределение T-211/T-212/T-213",
+      "startedAt": "2026-09-13T18:20:10+03:00",
       "finishedAt": null
     }
   ],
@@ -12671,6 +12681,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-055 · ревью #2 (TEAM-1/code-reviewer#3): принять — 0/0/3/2. Ma-1 закрыт: повтор тех же байтов, publish_failed при Stop, предложение не коммитится (membus — зонд, kafka — чтение кода); норма посредника C-01 v1.6 не потеряна. Mi-5: паузы повтора на Deps.Timers в replay (NullTimers) не срабатывают — "
+    },
+    {
+      "at": "2026-09-13T18:20:10+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-459 · итерация 2 (architect#2): Ma-1 — T-211 делает llm.LabelTable/LabelsHash (ErrLabelTable для ключа вне eK/bK), схему, golden и запись из явного входа Recorder; T-213 заполняет вход из Call.Guard, свойство-тест и сверку ярлыков replay (зависимость T-212→T-213 дала бы цикл); T-212 — только promp"
     }
   ],
   "blockers": [],
