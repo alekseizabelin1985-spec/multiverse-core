@@ -736,7 +736,8 @@ sequenceDiagram
 | Событие | Адресаты | `kind` | `generated_by` | Текст |
 |---|---|---|---|---|
 | `combat.decided` | все `alive` участники scope (соло — игрок) | `mechanics` | `rules` | `render.Mechanics` |
-| `entity.updated` с `cause ∈ {move, rest, loot}` для `player` | сам игрок (при `group_move` — все участники) | `mechanics` | `rules` | `render.Mechanics` |
+| `entity.updated` с `cause ∈ {move, rest, loot}` для `player` | сам игрок; при `cause=move` у игрока в групповом scope (`scope = group:{id}`) — **не ставится**: перемещение группы адресует факт сущности группы (строка ниже) *(изм. T-449, C-04 v1.4: прежде «при `group_move` — все участники», но такого значения нет ни в схемах, ни в таблице владения; итерация 2 T-449, ревью #1 Mi-5: одна доставка на перемещение. Признак — scope игрока в read-model шлюза, а не поиск факта группы с тем же `proposal_id`: факты пакета приходят по одному, и факт игрока может прийти раньше факта группы. Игрок в групповом scope перемещается только пакетом группы, §7.4)* | `mechanics` | `rules` | `render.Mechanics` |
+| `entity.updated` позиции сущности `group` (`cause=move`) | все `alive` участники группы, по одной доставке на участника *(итерация 2 T-449)* | `mechanics` | `rules` | `render.Mechanics` |
 | `entity.updated player.status=dead` | сам игрок | `system` | `rules` | «Ваш персонаж погиб…» |
 | `encounter.started` | участники scope | `world_event` | `rules` | «Из тени выходит …» |
 | `narrative.output` | `payload.recipients[]` | `narrative` | из события (`llm`/`template`) | `payload.text`; `data{narrative_event_id: event.id, kind, absence?, filter}` |
