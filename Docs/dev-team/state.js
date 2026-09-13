@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:52:04+03:00",
+  "updatedAt": "2026-09-13T14:52:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2483,7 +2483,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-455",
           "title": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (профиль legacy)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/devops-engineer#1",
           "startedAt": "2026-09-13T14:36:44+03:00",
           "finishedAt": null,
@@ -8532,7 +8532,7 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (проф",
       "startedAt": "2026-09-13T14:36:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:52:42+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -11341,6 +11341,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-201 · ревью #3 (TEAM-2/code-reviewer#1): принять — 0/0/0/2. Ma-2/Mi-5/Mi-6/N-1/N-2 закрыты; отступление «смещение даты не переводится в UTC» принято (безопаснее для контроля подмены T-26; хеш не зависит от пояса машины — 11 значений в 6 поясах). Nit: N-3 тест ключа null, N-4 флаг untyped. Приёмка "
+    },
+    {
+      "at": "2026-09-13T14:52:42+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 выполнена TEAM-1/devops-engineer#1: причина не .env, а шаг «Read the pinned versions» — build/versions.env уходит в $GITHUB_ENV, пустой CHROMA_IMAGE из окружения сильнее --env-file и скрывает заглушку .github/ci.env. compose-lint.sh теперь снимает из своего окружения имена, объявленные в своих"
     }
   ],
   "blockers": [],
