@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:10:33+03:00",
+  "updatedAt": "2026-09-13T16:10:55+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3229,16 +3229,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#2",
+          "startedAt": "2026-09-13T16:10:55+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md",
-          "subwave": "B"
+          "subwave": "B",
+          "branch": "task/T-207-fake-recorded-providers",
+          "worktree": ".worktrees/T-207"
         },
         {
           "id": "T-208",
@@ -8942,6 +8944,16 @@ window.DEVTEAM_STATE =
       "action": "levels.go и валидатор блупринтов",
       "startedAt": "2026-09-13T16:03:58+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Провайдеры fake и recorded",
+      "startedAt": "2026-09-13T16:10:55+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -11842,6 +11854,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-303: отметка владельца EPIC-001 (tech-lead#1) — вернуть. В-1 (блокирует): startProcess в cmd/multiverse/fake_contexts_test.go не задаёт MV_GATEWAY_DATA_DIR — четыре теста процесса открывают SQLite в /data (CI Linux упадёт на mkdir /data; на Windows созданы C:\\data\\gateway.db и links.db). В-2: runb"
+    },
+    {
+      "at": "2026-09-13T16:10:55+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-207 (TEAM-2/developer#2, подволна B): провайдеры fake и recorded internal/llm/providers — зависимость T-206 слита."
     }
   ],
   "blockers": [],
