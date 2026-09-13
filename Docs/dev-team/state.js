@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:40:06+03:00",
+  "updatedAt": "2026-09-13T18:43:23+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -9500,7 +9500,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Текст уведомления FR-009",
       "startedAt": "2026-09-13T18:33:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:43:23+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9530,6 +9530,16 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Ревью #2 contracts v0.14",
       "startedAt": "2026-09-13T18:40:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Вычитка текста уведомления FR-009",
+      "startedAt": "2026-09-13T18:43:23+03:00",
       "finishedAt": null
     }
   ],
@@ -12857,6 +12867,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-456 · итерация 2 (system-architect#1): Ma-1 — таймауты маршрута по КД §5.1 п. 8 (10/10, long-poll wait+5≤30/0, admin 35/35); Ma-2 — Permanent только дефект события, отменённый контекст не паркуется, publish_failed и мир, остановленный паникой, — обычная ошибка (довод: после рестарта предложение ре"
+    },
+    {
+      "at": "2026-09-13T18:43:23+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 · текст уведомления FR-009 готов (business-analyst#1): ~1900 знаков, 6 разделов (ИИ, 18+, текст и облако, что хранится, /forget, сроки 30/90/180 и бэкап ≤ 30 дней), кнопка «Мне есть 18, принимаю», таблица соответствия источникам, 8 подстрок для grep-теста T-311; prd.md 0.5.1 — «Формулировка» з"
+    },
+    {
+      "at": "2026-09-13T18:43:23+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам T-318: Р-2 — /forget работает на любом шаге онбординга и удаляет pending_consent (иначе отказавшийся не может удалить свой ID; правка КД §10.3 и DoD T-311); Р-3 — на отказ короткий ответ, полное уведомление при следующей игровой команде (US-008/UC-001 E1; подтверждае"
     }
   ],
   "blockers": [],
