@@ -115,6 +115,10 @@ func TestEveryActionPublishesEventsOfTheContract(t *testing.T) {
 				if got, _ := ev.Path().GetString("proposal_id"); got != ev.ID {
 					t.Errorf("proposal_id = %q, id %s", got, ev.ID)
 				}
+				// The consumer finds the player of a refusal by this id (T-307).
+				if got := actions.ProposalID(action.ID, tc.player); got != ev.ID {
+					t.Errorf("ProposalID(%s, %s) = %s, the proposal is %s", action.ID, tc.player, got, ev.ID)
+				}
 			}
 		})
 	}

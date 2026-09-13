@@ -17,6 +17,7 @@ import (
 	"multiverse-core.io/cmd/telegram-bot/internal/privacy"
 	"multiverse-core.io/cmd/telegram-bot/internal/sender"
 	"multiverse-core.io/cmd/telegram-bot/internal/updates"
+	"multiverse-core.io/internal/gateway/client"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/logging"
 )
@@ -50,23 +51,17 @@ func newGatewayMock(t *testing.T) *gatewayMock {
 }
 
 // resolveLink is what the flow does first with an admitted update: POST
-// /v1/links/resolve (component §7.1). The flow itself is T-311; the gate is
-// only allowed to reach it for an admitted update.
+// /v1/links/resolve through the client of the gateway (component §7.1). The
+// gate is only allowed to reach it for an admitted update; the client is the
+// one the flow uses, so a refused update is proven to leave the gateway alone
+// on the path the bot really takes (review #1 of T-310).
 func (g *gatewayMock) resolveLink(t *testing.T) updates.Handler {
+	c := client.New(g.srv.URL, "telegram-bot")
+	c.Backoff = client.NoRetry
 	return func(ctx context.Context, u updates.Update) {
-		body := `{"external_platform":"telegram","external_id":"` + strconv.FormatInt(u.Message.From.ID, 10) + `"}`
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, g.srv.URL+"/v1/links/resolve", strings.NewReader(body))
-		if err != nil {
+		if _, err := c.Resolve(ctx, "telegram", strconv.FormatInt(u.Message.From.ID, 10)); err != nil {
 			t.Error(err)
-			return
 		}
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		_ = resp.Body.Close()
 	}
 }
 
