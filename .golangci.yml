@@ -170,6 +170,8 @@ linters:
             - "!**/internal/gateway/**"
             - "!**/internal/memory/**"
             - "!**/internal/replay/**"
+            # Not a context: the bot's own internal/ has its rule cmd-telegram-bot.
+            - "!**/cmd/telegram-bot/**"
           deny:
             - pkg: multiverse-core.io/internal
               desc: "this context has no depguard rule yet: declare its allowed neighbours in .golangci.yml before importing internal/* (ADR-001 p. 3)"
@@ -359,6 +361,34 @@ linters:
           deny:
             - pkg: multiverse-core.io/internal
               desc: "replay drives the process through shared/runtime.Deps (ADR-001 addendum p. 2)"
+
+        # The Telegram bot is a thin client of the gateway (ADR-018; component
+        # gateway-and-bot §3; ADR-001 addendum, boundary 1e). Of internal/* it
+        # sees the client of C-10 and its wire types, one package each, with
+        # the trailing $ for the reason given at shared-testkit-mechanics:
+        # internal/gateway/links, store or the gateway itself must not pass by
+        # prefix. It does not touch the bus, membus included: the bot is a
+        # process of its own and reaches the platform over HTTP of the gateway
+        # only. Its own packages live in cmd/telegram-bot/internal, outside
+        # internal/* of the module, so they need no <ctx>$ + <ctx>/ pair.
+        # internal-unlisted excludes the bot: its **/internal/** would
+        # otherwise match cmd/telegram-bot/internal and deny the two packages
+        # allowed here. The rule holds for the tests of the bot as well; a
+        # test that needs internal/gateway/gatewaytest or membus gets a rule
+        # of its own, like internal-swarm-tests. no-testkit-in-production and
+        # cmd-others still apply to the bot.
+        cmd-telegram-bot:
+          list-mode: lax
+          files:
+            - "**/cmd/telegram-bot/**"
+          allow:
+            - multiverse-core.io/internal/gateway/client$
+            - multiverse-core.io/internal/gateway/api$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "cmd/telegram-bot may import internal/gateway/client and internal/gateway/api and no other package of internal/*: the bot talks to the platform over HTTP of C-10 only (ADR-018, ADR-001 addendum, boundary 1e)"
+            - pkg: multiverse-core.io/shared/eventbus
+              desc: "cmd/telegram-bot does not touch the bus, membus included: commands and deliveries go through the gateway over HTTP (ADR-018, component gateway-and-bot §3)"
 
         # cmd/multiverse is the only importer of internal/replay.
         cmd-others:

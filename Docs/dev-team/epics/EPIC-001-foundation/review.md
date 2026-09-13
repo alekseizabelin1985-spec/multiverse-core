@@ -16796,3 +16796,140 @@ R2-Mi-2 можно закрыть до старта T-061 и T-221.
 - Поведение скриптов проверено одним прогоном `llm_endpoint_classify` в bash. pwsh-двойник не запускался, его вывод принят равным по комментарию `llm-endpoint.sh` («the .psm1 does the same»).
 - `gitleaks dir` по копии не заменяет скан индекса. Подтверждение — `make secrets-scan` после коммита оркестратора.
 - Решение «группа — бот молчит» взято из карточки T-310 в `.worktrees/T-310`. Относится ли оно к T-456, решает оркестратор (Mi-2).
+
+## T-461 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+Папка `.worktrees/T-461`, ветка `task/T-461-depguard-telegram-bot`, база `a0d45d2`. Коммитов нет. Проверялась рабочая копия: `.golangci.yml` (+30 строк, удалений нет), запись `<!-- dev-log T-461 -->` в `dev-log.md` и новая карточка `tasks/T-461.md`. Основание: DoD карточки, раздел «Отметка владельца (tech-lead#1)» карточки T-310 (`.worktrees/EPIC-004`, подраздел «Правило depguard `cmd-telegram-bot`»). Модель Opus. `golangci-lint` v2.13.2 (пин `build/versions.env`).
+
+### Что проверено
+
+| # | Проверка | Итог |
+|---|---|---|
+| 1 | Текст по отметке владельца | Скрипт извлёк оба блока `yaml` из «Текст для `.golangci.yml`» карточки T-310. Каждый входит в `.golangci.yml` рабочей копии ровно один раз, побайтно. `git diff` — только эти 30 добавленных строк: исключение `.golangci.yml:173-174` в конце `files` правила `internal-unlisted` после `"!**/internal/replay/**"` и правило `cmd-telegram-bot` `:365-391` перед комментарием `cmd-others` `:393`. Разрешения `internal/gateway/client$` и `internal/gateway/api$` записаны с якорем `$`. Байтов CR нет, файл в LF, как база |
+| 2 | Не ослаблены существующие правила | depguard проверяет каждое правило, чьи `files` совпали, отдельно, и находка любого из них — отказ. Новое правило поэтому только добавляет запреты. Ослабить что-то может лишь отрицание в `internal-unlisted`. Оно снимает это правило с путей, где есть `/cmd/telegram-bot/`, но все такие пути покрывает `cmd-telegram-bot`, а он строже `internal-unlisted` везде, кроме двух разрешённых пакетов (N-2). `no-testkit-in-production`, `cmd-others`, правила контекстов T-445 и исключение `_test.go` не менялись (дифф). R1b и R4 ниже подтверждают, что `no-testkit-in-production` и `cmd-telegram-bot` действуют на вложенные пакеты бота |
+| 3 | Дыры | Шаблон `**/cmd/telegram-bot/**` требует `/` после `telegram-bot`, поэтому `cmd/telegram-bot-evil/**` под правило бота и под исключение не попадает (R2, R2b). Вложенный `internal` бота ловит `cmd-telegram-bot` (R4). Тесты бота под правилом (K0, R6). Пакет вне `cmd/telegram-bot` с совпадающим путём (`internal/zzprobe/cmd/telegram-bot`) ловится `cmd-telegram-bot` на всём `internal/*`, кроме `client` и `api` (R5, R5b; N-2). Тест бота доходит до шины через `shared/testkit/*` (R1; N-1). `cmd/telegram-bot-evil/x` с импортом `internal/state` не ловит ни одно правило, и так же было до T-461 (R2 на базовом конфиге). Это дыра всех новых `cmd/*`, не задачи — бэклог п. 1 |
+| 4 | Прогон на коде бота | Копия: `git worktree add --detach` на кончике `epic/EPIC-004-gateway-bot` (`c92eb22`, блоб `.golangci.yml` — `39c1839`, как база T-461) в scratch `t461r1-dg`, поверх — `.golangci.yml` из T-461. `golangci-lint config verify` — ok. Все линтеры: N0 `./cmd/telegram-bot/... ./internal/...` — 0 issues; N1 `./...` — 0 issues. Мутанты — таблица ниже |
+| 5 | Рабочая папка T-461 | `golangci-lint config verify` — exit 0; `golangci-lint run ./...` — 0 issues, exit 0 |
+| 6 | Отчёт и документы | Отчёт исполнителя совпадает с диффом. Запись dev-log и карточка — CRLF (8824/8824 и 67/67). Документы в ветке задачи — карточка и запись dev-log, как принято процессом команды (T-456 и др.); кода вне `.golangci.yml` нет |
+
+**Мутанты.** Скрипт Python, по одному мутанту на прогон `golangci-lint run --allow-parallel-runners --enable-only depguard --uniq-by-line=false <пакеты>`. Мутант — пустой импорт `_ "<пакет>"` первой строкой блока `import` (одно вхождение проверено) или новый пакет-проба в одном файле. После прогона файл возвращался из копии в памяти со сверкой байтов, пробы удалялись по точным путям. После всех мутантов `git status --short --untracked-files=all` копии — только `M .golangci.yml`. R1, R2 и R5b повторены на базовом `.golangci.yml` (`git checkout -- .golangci.yml`), потом новый конфиг возвращён и сверен `cmp` с рабочей папкой.
+
+| # | Файл · импорт | Пакеты | Ожидание | Итог (новый конфиг) | Базовый конфиг |
+|---|---|---|---|---|---|
+| K0 | `access/gate_test.go` · `shared/eventbus` (контрольный) | `./cmd/telegram-bot/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot`, `desc` запрета шины | — |
+| R1 | `access/gate_test.go` · `shared/testkit/contract` | то же | — | 0 issues | 0 issues |
+| R1b | `access/gate.go` · `shared/testkit/contract` | то же | `no-testkit-in-production` | 1, `no-testkit-in-production` | — |
+| R2 | проба `cmd/telegram-bot-evil/x` · проба `internal/state` | `./cmd/telegram-bot-evil/...` | — | 0 issues | 0 issues |
+| R2b | проба `cmd/telegram-bot-evil/internal/x` · `internal/gateway/client` | то же | `internal-unlisted` (исключение не протекает на `-evil`) | 1, `internal-unlisted` | — |
+| R3 | `access/gate.go` · проба `internal/gateway/client/sub` | `./cmd/telegram-bot/...` | `cmd-telegram-bot` (якорь `$`) | 1, `cmd-telegram-bot` | — |
+| R4 | проба `cmd/telegram-bot/internal/access/internal/deep` · `internal/mechanics` | то же | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R5 | проба `internal/zzprobe/cmd/telegram-bot` · `internal/mechanics` | `./internal/zzprobe/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R5b | проба `internal/zzprobe/cmd/telegram-bot` · `internal/gateway/client` | то же | — | 0 issues | 1, `internal-unlisted` |
+| R6 | `access/gate_test.go` · `internal/gateway/links` | `./cmd/telegram-bot/...` | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| R7 | `access/gate.go` · `shared/eventbus/membus` | то же | `cmd-telegram-bot` | 1, `cmd-telegram-bot` | — |
+| A1 | `access/gate.go` · `internal/gateway/client` | то же | 0 | 0 issues | — |
+
+В R2 проба `internal/state` создана только для того, чтобы импорт разрешился: на кончике EPIC-004 пакета `internal/state` нет. Копия удалена: `git worktree remove` по точному пути без `--force`, затем `git worktree prune`. В `git worktree list` записи `t461r1` нет, каталога нет. Скрипт и копия конфига в scratch удалены по точным именам.
+
+### Замечания
+
+| # | Уровень | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| N-1 | Nit | `.golangci.yml:376-378` (комментарий `cmd-telegram-bot`) | Комментарий говорит: «a test that needs internal/gateway/gatewaytest or membus gets a rule of its own». Но тест бота с импортом `shared/testkit/contract` проходит линтер (R1). Пакет сам импортирует `shared/eventbus` и `membus`, `shared/testkit/gateway` тоже тянет `membus`. Находку `no-testkit-in-production` снимает исключение `_test.go`, а `cmd-telegram-bot` `shared/testkit` не запрещает. depguard видит только прямые импорты, и на базовом конфиге R1 даёт тот же 0, так что это не регрессия. Текст — дословно отметка владельца, в T-461 его не менять | В T-461 — ничего. В бэклог system-architect: решить, можно ли тестам бота брать двойники `shared/testkit/*`, которые приносят шину. Для e2e T-315 на `testkit/gateway.Harness`, скорее всего, можно. Если нельзя — запрет `shared/testkit` в `cmd-telegram-bot` (исключение `_test.go` снимает только список `no-testkit-in-production`) и отдельное правило для тестов. Если можно — уточнить комментарий: «напрямую» |
+| N-2 | Nit | `.golangci.yml:174` | `!**/cmd/telegram-bot/**` снимает `internal-unlisted` с любого пути, где есть `/cmd/telegram-bot/`, в том числе внутри `internal/`. Пакет `internal/<неучтённый>/cmd/telegram-bot` может импортировать `internal/gateway/client` и `api` (R5b; на базовом конфиге — находка `internal-unlisted`). Остальное `internal/*` ему по-прежнему запрещено (R5). Путь надуманный, а глоб depguard сравнивается с абсолютным путём, поэтому привязать шаблон к корню модуля нельзя | Не править. Держать в памяти при разборе `internal-unlisted`: исключение бота — не контекст |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 0 · Nit: 2.
+
+Правило и исключение внесены побайтно по отметке tech-lead#1, с якорями `$`, на своём месте. Существующие правила не ослаблены, кроме надуманного случая N-2. На коде бота: как есть — 0 issues; шина, `membus`, `links`, `client/sub`, вложенный `internal` и тесты бота ловятся `cmd-telegram-bot`; `client` проходит; исключение не протекает на `cmd/telegram-bot-evil`. DoD 1–3 выполнены.
+
+### Предложения в бэклог
+
+1. system-architect: ловушка для новых `cmd/*` по образцу `internal-unlisted`. Сейчас пакет `cmd/<новый>` (R2: `cmd/telegram-bot-evil/x`) импортирует любой `internal/*` без находки, и на базовом конфиге так же. Например, правило `cmd-unlisted`: `files` `**/cmd/**` без `cmd/multiverse`, `cmd/mvctl` и `cmd/telegram-bot`, запрет `multiverse-core.io/internal`. Сначала сверить, какие `internal/*` импортирует `cmd/mvctl`.
+2. system-architect: N-1 — тесты бота и двойники `shared/testkit/*`, которые приносят шину (до T-315).
+
+### Риски и допущения
+
+- Код бота — кончик `epic/EPIC-004-gateway-bot` `c92eb22` на момент ревью. Когда T-311/T-312 добавят `main.go` и новые пакеты, прогон нужно повторить в их ревью.
+- Поведение depguard («каждое совпавшее правило проверяется отдельно») выведено из R4, R5 и R1b, а не из исходников depguard.
+- `--uniq-by-line=false` задан, чтобы находки двух списков на одной строке не схлопнулись. Во всех мутантах была одна находка или ни одной.
+
+## T-460 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-1)
+
+Задача: `eventbus.Permanent`, `ErrPermanent`, `Policy.World` (`WorldRule`, `WorldOptional`, `WorldRequired`) по C-01 v1.10; два contract-кейса на `membus` и kafka. Метка `contract-change`. Ветка `task/T-460-permanent-policy-world` от `a0d45d2`, изменения не закоммичены. Сверка — `git diff a0d45d2` и неотслеживаемые файлы рабочей папки `.worktrees/T-460`.
+
+### Что проверено
+
+- **Дифф целиком:** `shared/eventbus/{delivery,registry}.go`, `README.md`; новые `permanent_test.go`, `policy_world_test.go`, `membus/policy_world_test.go`; `shared/testkit/contract/{contract.go,membus_test.go,redpanda_integration_test.go}`; карточка, `dev-log.md`.
+- **Источники:** `contracts.md` — C-01 v1.10 (`:272`–`:278`, история `:405`–`:408`), C-02 v1.7 (`:451`); КД State §9 (`state-and-mechanics.md:763`–`:787`); DoD — карточка `T-456.md:116`–`:121`.
+- **Код рядом:** `kafka.go:384`–`:395` и `membus.go:447`–`:458` (обе реализации читают через `Delivery.Deliver`), `membus.go:205` (`Publish` → `Route`), `cmd/mvctl/internal/contracts/check.go:239`–`:315` (правило (г) — второй потребитель `Policy.Check`).
+- **Кончики эпиков (только чтение):** `EPIC-002` `281348a`, `EPIC-003` `b9a169c`, `EPIC-004` `c92eb22`.
+
+### Сверка по пунктам задания
+
+1. **Соответствие C-01 v1.10.**
+   - `Permanent(nil)` → `nil` (`delivery.go:46`). Обёртка `Unwrap() []error{ErrPermanent, cause}`: `errors.Is` по обоим, `errors.As` доходит до причины, текст — текст причины. Повторная обёртка `fmt.Errorf("…: %w")` остаётся окончательной.
+   - Порядок в `Deliver` (`delivery.go:147`–`:169`): паника → `deadLetter` сразу, отмена не проверяется, поведение v1.5 не тронуто; затем `ctx.Err()` → возврат без письма; затем `ErrPermanent` → `parkPermanent`. Под отменой `Permanent` не паркуется, повторная доставка работает; проверка отмены стоит раньше парковки.
+   - `parkPermanent` (`:179`–`:191`): письмо `attempts` = номер вызова, запись под `WithoutCancel`. Строка `Error` с `handled=true` пишется после записи письма, без `panic`/`stack`. Неудачная запись идёт прежним путём `logNotParked`: `handled=false`, ошибка из `Deliver`.
+   - `WorldRequired` (`registry.go:122`–`:131`): `World == nil` и пустой `World.Entity.ID` → `ErrPolicyViolation`. `Check` вызывают `Route` (публикация, обе шины) и `Delivery.validate` (чтение, обе шины), так что отдельной проверки не нужно. Deprecated-типы политику не проверяют, как и раньше.
+   - Реестр не менялся: в `shared/contracts` дифф пуст, ненулевого `World` нет.
+2. **Совместимость с EPIC-002 (T-055, `internal/state`).**
+   - `ErrPermanent`/`Permanent` на кончиках EPIC-002/003/004 не встречаются.
+   - `ErrWorldStopped` оборачивает причину через `%w` (`apply.go:422`, `:437`). Причины — ошибки `Publish` и хранилища; ни одна не несёт `ErrPermanent`. `Publish` обеих шин асинхронен и ошибок чужих обработчиков не возвращает. Паника worker'а оборачивается через `%v` (`worker.go:108`).
+   - `Stop` State опирается на «ошибка под отменой → офсет не фиксируется». Этот путь сохранён и стоит раньше новой ветки.
+   - Поведение `internal/state` после слияния develop → EPIC-002 не меняется. Неключевых литералов `eventbus.Policy{…}` нет ни в одном дереве, так что новое поле ничего не ломает при компиляции.
+   - Семь изменённых файлов кода на кончиках эпиков с `a0d45d2` не менялись, конфликтов в коде не будет.
+3. **Публичный API не шире контракта.**
+   - В `eventbus` добавлены `ErrPermanent`, `Permanent`, `WorldRule`, `WorldOptional`, `WorldRequired`, `Policy.World` — ровно перечень C-01 v1.10. `permanentError` и `parkPermanent` не экспортированы.
+   - В `shared/testkit/contract` — `Target.Stalled`, `StalledBus`, `StalledBackoff` (решение оркестратора п. 2). Потребители `contract.Target` во всём дереве и во всех рабочих папках (`EPIC-001…004`, `T-203`, `T-208`, `T-305`, `T-318`, `T-458`, `T-461`) — только `membus_test.go` и `redpanda_integration_test.go` самого пакета. Оба в ветке дополнены; других потребителей нет.
+4. **Качество contract-теста.**
+   - *Застывшая шина.* Паузы `time.Hour` на `clock.Manual`, который никто не двигает. Если окончательную ошибку примут за обычную, подписка повиснет на первой паузе: следующее событие не придёт за `Timeout`, `ReadRange` упрётся в `readCtx`. Отсутствие пауз кейс доказывает. Проверки `attempts = 1` и текста причины идут и по подписке, и по журналу.
+   - *Сторож `checkItStalls`.* Обычная ошибка на той же шине за 300 мс не повторяется. Он ловит подмену `StalledBackoff` нулями (M6 разработчика).
+   - *Флейк 300 мс с `-race`.* Ложного красного не бывает: ручной таймер не срабатывает ни при какой задержке, `calls` больше 1 не станет. Медленный CI может дать только ложный зелёный сторожа, и только для шины с реальными паузами короче ≈ 300 мс. На основной кейс это не влияет. Первый вызов ждётся через `waitFor` с `Timeout`.
+   - Порядок `defer` верный: `sub.stop` раньше `Release`.
+   - *Кейс под отменой.* Проверяет «письма нет» и «новая подписка той же группы получает событие снова». Возврат `ctx.Err()` снаружи `Subscribe` не виден; его закрывает unit `TestDeliverDoesNotParkAPermanentErrorUnderCancellation`.
+5. **Мутанты ревьюера.** Копии `t460r1-<имя>` в scratch, без `-overlay`, замена скриптом с `assert count == 1`. Прогон: `go test -short -count=1 ./shared/eventbus/... ./shared/testkit/contract/` (unit и contract на membus, kafka не запускался). Копии удалены по точным путям.
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный, без изменений | **зелёный**, 3 пакета ok |
+| R1 | «`Permanent` оборачивает `nil`» — проверка `err == nil` удалена | **красный**: `TestPermanentKeepsTheCauseAndItsText` |
+| R2 | «`errors.As` не доходит до причины» — `Unwrap() error { return ErrPermanent }` + метод `Is`, делегирующий причине (`errors.Is` по обоим остаётся истинным) | **красный**: `…KeepsTheCauseAndItsText` («errors.As does not reach the cause») |
+| R3 | «`WorldRequired` при чтении не проверяется» — в `Delivery.validate` политика с `World = WorldOptional` | **красный**: `TestDeliverParksAnEventTheWorldRuleRejects…` (eventbus), `TestReadParksAnEventWithoutTheWorld…` (membus) |
+| R4 | строка `failed permanently` до записи письма | **красный**: `TestDeliverReportsAFailingSinkForAPermanentError` (две строки лога) |
+| R5 | `attempts` окончательной ошибки всегда 1 | **красный**: `TestDeliverParksAPermanentErrorWithTheNumberOfItsCall` |
+| R6 | паника со значением `Permanent(…)` при живом контексте идёт в `parkPermanent`: `if panicked && (ctx.Err() != nil \|\| !errors.Is(err, ErrPermanent))` | **зелёный** — см. Mi-2 |
+
+6. **Прогоны** (go1.26.8 windows/amd64).
+   - `go build ./... && go vet ./...` — 0; `go vet -tags integration ./shared/eventbus/... ./shared/testkit/contract/` — 0.
+   - `go test -short -count=1 ./shared/...` — все пакеты ok. Оба новых contract-кейса на membus: 0,31 с и 0,01 с.
+   - `golangci-lint run ./shared/...` — 0 issues; `--build-tags integration` по `eventbus`/`contract` — 0 issues.
+   - `go run ./cmd/mvctl contracts check` — «65 types, 8 topics, 58 schema files checked»; `gofmt -l shared/` — пусто.
+   - `-race` не запускался: нет cgo.
+
+### Замечания
+
+| # | Уровень | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/mvctl/internal/contracts/check.go:269`–`:270`, `:298`–`:315` | Правило (г) сверяет политику типа с политикой топика на восьми фикстурах `policyFixtures`. У фикстур нет `World`. Если владелец поставит `WorldRequired` типу на `player_events`, `llm_records` или `narrative_output`, `spec.Policy.Check` отвергнет все восемь, а политика топика примет. `contracts check` покраснеет ложным «policy refuses actor_kind=human without meta.agent, which player_events allows». Сейчас не проявляется: первые типы с правилом (`entity.*.proposed`, T-056) идут в `system_events`, где правила топика нет. Но новое поле ломает посылку правила «политику держат против фикстур, а не сравнивают по полям» | Дать фикстурам мир: `World: &eventbus.WorldRef{Entity: eventbus.EntityRef{ID: "world-1", Type: "world"}}`. Правило (г) по-прежнему проверяет только `actor_kind`/`agent`. Плюс тест `check_test.go` на тип с `WorldRequired` на `player_events`. Сейчас однострочной правкой или в бэклог tech-lead#1 до первой строки `WorldRequired` на правленом топике |
+| Mi-2 | Minor | `shared/eventbus/permanent_test.go:167`–`:189` | Комментарий теста обещает «a permanent error does not borrow its trace», но проверяется только текст письма под отменой. Мутант R6 выжил: паника со значением `Permanent(…)` при живом контексте уходит в `parkPermanent`. К строке паники (`handled=false`, `stack`) добавляется `Error` «failed permanently» с `handled=true`. C-01 v1.10: «`ErrHandlerPanic` и `handled=false` остаются за перехватом паники». Текст письма и `attempts` совпадают, поэтому ни один тест разницы не видит | В `TestDeliverKeepsAPanicApartFromAPermanentError` (или отдельным случаем при живом контексте) подключить `recordingLog` и проверить: запись одна, у неё есть `panic` и `stack`, `handled=false`, строки «failed permanently» нет. Прогнать R6 — должен покраснеть |
+| N-1 | Nit | `shared/testkit/contract/contract.go:99` | `StalledBackoff` — экспортированная изменяемая переменная, общая для обеих целей. Кейс или цель, переписавшие элемент, незаметно сломают сторож другой цели | Функция `StalledBackoff() []time.Duration`, возвращающая новый срез, или копия `slices.Clone` в целях |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 1.
+
+Код соответствует C-01 v1.10 и DoD карточки T-456: порядок «паника → отмена → окончательная», `Permanent(nil)`, `errors.Is/As`, `WorldRequired` при публикации и при чтении на обеих шинах. Застывшая шина доказывает отсутствие пауз, флейка на `-race` не даёт. Поведение `internal/state` EPIC-002 при синхронизации не меняется. Mi-1 — скрытое взаимодействие нового поля с `mvctl contracts check` вне нынешних строк реестра. Mi-2 — пробел теста при верном коде. Оба закрываются малыми правками до коммита или записями в бэклог, вердикт от выбора не зависит.
+
+### Предложения в бэклог
+
+1. tech-lead#1 (EPIC-001): Mi-1, если не закрыт в T-460. Срок — до первой строки `WorldRequired` у типа на `player_events`/`llm_records`/`narrative_output`.
+2. tech-lead#1: contract-кейс «предложение без мира» после T-056 (п. 1 бэклога разработчика). Выигрыш мал: обе шины проверяют через тот же `Delivery`, а R3 уже ловят unit-тесты `eventbus` и `membus`.
+3. system-architect: C-01 не говорит, что делать с голым `ErrPermanent` без причины. Сейчас такое событие паркуется с текстом «eventbus: permanent handler error». Можно явно разрешить или запретить.
+
+### Риски и допущения
+
+- Kafka-вариант обоих кейсов не запускался (запрет задания). Его зелёный прогон взят из карточки: один интеграционный прогон разработчика, 26 кейсов.
+- `-race` недоступен (нет cgo). Оценка флейка `checkItStalls` — рассуждением: ручные таймеры не срабатывают, поэтому ложный красный невозможен.
+- Совместимость с EPIC-002 проверена по кончику `281348a` рабочей папки `.worktrees/EPIC-002`. Незакоммиченные правки T-055/T-056 в других папках не смотрелись.
