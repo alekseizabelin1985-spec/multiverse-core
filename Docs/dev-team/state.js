@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:38:28+03:00",
+  "updatedAt": "2026-09-13T15:39:15+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8742,7 +8742,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Приёмка T-201 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:39:15+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8812,6 +8812,16 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Ревью #2: итерация 2 links/HTTP",
       "startedAt": "2026-09-13T15:38:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Отметка владельца: .golangci.yml и архив",
+      "startedAt": "2026-09-13T15:39:15+03:00",
       "finishedAt": null
     }
   ],
@@ -11635,6 +11645,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-303 · итерация 2 (TEAM-3/developer#1, возобновление): M-1 /data (nonroot, 0700) в build/Dockerfile и абзац runbook о пересоздании тома gateway-data (не выполнялось; на стенде нужно make image && make up && make health — это стек владельца); 503 forget_incomplete по условиям архитектора (Retry-Afte"
+    },
+    {
+      "at": "2026-09-13T15:39:15+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 принята TEAM-2/tech-lead#2 (возобновлённая приёмка): DoD 5/5 и общий DoD §1, make test — ok, shared/agent 93,3 %; N-3/N-4 закрыты тестами (мутанты M16/M9/M10 убиты); пробы слияния с кончиком эпика — .golangci.yml и tasks.md без конфликта, dev-log/review — appendtail. Бэклог разнесён в T-202, T"
     }
   ],
   "blockers": [],
