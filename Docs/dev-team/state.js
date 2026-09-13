@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:36:06+03:00",
+  "updatedAt": "2026-09-13T15:37:02+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2544,6 +2544,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-456.md"
+        },
+        {
+          "id": "T-457",
+          "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-457.md"
         }
       ],
       "defects": [],
@@ -4132,7 +4145,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-439",
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
@@ -8769,7 +8782,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Итерация 2: ADR-029 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:37:02+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -8779,6 +8792,16 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Ревью #1: compose-lint без окружения CI",
       "startedAt": "2026-09-13T15:36:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Ревью #2: ADR-029 и потолок нарратива",
+      "startedAt": "2026-09-13T15:37:02+03:00",
       "finishedAt": null
     }
   ],
@@ -11584,6 +11607,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-449 принята tech-lead#1 (возобновлённая приёмка): DoD 1–5 выполнен, C-03 v1.3 сверен с кодом EPIC-002 24f1baf, правило C-15 = ADR-005 побайтно; R2-Mi-1/R2-Mi-2/Nit ревью #2 внесены в новый раздел T-456 tasks.md (номер записи C-08, ожидаемо v1.5, выбирает system-architect: v1.4 уже занят T-444). Ко"
+    },
+    {
+      "at": "2026-09-13T15:37:02+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · итерация 2 (TEAM-2/architect#2, возобновление): ADR-029 «ярлыки вызова нарратива» (предложено; поправки ADR-016 п. 4 и ADR-017 п. 5 — на подтверждение system-architect). Решение итерации 1 пересмотрено: схема narrative.json статична (pattern ^e[1-9][0-9]?$/^b…$), выдуманный ярлык страж отбра"
+    },
+    {
+      "at": "2026-09-13T15:37:02+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Заведена T-457 (system-architect#1, EPIC-001, contract-change, S): очередь решений архитектора — (1) подтверждение поправок ADR-016/ADR-017 по ADR-029 и C-07 v1.4 поле ref у unknown_entity (или reason=other насовсем); (2) T-054: touched — id, players_present вне инварианта, выход погибшего из участи"
     }
   ],
   "blockers": [],
