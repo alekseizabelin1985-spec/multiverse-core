@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:41:44+03:00",
+  "updatedAt": "2026-09-14T02:48:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3215,13 +3215,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-471",
           "title": "Законы мира в процессе: rules/dark-forest.yaml и Config.Invariants в contexts_state.go; норма rest hp == hp_max и строка system по C-02 v1.8 (после T-470, T-056)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
-          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T02:48:50+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 85,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-471.md"
         },
@@ -3237,6 +3237,12 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-472.md"
+        },
+        {
+          "id": "T-474",
+          "title": "Предложения без ответа после восстановления State",
+          "status": "todo",
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-474.md"
         }
       ],
       "defects": [],
@@ -10792,7 +10798,7 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Просмотр T-471: ownership.go, пометки C-02, эталон §4.2",
       "startedAt": "2026-09-14T02:25:14+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:48:50+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10822,7 +10828,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Приёмка T-057, строки T-058/T-059",
       "startedAt": "2026-09-14T02:35:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:48:50+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -10842,6 +10848,26 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Итерация 3: мутанты Acked/Withdrawn, 503 на истёкший бюджет",
       "startedAt": "2026-09-14T02:41:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "Отметка владельца shared/contracts",
+      "startedAt": "2026-09-14T02:48:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-474",
+      "action": "Заведение T-474",
+      "startedAt": "2026-09-14T02:48:50+03:00",
       "finishedAt": null
     }
   ],
@@ -15087,6 +15113,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-308 · ревью #2 (code-reviewer#3): принять — 0/0/1/3. Откат без гонок (одно соединение, условный DELETE), turns_count не уходит в минус, повтор после 503 идемпотентен; реализаций actions.Turns вне T-308 нет. Mi-1 мутанты Acked(ctx)/Withdrawn(ctx) зелёные и устаревший тест порядка; N-2 истёкший бюдж"
+    },
+    {
+      "at": "2026-09-14T02:48:50+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-471 · просмотр system-architect#1: одобрено. Строка system пуста по C-02 v1.8 п. 6; порядок rest уточнён — C-02 v1.8a (норма пути → ApplyOps → встреча → вид hp → значение); пометки «Код расходится до T-471» сняты в C-02 и КД State §4.1/§4.6 (contracts v0.16); эталон §4.2 дополнен MV_STATE_WORLDS и"
+    },
+    {
+      "at": "2026-09-14T02:48:50+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-471 слита: коммит c54be80, ветка запушена, слита в epic/EPIC-002-state-mechanics (c43ec2f) без конфликтов; EPIC-002 собирается, env check 81 переменная, тесты multiverse/state/gateway зелёные, эпик запушен. Итераций ревью — 1 (итерация 2 по Minor принята тимлидом). Время — 85 мин."
+    },
+    {
+      "at": "2026-09-14T02:48:50+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение оркестратора по вопросу system-architect#1 (предложения в [cursor, End) пропускаются при восстановлении State — действие игрока во время рестарта core получает timeout): вариант A — отдельная задача T-474 EPIC-002 после T-057/T-059 (State решает предложения без факта и отказа как пришедшие п"
+    },
+    {
+      "at": "2026-09-14T02:48:50+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 принята tech-lead#2: DoD закрыт тестами, итерация 2 проверена по коду, persist_failed при живом интенте принят; строки T-058 (3) и T-059 (8) внесены в индекс 0.1.6; пересечение с T-471 — код без общих файлов, КД 0 конфликтов, tasks.md — стандартный рецепт. До слияния — отметка tech-lead#1 по r"
     }
   ],
   "blockers": [],
