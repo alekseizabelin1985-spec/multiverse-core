@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:23:58+03:00",
+  "updatedAt": "2026-09-13T21:30:30+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3360,7 +3360,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -10081,7 +10081,7 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Ревью #2 парсера",
       "startedAt": "2026-09-13T21:19:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:30:30+03:00"
     },
     {
       "instance": "developer#2",
@@ -10091,6 +10091,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Снятие блокера FakeEncounter",
       "startedAt": "2026-09-13T21:23:58+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-209",
+      "action": "Приёмка парсера",
+      "startedAt": "2026-09-13T21:30:30+03:00",
       "finishedAt": null
     }
   ],
@@ -13838,6 +13848,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по T-056: правка shared/testkit/swarm (FakeEncounter) разрешена в T-056 минимально с отметкой владельца tech-lead#2 EPIC-003 — died_at/killed_by только NPC по таблице §4.6, тесты без зависимости от последовательности id, WithCauseID сохраняется; остановленный мир — обычная ошибк"
+    },
+    {
+      "at": "2026-09-13T21:30:30+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-209 · ревью #2 (TEAM-2/code-reviewer#1): принять — 0/0/2/2. Ma-1, Mi-1, Mi-4, N-1, N-3 закрыты; ложные отказы только при незакрытой [ в преамбуле (редко, цена — повтор). Mi-5 регрессия: нечётные кавычки в прозе рассуждения не дают снять хвост и принимается черновик; Mi-6 скобка внутри строки пряче"
     }
   ],
   "blockers": [],
