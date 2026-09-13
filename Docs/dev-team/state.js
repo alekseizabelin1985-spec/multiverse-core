@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:10:55+03:00",
+  "updatedAt": "2026-09-13T16:12:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2509,7 +2509,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T14:36:44+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8893,7 +8893,7 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "Ревью #1: гонка testkit/state, флак fight-05",
       "startedAt": "2026-09-13T15:56:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:12:01+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8953,6 +8953,16 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Провайдеры fake и recorded",
       "startedAt": "2026-09-13T16:10:55+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "Приёмка T-454 гонка и флак CI",
+      "startedAt": "2026-09-13T16:12:01+03:00",
       "finishedAt": null
     }
   ],
@@ -11860,6 +11870,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Начата T-207 (TEAM-2/developer#2, подволна B): провайдеры fake и recorded internal/llm/providers — зависимость T-206 слита."
+    },
+    {
+      "at": "2026-09-13T16:12:01+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 · ревью #1 (TEAM-1/code-reviewer#3): принять — 0/0/1/3. Все 12 отчётов DATA RACE CI — consumer_test.go, исправлено; канал opened без дедлока; обёртка learning верна (мутанты R2/R5/R6/R8 красные, предохранитель 10 с с понятной диагностикой); с T-446 текстовых конфликтов нет. Mi-1 ожидание learn"
     }
   ],
   "blockers": [],
