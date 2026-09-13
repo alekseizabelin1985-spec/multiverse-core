@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:58:06+03:00",
+  "updatedAt": "2026-09-13T18:02:47+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -12528,6 +12528,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-459 выполнена TEAM-2/architect#2: ADR-029 «принято» (N-6, unknown_entity+element+ref, labels_hash), КД роя §9.1 (fake/recorded, ключ из llm.Request, shared/recording), §9.2 (Allow перед каждой попыткой, синхронный Observe), §13.2 решения по валидатору (Issue.Code для 7а — T-222, city-gm резервная "
+    },
+    {
+      "at": "2026-09-13T18:02:47+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние F (постоянное разрешение): epic/EPIC-001-foundation → develop (7ad4222), состав — T-457 (contracts.md v0.13, ownership v0.7). make ci BASE=develop — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация develop → EPIC-002/003/004 без конфликтов: C-07 v1.5, C"
     }
   ],
   "blockers": [],
