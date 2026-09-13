@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:52:42+03:00",
+  "updatedAt": "2026-09-13T14:56:38+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2705,7 +2705,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/developer#1",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -8542,7 +8542,7 @@ window.DEVTEAM_STATE =
       "task": "T-054",
       "action": "Ревью #1: инварианты соло",
       "startedAt": "2026-09-13T14:39:15+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:56:38+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -8602,6 +8602,26 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Приёмка T-201 shared/agent v2",
       "startedAt": "2026-09-13T14:52:04+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Приёмка T-054 инварианты соло",
+      "startedAt": "2026-09-13T14:56:38+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Ревью #1: compose-lint без окружения CI",
+      "startedAt": "2026-09-13T14:56:38+03:00",
       "finishedAt": null
     }
   ],
@@ -11347,6 +11367,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-455 выполнена TEAM-1/devops-engineer#1: причина не .env, а шаг «Read the pinned versions» — build/versions.env уходит в $GITHUB_ENV, пустой CHROMA_IMAGE из окружения сильнее --env-file и скрывает заглушку .github/ci.env. compose-lint.sh теперь снимает из своего окружения имена, объявленные в своих"
+    },
+    {
+      "at": "2026-09-13T14:56:38+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 · ревью #1 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Пять проверок детерминированы, законные пути соло не отвергаются, реестр десяти законов закреплён. Minor-1 inv-01 по участникам отвергает гонку «/forget раньше пакета промаха» (соло) и погибшего участника группы (I2); Minor-2 сторона NPC "
     }
   ],
   "blockers": [],
