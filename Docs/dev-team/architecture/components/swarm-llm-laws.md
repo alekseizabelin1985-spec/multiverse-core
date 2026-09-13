@@ -291,7 +291,7 @@ var ErrUnavailable, ErrBudget, ErrQuarantined, ErrInvalidAfterRetries, ErrFilter
 // internal/llm/guardian (ADR-017)
 // (изм. T-444, ADR-001 доп. 2026-09-13 п. 1) страж не импортирует internal/laws и internal/mechanics: вместо laws.LawsVersion
 // и map[string]mechanics.Invariant — данные; адаптер mechanics.Invariant → InvariantFunc живёт в internal/swarm
-type Input struct { Level agent.AgentLevel; Role string; Scope eventbus.ScopeRef; Allowed []string; Owned []string; View StateView; LawsVersion string; CheckKeys []string; Invariants map[string]InvariantFunc; AbsenceEventIDs map[string]bool; Kind SchemaKind }
+type Input struct { Level agent.AgentLevel; Role string; Scope eventbus.ScopeRef; Allowed []string; Owned []string; View StateView; LawsVersion string; CheckKeys []string; Invariants map[string]InvariantFunc; AbsenceEventIDs map[string]string; Mentions map[string]string; Kind SchemaKind } // (изм. T-439, ADR-029 п. 5) нарратив: ярлык вызова → id события (`b1…`) и → id сущности (`e1…`); прежде AbsenceEventIDs map[string]bool — множество id событий
 type StateView interface { Entity(id string) (Entity, bool); InScope(id string, scope eventbus.ScopeRef) bool; Position(id string) string }
 type InvariantView interface { Get(id string) (*entity.Entity, bool); ByType(t string) []*entity.Entity; WorldID() string } // набор методов mechanics.StateView; страж строит его сам: View + ops на копии (§10.4)
 type InvariantFunc func(v InvariantView, touched []string) []Violation // Violation{InvariantID, EntityID, Message}
@@ -532,14 +532,16 @@ Generate(call):
   0. replay-режим: provider = recorded (шаги 2–5 читают запись; запись llm.output не издаётся, meta.replay=true при пробросе)
   1. budget.Allow(world, level, phase, provider) → нет → publish llm.output.rejected{reason: budget_exceeded, budget{kind,limit,window}} → ErrBudget (без вызова)
   2. prompt.Build(call.Prompt) → system, user, prompt_hash (SHA-256); по флагу MV_LLM_STORE_PROMPTS=true → prompts-{world}/{cid}/{agent}/{phase}-{attempt}.txt
+     (изм. T-439, ADR-029 п. 8; под шагом 2 — приёмка T-439, ревью #2 N-11) replay-режим: prompt_hash шага 2 ≠ prompt_hash записи → warn llm_replay_prompt_drift; нарратив с непустыми mentions/background_refs — ярлыки не разрешаются (массивы пусты), text используется
   3. for attempt := 1; attempt <= 1+retries; attempt++ :
        resp, err := provider.Generate(ctx(timeout фазы), req)        # ошибка/таймаут → status=error, повтор при временной ошибке, иначе → ErrUnavailable
        value, strategy, perr := parser.Parse(resp.Content, schema)   # ADR-016; perr → status=invalid(schema_invalid) → retry
+       (изм. T-439, ADR-029 п. 4) Kind=narrative: ярлык eK/bK в text → status=invalid + rejected{reason: schema_invalid} без element → retry с подсказкой
        lerr := parser.CheckLanguage(texts(value, call.TextPaths))    # 0 CJK, латиница ≤ LLM_LATIN_MAX_RATIO (0.10) → status=invalid + rejected{reason: language} → retry   (изм. T-444: статуса rejected_language нет — C-07 v1.2, ADR-017 доп. 1)
        fdec, ferr := filter.Check(texts)                              # error → status=filter_error (raw НЕ сохраняется — изм. T-444, C-07 v1.2, ОВ-33); block → status=quarantined (raw НЕ сохраняется) + content.incident.recorded; без повтора
        verdict := guardian.Evaluate(value, call.Guard)               # чистая функция; даёт итоговый status valid|partially_rejected|invalid и rejected[]
        ev := record.LLMOutput(call, attempt, resp, status, hashes, parse{strategy}, filter{…}, tokens, latency)   # ЗАПИСЬ ДО ИСПОЛЬЗОВАНИЯ
-       for r in verdict.Rejected: publish llm.output.rejected{llm_output{event{id: ev.ID}}, reason, element, entity}
+       for r in verdict.Rejected: publish llm.output.rejected{llm_output{event{id: ev.ID}}, reason, element, entity}   # (изм. T-439, ADR-029 п. 6) выдуманная ссылка: до C-07 v1.4 reason=other + element, после — unknown_entity + ref
        if status ∈ {valid, partially_rejected}: return Result{Value: verdict.Value, OutputEventID: ev.ID}
        if status ∈ {quarantined, filter_error}: return ErrQuarantined/ErrFilter
        if status == invalid && verdict.Reason == law_violation(stale laws): обновить laws_version в промпте, retry
@@ -576,7 +578,7 @@ Generate(call):
 
 | Правило | `narrative.json` (`{text, background_refs[], mentions[], tone?}`) | `tick-*.json` (`{events[]{type, summary, ops[]{path, value}, affects[]?, entity?}}`) |
 |---|---|---|
-| 3 `unknown_entity` | `mentions[i]` ∉ `View`/не видима → элемент удаляется из `mentions` (текст остаётся); `background_refs[i]` ∉ `AbsenceEventIDs` → удаляется | `events[i].entity`/`affects[]` ∉ View или не видимы → `events[i]` отброшен |
+| 3 `unknown_entity` | `mentions[i]` ∉ `View`/не видима → элемент удаляется из `mentions` (текст остаётся); `background_refs[i]` ∉ `AbsenceEventIDs` → удаляется. *(изм. T-439, ADR-029 п. 5–6)* Элементы — ярлыки вызова: `mentions[i]` разрешается через `Input.Mentions` в id сущности, `background_refs[i]` — через `AbsenceEventIDs` в id события. Ярлыка нет в таблице (выдуман) → элемент отброшен, текст остаётся; событие — до C-07 v1.4 `reason=other` с `element`, после — `unknown_entity` с `ref`. Ярлык в таблице, сущность не видима → `unknown_entity`, `entity` — id и тип из `View`. Таблица не передана — непустой `mentions` при `Mentions == nil` или непустой `background_refs` при `AbsenceEventIDs == nil` — ошибка программы: весь ответ `invalid`, `reason=other` без `element`, лог `error` *(условие по массиву — приёмка T-439, ревью #2 N-6; ADR-029 п. 5 пока формулирует его для обеих карт сразу)* | `events[i].entity`/`affects[]` ∉ View или не видимы → `events[i]` отброшен |
 | 4 `player_agency` | текст не проверяется (нет структурных полей действий) | `events[i].type` начинается с `player.` или `ops[].path` меняет сущность типа `player` → отброшен |
 | 5 `level_violation` | — (allowed = `[narrative.output]`, страж не применяется; Emitter — §5.4) | `events[i].type` ∉ `Allowed`; `ops[]` меняют сущность типа ∉ `Owned` или вне scope агента (регион GM — только свой регион/NPC) → отброшен |
 | 6 `law_violation` | `LawsVersion` вызова ≠ `Laws.Current` → весь ответ `invalid`, повтор с новой версией | инварианты по `check`-ключам к гипотетическому состоянию `View + ops` (см. 10.4): провал → `events[i]` отброшен с `details{invariant_id}`; stale laws → `invalid` |
@@ -612,7 +614,7 @@ Read-only проекция сущностей мира: `map[entityID]Entity{ID,
 - `EventWindow`: кольцо последних `N=50` событий на scope (`solo:*`, `group:*`, `region:*`, `world:*`) с `{id, type, at, actor_kind, summary}`; `summary` — короткий рендер `prompt/events.go` (перенос `formatEventDescription`).
 - `BackgroundIndex`: на `(world)` и `(region)` — события `world.*`, `region.*`, `npc.*` с `meta.actor_kind=system` за `SWARM_BACKGROUND_INDEX_TTL=30d` (≤ ~3 000 записей/мир при B=4).
 - `Presence`: `player_id → {last_seen_at, region}` из `player.*` (последняя активность).
-- `Absence(player, region, now)`: если `last_seen_at` есть и `now − last_seen_at ≥ 30 мин` (или это первый `enter` после `left_region`) → `since_at = last_seen_at`, события = `BackgroundIndex(world) ∪ BackgroundIndex(region)` в `(since_at, now]`, отсортированы по `at`, лимит 20 последних (остальное — счётчик). Итог: `absence{since_at, background_events_count}` + `background_refs[]` кандидаты (страж пропускает в `narrative.output` только те `background_refs`, что были в контексте).
+- `Absence(player, region, now)`: если `last_seen_at` есть и `now − last_seen_at ≥ 30 мин` (или это первый `enter` после `left_region`) → `since_at = last_seen_at`, события = `BackgroundIndex(world) ∪ BackgroundIndex(region)` в `(since_at, now]`, отсортированы по `at`, лимит 20 последних (остальное — счётчик). Итог: `absence{since_at, background_events_count}` + `background_refs[]` кандидаты (страж пропускает в `narrative.output` только те `background_refs`, что были в контексте). *(изм. T-439, ADR-029 п. 2)* В промпт нарратива события отсутствия идут под ярлыками `b1…b20`, `background_refs[]` ответа — ярлыки; id событий в `narrative.output.background_refs` подставляет роль по таблице вызова.
 - Всё персистится в снапшоте роя (§4.3) и восстанавливается при догоне; чтения журнала **по времени** не требуется (изм. G2: `Journal` C-01 v1.1 даёт диапазон по офсетам — используется для догона, не для сводки; сводка фона по-прежнему из индекса роя).
 
 ### 11.3. memoryContext (C-09)
@@ -621,7 +623,7 @@ Read-only проекция сущностей мира: `map[entityID]Entity{ID,
 
 ### 11.4. Секции промпта (`internal/llm/prompt`, ADR-005 п. 4)
 
-System (кэшируемая часть, порядок фиксирован): `<role>` (из `## system` блупринта) → `<laws laws_version="v1">` (декларативные законы `Laws.Current` + инварианты одной строкой) → `<canon>` (`## canon` мира + региона родителя) → `<absolute_limits>` (короткая позитивная формулировка из `config/absolute-limits.yaml.prompt_notice`) → `<format>` (краткое описание схемы; сама схема уходит в `format`). User: `<state>` (WorldView: мир{погода, время}, регион{описание из `## description`}, игрок/участники{hp/hp_max, статус, инвентарь}, NPC{hp, статус}, встреча{раунд}) → `<events>` (окно журнала + события причины, с `actor_kind`) → `<absence since_at=…>` (если есть) → `<facts source="memory">` (если есть) → `<player_text>` (реплики `say` и имена — **только как данные**, `<`→`&lt;`, `>`→`&gt;`, длина ≤ 500) → `<task>` (из `## phase2`/`## tick` с подстановкой плейсхолдеров). `locale` — в `<role>` и в `meta.locale`. `prompt_hash = SHA-256(system + "\n \n" + user)`.
+System (кэшируемая часть, порядок фиксирован): `<role>` (из `## system` блупринта) → `<laws laws_version="v1">` (декларативные законы `Laws.Current` + инварианты одной строкой) → `<canon>` (`## canon` мира + региона родителя) → `<absolute_limits>` (короткая позитивная формулировка из `config/absolute-limits.yaml.prompt_notice`) → `<format>` (краткое описание схемы; сама схема уходит в `format`). User: `<state>` (WorldView: мир{погода, время}, регион{описание из `## description`}, игрок/участники{hp/hp_max, статус, инвентарь}, NPC{hp, статус}, встреча{раунд}) → `<events>` (окно журнала + события причины, с `actor_kind`) → `<absence since_at=…>` (если есть) → `<facts source="memory">` (если есть) → `<player_text>` (реплики `say` и имена — **только как данные**, `<`→`&lt;`, `>`→`&gt;`, длина ≤ 500) → `<task>` (из `## phase2`/`## tick` с подстановкой плейсхолдеров). `locale` — в `<role>` и в `meta.locale`. `prompt_hash = SHA-256(system + "\n \n" + user)`. *(изм. T-439, ADR-029 п. 2–3)* В вызовах нарратива (`Kind=narrative`) сущности `<state>` и события `<absence>` помечены ярлыками вызова в скобках (`Альфа-волк [e3]`, `[b2] …`) вместо id, а в `<events>` сущности названы именем и ярлыком, без id (§13.4.2). Ярлыки — только в `user`: `system`, включая `<format>`, от набора ярлыков не зависит, и `system` двух вызовов с разными таблицами побайтно равен — кэш префикса сохраняется. `<format>` нарратива — статичное правило ярлыков. Вызовы тика несут id, как прежде.
 
 Словарь плейсхолдеров блупринта (`shared/agent/placeholders.go`): `{world.name} {world.weather} {world.time_of_day} {world.day} {region.name} {region.description} {player.name} {player.hp} {player.hp_max} {events} {state} {absence} {canon} {laws_version} {locale} {npc.name} {encounter.round}`; неизвестный → ошибка валидации (C-11).
 
@@ -741,21 +743,106 @@ type AgentBlueprint struct {
 - `global-dark-forest-world.md` — как в §3.3; добавлены `locale: ru`, `## system`, `## tick`; `invariants` — ссылки на `laws/dark-forest-world@v1` (список `id/check` дублируется валидатором против файла законов; расхождение — error).
 - `domain-dark-forest.md` — как в §3.3 (`version: "1.1"`), `trigger.intervals{idle: 30m, active: 60s}`, `encounter{detect_on: tick, perception: all, child_blueprint: encounter-wolf}`; секции `## description`, `## canon`, `## system`, `## tick`. Заменяет `shared/agent/examples/domain-dark-forest.md` (старый файл удаляется; старые `configs/gm_*.yaml` не конвертируются — ADR-002 п. 6).
 - `encounter-wolf.md` — как в §3.3; `scope_binding: {type: "solo|group", pattern: "*"}`; `llm: {phase1: {mode: rules}, fallback: rules}`; `round{timeout: 60s, idle_after_missed: 2}`.
-- `player-gm.md` — `level: task`, `parent: {name: "region-gm", instance: dynamic}`, `trigger: {type: event, event_name: "player.*"}`, `ttl: 45m`, `llm.phase2{model: <из baseline.md, стартово qwen3:30b-a3b>, temperature: 0.8, max_tokens: 700, thinking: false, schema_ref: schemas/agent/narrative.json}`, `retries: 2`, `fallback: template`, `allowed_event_types: [narrative.output]`, `owned_entity_types: []`, `absolute_limits_ref: config/absolute-limits.yaml`; секции `## system`, `## phase2`.
-- `group-narrator.md` — `level: task`, `role: group-narrator`, `scope_binding: {type: group, pattern: "group:*"}`, `parent: {name: region-gm, instance: dynamic}`, `trigger: {type: event, event_name: group.created}`, `ttl: 45m`, `llm.phase2` как у `player-gm`, `retries: 2`, `fallback: template`, `allowed_event_types: [narrative.output]`, `owned_entity_types: []`, `absolute_limits_ref`; секции `## system` («описываешь раунд для всей группы; каждый участник назван по имени; числа механики — истина»), `## phase2`.
+- `player-gm.md` — `level: task`, `parent: {name: "region-gm", instance: dynamic}`, `trigger: {type: event, event_name: "player.*"}`, `ttl: 45m`, `llm.phase2{model: <по ops/metrics/baseline.md §5: базовая E Qwen3.8-27B-UD-Q3_K_XL>, temperature: 0.7, max_tokens: <потолок конфигурации §13.4.1, для E 160>, thinking: false, schema_ref: schemas/agent/narrative.json}` *(изм. T-439; прежде — «стартово qwen3:30b-a3b», `temperature: 0.8`, 700 токенов)*, `retries: 2`, `fallback: template`, `allowed_event_types: [narrative.output]`, `owned_entity_types: []`, `absolute_limits_ref: config/absolute-limits.yaml`; секции `## system`, `## phase2`.
+- `group-narrator.md` — `level: task`, `role: group-narrator`, `scope_binding: {type: group, pattern: "group:*"}`, `parent: {name: region-gm, instance: dynamic}`, `trigger: {type: event, event_name: group.created}`, `ttl: 45m`, `llm.phase2{model, temperature: 0.7, thinking: false, schema_ref: schemas/agent/narrative.json}` как у `player-gm`, но **потолок `max_tokens` — свой, группы** (§13.4.1, для E 160) *(изм. T-439; прежде — «`llm.phase2` как у `player-gm`»)*, `retries: 2`, `fallback: template`, `allowed_event_types: [narrative.output]`, `owned_entity_types: []`, `absolute_limits_ref`; секции `## system` («описываешь раунд для всей группы; каждый участник назван по имени; числа механики — истина»), `## phase2`.
 
-Модель на фазу — параметр блупринта: замена конфигурации A/B/C/D матрицы (overview §18.1) = правка YAML.
+Модель на фазу — параметр блупринта: замена конфигурации A/B/C/D матрицы (overview §18.1) = правка YAML. *(изм. T-439)* Смена конфигурации меняет вместе с моделью и потолок длины: `model` и `max_tokens` в YAML, длина L в `## phase2` и `text.maxLength` в `schemas/agent/narrative.json` вместе с c и c_min в её `$comment` — одним PR (T-260, ADR-005 доп. 3 п. 2); Go не меняется.
 
-**(изм. G2) Модели по OQ-A-18 (U-2)**: стартовая конфигурация блупринтов — **C, одна `qwen3:30b-a3b`** во всех фазах с LLM (`player-gm.llm.phase2.model`, `group-narrator.llm.phase2.model`, `global-*.llm.tick.model`, `domain-*.llm.tick.model`); Phase 1 везде `mode: rules` (модель не нужна). Если матрица F-8 (`ops/metrics/baseline.md`) не подтверждает NFR-002/NFR-090 — запасная **A: `qwen3:8b` для `tick`, `qwen3:14b` для `phase2`**. Переключение — правка пяти YAML-полей без кода; в блупринтах строка `# model: per ops/metrics/baseline.md (OQ-A-18)` рядом с полем. Валидатор 7а гарантирует, что модель есть у провайдера. Замена B/D — только материал замера.
+**(изм. T-439) Модели по ADR-005 доп. 3 и `ops/metrics/baseline.md` §5**: базовая конфигурация на переход — **E, одна `Qwen3.8-27B-UD-Q3_K_XL`** во всех фазах с LLM (`player-gm.llm.phase2.model`, `group-narrator.llm.phase2.model`, `global-*.llm.tick.model`, `domain-*.llm.tick.model`), `thinking: false`; Phase 1 везде `mode: rules` (модель не нужна). Целевая конфигурация нарратива — **`Qwen3.6-35B-A3B-UD-Q3_K_XL`**: становится базовой по исходу T-438 (три `pass` в ячейке платформы и объяснённый хвост «прочего»). Порядок запасных — `decision_order` матрицы: E → Qwen3.6-35B-A3B → C (`qwen3:30b-a3b`) → A (`qwen3:8b` для `tick`, `qwen3:14b` для `phase2`). Правило выбора — «проходит пороги **и** даёт нужную длину нарратива» (доп. 3 п. 1), поэтому переход меняет вместе с моделью и потолок длины (§13.4.1). Переключение — правка YAML-полей и схемы нарратива без кода; в блупринтах строка `# model: per ops/metrics/baseline.md §5 (ADR-005 доп. 3)` рядом с полем. Валидатор 7а гарантирует, что модель есть у провайдера. B, D и E+ — только материал замера. *Запись G2 (прежде):* стартовая конфигурация — C, одна `qwen3:30b-a3b`; запасная — A.
+
+**(изм. T-439) Семплинг фаз.** В блупринте `temperature: 0.7` — одно значение с умолчанием фазы в шлюзе (non-thinking-профиль `temperature 0.7 / top_p 0.8 / top_k 20 / min_p 0 / presence_penalty 1.5`, ADR-005 доп. 2 п. 1). *Почему 0.7, а не прежнее 0.8:* пороги `baseline.md` (NFR-002, B3, NFR-090) получены замером на этом профиле (`ops/metrics/bench-matrix.json`, `request.sampling_non_thinking`: замер повторяет путь платформы). Значение 0.8 пришло из черновика под Ollama (`api-contracts.md` §3.3) и не измерялось; другая температура сдвигает и длину, и долю латиницы, то есть выводит вызов из-под замера. Остальные параметры профиля в блупринт не выносятся: формат фазы §13.1, разбор с `KnownFields`.
 
 ### 13.4. Схемы `schemas/agent/`
 
-- `narrative.json`: `{ "type":"object", "required":["text","mentions","background_refs"], "properties": { "text": {"type":"string","minLength":1,"maxLength":1500}, "mentions": {"type":"array","items":{"type":"string"}}, "background_refs": {"type":"array","items":{"type":"string"}}, "tone": {"enum":["calm","tense","grim","hopeful"]} }, "additionalProperties": false }`.
+- `narrative.json` *(изм. T-439; прежде `text.maxLength: 1500`, массивы без `maxItems`, элементы — id)*: `{ "$comment": "narrative cap: config=E; c=2.5; c_min=2.0; overhead=66; ops/metrics/baseline.md §5, КД §13.4.1, ADR-029", "type":"object", "required":["text","mentions","background_refs"], "properties": { "text": {"type":"string","minLength":1,"maxLength":185}, "mentions": {"type":"array","maxItems":4,"items":{"type":"string","pattern":"^e[1-9][0-9]?$"}}, "background_refs": {"type":"array","maxItems":2,"items":{"type":"string","pattern":"^b[1-9][0-9]?$"}}, "tone": {"enum":["calm","tense","grim","hopeful"]} }, "additionalProperties": false }`. Числа — строка E таблицы §13.4.1 (итерация 2: `maxLength` 185 вместо 210 — c_min, ревью #1 Mi-2); элементы массивов — ярлыки вызова, а не id; схема статична и на вызов не сужается (§13.4.2, ADR-029 п. 3). Один файл на `player-gm` и `group-narrator`, пока порог группы не зафиксирован (§13.4.1, «Группа»).
 - `tick-global.json`: `{ events: [ { type: enum[world.weather_changed, world.time_advanced, world.event_occurred], summary: string ≤ 300, ops: [ { path: enum[weather, time_of_day, day], value } ] } ] }`, `maxItems: 2`.
 - `tick-region.json`: `{ events: [ { type: enum[region.event_occurred, npc.moved, npc.spawned], summary, entity?: {id}, affects?: [{id}], ops: [ { path, value } ] } ] }`, `maxItems: 3`.
 - `breach.json` — заглушка `{ "$comment": "reserved E-B" }`.
 
 Схемы компилируются при старте (`jsonschema/v6`), передаются провайдеру как `format`, валидируются парсером; `enum` типов в схемах тика = пересечение `allowed_event_types` блупринта (схема генерируется из шаблона на блупринт: `schema_ref` + подстановка enum).
+
+#### 13.4.1. Потолок длины нарратива по конфигурации *(изм. T-439)*
+
+Основание — ADR-005 доп. 3 и «Уточнение исполнения» п. 4, `ops/metrics/baseline.md` §5 (строка 2 таблицы оговорок), ADR-029 п. 9. Длину ответа держат три числа схемы и блупринта:
+- `max_tokens` фазы — жёсткий обрез: обрезанный ответ невалиден, дальше повтор и шаблон;
+- `text.maxLength` и `maxItems` схемы — сама длина: грамматика `json_schema` закрывает строку, и ответ в пределах схемы до обреза не доходит;
+- L в `## phase2` — длина, которую просят у модели. Она ниже `maxLength`, чтобы грамматика не закрывала строку посреди фразы.
+
+**Числа Qwen3.6 предварительные**: стендовая сессия T-438 не проведена.
+
+| Конфигурация | Статус | `max_tokens` `player-gm` | `max_tokens` `group-narrator` | `text.maxLength` | L в `## phase2` | `mentions.maxItems` | `background_refs.maxItems` |
+|---|---|---|---|---|---|---|---|
+| E `Qwen3.8-27B-UD-Q3_K_XL` — базовая на переход | **действует**, в файлах T-203 | 160 | 160 | 185 | 140 | 4 | 2 |
+| `Qwen3.6-35B-A3B-UD-Q3_K_XL` — целевая, хвост «прочего» есть | предварительно, до T-438 | 210 | 210 | 285 | 220 | 4 | 2 |
+| `Qwen3.6-35B-A3B-UD-Q3_K_XL` — хвост исчез или объяснён | предварительно, окончательно — по T-438 | 400 | 400 | 665 | 530 | 4 | 2 |
+
+*Итерация 2 (ревью #1 T-439, Mi-1 и Mi-2).* Прежние строки — 160/210, 220/345 и 410/775. N Qwen3.6 было округлено до ближайшего, а `maxLength` посчитан по c = 2,5 без нижней границы.
+
+**Потолок ответа N** — формула бюджета ADR-005 УИ п. 4: N = (порог − «прочее» − 150 мс на шину и gateway) × скорость генерации на запрос, **округление вниз до десятков** у всех конфигураций. Скорость — минимум по запросам `phase2`.
+- E: (5000 − 850 − 150) мс × 40,8 ток/с = 163,2 → **160**.
+- Qwen3.6 с хвостом: (5000 − 2801 − 150) × 107,2 = 219,7 → **210**; без хвоста: (5000 − 1027 − 150) × 107,2 = 409,8 → **400**.
+- *Почему не «≈ 220» и «≈ 410» ADR-005 УИ п. 4.* Там округление до ближайшего, а N — потолок латентности. 220 токенов — это 2052 мс генерации, вместе с «прочим» и 150 мс — 5003 мс, выше порога; у 410 — 5002 мс. Окончательные числа дадут три прогона T-438 по тому же правилу. Расхождение с ADR-005 и `baseline.md` §5 передано architect#1.
+
+**`text.maxLength`** = (N − каркас − служебные поля) × min(0,9 × c; c_min), **округление вниз** до кратного 5:
+- каркас ≈ 30 токенов — ключи, скобки, кавычки, `tone`;
+- служебные поля = 6 × (`mentions.maxItems` + `background_refs.maxItems`) = 36 токенов, где 6 — ярлык в кавычках с запятой (§13.4.2, ADR-029). Вместе с каркасом вычитается 66;
+- c — ожидаемые символы на токен: медиана калибровки, до калибровки — допущение **2,5** для кириллицы; 0,9 — запас на разброс;
+- c_min — нижняя граница плотности: 5-й процентиль символов на токен по ответам калибровочного набора длиной `text` ≥ L/2, до калибровки — **2,0**. Не минимум: один короткий ответ с числами или латиницей обвалил бы `maxLength` у всех *(приёмка T-439, ревью #2 N-9)*.
+
+Расчёт: E — 94 × min(2,25; 2,0) = 188 → **185**; Qwen3.6 с хвостом — 144 × 2,0 = 288 → **285**; без хвоста — 334 × 2,0 = 668 → **665**.
+
+*Почему c_min = 2,0 до калибровки (ревью #1, Mi-2).* Если плотность кириллицы у модели ниже допущения, ответ длины `maxLength` с полными массивами в N не помещается. Тогда `max_tokens` обрезает ответ, дальше `invalid`, повтор и шаблон, и NFR-002 теряется именно на самых длинных ответах. При c = 2,5 и реальных 2,0 символа на токен текст в 210 символов — это 105 токенов, со служебными 66 — 171 > 160. Цена запаса на E — 25 символов текста. Калибровка T-438 вернёт их правкой данных, если c_min окажется выше.
+
+**L** — длина, которую `## phase2` обоих блупринтов просит у модели: «1–2 предложения, до ~L символов». L = 0,8 × `maxLength`, вниз до десятков. Грамматика закрывает строку на `maxLength` даже посреди слова; L держит обычный ответ ниже этой границы (ревью #1, Mi-3).
+
+**Инварианты** — проверяет тест T-203:
+1. 66 + ⌈`maxLength` / c_min⌉ ≤ N. E: 66 + 93 = 159 ≤ 160; Qwen3.6: 66 + 143 = 209 ≤ 210 и 66 + 333 = 399 ≤ 400.
+2. `maxLength` ≤ (N − 66) × 0,9 × c. E: 185 ≤ 211,5.
+3. L ≤ 0,8 × `maxLength`. E: 140 ≤ 148.
+
+*Что тест защищает, а что нет.* c и c_min записаны рядом с числами — в `$comment` схемы (`c=2.5; c_min=2.0`); служебные поля тест считает по `maxItems` схемы.
+- Тест ловит ручную правку любого числа без пересчёта остальных.
+- После калибровки он ловит и содержательную ошибку: `maxLength`, взятый по медиане c, выходит за нижнюю границу c_min.
+- Запас — отдельная константа c_min, а не тот же c, поэтому инвариант 1 не выполняется «по построению» для числа, взятого по c: `maxLength` 210 итерации 1 даёт 66 + ⌈210 / 2,0⌉ = 171 > 160, и тест красный (мутант DoD T-203). До калибровки само значение c_min — допущение, тест его не проверяет.
+- Реальную плотность токенизатора модели CI не видит. Её проверяет только стенд (ниже).
+
+Что пересчитывается и когда:
+- калибровка T-438 (шаг 5, `/tokenize` на ответах прогона) дала c и c_min модели → `maxLength` и L по формулам выше, c и c_min — в `$comment`; N не меняется;
+- меняется `maxItems` → служебные поля = 6 × сумма `maxItems`, формула та же;
+- промпт роя длиннее ~420 токенов замера → больше «прочего» → N пересчитывается по `prompt_ms` (T-434), затем `maxLength` и L.
+
+**Группа — свой потолок, а не «как у `player-gm`».** Потолок промптов замера 512 токенов — свойство замера, а не цель: на E под 5000 мс он не проходит (ADR-005 УИ п. 4). Порог группы NFR-002 не зафиксирован (T-140, BA); в матрице он справочный — 5000 мс. Пока так, потолок группы — **меньшая** из двух оценок, по соло и по данным группы, обе вниз до десятков: E — min(160, 160) → 160 (оценки 163,2 и 169,0); Qwen3.6 — min(210, 220) → 210 и min(400, 410) → 400 (по данным группы ≈ 226 и ≈ 418). Числа совпали с соло, но выведены отдельно и меняются отдельно. Когда T-140 зафиксирует порог группы (ориентир — «не хуже двух соло», 10 с), `group-narrator.llm.phase2.max_tokens` пересчитывается по той же формуле на данных группы (ориентиры ADR-005 УИ п. 4: E ≈ 367, Qwen3.6 ≈ 760 и ≈ 950). Тогда же группа получает свою схему `schemas/agent/narrative-group.json` со своими `text.maxLength` и L и, если нужно, своим `mentions.maxItems`. Это правка данных — файл схемы и `schema_ref` блупринта; Go не меняется: вид схемы (`guardian.Input.Kind`) задаёт роль, а не имя файла. Раньше второй файл не заводится: две одинаковые схемы разошлись бы молча.
+
+*`mentions` группы (ревью #1, N-4).* `## system` группы требует назвать каждого участника **в тексте**. `mentions` не обязаны покрывать всех участников: адресаты — `recipients[]` из состава группы, а не из `mentions`. Поэтому `maxItems` 4 при группе до 6 игроков (NFR-080) — не ошибка.
+
+**Проверки.**
+- CI (T-203): `max_tokens` обоих блупринтов, `text.maxLength` и `maxItems` схемы, L в `## phase2` равны строке E таблицы; инварианты 1–3 проверяются тестом по c и c_min из `$comment`.
+- Стенд — **T-260 в сессии T-438** (агенты стенд LLM не трогают). Промпт с заданием на длинный нарратив, `max_tokens` = N текущей конфигурации, ответы трёх прогонов:
+  - `finish_reason` не `length` во всех ответах; JSON валиден по схеме с первой попытки; длина `text` ≤ `maxLength`; `usage.completion_tokens` ≤ N;
+  - **упор в потолок:** доля ответов с длиной `text` ≥ `maxLength` − 5 — не выше 5 %. Выше — грамматика режет фразы: L снижается или `maxLength` пересматривается;
+  - **конец фразы:** `text` оканчивается знаком конца предложения (`.`, `!`, `?`, `…`; после него допустима закрывающая кавычка или скобка) — не меньше 95 % ответов;
+  - **ярлык в `text`** (ADR-029 п. 4): доля **попыток**, отвергнутых за ярлык в `text`, — не выше 2 %. «Ни одного в принятых ответах» — свойство парсера T-209, а не проверка стенда: такой ответ принятым не бывает *(приёмка T-439, ревью #2 Mi-10)*;
+  - **выдуманные ярлыки** — ярлык ответа вне таблицы промпта (в платформе — отброс стражем, ADR-029 п. 5–6) — не больше 5 на 100 вызовов. Оба порога — условия пересмотра ADR-029: превышение — вопрос о пересмотре решения, а не правка чисел;
+  - калибровка: c — медиана, c_min — 5-й процентиль символов на токен по `text` ответов длиной ≥ L/2 (`/tokenize`); при c_min ≠ 2,0 — пересчёт `maxLength` и L одним PR;
+  - для Qwen3.6 — на её числах.
+
+  Тот же прогон закрывает оговорку `baseline.md` §5 «потолок подтверждён расчётом, а не замером».
+
+#### 13.4.2. Ярлыки ссылок в ответе нарратива *(изм. T-439; решение — ADR-029)*
+
+Элемент ≈ 6 токенов в формуле §13.4.1 верен только для коротких ссылок. Id событий — UUID (`shared/eventbus`), id встречи — `encounter-<id события>` (T-232), у NPC респауна — новый производный id; такой id — ≈ 20–25 токенов. Поэтому в вызовах нарратива модель ссылается не на id, а на **ярлыки вызова**. Контекст, варианты и условия пересмотра — в ADR-029.
+- **Выдача** (`context/builder.go`, T-235). Сущности `<state>` — `e1…eN` по id (байтовое сравнение), события `<absence>` — `b1…bM` по `at`, затем по id. N ≤ 99: сверх — без ярлыка и с `warn`, по NFR-080 недостижимо. M ≤ 20. N = 0 или M = 0 — пустая, но не `nil` карта: `nil` значит «таблицу не передали» (§10.2). Форма в промпте — `Имя [eK]`; id в промпт нарратива не попадает; ярлыки — только в `user` (§11.4). Одинаковый контекст даёт одинаковые ярлыки и `prompt_hash`.
+- **Схема** `narrative.json` статична: `pattern` `^e[1-9][0-9]?$` и `^b[1-9][0-9]?$`, на вызов не сужается, компилируется при старте (ADR-016 п. 1 без изменений). `<format>` — статичное правило ярлыков (T-218).
+- **Ярлык в `text`** проверяет парсер после схемы выражением `(^|[^0-9A-Za-z_])[eb][1-9][0-9]?([^0-9A-Za-z_]|$)`: совпадение → `invalid`, `schema_invalid` без `element`, повтор с подсказкой (ADR-029 п. 4, T-209).
+- **Страж.** Таблица — в `guardian.Input` (`Mentions`, `AbsenceEventIDs`, §3), правило 3 по элементу — §10.2. Ярлык вне таблицы отбрасывается элементом, текст остаётся. Событие отброса до C-07 v1.4 — `reason=other` с `element`, после — `unknown_entity` с `ref` (ADR-029 п. 5–6, T-217, T-213).
+- **Роль** пишет в `narrative.output.background_refs` id событий из таблицы и схлопывает повторы (T-233, T-247). Во внешних событиях ярлыков нет.
+- **`llm.output.response_raw`** хранит ответ с ярлыками, таблица в запись не пишется. Аудит читает её из сохранённого промпта (`MV_LLM_STORE_PROMPTS`) или восстанавливает правилом выдачи, сверяя `prompt_hash` (ADR-029 п. 7).
+- **Replay и нарратив из записи** (§8.4). `prompt_hash` пересобранного промпта ≠ записи → `warn llm_replay_prompt_drift`; у нарратива с непустыми массивами ярлыки не разрешаются, `text` используется (ADR-029 п. 8, T-212). Оговорка I2 с `NopMemory` (§11.3, T-248) — частный случай, но не редкий: запись, снятая с живой памятью, в replay с `NopMemory` расходится всегда, и ссылки её нарратива теряются — T-248 это принимает. Сверка по `prompt_hash` грубее таблицы ярлыков: расхождение даёт и правка промпта вне `<state>`/`<absence>`, например смена L в `## phase2` при переходе конфигурации (§13.4.1). Поэтому смена L или текста `## phase2` идёт одним PR с перезаписью записей с нарративом (T-260, T-261, T-262), иначе e2e, сверяющие `background_refs`, краснеют. Точная сверка по хешу таблицы — вопрос C-07 к system-architect#1 (T-457) *(приёмка T-439, ревью #2 Mi-11)*.
+
+Отклонено (подробно — ADR-029, «Рассмотренные варианты»):
+- id как есть;
+- объекты `{"entity":{"id","type"}}`;
+- сужение схемы на вызов до `enum` выданных ярлыков — решение итерации 1 T-439. Выдуманный ярлык стоил бы повтора всего ответа, а под грамматикой становился бы невидимой ошибкой ссылки.
 
 ### 13.5. `config/absolute-limits.yaml`
 
@@ -910,7 +997,7 @@ sequenceDiagram
 | NFR | Механизм |
 |---|---|
 | NFR-001 (механика p95 ≤ 0,5 с) | Phase 1 синхронно в обработчике, без очередей и LLM; `WorldView` в памяти; `Emitter` публикует без ожидания фактов |
-| NFR-002 (нарратив p95 ≤ 5 с, после замера) | очередь `interactive` впереди фона; отмена фонового вызова при появлении интерактивного; один вызов на ход/раунд; `keep_alive=-1`; модель на фазу из блупринта |
+| NFR-002 (нарратив p95 ≤ 5 с, после замера) | очередь `interactive` впереди фона; отмена фонового вызова при появлении интерактивного; один вызов на ход/раунд; `keep_alive=-1`; модель на фазу из блупринта; *(изм. T-439)* потолок длины ответа на конфигурацию — `max_tokens` фазы и `text.maxLength`/`maxItems` схемы (§13.4.1, `baseline.md` §5); ярлыки вместо id укорачивают промпт и ответ (§13.4.2) |
 | NFR-004 (холодный старт) | `keep_alive=-1`, `Health` проверяет `/api/ps`; при `model_not_resident` — шаблон с пометкой на время прогрева |
 | NFR-005 (группа) | один `group-narrator` на группу, Phase 2 по завершению раунда; персональные GM в группе `rule-only` |
 | NFR-006/007/053 (бюджет) | таблица триггеров 8.2 (≤ 1 вызов на ход соло, ≤ 2 на раунд группы); `BackgroundBudget` B/час/мир + middleware бюджета; отсутствие таймеров у `task` |
@@ -970,7 +1057,7 @@ sequenceDiagram
 ## 19. Трассировка и допущения
 
 - FR-010/012/013/016/037/120…128 → §4, §5, §7, §8; FR-014 → §17; FR-015 → §8.4; FR-018/BR-05 → схема `narrative.json` без действий + Emitter; FR-032/034 → §9.2, §10; FR-040/045/BR-02 → §12; FR-050/051/055/056 → §9.2, §11.4, §13.5 (`InputFilter` — gateway, EPIC-004); FR-070…072 → §9.1, §9.3; FR-090…092 → §13, §11.4 (`prompt_hash` в `llm.output`), `mvctl blueprint validate` (валидатор — здесь, команда — EPIC-005).
-- Допущения: (1) `Journal` C-01 v1.1 даёт чтение по офсетам, не по времени — сводка фона строится из индекса роя в снапшоте (принято к сведению, W-6); (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) стартовые модели в блупринтах — C (`qwen3:30b-a3b`) до `baseline.md`, запасная A (§13.3); (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
+- Допущения: (1) `Journal` C-01 v1.1 даёт чтение по офсетам, не по времени — сводка фона строится из индекса роя в снапшоте (принято к сведению, W-6); (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) *(изм. T-439)* модели в блупринтах — базовая E по `baseline.md` §5, целевая нарратива Qwen3.6-35B-A3B, запасные C и A (§13.3); потолки Qwen3.6 предварительны до T-438; до калибровки символов на токен c = 2,5 и нижняя граница c_min = 2,0 (§13.4.1, ADR-029 п. 9); выдуманный ярлык нарратива публикуется как `other` с `element` до C-07 v1.4 (ADR-029 п. 6); (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
 
 ---
 
@@ -983,7 +1070,7 @@ sequenceDiagram
 | 1 | Префикс `MV_` для всех платформенных env (D-4, W-3) | таблица переменных по пакетам-владельцам; `LLM_PROMPT_STORE` → `MV_LLM_STORE_PROMPTS`; `OLLAMA_URL` → `MV_OLLAMA_URL`; сторонние `OLLAMA_*` без префикса | §14 |
 | 2 | `MV_CORE_ADDR=127.0.0.1:8090`, HTTP-сервер — у `shared/runtime` (D-7, W-3) | `SWARM_ADMIN_ADDR` упразднён; `admin.go`/`usage.go` монтируют маршруты на `runtime.Mux`; `Deps.HTTP`; `/health` процесса собирает `agents_by_level`/`llm` из `Health()` контекстов; спецификация маршрутов — раздел `admin` в `api/gateway.openapi.yaml` (EPIC-004), отдельного `core.openapi.yaml` нет | §1.1, §2, §3, §14 |
 | 3 | Инициализация мира — фикстуры; `npc_table` только респаун; `swarm.InitWorld`/`mvctl world init --blueprints` — не в MVP-1 (G2) | §17 переписан; §4.1 спавн `global/domain` при `Start` по блупринтам, сущности — из фикстур; `/health degraded {swarm: region_missing}`; тест согласованности `npc_table` ↔ `rules`/фикстуры в I1b; S6 = блупринт + фикстура | §4.1, §17 |
-| 4 | Модели по OQ-A-18 (U-2) | стартово C (`qwen3:30b-a3b` во всех LLM-фазах), запасная A (`8b` tick / `14b` phase2); параметризовано через блупринты и `baseline.md`; валидатор 7а (`Provider.Models()`, W-5/T-7) | §9.1, §13.2, §13.3 |
+| 4 | Модели по OQ-A-18 (U-2) | стартово C (`qwen3:30b-a3b` во всех LLM-фазах), запасная A (`8b` tick / `14b` phase2); параметризовано через блупринты и `baseline.md`; валидатор 7а (`Provider.Models()`, W-5/T-7) *(запись своего времени; с ADR-005 доп. 3 и T-439 — базовая E, целевая нарратива Qwen3.6-35B-A3B, запасные C и A, потолок длины на конфигурацию — §13.3, §13.4.1)* | §9.1, §13.2, §13.3 |
 | 5 | Профиль `legacy` = as-is narrative-orchestrator + semantic-memory + chromadb до S5 (D-3, U-1) | I2-2: перенос в `services/_archive/`, не удаление; запасной критерий S5 | §17 |
 | 6 | `RecordingWriter` + `mvctl record` → EPIC-003 I1a (decomposition-review §5.1 п. 2) | структура `cmd/mvctl/internal/record`; владелец `testdata/recordings/` — EPIC-003 | §2, §18 |
 | 7 | Записи/golden только `actor_kind=ci` (T-5, ADR-010 доп. п. 1) | ограничение в `mvctl record`, `merge=binary`, `privacy-scan` | §18 |
@@ -1022,3 +1109,16 @@ sequenceDiagram
 | **§5.2** (строка `encounter`) | Пока встреча открывается, агент видит `entity.created` своей встречи и `entity.update.rejected` по `proposal_id` её создания | ADR-028; задача T-229 |
 | **§5.1**, **§4.3** (дедуп и снапшот агента встречи) | Окно действий агента встречи — `Dedup.Has`/`Add`, не `Seen`. Id всех событий ответа выводятся из причины. Ответ собирается один раз и лежит в слоте экземпляра с курсором публикаций; слот и очередь отложенных действий входят в снапшот роя | design §14.1; задачи T-230, T-421, T-236 |
 | §3 (интерфейсы) | новый интерфейс роли `Spawner{SpawnChild, Alive}`, реализует `Lifecycle` | design §14.2; T-223, T-225 |
+
+---
+
+## Дополнение 2026-09-13 (architect#2, T-439): потолок длины нарратива
+
+Решения уровня реализации по ADR-005 доп. 3 и «Уточнению исполнения» п. 4, `ops/metrics/baseline.md` §5; решение о ярлыках — **ADR-029** (итерация 2 по ревью #1). Схемы событий не меняются; для отброса выдуманной ссылки — запрос C-07 v1.4 к system-architect#1 (ADR-029 п. 6). В основном тексте изменённые места помечены «(изм. T-439)».
+
+| Раздел | Что изменилось | Основание |
+|---|---|---|
+| **§13.3** (`player-gm`, `group-narrator`, модели, семплинг) | модель — базовая E по `baseline.md` §5, запасные по `decision_order` (Qwen3.6-35B-A3B, C, A); `temperature: 0.7` вместо 0.8; `max_tokens` — потолок конфигурации (E — 160), у группы свой | ADR-005 доп. 2 п. 1, доп. 3; `bench-matrix.json` `request.sampling_non_thinking`; T-203 |
+| **§13.4**, **§13.4.1** | `narrative.json`: `text.maxLength` 185, `mentions.maxItems` 4, `background_refs.maxItems` 2; таблица E / Qwen3.6 (210 → 285, 400 → 665, предварительно); N вниз до десятков; формула с c и c_min; длина L в `## phase2`; потолок группы и `mentions` группы; инварианты теста; проверки CI и стенда — упор в потолок, конец фразы, ярлыки в тексте (T-260 в сессии T-438). *Итерация 2:* прежде 210, 220 → 345, 410 → 775 | ADR-005 УИ п. 4; ADR-029 п. 9; ревью #1 T-439 Mi-1…Mi-3, N-4; T-203, T-260, T-438 |
+| **§13.4.2**, §3 (`guardian.Input`), §9.2, §10.2, §11.2, §11.4 | ярлыки `eK`/`bK` вместо id в промпте и ответе нарратива; статическая схема с `pattern`; ярлык в `text` — `schema_invalid`; выдуманный ярлык — отброс элемента стражем (до C-07 v1.4 — `other`); `Input.Mentions`, `AbsenceEventIDs` — ярлык → id; сверка `prompt_hash` в replay. *Итерация 2:* сужение схемы на вызов отменено | **ADR-029**; T-203, T-209, T-212, T-213, T-217, T-218, T-233, T-235, T-247 |
+| §16 (NFR-002), §19 (допущение 3), §20 (строка 4) | потолок на конфигурацию; модели по доп. 3 | ADR-005 доп. 3 |
