@@ -313,6 +313,10 @@ services:
       # the manifest's (rule 8), so a silent .env and a process started by hand
       # serve the same world (T-464).
       MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest-world}
+      # The rule book whose laws the context state holds every world to; state
+      # does not start without it (T-471). The default is the manifest's, and
+      # the image carries rules/ in its working directory (build/Dockerfile).
+      MV_RULES_PATH: ${MV_RULES_PATH:-rules/dark-forest.yaml}
       MV_GM_PATH: ${MV_GM_PATH:-agent}
       MV_LAWS_BREACH_PHASE: ${MV_LAWS_BREACH_PHASE:-false}
       MV_LLM_PROVIDER: ${MV_LLM_PROVIDER:-openai_compat}
