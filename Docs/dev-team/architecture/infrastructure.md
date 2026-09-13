@@ -4,6 +4,12 @@
 Основание: `architecture/overview.md` (§3, §5, §9, **§13**, §15–§19, **§18.1**, §21), ADR-001, ADR-004, **ADR-005 (дополнение 2)**, ADR-006, ADR-007, ADR-009, ADR-010 (все — с дополнениями «2026-09-09»), ADR-019, ADR-021, `architecture/consolidation.md` (§1 U-1…U-7, §6 T-3/T-8/T-13/T-15/T-16/T-17, §7 D-1…D-14, §9, **§10 U-8…U-12, §13**), `architecture/threat-model.md` (§4.5, §4.6, §4.9, SEC-04/05/09/13/14/15/22/24/25/30/32/33), `contracts.md` (§0, C-01, C-14, **C-15 v1.1**, §16 п. 5), `plan/epics.md` v0.2 §6, `plan/teams.md` §3, `plan/ownership.md`, `audit-facts.md` (§1, §3, §7, §8), `requirements/nfr.md` (NFR-002, NFR-076, NFR-090, «Что измерить первым»), `project/metrics.md` (§6, §7), `journal.md` (записи 2026-09-09: G2, F-0, решения по безопасности, **«Решения пользователя (DevOps)»**).
 Правило документа: **значения секретов нигде не приводятся** — только имена переменных. Код и конфиги проекта этим документом не меняются; всё ниже — задания для разработчика и devops в EPIC-001. Команды в документе перечисляются, но **не выполнялись**.
 
+**Редакционная правка T-399** (2026-09-13, architect#1; Mi-2 ревью T-397). Документ приведён к дереву после T-397, T-404, T-412, T-413, T-429, T-432; решения не менялись, записи истории ниже не переписаны, §6 не затронут. §0 и §1.3: три compose-файла, какие профили где лежат, почему они разделены и как Makefile их подключает. §2.2: цели стека идут через `$(COMPOSE)`, добавлена цель `legacy-src`, `compose-lint` запускает самопроверку на фикстурах. §2.4: эталон `build/versions.env` без инлайн-комментариев. §3.1: шаги задания `compose-lint`. §3.1.1: восемь правил по строке на каждое, со ссылкой на `scripts/compose-lint.sh` и `testdata/compose-lint/README.md` вместо пересказа логики. §4.1 п. 5 и §4.2: формат `.env.example` — у пустого значения нет инлайн-комментария, обязательные помечены `[required]` над переменной. Ссылки на правило про `llama-server` исправлены с §3.1.1 п. 5 на п. 6 (§1.4, §10). Итерация 2, по ревью #1 T-399:
+- в пересказ правил 3 и 8 возвращены условия скрипта;
+- §9 (вводный абзац, §9.1 п. 1, §9.2, §9.6, §9.8) сверен с `Docs/ops/runbook.md` в местах про профили `bot`/`legacy` и `-f` файлов профиля;
+- путь `Docs/ops/runbook.md` в §9, §9.8 и §10 пишется с заглавной;
+- уточнены §0 (`prod` и бот), §2.2 (все цели с `$(COMPOSE)`) и §2.4 (запрет из T-004).
+
 **Изменения v0.3** (сведение 2, `consolidation.md` §10 U-8…U-12 и §13 строка devops; ADR-005 дополнение 2 п. 1–9; `overview.md` §13/§18.1). Точечная правка: разделы, не связанные с LLM-рантаймом, CODEOWNERS и MinIO-форком, оставлены без изменений.
 1. **LLM-рантайм по умолчанию — нативный `llama-server` (llama.cpp) на `127.0.0.1:1234`**, вне compose; Ollama — опциональный второй рантайм (U-8, ADR-005 доп. 2 п. 1/7). `scripts/llm-server.ps1` + `.sh`, `make llm-up / llm-down / llm-health`; `make up` процесс не поднимает, только проверяет health — §6 (переписан), §2.2, §1.1–§1.4.
 2. `.env.example`: `MV_LLM_PROVIDER=openai_compat`, `MV_LLM_URL`, `MV_LLM_API_KEY` (пусто локально), `MV_LLM_CLOUD_ENABLED=false` (гейт по host, не по имени провайдера); `MV_OLLAMA_URL` и блок `OLLAMA_*` — только при `MV_LLM_PROVIDER=ollama`, из обязательных убраны — §4.2, §4.4.
@@ -42,11 +48,11 @@
 
 | Область | Решение | Где закреплено |
 |---|---|---|
-| Окружения | три: `dev` (машина владельца, Docker Desktop + Git Bash/PowerShell), `ci` (GitHub-hosted `ubuntu-latest` с Docker, без GPU), `prod` (та же машина владельца, `COMPOSE_PROFILES=memory,bot`; LLM — нативный `llama-server` вне compose, профиль `gpu` только при контейнерном Ollama) | §1 |
-| Топология | один образ `multiverse-core` с тремя бинарниками; процессы `gateway` (:8088), `core` (:8090), `memory` (:8082), `telegram-bot`; профили compose `memory`, `gpu`, `bot`, `dev`, `legacy` | §1.2, §1.3 |
+| Окружения | три: `dev` (машина владельца, Docker Desktop + Git Bash/PowerShell), `ci` (GitHub-hosted `ubuntu-latest` с Docker, без GPU), `prod` (та же машина владельца, `COMPOSE_PROFILES=memory,bot` — `bot`, когда появится бот, EPIC-004; до того `memory`, §1.3; LLM — нативный `llama-server` вне compose, профиль `gpu` только при контейнерном Ollama) | §1 |
+| Топология | один образ `multiverse-core` с тремя бинарниками; процессы `gateway` (:8088), `core` (:8090), `memory` (:8082), `telegram-bot`; профили compose `memory`, `gpu`, `bot`, `dev`, `legacy` в трёх файлах: `docker-compose.yml` (без профиля, `memory`, `gpu`, `dev`), `docker-compose.bot.yml`, `docker-compose.legacy.yml`; файлы профилей подключает Makefile (T-397) | §1.2, §1.3, §2.2 |
 | Сборка | единый модуль `multiverse-core.io`, **`go 1.26` + `toolchain go1.26.x`** (ADR-001 доп. п. 1); Makefile — одна цель на действие; `build/Dockerfile` multi-stage с кэшем, runtime `distroless/static:nonroot`; **`build/minio.Dockerfile`** — MinIO из исходников (ADR-021); **`build/versions.env`** — единственный источник версий образов/toolchain для compose, Makefile, testcontainers | §2 |
 | CI | `.github/workflows/go.yml`: `unit`, `integration` (testcontainers-go, образы из `versions.env`), `e2e`, `contracts`, `security` (gitleaks + govulncheck **блокирующий** + privacy-scan), `compose-lint`; Actions с пином по SHA, `permissions: contents: read`, Dependabot, CODEOWNERS; ≤ 10 мин; `validate-blueprints.yml` удаляется; `qwen-*` не трогаем | §3 |
-| Конфигурация | только env с префиксом `MV_` через единственный пакет `shared/env` (реестр `Declare`); сторонние переменные образов — без префикса; `.env.example` полный и сверяется `mvctl env check`; `os.Getenv` вне `shared/env` запрещён линтером | §4.1–§4.3 |
+| Конфигурация | только env с префиксом `MV_` через единственный пакет `shared/env` (реестр `Declare`); сторонние переменные образов — без префикса; `.env.example` полный и сверяется `mvctl env check`; комментарий к пустой переменной — строкой выше, обязательные — пометкой `[required]` над переменной (правило 7 `compose-lint`); `os.Getenv` вне `shared/env` запрещён линтером | §4.1–§4.3 |
 | Секреты | `.env`, `.mcp.env`, `.claude/settings.local.json` вне индекса; `gitleaks` в pre-commit и CI; allowlist **только `*.example`**; compose без паролей по умолчанию; `git filter-repo` — только по команде владельца | §4.4, §4.5 |
 | Данные | Redpanda 8 топиков `-p 1 -r 1`, retention 30/90/180 дней, `segment.ms=1d`; MinIO: versioning + ILM включает `objstore.EnsureBucket`, `prompts-*` без versioning и ILM 30 дн.; Qdrant и Neo4j (без APOC) перестраиваемые; SQLite `links.db`/`gateway.db` в именованном томе `gateway-data`, бэкап `links.db` шифрованный `age`, ≤ 30 дней | §5 |
 | LLM-рантайм | **нативный `llama-server` (llama.cpp) на `127.0.0.1:1234`, вне compose** (U-8, ADR-005 доп. 2): `scripts/llm-server.ps1`/`.sh`, `make llm-up/llm-down/llm-health`; провайдер `openai_compat` (`/v1/chat/completions` + `response_format json_schema`); прогрев не нужен — модель грузится при старте, `/health` 503 = loading. Ollama — **опциональный** второй рантайм (нативно или профиль `gpu`) для конфигураций C/A и эмбеддингов; матрица замера — `scripts/llm-bench.ps1`/`.sh`, варианты **E** (базовый кандидат), E+, C, A | §6 |
@@ -89,18 +95,24 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 
 ### 1.3. Compose-профили (ADR-001 доп. п. 6)
 
-| Профиль | Сервисы | Когда включён |
-|---|---|---|
-| (без профиля — всегда) | `redpanda`, `redpanda-init`, `minio` (образ `build/minio.Dockerfile`), `minio-init`, `gateway`, `core` | всегда: минимальный стек «соло без памяти и без LLM» (деградация FR-080/NFR-072) |
-| `memory` | `qdrant`, `neo4j`, `memory` | память Should (EPIC-005-memory); в `prod` включён |
-| `gpu` | `ollama` (контейнер с NVIDIA) | **опционально**: только если выбран Ollama и именно в контейнере (§6.5). Основной рантайм `llama-server` — нативный процесс, в compose его нет и профиля для него не заводим (ADR-005 доп. 2 п. 7) |
-| `bot` | `telegram-bot` | когда задан `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; `env_file`/`environment` с токеном — только у этого сервиса (D-10, `compose-lint` проверяет) |
-| `dev` | `redpanda-console` | удобство разработчика; консоли только здесь (SEC-33) |
-| `legacy` | as-is `narrative-orchestrator` (`build/legacy.Dockerfile`), **as-is `semantic-memory` (`127.0.0.1:8083`) и `chromadb`** | только на время миграции GM (`MV_GM_PATH=legacy`, S5); оркестратор жёстко ходит в `/v1/context-with-events` без деградации (`orchestrator.go:117,177`), поэтому Chroma живёт здесь до S5 и удаляется вместе с профилем в EPIC-003 I2 (D-3, ADR-004 доп. п. 8). Legacy-сервисы читают **свои as-is переменные** (без `MV_`), собираются из `services/narrative-orchestrator`, `services/semantic-memory` (замороженные, `FROZEN.md`), не из корневого модуля |
+*Редакция T-399 — сверено с `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml` и `Makefile`.*
 
-**Где живут профили (T-397, внесено в T-409).** Профили без профиля, `memory`, `gpu`, `dev` — в `docker-compose.yml`; **`bot` — в отдельном `docker-compose.bot.yml`, `legacy` — в отдельном `docker-compose.legacy.yml`**. Причина: `docker compose` интерполирует файл **целиком** до фильтрации по профилю, и обязательная переменная профиля (токен бота, образ Chroma) роняла бы запуск всего стека на чистой машине. Makefile подключает нужный файл сам по `PROFILES=...` (правило линтера композиции: файл, который загружается всегда, интерполируется на чистой машине). Состояние профилей на 2026-09-11: **`bot`** описан целиком, но бинарника `cmd/telegram-bot` ещё нет (EPIC-004) — `make up PROFILES=bot` поднимет стек и упадёт на старте контейнера бота, а не на проверке конфигурации; **`legacy`** не поднимается намеренно — `CHROMA_IMAGE` в `build/versions.env` пуст до выбора тега, это громкий отказ вместо тихой ошибки.
+| Профиль | Файл | Сервисы | Когда включён |
+|---|---|---|---|
+| (без профиля — всегда) | `docker-compose.yml` | `redpanda`, `redpanda-init`, `minio` (образ `build/minio.Dockerfile`), `minio-init`, `gateway`, `core` | всегда: минимальный стек «соло без памяти и без LLM» (деградация FR-080/NFR-072) |
+| `memory` | `docker-compose.yml` | `qdrant`, `neo4j`, `memory` | память Should (EPIC-005-memory); в `.env.example` — набор по умолчанию, в `prod` включён |
+| `gpu` | `docker-compose.yml` | `ollama` (контейнер с NVIDIA) | **опционально**: только если выбран Ollama и именно в контейнере (§6.5). Основной рантайм `llama-server` — нативный процесс, в compose его нет и профиля для него не заводим (ADR-005 доп. 2 п. 7) |
+| `dev` | `docker-compose.yml` | `redpanda-console` | удобство разработчика; консоли только здесь (SEC-33) |
+| `bot` | **`docker-compose.bot.yml`** | `telegram-bot` (свой якорь логов `x-bot-logging`, `10m × 3`) | когда задан `MV_TELEGRAM_BOT_TOKEN`; в CI/e2e выключен; токен — только у этого сервиса и только через `environment` (D-10, правило 4 `compose-lint`). В набор `.env.example` не входит: бинарника `cmd/telegram-bot` нет до EPIC-004 |
+| `legacy` | **`docker-compose.legacy.yml`** | as-is `narrative-orchestrator` (`build/legacy.Dockerfile`), **as-is `semantic-memory` (`127.0.0.1:8083`) и `chromadb`**; `neo4j` поднимается и этим профилем, но остаётся в `docker-compose.yml` (`profiles: ["memory", "legacy"]` — один сервер на оба профиля) | только на время миграции GM (`MV_GM_PATH=legacy`, S5); оркестратор жёстко ходит в `/v1/context-with-events` без деградации (`orchestrator.go:117,177`), поэтому Chroma живёт здесь до S5 и удаляется вместе с профилем в EPIC-003 I2 — теперь это удаление одного файла (D-3, ADR-004 доп. п. 8). Legacy-сервисы читают **свои as-is переменные** (без `MV_`) и собираются не из рабочего дерева, а из коммита `LEGACY_SRC_REF` (`make legacy-src`, §2.2): замороженный код не компилируется с текущим `shared/` |
 
-Набор профилей задаётся `COMPOSE_PROFILES` в `.env` (`COMPOSE_PROFILES=memory,bot`); `make up PROFILES=...` переопределяет. Жизнеспособность профиля `legacy` подтверждается до старта волны 1 (`epics.md` §6 F-6); запасной вариант S5 — «флаг удалён, `gm_path=agent` в 100 % `llm.output`».
+**Почему файлов три (T-397).** `docker compose` интерполирует файл **целиком, до** отбора сервисов по профилю. Одна `${VAR:?}` сервиса, который оператор не поднимает, останавливает `config`, `up` и `ps` у всех. Так `MV_TELEGRAM_BOT_TOKEN` (секрет, который в `.env.example` пуст по правилу) и `CHROMA_IMAGE` (пуст намеренно, D-3) роняли `make up` на чистой машине до создания первого контейнера. Поэтому сервисы с обязательной переменной, которой у чистой машины нет, живут в файле своего профиля. Громкий отказ сохраняется, но достаётся тому оператору, который профиль запросил. `profiles:` на сервисах этих файлов оставлен: `compose-lint` загружает все три файла разом, и решать по-прежнему должен профиль. YAML-якорь между файлами не переходит, поэтому у файлов профилей свои якоря логов. Основной файл от рецидива защищает правило 7 `compose-lint` (§3.1.1): `docker-compose.yml` обязан интерполироваться на `.env.example` с заполненными `[required]` плюс `build/versions.env`.
+
+**Как файлы подключаются.** Только через `make` — состав команды описан в §2.2 под таблицей целей. `-f docker-compose.bot.yml` и `-f docker-compose.legacy.yml` Makefile добавляет сам, когда профиль есть в активном наборе: `make up PROFILES=bot`, `make up PROFILES=memory,legacy` или `COMPOSE_PROFILES` в `.env`. Голый `docker compose --profile bot up` **не поддерживается**, и это решение, а не пробел (T-397, README, врезка «Профили `bot` и `legacy`»). Без `COMPOSE_ENV_FILES` в оболочке он падает на первой `*_IMAGE`. С переменной, но без `-f` файла профиля, он поднимает стек без сервиса профиля. Ручная команда для профильного сервиса — `docker compose -f docker-compose.yml -f docker-compose.bot.yml …` с `COMPOSE_ENV_FILES` в оболочке.
+
+**Состояние профилей (2026-09-13).** **`bot`** описан целиком, но не стартует до EPIC-004: бинарника `cmd/telegram-bot` нет. При пустом токене `make up PROFILES=bot` останавливается на интерполяции с текстом про D-10. **`legacy`** не поднимается намеренно: `CHROMA_IMAGE` в `build/versions.env` пуст до выбора тега на стенде, и это громкий отказ профиля вместо тихой ошибки. По шапке `docker-compose.bot.yml` сервис бота уходит из compose в EPIC-004, вместе со своим бинарником и деплоем.
+
+Набор профилей задаётся `COMPOSE_PROFILES` в `.env`: в `.env.example` — `memory`, в `prod` — `memory,bot`, когда появится бот. `make up PROFILES=...` переопределяет набор разово. Жизнеспособность профиля `legacy` подтверждается до старта волны 1 (`epics.md` §6 F-6); запасной вариант S5 — «флаг удалён, `gm_path=agent` в 100 % `llm.output`».
 
 ### 1.4. Порты (все — `127.0.0.1`; `compose-lint` проверяет, SEC-13)
 
@@ -124,7 +136,7 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 
 Два listener'а Redpanda (`internal://redpanda:9092`, `external://localhost:19092`) нужны, чтобы один и тот же кластер обслуживал контейнеры и процессы, запущенные `go run` на хосте, **и `mvctl`, который публикует в шину** (`laws bump`, `world init`) — на хосте это `MV_KAFKA_BROKERS=127.0.0.1:19092` (§4.2). Schema Registry (as-is 8081) не поднимается (ADR-007: реестр схем — в репозитории).
 
-Порт `1234` `llama-server` **не публикуется compose** — процесс запускается на хосте и виден контейнерам через `host.docker.internal` (`extra_hosts: ["host.docker.internal:host-gateway"]` у `core`); `compose-lint` проверяет, что сервиса `llama-server` в compose нет и что `MV_LLM_URL` контейнера указывает на `host.docker.internal` либо на сервис внутри сети, но не на публичный адрес (§3.1.1 п. 5).
+Порт `1234` `llama-server` **не публикуется compose** — процесс запускается на хосте и виден контейнерам через `host.docker.internal` (`extra_hosts: ["host.docker.internal:host-gateway"]` у `core`); `compose-lint` проверяет, что сервиса `llama-server` в compose нет и что `MV_LLM_URL` контейнера указывает на `host.docker.internal` либо на сервис внутри сети, но не на публичный адрес (§3.1.1 п. 6; до T-399 ссылка вела на п. 5 прежней нумерации).
 
 ---
 
@@ -150,12 +162,13 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 | `make contracts` | `go run ./cmd/mvctl contracts check && go run ./cmd/mvctl blueprint validate blueprints/ && go run ./cmd/mvctl env check && go test ./shared/contracts/... -run TestSchemasValid` |
 | `make secrets-scan` | `gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .` (диапазон ветки; `BASE=integration/mvp-1` по умолчанию) + `gitleaks dir --no-banner --redact .` (рабочая копия) |
 | `make vuln` | `govulncheck ./...` |
-| `make compose-lint` | `scripts/compose-lint.sh` (§3.1.1) |
+| `make compose-lint` | `scripts/compose-lint.sh` — восемь правил по трём compose-файлам (§3.1.1), затем `scripts/compose-lint.sh --fixtures` — самопроверка на `testdata/compose-lint/` |
 | `make ci` | `lint test test-race contracts secrets-scan privacy-scan vuln compose-lint test-e2e` — то же, что CI без Docker-тестов; `make ci-full` добавляет `test-integration`. `test-race` внутри `ci` без cgo печатает `SKIPPED` и не валит прогон: `make ci` — проверка владельца на Windows, где детектор недоступен (ОВ-5, T-401) |
 | `make image` | `docker build -t multiverse-core:$(GIT_SHA) -t multiverse-core:dev -f build/Dockerfile .` |
 | `make minio-image` | `docker build -f build/minio.Dockerfile --build-arg MINIO_TAG=$(MINIO_TAG) --build-arg MINIO_REPO=$(MINIO_REPO) --build-arg MINIO_BUILDER_IMAGE=$(MINIO_BUILDER_IMAGE) -t $(MINIO_IMAGE) .` (§2.5; аргументы из `build/versions.env`) |
-| `make up` | `docker compose --profile … up -d --wait` (compose получает `COMPOSE_ENV_FILES=.env,build/versions.env`) → `make health`; LLM-процесс **не запускает** — только проверяет `GET $MV_LLM_URL/health` и печатает предупреждение, если не `200` (деградация FR-080/NFR-072) |
-| `make down` | `docker compose down` (тома сохраняются); `make reset` — `down -v` с подтверждением и проверкой свежего бэкапа. LLM-процесс не трогает — `make llm-down` отдельно |
+| `make up` | `$(COMPOSE) up -d --wait` → `make health LLM_STRICT=0`; состав `$(COMPOSE)` — абзац под таблицей. Если `legacy` в активном наборе профилей, сначала выполняется `make legacy-src`. LLM-процесс **не запускает** — только проверяет `GET $MV_LLM_URL/health` и печатает предупреждение, если не `200` (деградация FR-080/NFR-072) |
+| `make legacy-src` | `rm -rf build/.legacy-src`, затем `git archive $(LEGACY_SRC_REF)` путей сборки профиля `legacy` в `build/.legacy-src` (замороженные сервисы не собираются с текущим `shared/`). Предпосылка `make up` при профиле `legacy` |
+| `make down` | `$(COMPOSE) down` (тома сохраняются); `make reset` — `$(COMPOSE) down -v` с подтверждением и проверкой свежего бэкапа. LLM-процесс не трогает — `make llm-down` отдельно |
 | **`make llm-up`** | `pwsh scripts/llm-server.ps1` (Windows) / `scripts/llm-server.sh` (WSL/Linux) — старт нативного `llama-server` и ожидание `/health = 200` (до 180 с); повторный вызов при живом процессе — no-op с сообщением (§6.2) |
 | **`make llm-down`** | остановка процесса по PID-файлу `ops/llm-server.pid` (`Stop-Process` / `kill`); тома и модели не трогаются |
 | **`make llm-health`** | `GET $MV_LLM_URL/health` (200 / 503 `loading`) + `GET $MV_LLM_URL/v1/models` (печатает имена моделей) + `nvidia-smi --query-gpu=memory.used`; код возврата ≠ 0, если не `200` |
@@ -167,11 +180,19 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 | `make archive-legacy` | копия томов as-is (MinIO, Redpanda) в `./backups/legacy-<date>/` до пересоздания томов (§5.5; ADR-004 доп. п. 6); однократно, вне git |
 | `make deploy` | `ci` + `backup` + `image` + `up` с `MV_IMAGE_TAG=$(GIT_SHA)` (§8) |
 | `make rollback` | `MV_IMAGE_TAG` ← `.env.previous` → `up` (§8) |
-| `make logs SERVICE=` | `docker compose logs -f --tail=200 $(SERVICE)` |
+| `make logs SERVICE=` | `$(COMPOSE) logs -f --tail=200 $(SERVICE)` |
 | `make replay RECORDING=` | `go run ./cmd/multiverse --contexts=all --mode=replay --bus=memory --recording=$(RECORDING)` |
 | `make clean` | `rm -rf bin/ coverage.out` (без `docker system prune` — он удалял чужие образы) |
 
 Правила: без `docker-compose` (v1) — только `docker compose`; без `latest`; `SERVICES` as-is и цели `build-service` для 15 сервисов исчезают вместе с workspace; версии — только через `build/versions.env` (`include build/versions.env` в Makefile).
+
+**Как Makefile собирает команду compose (T-397, T-412; редакция T-399 по `Makefile`).** Все цели, которые зовут compose, используют одну переменную `COMPOSE`, голого `docker compose` в `Makefile` нет. Это `up`, `down`, `reset`, `logs`, `health`, `backup`, `restore`, `archive-legacy`, `deploy`, `rollback`. Поэтому у `make up` и `make down` должен быть один и тот же `PROFILES=` или неизменный `COMPOSE_PROFILES` в `.env`: иначе `down` не подключит файл профиля и не остановит его сервисы. `PROFILES=` замещает активный набор, а не дополняет его.
+- `COMPOSE_ENV_FILES ?= .env,build/versions.env` экспортируется. Compose берёт эту переменную только из окружения своего процесса, строка в `.env` инертна (§1.1, T-412).
+- Активный набор профилей `ACTIVE_PROFILES`: `PROFILES=` из командной строки, иначе `COMPOSE_PROFILES` из окружения, иначе из `.env`. Строка `.env` разбирается так же, как её разбирает compose: побеждает последнее вхождение, допустимы префикс `export`, ведущие пробелы, хвостовой `# комментарий` и кавычки (ревью T-397, Mi-1).
+- `COMPOSE_FILES`: всегда `-f docker-compose.yml`. `-f docker-compose.bot.yml` добавляется, если в активном наборе есть `bot`, `-f docker-compose.legacy.yml` — если есть `legacy`. Последним идёт `-f docker-compose.override.yml`, если локальный файл существует: явный `-f` выключает автопоиск override у compose (ОВ-40).
+- `COMPOSE := docker compose $(COMPOSE_FILES) $(PROFILE_ARGS)`. `PROFILE_ARGS` — это `--profile` по каждому элементу `PROFILES=`. Профили из `.env` compose читает сам через `COMPOSE_PROFILES`.
+
+Почему файлов три — §1.3.
 
 ### 2.3. Dockerfile платформы (F-6)
 
@@ -235,24 +256,29 @@ ENTRYPOINT ["/multiverse"]
 | pre-commit | `v4.6.2`; `pre-commit/pre-commit-hooks rev: v5.0.0` (или новее на день F-1) | GitHub |
 | Go-библиотеки (F-2/F-4/F-5) | `segmentio/kafka-go v0.4.51`, `minio-go/v7 v7.3.0`, `modernc.org/sqlite v1.58.0`, **`pressly/goose/v3 v3.28.0`** (ADR-019; `golang-migrate` из v0.1 снят), **`santhosh-tekuri/jsonschema/v6 v6.0.3`** (JSON Schema 2020-12; D-5), `oklog/ulid/v2 v2.1.2`, `go-telegram/bot v1.25.0` (ADR-018), `gopkg.in/yaml.v3`, `stretchr/testify` | proxy.golang.org |
 
-`build/versions.env` (читают `docker-compose.yml` через интерполяцию `${...}`, Makefile через `include`, тесты через `shared/testkit.Versions()`; CI — `cat build/versions.env >> $GITHUB_ENV`):
+`build/versions.env` (читают compose-файлы через интерполяцию `${...}` — только при `COMPOSE_ENV_FILES` в окружении процесса, T-412; Makefile через `include`, тесты через `shared/testkit.Versions()`; CI — `grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"`). **Инлайн-комментарии в этом файле запрещены** (шапка файла, T-004). Причины: `include` в Makefile сохраняет хвостовые пробелы значения, парсеры dotenv у compose расходятся в чтении такой строки, а в `$GITHUB_ENV` она уходит целиком, с комментарием (последний довод добавлен в T-399). Комментарий пишется строкой выше. Эталон ниже задаёт формат и основной состав на 2026-09-09. Полный состав и значения — в самом файле: там закреплены конкретные патчи и билды, и позже добавлены `LEGACY_*`, `ALPINE_IMAGE`, `MINIO_COMMIT`.
 
 ```dotenv
 GO_VERSION=1.26.x
 REDPANDA_IMAGE=docker.redpanda.com/redpandadata/redpanda:v26.1.17
 REDPANDA_CONSOLE_IMAGE=docker.redpanda.com/redpandadata/console:v3.11.0
 MINIO_TAG=RELEASE.2025-10-15T17-29-55Z
-MINIO_REPO=https://github.com/alekseizabelin1985-spec/minio.git   # форк владельца (U-10)
+# форк владельца (U-10); пока форка нет — upstream https://github.com/minio/minio.git
+MINIO_REPO=https://github.com/alekseizabelin1985-spec/minio.git
 MINIO_IMAGE=multiverse-core/minio:RELEASE.2025-10-15T17-29-55Z
 MINIO_BUILDER_IMAGE=golang:1.26.x-bookworm
 MC_IMAGE=minio/mc:RELEASE.2025-08-13T08-35-41Z
 QDRANT_IMAGE=qdrant/qdrant:v1.19.1
 NEO4J_IMAGE=neo4j:5.26.30-community
-OLLAMA_IMAGE=ollama/ollama:0.33.3           # только профиль gpu (опционально)
-CHROMA_IMAGE=chromadb/chroma:<tag>          # только профиль legacy
+# только профиль gpu (опционально)
+OLLAMA_IMAGE=ollama/ollama:0.33.3
+# только профиль legacy; пуст намеренно, пока тег не выбран на стенде (D-3): пустое значение — громкий отказ профиля
+CHROMA_IMAGE=
 # --- LLM-рантайм вне compose: пины проекта (машинно-независимые) ---
-LLAMACPP_BUILD=b<NNNN>                      # llama-server --version; фиксируется при F-6
-LLM_MODEL_DEFAULT=Qwen3.8-27B-UD-Q3_K_XL    # имя (stem) модели варианта E; = model в блупринтах
+# llama-server --version; фиксируется при F-6
+LLAMACPP_BUILD=b<NNNN>
+# имя (stem) модели варианта E; = model в блупринтах
+LLM_MODEL_DEFAULT=Qwen3.8-27B-UD-Q3_K_XL
 GOLANGCI_LINT_VERSION=v2.13.2
 GITLEAKS_VERSION=v8.30.1
 ```
@@ -305,7 +331,7 @@ CMD ["server", "/data", "--console-address", ":9001"]
 
 Триггеры: `push` и `pull_request` в `main`, `integration/**`, `epic/**`, `feature/agent-gm-core` (ветки по `teams.md` §3; `develop` не используется); `paths-ignore: ['Docs/**', '**/*.md']` (кроме `blueprints/**/*.md` — они данные; исключение через `paths` в отдельном фильтре); `concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}`; **`permissions: {contents: read}`** на уровне workflow, job `security` — `security-events: write` (SARIF) (T-15, ADR-010 доп. п. 3). Все job'ы — `runs-on: ubuntu-latest`, `timeout-minutes` явные; все `uses:` — по SHA с комментарием версии.
 
-Общий шаг: `cat build/versions.env >> "$GITHUB_ENV"` — версии образов доступны и compose-lint, и testcontainers.
+Общий шаг: `grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"` — версии образов доступны и compose-lint, и testcontainers (в `go.yml` так; `cat` прежней редакции сверен и заменён в T-399).
 
 | Job | Шаги | Время (оценка) | Блокирует мерж |
 |---|---|---|---|
@@ -315,36 +341,28 @@ CMD ["server", "/data", "--console-address", ":9001"]
 | `race` (T-401) | setup-go → `make test-race` в строгом режиме: без cgo цель громко отказывает. Список пакетов и число повторов существуют в одном экземпляре — `RACE_PKGS` и `RACE_COUNT=3` в Makefile (ревью #1 T-401, Mi-1); правила «CI не вызывает make» в проекте нет. Цель выполняет `go test -race -count=$(RACE_COUNT) -timeout 10m $(RACE_PKGS)`, затем `go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...` с `GOFLAGS=-race` и печатает обе команды в лог. Без Docker, `CGO_ENABLED=1`. `timeout-minutes: 25` складывается из настройки и компиляции плюс двух вызовов по 10m: `-timeout` действует на тестовый бинарник, и все проходы `-count` идут внутри него. Зачем при `-race` в `unit`: детектор видит только гонки, которые случились в прогоне, а `unit` проходит каждое чередование один раз. Здесь пакеты, где встречаются горутины, идут трижды: `membus` (`deliverNext`, `SetChaos` на работающей шине), контракт на `membus` (`Close`, кейсы с хвостом), `Harness.mu`, двойники роя (проекция `FakeNarrator`, `failMu` у `FakeEncounter`), `runtime`, `clock`. Список — пакеты, а не `-run`: шаблон, переставший совпадать после переименования, даёт зелёный `[no tests to run]`. `GOFLAGS=-race` наследует `go build` дочернего `cmd/multiverse` в e2e: гонка в процессе даёт код выхода 66, и кейс остановки по сигналу, требующий 0, падает с выводом процесса. Повторяет локально `make test-race` | 4–7 мин, оценка, не замер: без детектора тот же набор с `-count=5` идёт ~19 с на машине владельца, детектор — ×2–20 по CPU | да — после того как владелец добавит `race` в required checks |
 | `contracts` | setup-go → `go run ./cmd/mvctl contracts check` → `go run ./cmd/mvctl blueprint validate blueprints/` → `go run ./cmd/mvctl env check` (`.env.example` ↔ реестр `shared/env`) → `go test ./shared/contracts/... -run TestSchemasValid` (все `schemas/**/*.json` — валидные JSON Schema 2020-12, `jsonschema/v6`) → проверка `api/*.openapi.yaml` загружается (`kin-openapi`) | 1 мин | да |
 | `security` | gitleaks-action (до очистки истории — диапазон PR/ветки `--log-opts="${{ github.event.pull_request.base.sha }}..HEAD"` + `gitleaks dir` рабочей копии; после filter-repo — полная история; `GITLEAKS_LICENSE` **не нужен**: репозиторий приватный на личном аккаунте, лицензия требуется только организациям — U-9) → govulncheck-action (`go-version-file: go.mod`) — **блокирующий** (ADR-010 доп. п. 5; пока `go.mod` не переведён на 1.26 в F-2 — `continue-on-error: true`, снимается тем же PR, что F-2) → `privacy-scan`: `go run ./cmd/mvctl privacy scan testdata/` (числовые внешние ID, username; те же правила, что тест NFR-041; ADR-010 доп. п. 1) | 1–2 мин | да |
-| `compose-lint` | `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` (`.github/ci.env` — копия `.env.example` с подставленными фиктивными паролями; без секретов) → `scripts/compose-lint.sh` (§3.1.1) → hadolint для `build/Dockerfile`, `build/minio.Dockerfile` | < 1 мин | да |
+| `compose-lint` | `docker compose version` (версия compose раннера не закреплена и попадает в лог) → `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` (`.github/ci.env` — копия `.env.example` с подставленными фиктивными паролями; без секретов) → `scripts/compose-lint.sh` (восемь правил по трём compose-файлам, §3.1.1) → `scripts/compose-lint.sh --fixtures` → hadolint для `build/Dockerfile`, `build/minio.Dockerfile` (шаги сверены с `go.yml` в T-399) | < 1 мин | да |
 | `image` (только `push` в `main`/`integration/mvp-1`) | buildx → `docker build -f build/Dockerfile` с кэшем `type=gha` → **без push** (образы собираются на машине владельца `make image`; публикация в GHCR — по отдельному решению) | 3 мин | нет |
 
 Суммарно ≤ 10 мин (job'ы параллельны, критический путь — `integration`). С T-401 детектор гонок работает в трёх заданиях: `unit` — каждый короткий тест один раз, `integration` — адаптеры и контракт на живом брокере, `race` — конкурентные пакеты с повтором и e2e. `race` идёт параллельно и критический путь не удлиняет, но добавляет к каждому прогону 4–7 минут бюджета Actions (2 000 мин/мес, U-9). Если бюджета станет не хватать, первым снижается `-count` в `race` и `RACE_COUNT` в Makefile: списки меняются вместе. Матрица ОС не нужна: единственная целевая платформа Linux-контейнер; локальная сборка на Windows проверяется разработчиком (`make build`). При появлении второй платформы — добавить `windows-latest` только для `unit`.
 
 #### 3.1.1. `scripts/compose-lint.sh` (ADR-010 доп. п. 4, SEC-13/14/33)
 
-Правила 1–6 проверяют модель `docker compose config --format json` (после интерполяции). Правила 3, 7, 8 и источник образа у правила 1 так не могут: литерал пароля и верная `${VAR:?}` в этой модели выглядят одинаково. Поэтому каждый файл они читают отдельно через `docker compose config --no-interpolate --no-consistency --format json --profile '*'`, то есть значения после разбора YAML и до подстановки (T-429). Файл профиля — не самостоятельный проект: `telegram-bot` зависит от `gateway` основного файла. Поэтому проверка согласованности отключена, а все профили включены. На compose v5.2 оба флага вывод не меняют, они нужны для версий, которые сначала собирают проект. Прежний построчный разбор YAML молча расходился с compose: кавычки, `''`, `\x24`, `#` в блочном скаляре и в продолжении строки в кавычках, поток-маппинг, литерал на следующей строке, `KEY :`. Теперь YAML разбирает сам compose, а скрипт воспроизводит только интерполяцию: сообщение `${VAR:?…}` не проверяется, потому что compose вычисляет его, лишь когда уже отказывает; `${VAR:-$${X}}` закрывается на второй `}`. Место находки называется путём в модели (`services.core.environment.MV_X`). Находка якоря, влитого в несколько сервисов, выводится один раз со всеми местами. Если compose не понимает `--profile '*'` и теряет сервисы с профилями, скрипт громко отказывает, а не пропускает их. Правил **восемь** — ровно столько, сколько перечисляет шапка `scripts/compose-lint.sh`. Прежняя редакция этого раздела знала пять и держала правило про `llama-server` внутри пятого (сверка T-416). T-413 уточнил правила 3, 7 и 8, их число не изменилось:
-1. каждый `image:` имеет явный тег ≠ `latest` и совпадает со значением из `build/versions.env` (NFR-071);
-2. каждая публикация порта имеет вид `127.0.0.1:<host>:<container>`; у `redpanda-init`, `minio-init`, `chromadb`, `narrative-orchestrator` публикаций нет; консоли (`redpanda-console`, MinIO `9001`, Neo4j `7474`) — только в профиле `dev`;
-3. нет паролей по умолчанию: в `environment` нет литералов для `MINIO_ROOT_PASSWORD`, `NEO4J_AUTH`, `MV_*_KEY`, `MV_*_PASSWORD`, `MV_TELEGRAM_BOT_TOKEN` (только `${VAR:?}`); ключ без значения для обязательного секрета — тоже нарушение: при молчащем `.env` его нет в контейнере, и образ стартует на встроенной учётке (T-411). Ключ читается и в кавычках (`"MINIO_ROOT_USER":` и элемент списка `- "KEY=value"`), и с пробелом перед двоеточием (`KEY : value`, ревью #1 T-413 Ma-1). `$${VAR}` — экранирование compose, то есть литерал, а не подстановка (T-413). `git grep -i minioadmin` пуст вне `Docs/` и `services/_archive/`;
-4. `MV_TELEGRAM_BOT_TOKEN` присутствует только у сервиса `telegram-bot` (профиль `bot`); `env_file` у других сервисов не содержит токен;
-5. `NEO4J_PLUGINS` отсутствует (T-17); `OLLAMA_ORIGINS` не `*`, `OLLAMA_HOST` не `0.0.0.0` в контейнерном профиле (SEC-15);
-6. **сервиса `llama-server` в compose нет** (нативный процесс, ADR-005 доп. 2 п. 7), а `MV_LLM_URL` у сервисов платформы указывает на `host.docker.internal`, `127.0.0.1`, имя сервиса внутри сети или RFC1918 — публичный host требует `MV_LLM_CLOUD_ENABLED=true` и в compose по умолчанию запрещён (SEC-15, ADR-005 доп. 2 п. 3);
-7. файл compose, который загружается всегда, интерполируется без единой ошибки на чистой машине — `.env.example` с заполненными переменными `[required]` плюс `build/versions.env`; обязательная переменная профиля, которой у чистой машины нет, живёт в файле профиля (`docker-compose.bot.yml`, `docker-compose.legacy.yml`), и эти файлы проверяются правилами 1–6 и 8, но не 7 (T-397). **Вторая половина правила 7** (T-413, приёмка T-412): каждая переменная, которую этот файл требует через `${VAR:?}` или `${VAR?}`, помечена `[required]` в `.env.example`, кроме пинов образов из `build/versions.env`. README велит заполнять только помеченные, и непомеченную оператор пропустит;
-8. у платформенной переменной одно умолчание — манифеста (T-411): `${MV_X:-d}` допустим, только если `d` равно умолчанию `MV_X` в `shared/env/vars.go`, **либо** `MV_X` входит в набор адресов сервисов сети — `MV_KAFKA_BROKERS`, `MV_MINIO_ENDPOINT`, `MV_CORE_URL`, `MV_QDRANT_ADDR`, `MV_NEO4J_URI`, `MV_TELEGRAM_GATEWAY_URL` — и каждый элемент `d` называет сервис этой сети в той же форме, что умолчание манифеста (схема ↔ схема, `host:port` ↔ `host:port`; `contracts.md` §16 п. 5, v0.7). `${MV_X}` и `$MV_X` без модификатора при непустом умолчании манифеста — нарушение (процесс получил бы пустое значение, а для списка допуска это «никого»); законная форма передачи — ключ без значения (`MV_X:`). Имя, которого манифест не объявляет или объявляет выведенным, — нарушение. Сетевая переменная вне набора отвергается с подсказкой внести её в набор (через system-architect, это изменение контракта). `MV_CORE_ADDR` (адрес прослушивания) и `MV_MEMORY_URL` (пустое умолчание передаётся как есть) в набор не входят, и отказ называет причину. Для сторонних переменных с умолчанием манифеста умолчание compose обязано совпадать с умолчанием `DeclareExternal` в `shared/env/infra.go`. Сверяются только `OLLAMA_*`, как в контракте: `COMPOSE_*` — настройки самого compose, и `${COMPOSE_PROJECT_NAME}` законна (ревью #1 T-413 Mi-1). Ключ без значения для них — нарушение: он отдал бы контейнеру умолчание образа, а не наше. Литерал для них (`OLLAMA_NUM_PARALLEL: 4`, `- OLLAMA_NUM_PARALLEL=4`) — тоже нарушение при любом значении, даже равном умолчанию, как и значение из другой переменной или своя подстановка с окружающим текстом: `.env` его не переопределит или дойдёт не тем значением. Из подстановок правило 8 принимает `${OLLAMA_X:-<умолчание манифеста>}` и отвергает `${OLLAMA_X-d}` без двоеточия (строка `OLLAMA_X=` в `.env` дала бы контейнеру пустое значение); отказ называет принимаемую форму, а обязательность через `:?`/`?` — дело правила 7, которое файлы профилей не читает. `OLLAMA_*`, которых `infra.go` не объявляет, правило 8 не трогает (`contracts.md` §16 п. 5, v0.9; T-432). Кроме того (T-413, ревью T-411 N-1, N-5, N-6):
-   - `${MV_X:+x}` и `${MV_X+x}` — нарушения: при заданной переменной они подставляют текст compose, при молчащем `.env` — пустое значение;
-   - умолчание, которое само является подстановкой (`${MV_X:-${…}}`), — нарушение, а внутренняя подстановка проверяется сама по себе;
-   - `$$` — экранирование compose: `$${MV_X:-d}` — текст для оболочки контейнера, а `$$$MV_X` — экранирование и настоящая `$MV_X`;
-   - YAML-комментарий не интерполируется и не читается;
-   - внутри `command:` или длинной строки ключа без значения нет, поэтому отказ советует повторить умолчание манифеста или `:?`.
+*Редакция T-399.* Раздел — перечень, а не спецификация. Точная формулировка каждого правила, его ветви и тексты отказов живут в шапке и коде [`scripts/compose-lint.sh`](../../../scripts/compose-lint.sh), примеры нарушений — в [`testdata/compose-lint/README.md`](../../../testdata/compose-lint/README.md). При расхождении прав скрипт, а этот раздел правится вслед за ним.
 
-Фикстуры — `testdata/compose-lint/`. Каждая `bad-*.yml` называет своё правило строкой `# expect-rule: N`, а причину — строками `# expect-text:`. Каждая `good-*.yml` обязана проходить. `scripts/compose-lint.sh --fixtures` (второй шаг `make compose-lint` и задания CI `compose-lint`) требует, чтобы «плохую» фикстуру отверг ровно её правило и по её причине: раньше проверялся только ненулевой код (приёмка T-411, T-413). Прогон отказывает и в этих случаях:
-   - у фикстуры две строки `expect-rule`;
-   - фикстура названа `*.yaml`;
-   - каталога нет или в нём ноль «плохих» либо ноль «хороших» фикстур;
-   - первая «хорошая» фикстура не проходит, если её запустить из собственного каталога по относительному пути `-f`. Относительный `-f` считается от каталога вызывающего, как у compose, а не от корня репозитория. Прежде такой путь давал ложный отказ правила 7 (ревью #1 T-413, N-3). Несуществующий файл отвергается по имени.
+**Что читается.** По умолчанию линтер берёт всю топологию §1.3: `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`. Первый `-f` заменяет набор, следующие добавляют к нему; первый файл набора — тот, к которому применяется правило 7. Правила 1–6 читают одну модель по всем файлам и всем профилям после интерполяции: `docker compose config --format json` с `build/versions.env` и `.github/ci.env`. Правила 3, 7 и 8, а также источник образа у правила 1 читают каждый файл отдельно, до интерполяции: `config --no-interpolate --no-consistency --format json --profile '*'` (T-429). Скрипт воспроизводит только интерполяцию, YAML разбирает сам compose. Итоговая строка: `ok — N services in 3 file(s), 8 rules`. Правил восемь:
+1. **Пины образов.** У каждого `image:` явный тег, не `latest`. Сторонний образ берётся из переменной `build/versions.env`, собственные `multiverse-core*` — исключение (NFR-071; T-429).
+2. **Порты.** Каждая публикация — `127.0.0.1:<host>:<container>`. `redpanda-init`, `minio-init`, `chromadb` и `narrative-orchestrator` не публикуют ничего. Консоли (`*-console`, MinIO `9001`, Neo4j `7474`) — только в профиле `dev` (SEC-13, SEC-33).
+3. **Нет учёток по умолчанию.** Секрет в `environment` — только подстановка переменной, не обязательно одноимённой (`NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?…}`), у обязательных — `${VAR:?}`. Литерал и экранированная `$${VAR}` — нарушения у любого секрета. Ключ без значения — только у обязательного; облачные `MV_LLM_API_KEY` и `MV_ANTHROPIC_API_KEY` законно пусты. `minioadmin` нет вне `Docs/` и `services/_archive/` (SEC-14; T-411, T-413).
+4. **Токен бота.** `MV_TELEGRAM_BOT_TOKEN` получает только `telegram-bot`, через `environment`, а не через общий `env_file` (D-10).
+5. **Neo4j и Ollama.** `NEO4J_PLUGINS` нет, `OLLAMA_ORIGINS` не `*`, `OLLAMA_HOST` не `0.0.0.0` (T-17, SEC-15, SEC-32).
+6. **LLM вне compose.** Сервиса `llama-server` нет. `MV_LLM_URL` и `MV_OLLAMA_URL` сервисов указывают на loopback, `host.docker.internal`, сервис сети или RFC1918, но не на публичный host (ADR-005 доп. 2 п. 3, п. 7; SEC-15).
+7. **Чистая машина.** В `.env.example` нет инлайн-комментария после пустого значения (§4.1 п. 5). Основной `docker-compose.yml` интерполируется без ошибок на `.env.example` с заполненными `[required]` плюс `build/versions.env`. Каждая его `${VAR:?}`/`${VAR?}`, кроме пинов образов, помечена `[required]` в сплошном блоке комментария над переменной. Файлы профилей под правило 7 не попадают (T-397, T-404, T-413).
+8. **Одно умолчание — манифеста.** `${MV_X:-d}` допустима только с `d` из `shared/env/vars.go`; шести сетевым адресам `contracts.md` §16 п. 5 вместо этого разрешено имя сервиса сети в форме умолчания. `${MV_X}` и `$MV_X` без модификатора — нарушения при непустом умолчании манифеста. `:+`/`+`, умолчание из другой подстановки, необъявленное или выведенное имя — нарушения всегда. Для `OLLAMA_*` из `shared/env/infra.go` принимается только `${OLLAMA_X:-<умолчание infra.go>}`; `${OLLAMA_X-d}` без двоеточия, литерал и ключ без значения отвергаются (T-411, T-413, T-432).
 
-   Иначе переезд каталога тихо выключил бы самопроверку (ревью #1 T-413). Фикстуры идут параллельно (`COMPOSE_LINT_JOBS`, по умолчанию число процессоров), а вердикты читаются в порядке файлов (T-429).
-Выход ≠ 0 при любом нарушении; тот же скрипт — `make compose-lint`.
+**Фикстуры** — `testdata/compose-lint/`, порядок и перечень в её `README.md`. `scripts/compose-lint.sh --fixtures` — второй шаг `make compose-lint` и задания CI `compose-lint`. Каждую `bad-*.yml` должно отвергнуть ровно правило её строки `# expect-rule: N`, и по причине из строк `# expect-text:`. Каждая `good-*.yml` обязана проходить. Пустой или пропавший каталог — отказ, а не зелёный прогон (T-411, T-413, T-429).
+
+Выход ≠ 0 при любом нарушении; тот же скрипт вызывают `make compose-lint` и задание CI `compose-lint`.
 
 Ветки (ADR-010, `teams.md` §3, `epics.md` v0.2 п. 4): интеграционная ветка **`integration/mvp-1`** (создана в F-0 от `feature/agent-gm-core`), ветки эпиков `epic/EPIC-00N-<slug>` на весь MVP-1, `main` — то, что задеплоено. CI одинаков на всех; правило защиты `main` и `integration/mvp-1` — required checks `unit, integration, e2e, race, contracts, security, compose-lint` (`race` добавлен T-401; в настройки репозитория его вносит владелец — пока он не отмечен, задание отчитывается, но мерж не блокирует), линейная история, без force-push, CODEOWNERS-ревью. Порядок слияния инкрементов — `epics.md` §5/§6; отдельного «интеграционного» CI не нужно — тот же workflow на `integration/mvp-1`. Сборка интеграционной ветки перед этапом интеграции = зелёный `go.yml` на `integration/mvp-1` после слияния каждого инкремента + `make ci-full` на машине владельца перед I1-α.
 
@@ -415,78 +433,113 @@ repos:
 2. Переменные сторонних образов (Redpanda, MinIO, Neo4j, Ollama, Chroma) префикса не имеют — их имена диктуют образы; они живут в том же `.env`, секция «infrastructure». Исключение — `llama-server`: он не образ и переменных окружения не требует, всё задаётся флагами командной строки, поэтому его параметры хранятся как **платформенные `MV_LLM_*`** (их читает `scripts/llm-server.*`, а `MV_LLM_URL`/`MV_LLM_PROVIDER` — ещё и шлюз). Legacy-сервисы профиля `legacy` читают свои as-is имена (секция «legacy»), в реестр `shared/env` не входят.
 3. Конфигурация домена — **файлы в Git**: `blueprints/*.md`, `rules/dark-forest.yaml`, `laws/*.yaml`, `config/absolute-limits.yaml`, `schemas/**`. `configs/gm_*.yaml` и `shared/config` (профили из MinIO) — в `services/_archive/` (overview §16).
 4. Фича-флаги MVP-1 — тоже env: `MV_GM_PATH=agent|legacy` (миграция GM, S5), `MV_LLM_CLOUD_ENABLED`, `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS`, `MV_LAWS_BREACH_PHASE=false`, `MV_LLM_STORE_PROMPTS=false`, `MV_BUS_VALIDATE_ON_READ=true`. Переключение флага = перезапуск процесса (горячая перезагрузка — E-F).
+5. **Формат `.env.example` (T-397, T-404, T-413; внесено в T-399).**
+   - **Комментарий к переменной с пустым значением пишется строкой выше, никогда после `=`.** Парсер dotenv у compose обрезает хвостовой комментарий только после непустого значения, после пустого он берёт текст комментария как значение. Строка `MINIO_ROOT_USER=   # обязательна` давала непустой логин-комментарий: `${VAR:?}` молчал, MinIO стартовал с мусорной учёткой. `set -a; . ./.env` в Makefile читал ту же строку как пустую, то есть compose и make расходились. Правило 7 `compose-lint` такую строку отвергает. После непустого значения инлайн-комментарий допустим (`MV_ENV=dev   # dev|ci|prod`). В `build/versions.env` и `.github/ci.env` инлайн-комментарии запрещены вовсе (§2.4).
+   - **Обязательная для оператора переменная помечается `[required]` в комментарии над ней.** Пометка может стоять в любой строке сплошного блока комментария над переменной (T-404). Это единственный список обязательных: README и `CLAUDE.md` называют правило «заполнить помеченные», а не имена, чтобы текст не расходился с файлом.
+   - Пометка машиночитаемая, и правило 7 сверяет её в обе стороны. Из `.env.example` с заполненными `[required]` собирается «чистая машина», и на ней должен интерполироваться `docker-compose.yml`. Каждая `${VAR:?}`/`${VAR?}` этого файла, кроме пинов `build/versions.env`, обязана нести пометку.
+   - Переменная, которую чистая машина заполнять не обязана (токен бота, тег образа Chroma), в `docker-compose.yml` не требуется: её место — файл профиля (§1.3).
 
 ### 4.2. `.env.example` — целевой состав (F-1/F-5/F-6)
+
+*Редакция T-399.* Эталон приведён к формату §4.1 п. 5 и сверен с `.env.example` по составу переменных. У пустого значения нет инлайн-комментария, обязательные помечены `[required]` в комментарии над переменной. Развёрнутые пояснения самого файла сокращены: шапка о формате, T-408 о `MV_MODE`/`MV_BUS`, T-411 о списках клиентов, T-404 об `MV_LLM_URL`, T-255 об `MV_SWARM_FAKE`. При расхождении формулировок прав файл. Прежний эталон (до T-399) хранил пустые значения с инлайн-комментарием — ровно формат, который T-397 признал дефектом. Воспроизводить его нельзя.
 
 ```dotenv
 # ===== compose =====
 COMPOSE_PROJECT_NAME=multiverse
-COMPOSE_PROFILES=memory,bot          # набор профилей: memory,gpu,bot,dev,legacy
-COMPOSE_ENV_FILES=.env,build/versions.env   # compose её отсюда НЕ читает — экспортирует Makefile (T-412)
+# bot в набор по умолчанию не входит: бинарника telegram-bot нет до EPIC-004 (§1.3)
+COMPOSE_PROFILES=memory              # набор профилей: memory,gpu,bot,dev,legacy
+# Профили bot и legacy — в docker-compose.bot.yml / docker-compose.legacy.yml, файл подключает make (§1.3, T-397).
+# Строку ниже compose НЕ читает — переменную экспортирует Makefile (T-412); строку объявляет манифест shared/env.
+COMPOSE_ENV_FILES=.env,build/versions.env
 MV_IMAGE_TAG=dev                     # тег образа multiverse-core (make deploy подставляет git sha)
 
 # ===== infrastructure (имена диктуют образы) =====
-MINIO_ROOT_USER=                     # обязательна; не minioadmin
-MINIO_ROOT_PASSWORD=                 # обязательна, ≥ 16 символов; секрет
-NEO4J_PASSWORD=                      # обязательна при профиле memory; секрет (compose собирает NEO4J_AUTH=neo4j/${NEO4J_PASSWORD})
-# --- Ollama: НЕОБЯЗАТЕЛЕН, заполняется только при MV_LLM_PROVIDER=ollama (конфигурации C/A, эмбеддинги) ---
-#OLLAMA_KEEP_ALIVE=-1                # только профиль gpu; нативно — переменные окружения Windows
+# [required] обязательна; не minioadmin
+MINIO_ROOT_USER=
+# [required] обязательна, >= 16 символов; секрет
+MINIO_ROOT_PASSWORD=
+# [required] обязательна при профилях memory/legacy; секрет (compose собирает NEO4J_AUTH=neo4j/${NEO4J_PASSWORD})
+NEO4J_PASSWORD=
+# --- Ollama: НЕОБЯЗАТЕЛЕН, только при MV_LLM_PROVIDER=ollama. Значения — умолчания shared/env/infra.go,
+# compose профиля gpu подставляет ровно их (правило 8). Раскомментировать — только чтобы задать ДРУГОЕ значение. ---
+#OLLAMA_KEEP_ALIVE=-1
 #OLLAMA_MAX_LOADED_MODELS=2
 #OLLAMA_NUM_PARALLEL=1
 #OLLAMA_FLASH_ATTENTION=1
-#OLLAMA_KV_CACHE_TYPE=f16            # q8_0 — вариант замера с квантованным KV (§6.4)
+#OLLAMA_KV_CACHE_TYPE=f16
+#OLLAMA_ORIGINS=http://127.0.0.1,http://localhost
 
 # ===== platform, общие для всех процессов =====
 MV_ENV=dev                           # dev|ci|prod
 MV_LOG_LEVEL=info                    # debug|info|warn|error
 MV_LOG_FORMAT=json                   # json|text
-MV_MODE=live                         # live|replay; источник истины — манифест, --mode перекрывает для запуска вручную (T-408)
-MV_BUS=kafka                         # kafka|memory — по протоколу, не по продукту; redpanda выведено и отвергается (T-408); memory — только --contexts=all
+# MV_MODE и MV_BUS читает процесс: это умолчания флагов --mode/--bus, compose флагов не передаёт (T-408)
+MV_MODE=live                         # live|replay
+# вид шины — по протоколу: redpanda выведено и отвергается (T-408); memory — только с --contexts=all
+MV_BUS=kafka                         # kafka|memory
 MV_BUS_VALIDATE_ON_READ=true         # валидация схемы при чтении (ADR-007 доп. п. 4)
 MV_KAFKA_BROKERS=redpanda:9092       # go run на хосте: 127.0.0.1:19092
 MV_MINIO_ENDPOINT=minio:9000         # без схемы; на хосте 127.0.0.1:9000
-MV_MINIO_ACCESS_KEY=                 # секрет; для dev = MINIO_ROOT_USER, для prod — отдельный пользователь (mc admin user add)
-MV_MINIO_SECRET_KEY=                 # секрет
+# [required] секрет; для dev = MINIO_ROOT_USER, для prod — отдельный пользователь (mc admin user add)
+MV_MINIO_ACCESS_KEY=
+# [required] секрет
+MV_MINIO_SECRET_KEY=
 MV_MINIO_USE_SSL=false
 MV_WORLD_ID=dark-forest-world        # мир по умолчанию для mvctl и bootstrap
-MV_BACKUP_AGE_RECIPIENT=             # публичный ключ age для бэкапа links.db (не секрет; §5.6)
+# публичный ключ age для бэкапа links.db (не секрет; §5.6)
+MV_BACKUP_AGE_RECIPIENT=
 
 # ===== gateway =====
 # адреса нет: процесс слушает MV_CORE_ADDR, в compose у gateway — литерал ":8088" (MV_GATEWAY_ADDR выведен, T-408)
 MV_GATEWAY_DATA_DIR=/data            # links.db, gateway.db (том gateway-data)
-MV_GATEWAY_CLIENT_IDS=telegram-bot,ci-harness,mvctl   # allow-list X-Client-Id (ADR-009 п. 9); в prod без ci-harness
+# Списки клиентов compose передаёт как есть, без своего умолчания (T-411): пустое значение = никого,
+# нет строки = умолчание манифеста. В prod держать строки всегда и убрать ci-harness.
+MV_GATEWAY_CLIENT_IDS=telegram-bot,ci-harness,mvctl   # allow-list X-Client-Id (ADR-009 п. 9)
 MV_GATEWAY_ACTOR_KIND_CLIENTS=ci-harness,mvctl        # кому разрешён X-Actor-Kind ci|sim
 MV_CORE_URL=http://core:8090         # прокси /v1/admin/* (D-7)
 
 # ===== core =====
+# единственный адрес прослушивания процесса при любом --contexts; в compose у каждого сервиса свой литерал (T-408)
 MV_CORE_ADDR=:8090                   # /health и /v1/admin/* (D-7; сервер — shared/runtime)
+# compose передаёт как есть, без своего умолчания — см. блок gateway (T-411)
+MV_CORE_ADMIN_CLIENTS=operator,mvctl,ci-harness # X-Client-Id, допущенные к /v1/admin/* (ADR-009 п. 9)
 MV_MEMORY_URL=http://memory:8082     # пусто = память выключена (деградация FR-035)
 MV_SNAPSHOT_EVERY_FACTS=200          # снапшот State каждые N фактов
 MV_GM_PATH=agent                     # agent|legacy — фича-флаг миграции GM (S5)
 MV_LAWS_BREACH_PHASE=false
+# временный флаг точки I1-α: заглушка Phase 1 вместо роя; удаляется с хуком в T-256
+MV_SWARM_FAKE=false                  # true|false; compose флаг в контейнеры не передаёт
 
 # ===== llm (рантайм по умолчанию — нативный llama-server, ADR-005 доп. 2) =====
 MV_LLM_PROVIDER=openai_compat        # openai_compat|ollama|anthropic|recorded|fake
-MV_LLM_URL=                          # ОБЯЗАТЕЛЕН, без значения по умолчанию (T-404): единственный источник адреса модели и порта llama-server; из контейнеров http://host.docker.internal:<порт>, на хосте http://127.0.0.1:<порт>; /v1 на конце допустим и отбрасывается
-MV_LLM_API_KEY=                      # пусто для локального llama-server; секрет — только для облачного эндпоинта
-MV_LLM_NUM_CTX=8192                  # контекст на слот; --ctx-size llama-server = MV_LLM_NUM_CTX × число слотов
+# Единственный источник адреса LLM и порта llama-server, умолчания нет (T-404). Хвост /v1 допустим.
+# Из контейнеров http://host.docker.internal:<порт>, на хосте http://127.0.0.1:<порт>.
+# [required] заполнить до первого `make up`: compose требует её через `:?` (сервис core, T-404)
+MV_LLM_URL=
+# пусто для локального llama-server; секрет — только для облачного эндпоинта
+MV_LLM_API_KEY=
+MV_LLM_NUM_CTX=8192                  # контекст на слот; --ctx-size llama-server = MV_LLM_NUM_CTX x число слотов
 MV_LLM_STORE_PROMPTS=false           # полные промпты в prompts-{world} (ILM 30 дн.)
 MV_LLM_CLOUD_ENABLED=false           # гейт по HOST в MV_LLM_URL, не по имени провайдера (ADR-005 доп. 2 п. 3)
 MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false
 MV_LLM_CLOUD_BUDGET_USD_PER_DAY=0
-MV_ANTHROPIC_API_KEY=                # секрет; только для провайдера anthropic (E-H)
+# секрет; только для провайдера anthropic (E-H)
+MV_ANTHROPIC_API_KEY=
 
 # --- llama-server: локальные пути и параметры запуска (читает только scripts/llm-server.*; в контейнеры не передаются) ---
-MV_LLM_BIN=D:\Models\llama\llama\llama-server.exe
-MV_LLM_MODEL_FILE=D:\Models\unsloth\Qwen3.8\Qwen3.8-27B-UD-Q3_K_XL.gguf   # single-режим (-m)
-MV_LLM_MODELS_DIR=D:\Models\         # router-режим (--models-dir, БЕЗ -m); варианты A/E+
-MV_LLM_SLOT_SAVE_PATH=D:\Models\llama\llama-slots
-MV_LLM_HOST=127.0.0.1                # интерфейс, который слушает llama-server; наружу не публикуется (SEC-15)
-# MV_LLM_PORT выведен (T-404): порт берётся из MV_LLM_URL — второй источник адреса разошёлся на стенде (1234 против 8888)
+# Пути Windows — в одинарных кавычках ('D:\Models\...'): Makefile читает .env через `set -a; . ./.env`.
+MV_LLM_BIN=
+# single-режим (-m), *.gguf
+MV_LLM_MODEL_FILE=
+# router-режим (--models-dir, БЕЗ -m); варианты A/E+
+MV_LLM_MODELS_DIR=
+MV_LLM_SLOT_SAVE_PATH=
+# интерфейс, который слушает локальный сервер; только loopback (SEC-15), порт — из MV_LLM_URL (MV_LLM_PORT выведен, T-404)
+MV_LLM_HOST=127.0.0.1
 MV_LLM_SLOTS=1                       # --parallel; 1 = как OLLAMA_NUM_PARALLEL=1
 MV_LLM_NGL=99                        # --n-gpu-layers
-MV_LLM_THREADS=32                    # --threads (i9-13900)
-MV_LLM_BATCH_SIZE=16000              # --batch-size (значение из командной строки владельца)
+MV_LLM_THREADS=32                    # --threads
+MV_LLM_BATCH_SIZE=16000              # --batch-size
 MV_LLM_REASONING=off                 # серверный --reasoning on|off|auto; на запрос шлюз шлёт enable_thinking=false
 
 # --- Ollama: только при MV_LLM_PROVIDER=ollama (иначе не заполнять) ---
@@ -496,7 +549,7 @@ MV_LLM_REASONING=off                 # серверный --reasoning on|off|aut
 # те же MV_* что и у процессов, но с адресами хоста:
 #   MV_KAFKA_BROKERS=127.0.0.1:19092   (external listener Redpanda, §1.4)
 #   MV_MINIO_ENDPOINT=127.0.0.1:9000
-#   MV_LLM_URL=http://127.0.0.1:1234
+#   MV_LLM_URL=http://127.0.0.1:<порт из блока llm>
 #   MV_CORE_URL=http://127.0.0.1:8090
 
 # ===== memory (профиль memory) =====
@@ -504,19 +557,30 @@ MV_LLM_REASONING=off                 # серверный --reasoning on|off|aut
 MV_QDRANT_ADDR=qdrant:6334           # gRPC
 MV_NEO4J_URI=neo4j://neo4j:7687
 MV_NEO4J_USER=neo4j
-MV_NEO4J_PASSWORD=                   # секрет; = NEO4J_PASSWORD
+# [required] секрет; = NEO4J_PASSWORD
+MV_NEO4J_PASSWORD=
 MV_EMBED_MODEL=nomic-embed-text      # или bge-m3 — по замеру
 
 # ===== telegram-bot (профиль bot) =====
-MV_TELEGRAM_BOT_TOKEN=               # секрет; выдаёт @BotFather; передаётся только сервису telegram-bot
-MV_TELEGRAM_ALLOWED_USER_IDS=        # allowlist Telegram user id через запятую (SEC-06); пусто = бот никого не пускает
+# Сервис — в docker-compose.bot.yml (T-397); пустой токен громко падает только при профиле bot, поэтому пометки обязательности нет.
+
+# секрет; выдаёт @BotFather; передаётся только сервису telegram-bot
+MV_TELEGRAM_BOT_TOKEN=
+# allowlist Telegram user id через запятую (SEC-06); пусто = бот никого не пускает
+MV_TELEGRAM_ALLOWED_USER_IDS=
 MV_TELEGRAM_GATEWAY_URL=http://gateway:8088
 MV_TELEGRAM_POLL_TIMEOUT_S=25
 MV_TELEGRAM_HEALTH_ADDR=:8089
 
 # ===== legacy (профиль legacy; as-is имена, вне реестра shared/env) =====
-# переменные as-is narrative-orchestrator / semantic-memory / chromadb — переносятся из as-is docker-compose.yml без изменений при F-6
+# Сервисы — в docker-compose.legacy.yml (T-397); сборка из LEGACY_SRC_REF (`make legacy-src`).
+# Тег Chroma — CHROMA_IMAGE в build/versions.env, пуст намеренно (D-3). Пусто = умолчание compose.
+#LEGACY_ORACLE_URL=http://host.docker.internal:1234/v1/chat/completions
+#LEGACY_ORACLE_TIMEOUT_MS=60000
+#LEGACY_CHROMA_COLLECTION=multiverse_events
 ```
+
+Проверка формата эталона (T-399), теми же средствами, что в ревью T-397: `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*#'` по блоку выше и по `.env.example` не находит ни одной строки. Пометку `[required]` несут ровно семь переменных: `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `NEO4J_PASSWORD`, `MV_MINIO_ACCESS_KEY`, `MV_MINIO_SECRET_KEY`, `MV_LLM_URL`, `MV_NEO4J_PASSWORD` — как в файле. Состав меняется вместе с `docker-compose.yml`, и сверяет его правило 7, а не этот список.
 
 Каждая переменная в реестре `shared/env` имеет описание; `mvctl env check` (job `contracts`, `make contracts`) проверяет: (а) каждая зарегистрированная `MV_*` есть в `.env.example`; (б) каждая `MV_*` из `.env.example` зарегистрирована; (в) переменные, помеченные `secret`, в `.env.example` пусты; (г) обязательные переменные без дефолта пусты в примере и документированы. Инфраструктурные переменные (без префикса) сверяются со списком в `shared/env/infra.go`; секция `legacy` исключена из проверки. Так закрывается NFR-074 без парсинга `os.Getenv` по исходникам — линтер `forbidigo` дополнительно гарантирует, что мимо реестра ничего не читается.
 
@@ -1041,20 +1105,20 @@ Ollama остаётся установленной и поддерживаетс
 
 ---
 
-## 9. Runbook — заготовки (переносятся в `docs/ops/runbook.md` tech-writer'ом на A7)
+## 9. Runbook — заготовки (переносятся в `Docs/ops/runbook.md` tech-writer'ом на A7)
 
-**Прямые команды `docker compose` в этом разделе (T-412)** требуют в оболочке `COMPOSE_ENV_FILES=.env,build/versions.env`: compose берёт эту переменную только из окружения своего процесса, строку в `.env` не читает (переменная называет env-файлы и не может прийти из одного из них; проверено на compose v5.2). Без неё compose не видит `build/versions.env` и падает на первой переменной образа (`REDPANDA_IMAGE` или другой `*_IMAGE`). Цели `make` экспортируют её сами — стек поднимается только через `make`.
+**Прямые команды `docker compose` в этом разделе (T-412)** требуют в оболочке `COMPOSE_ENV_FILES=.env,build/versions.env`: compose берёт эту переменную только из окружения своего процесса, строку в `.env` не читает (переменная называет env-файлы и не может прийти из одного из них; проверено на compose v5.2). Без неё compose не видит `build/versions.env` и падает на первой переменной образа (`REDPANDA_IMAGE` или другой `*_IMAGE`). Цели `make` экспортируют её сами — стек поднимается только через `make`. **Сервисы профилей `bot` и `legacy`** (`telegram-bot`, `chromadb`, `semantic-memory`, `narrative-orchestrator`) живут в своих файлах. Прямой команде для них, кроме `COMPOSE_ENV_FILES`, нужен ещё `-f` файла профиля: `docker compose -f docker-compose.yml -f docker-compose.bot.yml …` (или `-f docker-compose.legacy.yml`). Без него compose сервиса не видит (§1.3; редакция T-399 по `Docs/ops/runbook.md`).
 
 ### 9.1. Запуск с нуля (после клонирования)
-1. `cp .env.example .env`; заполнить `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` (≥ 16 симв.), `MV_MINIO_ACCESS_KEY/SECRET_KEY`, `NEO4J_PASSWORD`/`MV_NEO4J_PASSWORD`, при боте — `MV_TELEGRAM_BOT_TOKEN` и `MV_TELEGRAM_ALLOWED_USER_IDS`; выставить `COMPOSE_PROFILES`.
+1. `cp .env.example .env`; заполнить `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` (≥ 16 симв.), `MV_MINIO_ACCESS_KEY/SECRET_KEY`, `NEO4J_PASSWORD`/`MV_NEO4J_PASSWORD`, при боте — `MV_TELEGRAM_BOT_TOKEN` и `MV_TELEGRAM_ALLOWED_USER_IDS`; выставить `COMPOSE_PROFILES`. В `.env.example` там `memory`; `bot` добавлять после EPIC-004, `legacy` — только на миграцию GM. Файлы этих профилей Makefile подключит сам (§1.3; редакция T-399).
 2. **LLM.** Проверить в `.env`: `MV_LLM_PROVIDER=openai_compat`, `MV_LLM_URL`, `MV_LLM_BIN`, `MV_LLM_MODEL_FILE`, `MV_LLM_MODELS_DIR`, `MV_LLM_NUM_CTX`; модель `.gguf` лежит на месте. `make llm-up` → ждать `/health = 200` → `make llm-health` (печатает `/v1/models` и билд). Проверка доступности из контейнера: `docker run --rm --add-host host.docker.internal:host-gateway curlimages/curl:8.10.1 -s -o /dev/null -w '%{http_code}' http://host.docker.internal:1234/health` → `200`; если нет — правило Windows Firewall для `llama-server.exe` (входящие с `172.16.0.0/12`), **не** `--host 0.0.0.0` (§6.3). Ollama ставится **только** если выбран провайдер `ollama` (§6.5).
 3. `make minio-image` (первый раз ≈ 5 мин; клонирует форк `MINIO_REPO`, §2.5) → `make up` (init-контейнеры создают топики/бакеты/пользователя MinIO) → `make health` → `make warm`.
 4. `MV_KAFKA_BROKERS=127.0.0.1:19092 MV_MINIO_ENDPOINT=127.0.0.1:9000 go run ./cmd/mvctl world init --blueprints blueprints/ --world $MV_WORLD_ID` (EPIC-002 I1; бакеты с versioning/ILM создаёт `objstore`) → `mvctl world status`. **Любая команда `mvctl`, которая пишет в шину** (`world init`, `laws bump`, `record`), запускается на хосте и должна получить external listener `127.0.0.1:19092` — имени `redpanda` на хосте нет (§1.4, §4.2).
 5. Бот: `/start` в Telegram (с user id из allowlist) → уведомление FR-009 → создание персонажа.
 
 ### 9.2. Остановка / перезапуск
-- `make down` — останавливает контейнеры, тома сохраняются; после `make up` `core` восстанавливается по C-14 (снапшот + догон журнала), в логе `analytics.replay.completed identical=true`.
-- Перезапуск одного процесса: `docker compose restart core` (bot держит long-poll к gateway — gateway перезапускать отдельно, бот переподключится).
+- `make down` — останавливает контейнеры, тома сохраняются; после `make up` `core` восстанавливается по C-14 (снапшот + догон журнала), в логе `analytics.replay.completed identical=true`. `make down` подключает тот же набор compose-файлов, что `make up`, только при том же `PROFILES=` или неизменном `COMPOSE_PROFILES` в `.env`. Иначе файл профиля не подключится, и его сервисы не остановятся (§2.2; T-399).
+- Перезапуск одного процесса: `docker compose restart core` (сервисы основного файла; для `bot`/`legacy` — с `-f` файла профиля, вводный абзац §9) (bot держит long-poll к gateway — gateway перезапускать отдельно, бот переподключится).
 - `make reset` — **удаляет тома** (спрашивает подтверждение, требует свежего `make backup`).
 
 ### 9.3. LLM: старт, проверка, смена модели (карточка `llama-server`)
@@ -1093,8 +1157,10 @@ Ollama остаётся установленной и поддерживаетс
 
 ### 9.6. Ротация токена бота
 1. `@BotFather` → `/revoke` (старый токен перестаёт работать немедленно; long-poll бота упадёт — ожидаемо).
-2. Обновить `MV_TELEGRAM_BOT_TOKEN` в `.env` → `docker compose up -d telegram-bot` (только бот; платформа не перезапускается).
-3. `docker compose logs --tail=50 telegram-bot` → `getMe ok` (токен в логе отредактирован); `/help` в чате.
+2. Обновить `MV_TELEGRAM_BOT_TOKEN` в `.env`. Дальше один из двух путей (редакция T-399 по `Docs/ops/runbook.md`):
+   - весь стек с профилем бота — `make up PROFILES=<обычный набор>,bot`, например `PROFILES=memory,bot`. `PROFILES=` замещает набор, поэтому перечислить весь;
+   - только бот, платформа не перезапускается — `docker compose -f docker-compose.yml -f docker-compose.bot.yml up -d telegram-bot` с `COMPOSE_ENV_FILES` в оболочке. Сервис живёт только в `docker-compose.bot.yml`, и без `-f` compose его не видит.
+3. `docker compose -f docker-compose.yml -f docker-compose.bot.yml logs --tail=50 telegram-bot` или `make logs SERVICE=telegram-bot PROFILES=<набор>,bot` → `getMe ok` (токен в логе отредактирован); `/help` в чате.
 4. Если старый токен попадал в git/логи: `gitleaks git` по истории — фиксировать в `ops/metrics/incidents.csv` (`kind=other`), очистка истории — по решению владельца.
 
 ### 9.7. Ежедневный/еженедельный чек оператора
@@ -1103,7 +1169,7 @@ Ollama остаётся установленной и поддерживаетс
 - Еженедельно: `make backup`, `docker system df`, `mvctl report --weekly`, ревью `incidents.csv`, PR Dependabot.
 - Ежемесячно: сверка `build/versions.env` с Docker Hub (Dependabot compose не видит) **и `LLAMACPP_BUILD` с релизами `ggml-org/llama.cpp`** — обновление только отдельной задачей (§9.3); ежеквартально — учения восстановления `links.db` (§5.6).
 
-### 9.8. Карточки процессов (заготовки для `docs/ops/runbook.md`)
+### 9.8. Карточки процессов (заготовки для `Docs/ops/runbook.md`)
 
 | | `gateway` | `core` | `memory` (профиль `memory`) | `telegram-bot` (профиль `bot`) |
 |---|---|---|---|---|
@@ -1111,8 +1177,8 @@ Ollama остаётся установленной и поддерживаетс
 | Порт / health | `127.0.0.1:8088/health` | `127.0.0.1:8090/health` | `127.0.0.1:8082/health` | `127.0.0.1:8089/health` |
 | Зависимости в `/health.deps` | `bus`, `sqlite`, `core` (для admin-прокси) | `bus`, `objstore`, `llm`, `memory` (опц.) | `bus`, `qdrant`, `neo4j` | `gateway` |
 | Данные | том `gateway-data` (`links.db`, `gateway.db`) | MinIO (`entities-*`, `snapshots-*`, `prompts-*`), журнал Redpanda | тома `qdrant_storage`, `neo4j_data` (производные) | нет (без курсора; состояние — в gateway) |
-| Старт / стоп | `docker compose up -d gateway` / `stop gateway`; при рестарте бот переподключается сам | `docker compose restart core` → в логе `replay.completed identical=true` | `docker compose restart memory`; при `unavailable` `core` деградирует (FR-035) | `docker compose up -d telegram-bot`; long-poll один на токен (409 в логе = второй экземпляр) |
-| Логи | `make logs SERVICE=gateway`; access-log без тел (SEC-02) | `make logs SERVICE=core`; фильтр по `correlation_id` | `make logs SERVICE=memory` | `make logs SERVICE=telegram-bot` (`10m × 3`, токен отредактирован) |
+| Старт / стоп | `docker compose up -d gateway` / `stop gateway`; при рестарте бот переподключается сам | `docker compose restart core` → в логе `replay.completed identical=true` | `docker compose restart memory`; при `unavailable` `core` деградирует (FR-035) | `make up PROFILES=<набор>,bot` / `make down PROFILES=<набор>,bot`; только бот — `docker compose -f docker-compose.yml -f docker-compose.bot.yml up -d telegram-bot` (§9.6); long-poll один на токен (409 в логе = второй экземпляр) |
+| Логи | `make logs SERVICE=gateway`; access-log без тел (SEC-02) | `make logs SERVICE=core`; фильтр по `correlation_id` | `make logs SERVICE=memory` | `make logs SERVICE=telegram-bot PROFILES=<набор>,bot` — без `bot` в активном наборе Makefile не подключит файл бота (`10m × 3`, токен отредактирован) |
 | Типичный сбой → действие | `sqlite` ≠ ok → проверить том, `db check`; `403 client_unknown` → `MV_GATEWAY_CLIENT_IDS` | `llm=unavailable` → §9.3; `objstore` ≠ ok → `make health`, `mc admin info`; `store.versioning=false` → предупреждение, не ошибка | индекс повреждён → §9.4 «порча индекса» | бот молчит → `MV_TELEGRAM_ALLOWED_USER_IDS`, `getMe`, `gateway /health`; 409 → убить второй экземпляр |
 | Секреты | `MV_MINIO_*` не нужны; только том | `MV_MINIO_*`, облачные ключи (если включены) | `MV_NEO4J_PASSWORD` | `MV_TELEGRAM_BOT_TOKEN` (только здесь) |
 | Порядок при полном рестарте | 3 | 2 (после `redpanda-init`, `minio-init`) | 2 | 4 (последним) |
@@ -1147,11 +1213,11 @@ Ollama остаётся установленной и поддерживаетс
 | F-4a/b/c | Шина, контракты, `mvctl` | (разработчики) — инфраструктурно: `schemas/**` валидируются `jsonschema/v6`; `mvctl env check`, `storage init` | `make contracts` зелёный |
 | F-5 | `shared/objstore`, `shared/env`, `shared/logging`, **`build/versions.env`** | `objstore` по ADR-021 п. 2 (`EnsureBucket` с versioning/ILM, `Capabilities()`); реестр `shared/env` (`MV_`); `.env.example` по §4.2; `versions.env` по §2.4 | `mvctl env check` зелёный; unit-тест логгера «внешний ID не попадает в лог»; `testkit.Versions()` читает `versions.env` |
 | F-5t | `shared/testkit` | membus (с T-418 — `shared/eventbus/membus`) с `Journal`, `Dedup`, `Versions()`, `containers.go` (образы из `versions.env`, MinIO — наш), contract-тест шины; интеграционные тесты «Redpanda: Publish → Subscribe порядок», «MinIO: `EnsureBucket` → versioning on / `prompts-*` off + ILM 30» | `make test-integration` зелёный локально (Docker Desktop) |
-| **F-6** | Compose + Makefile + образы (devops) | `docker-compose.yml`: образы `${…}` из `versions.env` (`COMPOSE_ENV_FILES`), профили `memory/gpu/bot/dev/legacy` (§1.3), `redpanda-init` (`build/redpanda-init.sh`, 8 топиков, retention 30/90/180, `segment.ms=1d`), `minio-init` (`build/minio-init.sh`), healthchecks, `depends_on: condition`, **все порты `127.0.0.1`**, `${VAR:?}` для паролей, ротация логов (`50m×5`, бот `10m×3`), Neo4j без APOC, токен только у бота; **`build/minio.Dockerfile`** (§2.5) — клонирует **форк владельца** `MINIO_REPO` (U-10; форк создаёт владелец до задачи), тарбол исходников в `backups/`; `.dockerignore`; Makefile (§2.2, включая `minio-image`, `compose-lint`, `archive-legacy`, **`llm-up`/`llm-down`/`llm-health`**); **`scripts/llm-server.ps1` и `.sh`** (§6.2), пин `LLAMACPP_BUILD` и `LLM_MODEL_DEFAULT` в `build/versions.env`; `extra_hosts: host.docker.internal:host-gateway` у `core`; `scripts/compose-lint.sh` (+ правило «нет сервиса llama-server», §3.1.1 п. 5); решение по жизнеспособности `legacy` (Chroma тег, as-is env) | `make minio-image` (из форка) → `minio --version` = тег; `git ls-remote --tags $MINIO_REPO` содержит тег; `make compose-lint` зелёный; `docker compose --env-file build/versions.env --env-file .github/ci.env config -q`; **`make llm-up` → `make llm-health` = 200 + модель в `/v1/models`; из контейнера `curl http://host.docker.internal:1234/health` = 200; `make llm-down` останавливает процесс**; `make up` на машине владельца → `make health` = ok для `gateway/core` (контексты-заглушки) и предупреждение (не ошибка) при остановленном LLM; `make up PROFILES=legacy` поднимает orchestrator + semantic-memory :8083 + chroma |
+| **F-6** | Compose + Makefile + образы (devops) | `docker-compose.yml`: образы `${…}` из `versions.env` (`COMPOSE_ENV_FILES`), профили `memory/gpu/bot/dev/legacy` (§1.3), `redpanda-init` (`build/redpanda-init.sh`, 8 топиков, retention 30/90/180, `segment.ms=1d`), `minio-init` (`build/minio-init.sh`), healthchecks, `depends_on: condition`, **все порты `127.0.0.1`**, `${VAR:?}` для паролей, ротация логов (`50m×5`, бот `10m×3`), Neo4j без APOC, токен только у бота; **`build/minio.Dockerfile`** (§2.5) — клонирует **форк владельца** `MINIO_REPO` (U-10; форк создаёт владелец до задачи), тарбол исходников в `backups/`; `.dockerignore`; Makefile (§2.2, включая `minio-image`, `compose-lint`, `archive-legacy`, **`llm-up`/`llm-down`/`llm-health`**); **`scripts/llm-server.ps1` и `.sh`** (§6.2), пин `LLAMACPP_BUILD` и `LLM_MODEL_DEFAULT` в `build/versions.env`; `extra_hosts: host.docker.internal:host-gateway` у `core`; `scripts/compose-lint.sh` (+ правило «нет сервиса llama-server», §3.1.1 п. 6 — нумерация T-416); решение по жизнеспособности `legacy` (Chroma тег, as-is env) | `make minio-image` (из форка) → `minio --version` = тег; `git ls-remote --tags $MINIO_REPO` содержит тег; `make compose-lint` зелёный; `docker compose --env-file build/versions.env --env-file .github/ci.env config -q`; **`make llm-up` → `make llm-health` = 200 + модель в `/v1/models`; из контейнера `curl http://host.docker.internal:1234/health` = 200; `make llm-down` останавливает процесс**; `make up` на машине владельца → `make health` = ok для `gateway/core` (контексты-заглушки) и предупреждение (не ошибка) при остановленном LLM; `make up PROFILES=legacy` поднимает orchestrator + semantic-memory :8083 + chroma |
 | **F-7** | CI (devops) | `.github/workflows/go.yml` (§3.1: 6 job'ов + `image`; SHA-пины; `permissions`; `go mod verify`/`tidy -diff`; govulncheck блокирующий; privacy-scan; compose-lint); `scripts/coverage-gate.sh`; `.github/dependabot.yml`; **`.github/CODEOWNERS` = `* @alekseizabelin1985-spec` + контрактные каталоги (§3.2, U-9)**; `.github/ci.env`; удалить `validate-blueprints.yml`; branch protection на `main`, `integration/mvp-1` | PR в `integration/mvp-1` → все шесть job'ов зелёные ≤ 10 мин; `integration` собирает MinIO из кэша ≤ 1 мин на втором прогоне |
 | F-8 | Матрица замера (architect#1 + владелец; devops — скрипты) | `scripts/llm-bench.ps1`, `scripts/llm-bench.sh` — против `/v1/chat/completions` (`response_format json_schema`, `chat_template_kwargs.enable_thinking=false`), метрики из `usage`/`timings` + `nvidia-smi`; `ops/metrics/bench-matrix.json` с полем `provider` и конфигурациями **E/E+/C/A**; `ops/models.txt` (секции `gguf` и `ollama`); `testdata/bench/prompts.jsonl` — architect#1 (§6.4) | `make llm-up && pwsh scripts/llm-bench.ps1 -Configs E` → `ops/metrics/bench-<date>.csv` с `verdict` для E (num_ctx 8192/16384, KV f16/q8_0) и колонкой `llamacpp_build`; при `fail` — прогон C, затем A; `baseline.md` (architect#1) |
 | F-10 | Заглушки контрактов v0 | (developer + architect#1) — инфраструктурно: фикстуры `testdata/fixtures/*` не содержат внешних ID (privacy-scan) | `security` job зелёный |
-| F-9 | Документы (tech-writer) | `README.md` (запуск за 5 команд, список `winget`: `ezwinports.make`, `jqlang.jq`, `FiloSottile.age`, `Gitleaks.Gitleaks` опц.), `CLAUDE.md`/`AGENTS.md`, `services/_archive/README.md`, `docs/ops/runbook.md` из §9, `.dev-team.json.stack` по факту (Go 1.26, MinIO из исходников, Qdrant; Chroma только `legacy`; без Timescale/Redis) | ревью |
+| F-9 | Документы (tech-writer) | `README.md` (запуск за 5 команд, список `winget`: `ezwinports.make`, `jqlang.jq`, `FiloSottile.age`, `Gitleaks.Gitleaks` опц.), `CLAUDE.md`/`AGENTS.md`, `services/_archive/README.md`, `Docs/ops/runbook.md` из §9, `.dev-team.json.stack` по факту (Go 1.26, MinIO из исходников, Qdrant; Chroma только `legacy`; без Timescale/Redis) | ревью |
 | Готовность EPIC-001 | `epics.md` | `make ci` зелёный; `make up` поднимает инфраструктуру и пустые контексты с `/health`; `mvctl contracts check` без фантомов; секретов в HEAD нет; `baseline.md` с конфигурацией моделей; `services/_archive/README.md` полон | — |
 
 ---
