@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:35:33+03:00",
+  "updatedAt": "2026-09-13T19:36:55+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3124,7 +3124,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-458",
           "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
@@ -9649,7 +9649,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Запись сессии: shared/recording, ReadJournal, Deps.Recording",
       "startedAt": "2026-09-13T19:02:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:36:55+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9759,6 +9759,26 @@ window.DEVTEAM_STATE =
       "task": "T-460",
       "action": "Ревью #1 Permanent и Policy.World",
       "startedAt": "2026-09-13T19:35:33+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Ревью #1 записи сессии",
+      "startedAt": "2026-09-13T19:36:55+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Просмотр contract-change T-458 и решение А5",
+      "startedAt": "2026-09-13T19:36:55+03:00",
       "finishedAt": null
     }
   ],
@@ -13248,6 +13268,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-460 выполнена TEAM-1/developer#2: eventbus.ErrPermanent/Permanent (nil → nil, errors.Is/As до причины); Delivery паркует Permanent сразу без пауз, при отменённом контексте возвращает ctx.Err() и не паркует, паника — по-прежнему ErrHandlerPanic; Policy.World (WorldOptional/WorldRequired) в Check пр"
+    },
+    {
+      "at": "2026-09-13T19:36:55+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 выполнена TEAM-1/developer#3 целиком (части А и Б): shared/recording переносом git mv (сходство 100 % в индексе), Open/Read, LLMOutputKeyOf отвергает дробный attempt, ReadJournal с тестами на membus; runtime.Deps.Recording, serve.go читает запись один раз; POST /v1/admin/replay/clock через Adm"
     }
   ],
   "blockers": [],
