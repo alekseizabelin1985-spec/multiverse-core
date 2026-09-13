@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:38:53+03:00",
+  "updatedAt": "2026-09-13T19:43:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -13328,6 +13328,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-463 — строки DoD из ревью безопасности #2 T-318 (R2-Mi-1): удаление архивов по возрасту строго старше 30 дней отдельной ежедневной задачей, не «последние N»; §5.6 infrastructure.md; тест; копии links.db/gateway.db не старше 30 дней — переданы tech-lead#1."
+    },
+    {
+      "at": "2026-09-13T19:43:37+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение пользователя: «Делай пушь автоматически» — push develop и epic/* выполняется без отдельного подтверждения после контрольных слияний и пачек задач, с gitleaks-сканом по коммитам вне origin и прежними запретами (main, теги, force, task/*). Скан: 114 коммитов без слияний (всего 167 с merge), no"
     }
   ],
   "blockers": [],
