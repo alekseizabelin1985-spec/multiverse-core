@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:39:02+03:00",
+  "updatedAt": "2026-09-13T20:44:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3167,7 +3167,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9928,7 +9928,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Просмотр итерации 2",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:44:27+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9978,6 +9978,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Владение, инварианты, дедуп",
       "startedAt": "2026-09-13T20:39:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Отметка владельца runtime/serve/.golangci.yml",
+      "startedAt": "2026-09-13T20:44:27+03:00",
       "finishedAt": null
     }
   ],
@@ -13623,6 +13633,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Запущены: ревью #2 T-305 (code-reviewer#2 TEAM-3), повторный просмотр T-458 (system-architect#1, заменяет ревью #2), приёмка T-208 (tech-lead#2, changelog 0.3.10), ревью #1 T-222 (code-reviewer#3 TEAM-2), T-209 (code-reviewer#1 TEAM-2), T-463 (code-reviewer#1 TEAM-1); разработка T-056 (developer#2 T"
+    },
+    {
+      "at": "2026-09-13T20:44:27+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · просмотр system-architect #2 (заменяет ревью #2 кода): одобрено — 0/0/0/2. У-1…У-4 закрыты (метка InReadJournal только на ReadRange, мутант «метка игнорируется» красный; шаблон с методом, 405 Allow: POST; форма Error; префиксы), Mi-1/Mi-2/N-1…N-5 ревью кода закрыты; текст C-01 v1.11 в карточ"
     }
   ],
   "blockers": [],
