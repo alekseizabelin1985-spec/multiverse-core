@@ -16,7 +16,7 @@
   "parallelism": {
     "maxTeams": 3,
     "maxAgentsPerRole": 3,
-    "maxParallelAgents": 6
+    "maxParallelAgents": 9
   },
   "models": {
     "profile": "balanced",

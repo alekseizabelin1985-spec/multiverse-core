@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T11:28:44+03:00",
+  "updatedAt": "2026-09-13T11:59:08+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2239,14 +2239,33 @@ window.DEVTEAM_STATE =
         {
           "id": "T-443",
           "title": "Kafka.Close: запись в dead_letters между closed и отменой loopCtx даёт «bus is closed» вместо nil — из ревью T-441",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T11:21:37+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T11:52:17+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 30,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 11:21",
+              "to": "13.09 11:33",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 11:33",
+              "to": "13.09 11:44",
+              "duration": "11m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 11:44",
+              "to": "13.09 11:52",
+              "duration": "7m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-443.md",
           "branch": "task/T-443-kafka-close-dead-letter-race",
           "worktree": ".worktrees/T-443"
@@ -6138,7 +6157,7 @@ window.DEVTEAM_STATE =
       "task": "T-405",
       "action": "стенд паритета .sh/.ps1 в репозиторий и CI",
       "startedAt": "2026-09-13T10:43:38+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T11:39:42+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -6258,7 +6277,7 @@ window.DEVTEAM_STATE =
       "task": "T-443",
       "action": "гонка Kafka.Close и dead_letters",
       "startedAt": "2026-09-13T11:21:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T11:33:30+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -6278,6 +6297,96 @@ window.DEVTEAM_STATE =
       "task": "PROJECT",
       "action": "план перезапуска трёх команд",
       "startedAt": "2026-09-13T11:28:44+03:00",
+      "finishedAt": "2026-09-13T11:41:03+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-443",
+      "action": "ревью #1 T-443",
+      "startedAt": "2026-09-13T11:33:30+03:00",
+      "finishedAt": "2026-09-13T11:44:55+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "ревью #1 T-405",
+      "startedAt": "2026-09-13T11:39:42+03:00",
+      "finishedAt": "2026-09-13T11:55:51+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-214",
+      "action": "ревью T-214 + T-215",
+      "startedAt": "2026-09-13T11:41:03+03:00",
+      "finishedAt": "2026-09-13T11:54:57+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "EPIC-003",
+      "action": "сверка подволн EPIC-003 с деревом и contracts v0.10",
+      "startedAt": "2026-09-13T11:41:03+03:00",
+      "finishedAt": "2026-09-13T11:55:51+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "EPIC-004",
+      "action": "сверка подволн EPIC-004 с деревом",
+      "startedAt": "2026-09-13T11:41:03+03:00",
+      "finishedAt": "2026-09-13T11:54:57+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "EPIC-002",
+      "action": "сверка EPIC-002 и чек-лист точки A",
+      "startedAt": "2026-09-13T11:41:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-443",
+      "action": "приёмка T-443 (TEAM-1)",
+      "startedAt": "2026-09-13T11:44:55+03:00",
+      "finishedAt": "2026-09-13T11:52:17+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "итерация 2 T-405: M-1, Mi-1–Mi-3, Nit",
+      "startedAt": "2026-09-13T11:55:51+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "PROJECT",
+      "initiative": "PROJECT",
+      "task": "PROJECT",
+      "action": "решения по контрактам и depguard перед волнами трёх команд",
+      "startedAt": "2026-09-13T11:59:08+03:00",
       "finishedAt": null
     }
   ],
