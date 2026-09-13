@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:53:29+03:00",
+  "updatedAt": "2026-09-13T16:57:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3231,11 +3231,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T16:10:55+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9081,7 +9081,7 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Ревью #1: провайдеры fake и recorded",
       "startedAt": "2026-09-13T16:46:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:57:06+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9111,6 +9111,16 @@ window.DEVTEAM_STATE =
       "task": "T-202",
       "action": "Приёмка T-202 валидатор блупринтов",
       "startedAt": "2026-09-13T16:53:29+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Итерация 2: удержание ответа по статусу записи",
+      "startedAt": "2026-09-13T16:57:06+03:00",
       "finishedAt": null
     }
   ],
@@ -12138,6 +12148,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-202 · ревью #1 (TEAM-2/code-reviewer#1): принять — 0/0/2/4. Отклонения исполнителя признаны корректными (белые списки из api-contracts §2.4, laws_ref ↔ файл по КД §12.2, 7а, одна ошибка при чужой роли); белые списки и владение не обходятся; тест корпуса сравнивает полный список находок. Mi-1 не пр"
+    },
+    {
+      "at": "2026-09-13T16:57:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 · ревью #1 (TEAM-2/code-reviewer#3): вернуть — 0/1/3/5. Ma-1: recorded отдаёт заблокированный текст записи quarantined/filter_error с response_raw (C-07 это поле запрещает; файлы записей схему не проверяют). Mi-1 длительность задержки fake не проверена (мутант d/2 выжил), Mi-2 Calls() при заве"
     }
   ],
   "blockers": [],
