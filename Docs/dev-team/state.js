@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:23:44+03:00",
+  "updatedAt": "2026-09-13T14:28:14+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2419,7 +2419,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-450",
           "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -2702,15 +2702,46 @@ window.DEVTEAM_STATE =
         {
           "id": "T-060",
           "title": "internal/replay — EventClock, NullTimers, Recording, сборка в serve.go",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:16:34+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T14:28:14+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 67,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:16",
+              "to": "13.09 13:38",
+              "duration": "22m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:38",
+              "to": "13.09 13:52",
+              "duration": "14m"
+            },
+            {
+              "stage": "Итерация 2",
+              "from": "13.09 13:52",
+              "to": "13.09 14:07",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 14:07",
+              "to": "13.09 14:16",
+              "duration": "9m"
+            },
+            {
+              "stage": "Отметка владельца",
+              "from": "13.09 14:16",
+              "to": "13.09 14:23",
+              "duration": "7m"
+            }
+          ],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-060.md",
           "branch": "task/T-060-replay-eventclock",
           "worktree": ".worktrees/T-060"
@@ -8148,7 +8179,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.t",
       "startedAt": "2026-09-13T13:31:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:28:14+03:00"
     },
     {
       "instance": "developer#2",
@@ -8368,7 +8399,7 @@ window.DEVTEAM_STATE =
       "task": "T-060",
       "action": "Отметка владельца cmd/multiverse по serve.go",
       "startedAt": "2026-09-13T14:16:04+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:28:14+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -8408,6 +8439,16 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Ревью #1: потолок длины нарратива, ярлыки eK/bK",
       "startedAt": "2026-09-13T14:23:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Ревью #1: таблица «локальный адрес» и скрипты",
+      "startedAt": "2026-09-13T14:28:14+03:00",
       "finishedAt": null
     }
   ],
@@ -11057,6 +11098,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-439 выполнена TEAM-2/architect#2: потолок нарратива E — max_tokens 160 (player-gm и group-narrator), text.maxLength 210, mentions ≤ 4, background_refs ≤ 2; Qwen3.6 предварительно 220→345 и 410→775 до T-438; формула КД §13.4.1 с проверкой 66 + ⌈maxLength/2,5⌉ ≤ N; temperature 0.7 (профиль всех поро"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние C (постоянное разрешение): epic/EPIC-001-foundation → develop (447b892), состав — T-453. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с незакоммиченными файлами владельца нет, ветка эпика сохранена. Push develop и epic/EPIC-001 (gitleaks по 5 новым коммита"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-060: отметка владельца cmd/multiverse (tech-lead#1) — согласовано: режимы live/memory и порядок StartAll → srv.Start → srv.Stop → StopAll не сломаны, WARN вместо отказа старта обоснован. Решение оркестратора: Н-1 (clock_start в WARN читается после StartAll) и Н-2 (справка флага --recording) — в T-"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 выполнена TEAM-1/devops-engineer#2: таблица testdata/llm/local-endpoints.tsv (107 случаев: 36 local, 32 cloud, 39 invalid), общий судья bash/pwsh с ручным разбором IPv4/IPv6, compose-lint правило 6 через bash-функцию, проверки T01/T02 и сценарии D07/D08, мутанты M18–M23 и C1–C4 убиты, make ci "
     }
   ],
   "blockers": [],
