@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:17:31+03:00",
+  "updatedAt": "2026-09-13T17:18:30+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2794,11 +2794,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-055",
           "title": "state — конвейер предложение → факт, источники в serve.go",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T16:20:10+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -9146,7 +9146,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Ревью #1: конвейер State",
       "startedAt": "2026-09-13T16:59:05+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:18:30+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9176,6 +9176,16 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Итерация 3 по ревью #2",
       "startedAt": "2026-09-13T17:17:31+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Итерация 2: фантомный факт, Stop/Start, тесты создания",
+      "startedAt": "2026-09-13T17:18:30+03:00",
       "finishedAt": null
     }
   ],
@@ -12263,6 +12273,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-457 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Ma-1 вариант (а) выполним, C-15 v1.4 сходится с кодом T-206, Mi-4 проверен по 15 строкам. R2-Mi-1 исключение для shared/runtime в §16 п. 8/ownership §3 п. 4 не записано; R2-Mi-2 «корень входа» захватывает таймерные корни шлюза; R2-Mi-3 кт"
+    },
+    {
+      "at": "2026-09-13T17:18:30+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/1/4/3. Ma-1 фантомный факт: после 4-й попытки предложение уходит в dead_letters, опубликованные факты остаются, мир не изменён, следующий ответ публикует другой факт той же версии (подтверждено зондом). Mi-1 предложение без world молча (Debug), "
     }
   ],
   "blockers": [],
