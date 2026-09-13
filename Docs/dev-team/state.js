@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:56:49+03:00",
+  "updatedAt": "2026-09-13T21:01:18+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2591,11 +2591,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-463",
           "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T19:48:25+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9981,7 +9981,7 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Ревью #1",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:01:18+03:00"
     },
     {
       "instance": "developer#2",
@@ -10041,6 +10041,16 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Приёмка T-305 и индекс EPIC-004",
       "startedAt": "2026-09-13T20:56:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-463",
+      "action": "Итерация 2: маски отказов, проверка --dir",
+      "startedAt": "2026-09-13T21:01:18+03:00",
       "finishedAt": null
     }
   ],
@@ -13740,6 +13750,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-458 · отметка tech-lead#1 подтверждена повторно (единый отчёт с отметкой T-208); приёмка идёт у tech-lead#2."
+    },
+    {
+      "at": "2026-09-13T21:01:18+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-463 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/5/6. Удаление безопасно (точные имена, полный путь, без обхода ссылок; кириллица и пробелы в пути; атомарный SHA256SUMS). Ma-1: облачный отказ правила 6 compose-lint и отказ «second server» llm-server при @ всё ещё называют хост (C-15 v1.5). M"
     }
   ],
   "blockers": [],
