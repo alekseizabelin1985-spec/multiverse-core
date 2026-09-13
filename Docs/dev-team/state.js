@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:39:26+03:00",
+  "updatedAt": "2026-09-13T23:46:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2669,11 +2669,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-470",
           "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T23:07:57+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -10466,7 +10466,7 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "Ревью #1 contracts v0.15",
       "startedAt": "2026-09-13T23:34:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:46:42+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10476,6 +10476,16 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "Приёмка deliver и main",
       "startedAt": "2026-09-13T23:39:26+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-470",
+      "action": "Итерация 2 contracts v0.15",
+      "startedAt": "2026-09-13T23:46:42+03:00",
       "finishedAt": null
     }
   ],
@@ -14469,6 +14479,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-312 · ревью #1 (TEAM-3/code-reviewer#2): принять — 0/0/4/4. Доставка не теряется, бесконечного повтора нет, коды выхода и /health соответствуют ADR-018 и C-08, depguard ловит запрещённый импорт. Mi-1…Mi-3 тесты (сброс паузы, прерванная отправка без ack, ack до опроса); Mi-4 ответы flow через клиен"
+    },
+    {
+      "at": "2026-09-13T23:46:42+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/2/4. C-01 v1.11, C-03, C-05, C-14, C-15/ADR-005 (побайтно), ADR-001, КД §6, infrastructure — точно; слияние с b085228 чисто. Ma-1: список скаляров кода расходится с data-model §3 (нет name и last_session_ended_at в коде; нет encounter_chance и"
     }
   ],
   "blockers": [],
