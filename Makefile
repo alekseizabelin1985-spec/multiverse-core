@@ -266,8 +266,35 @@ compose-lint: ## The eight house rules of the compose files (§3.1.1), then the 
 	# must pass (testdata/compose-lint, T-413). The same call runs in CI.
 	scripts/compose-lint.sh --fixtures
 
+# The parity stand of the two implementations of the LLM scripts (T-405):
+# scripts/llm-server.{sh,ps1} and scripts/llm-bench.{sh,ps1} with their modules
+# in scripts/lib get the same inputs, and their exit codes, messages, the argv
+# they hand to llama-server, the requests they send, the CSV and the fields of
+# the JSON report must agree. A double stands in for llama-server; no Docker, no
+# network beyond loopback, no real server, and nothing on 8888 is touched. Without
+# pwsh on PATH the stand runs the bash half against the expectations of every
+# scenario and compares the message texts of the two files statically — its
+# first lines say which of the two runs happened. The stand lives in
+# testdata/script-parity (outside every ./... pattern, see its package comment);
+# PARITY_ARGS passes flags through, e.g. PARITY_ARGS='-run U0 -v'.
+PARITY_ARGS ?=
+
+.PHONY: scripts-parity
+scripts-parity: ## Same input, same output from the .sh and .ps1 LLM scripts (both halves with pwsh, the bash half without)
+	@# The linter does not see testdata/; vet at least keeps the stand honest (T-405 review #1, N-1).
+	go vet ./testdata/script-parity
+	go run ./testdata/script-parity $(PARITY_ARGS)
+
+# Every control mutant must turn the stand red: the scripts are broken one
+# defect at a time in a scratch copy, the control (a syntax error) first and the
+# identity mutant (no change, must stay green) second. Not part of ci: it is the
+# check of the stand itself, run when the stand or its scenarios change.
+.PHONY: parity-mutants
+parity-mutants: ## The control mutants of scripts-parity: each must turn the stand red
+	@go run ./testdata/script-parity -mutants $(PARITY_ARGS)
+
 .PHONY: ci
-ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
+ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint scripts-parity test-e2e ## Everything CI runs without Docker
 
 # `make ci` is the owner's check on Windows, where -race cannot run: there
 # test-race prints SKIPPED and steps aside instead of failing the whole run
@@ -530,4 +557,4 @@ help: ## This list
 		sort |
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	echo
-	echo "Variables: PROFILES=memory,bot  SERVICE=core  FILE=  RECORDING=  ROUTER=1  BASE=$(BASE)"
+	echo "Variables: PROFILES=memory,bot  SERVICE=core  FILE=  RECORDING=  ROUTER=1  BASE=$(BASE)  PARITY_ARGS='-run U0 -v'"

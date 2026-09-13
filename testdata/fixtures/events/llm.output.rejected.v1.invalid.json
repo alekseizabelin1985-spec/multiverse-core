@@ -1,5 +1,6 @@
 {
-  "reason": "budget",
+  "llm_output": { "event": { "id": "01JG0000000000000000000011", "type": "llm.output" } },
+  "reason": "budget_exceeded",
   "budget": { "kind": "background", "limit": 4, "window": "1m" },
   "phase": "tick",
   "attempt": 1
