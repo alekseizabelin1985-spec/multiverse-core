@@ -49,9 +49,9 @@ func NoLogOperations() []string { return slices.Clone(noLogOperations) }
 // LongPollOperations returns the operations served as long-polls.
 func LongPollOperations() []string { return slices.Clone(longPollOperations) }
 
-// RateLimiter decides whether a request may proceed. It is the insertion point
-// of the action rate limit of T-305 (30 per minute per player_id, SEC-11);
-// retryAfter is the whole number of seconds sent in Retry-After.
+// RateLimiter decides whether a request may proceed: the action rate limit per
+// player_id of SEC-11 (actions.Limiter); retryAfter is the whole number of
+// seconds sent in Retry-After.
 type RateLimiter interface {
 	Allow(r *http.Request, rt Route) (ok bool, retryAfter int)
 }
@@ -70,7 +70,8 @@ type Config struct {
 	RequestIDs func() string
 	Clock      clock.Clock
 	Log        *slog.Logger
-	// Limiter is nil until T-305.
+	// Limiter is the action rate limit of live mode; nil lets every request
+	// through, as in replay.
 	Limiter RateLimiter
 	// Timeout is RequestTimeout when zero.
 	Timeout time.Duration
@@ -90,7 +91,7 @@ type Config struct {
 //  5. nolog is not a wrapper of its own: the policy is the operation, applied
 //     by the access log of step 1, which must see every answer, including the
 //     403 of step 3;
-//  6. ratelimit — the insertion point of T-305;
+//  6. ratelimit — the action rate limit (Config.Limiter);
 //  7. pollguard — one long-poll per client (409 poll_in_progress);
 //  8. timeout — RequestTimeout on the context of everything but a long-poll.
 //

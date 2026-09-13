@@ -330,3 +330,25 @@ func TestTheClaimOfATransitionDoesNotSurviveARestart(t *testing.T) {
 		}
 	})
 }
+
+// The gateway answers encounter_unavailable while an active encounter has no
+// task agent for longer than its grace (component §5.4 p. 3), so the projection
+// carries the agent and the time the encounter was created, both from the
+// entity: the announcement alone knows neither.
+func TestTheEncounterCarriesItsTaskAgentAndItsCreation(t *testing.T) {
+	m, _ := newModel(t)
+	mustApply(t, m, started(t))
+	enc, ok := m.Encounter(encounterID)
+	if !ok || enc.TaskAgentID != "" || !enc.CreatedAt.IsZero() {
+		t.Fatalf("announced encounter = %+v %v, want no agent and no creation time", enc, ok)
+	}
+	mustApply(t, m, encounterCreated(t))
+	if enc, _ = m.Encounter(encounterID); enc.TaskAgentID != "" || !enc.CreatedAt.Equal(t0) {
+		t.Errorf("created encounter without an agent = %q at %v, want none at %v", enc.TaskAgentID, enc.CreatedAt, t0)
+	}
+	mustApply(t, m, updated(t, "u-agent", encounterID, entity.TypeEncounter, 2, "spawn-1",
+		set("task_agent_id", nil, "encounter-wolf:solo:player-A")))
+	if enc, _ = m.Encounter(encounterID); enc.TaskAgentID != "encounter-wolf:solo:player-A" || !enc.CreatedAt.Equal(t0) {
+		t.Errorf("encounter after the spawn = %q at %v", enc.TaskAgentID, enc.CreatedAt)
+	}
+}

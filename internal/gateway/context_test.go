@@ -208,8 +208,9 @@ func TestTheContextServesTheLinksRoutes(t *testing.T) {
 	}
 }
 
-// In live mode the sweeper removes expired character requests on its tick; in
-// replay mode no timer of the gateway runs (component §11.2).
+// In live mode the sweeper removes expired character requests and answers to
+// actions on its tick; in replay mode no timer of the gateway runs (component
+// §11.2).
 func TestTheSweeperRunsInLiveModeOnly(t *testing.T) {
 	for _, mode := range []runtime.Mode{runtime.ModeLive, runtime.ModeReplay} {
 		t.Run(string(mode), func(t *testing.T) {
@@ -230,12 +231,26 @@ func TestTheSweeperRunsInLiveModeOnly(t *testing.T) {
 				SELECT link_id, 'k', 'player-1', 201, '{}', '2026-09-13T11:00:00.000000000Z' FROM links`); err != nil {
 				t.Fatal(err)
 			}
+			// And the answer to an action T-305 keeps, expired as well.
+			gdb, err := store.OpenGateway(ctx, store.GatewayPath(r.dir))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = gdb.Close() }()
+			if _, err := gdb.ExecContext(ctx, `INSERT INTO idempotency_keys
+				(player_id, action_key, correlation_id, status_code, response_json, created_at, expires_at)
+				VALUES ('player-1', 'k', 'ev-1', 202, '{}', '2026-09-12T11:00:00.000000000Z', '2026-09-13T11:00:00.000000000Z')`); err != nil {
+				t.Fatal(err)
+			}
 			count := func() int {
-				var n int
+				var n, keys int
 				if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM character_requests").Scan(&n); err != nil {
 					t.Fatal(err)
 				}
-				return n
+				if err := gdb.QueryRowContext(ctx, "SELECT COUNT(*) FROM idempotency_keys").Scan(&keys); err != nil {
+					t.Fatal(err)
+				}
+				return n + keys
 			}
 			// The sweeper registers its tickers in its own goroutine: advance
 			// until the tick lands, within a bound.
@@ -251,8 +266,8 @@ func TestTheSweeperRunsInLiveModeOnly(t *testing.T) {
 			switch n := count(); {
 			case mode == runtime.ModeLive && n != 0:
 				t.Errorf("live: %d expired requests left after the sweeps", n)
-			case mode == runtime.ModeReplay && n != 1:
-				t.Errorf("replay: %d requests left, want the one untouched", n)
+			case mode == runtime.ModeReplay && n != 2:
+				t.Errorf("replay: %d requests and keys left, want the two untouched", n)
 			}
 		})
 	}
