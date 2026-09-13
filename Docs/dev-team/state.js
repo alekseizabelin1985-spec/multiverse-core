@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T00:07:28+03:00",
+  "updatedAt": "2026-09-14T00:22:22+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4610,7 +4610,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-307",
           "title": "outbox, long-poll доставок, consumer боя и нарратива",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T23:34:13+03:00",
           "finishedAt": null,
@@ -10456,7 +10456,7 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "outbox, deliveries, consumer",
       "startedAt": "2026-09-13T23:34:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T00:22:22+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -10507,6 +10507,16 @@ window.DEVTEAM_STATE =
       "action": "Приёмка contracts v0.15",
       "startedAt": "2026-09-13T23:59:03+03:00",
       "finishedAt": "2026-09-14T00:07:28+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "Ревью #1 outbox и доставок",
+      "startedAt": "2026-09-14T00:22:22+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -14529,6 +14539,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-470 принята tech-lead#1: Mi-3 источник скаляров — таблицы сущностей §3 без §3.5 Item; N-5 пометка у примера отдыха; строки T-468/T-469 в индексе EPIC-001 v0.1.5; строки для EPIC-002/EPIC-003 — в карточке. Условие слияния: после появления name и last_session_ended_at в scalarAttributes T-056 (правк"
+    },
+    {
+      "at": "2026-09-14T00:22:22+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 выполнена TEAM-3/developer#1: outbox (идемпотентная постановка, одна доставка на игрока по порядку, long-poll без удержания соединения, поздний ack без перехвата, уборка), consumer доставок (combat.decided, entity.updated, открытие встречи, narrative.output, отказы State без кода), HTTP poll/a"
+    },
+    {
+      "at": "2026-09-14T00:22:22+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам T-307: доставки получает и ci-harness (условно, подтверждение system-architect в ревью T-308); аналитика «со сроком» до ответа system-architect; доставка без адресатов со связкой — доставлена (ход ok/degraded); лизинг outbox в replay работает, long-poll по настенным "
     }
   ],
   "blockers": [],
