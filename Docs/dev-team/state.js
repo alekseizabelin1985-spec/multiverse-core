@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:51:52+03:00",
+  "updatedAt": "2026-09-13T18:59:56+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3176,7 +3176,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-203",
           "title": "A3 · Пять блупринтов MVP-1 и схемы schemas/agent/",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T18:40:06+03:00",
           "finishedAt": null,
@@ -9520,7 +9520,7 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Пять блупринтов MVP-1 и schemas/agent",
       "startedAt": "2026-09-13T18:40:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:59:56+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9590,6 +9590,16 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Ревью SEC-26 текста уведомления FR-009",
       "startedAt": "2026-09-13T18:51:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-203",
+      "action": "Ревью #1 блупринтов MVP-1",
+      "startedAt": "2026-09-13T18:59:56+03:00",
       "finishedAt": null
     }
   ],
@@ -12965,6 +12975,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-318 · вычитка tech-writer#1: одна содержательная правка («связка» с двумя значениями), длина NoticeText 1913 знаков, 8 подстрок grep-теста и запрет разметки перепроверены; неразрывные пробелы не ставились (сломали бы grep-подстроки). Ревью безопасности (SEC-26) — security-engineer#1."
+    },
+    {
+      "at": "2026-09-13T18:59:56+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 выполнена TEAM-2/developer#1: пять блупринтов MVP-1 (Qwen3.8-27B, temperature 0.7, thinking false; max_tokens 160 у нарратива), schemas/agent (narrative.json по строке E C-07 v1.5 — 185 символов, pattern ярлыков; tick-global, tick-region, breach-заглушка), фикстуры llm.output приведены к ярлык"
+    },
+    {
+      "at": "2026-09-13T18:59:56+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам T-203: absolute-limits.yaml не подкладывать заглушкой — ждать T-216 (словарь категории (a) утверждает пользователь), в DoD T-216 — «тест T-203 проходит без исключения»; место теста (blueprints/ или test/blueprints/) оценивает ревью с учётом Dockerfile T-447. Бэклог: "
     }
   ],
   "blockers": [],
