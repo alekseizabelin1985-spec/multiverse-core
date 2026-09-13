@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:20:10+03:00",
+  "updatedAt": "2026-09-13T16:20:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8925,7 +8925,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Приёмка T-303 links и HTTP",
       "startedAt": "2026-09-13T16:02:07+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:20:50+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8985,6 +8985,16 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Ревью #1: решения архитектора C-01/C-05/C-07",
       "startedAt": "2026-09-13T16:20:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Повторная отметка владельца: В-1, В-2",
+      "startedAt": "2026-09-13T16:20:50+03:00",
       "finishedAt": null
     }
   ],
@@ -11928,6 +11938,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Начата T-055 (TEAM-1/developer#3): internal/state конвейер предложение → факт — зависимости T-050/T-052/T-054/T-060/T-448 слиты."
+    },
+    {
+      "at": "2026-09-13T16:20:50+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 принята TEAM-3/tech-lead#3: DoD сверен; R2-Mi-1 (два теста повтора каскада, мутант R1 красный) и R2-N-1 (тест часового сжатия) закрыты; В-1 (startProcess с временным MV_GATEWAY_DATA_DIR, проверка файлом-заглушкой — C:\\data не меняется) и В-2 (runbook: проверка тома :ro, chown/chmod вместо удал"
     }
   ],
   "blockers": [],
