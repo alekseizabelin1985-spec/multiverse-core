@@ -62,6 +62,23 @@ type ApplierConfig struct {
 	// "Заглушка", state-and-mechanics.md §8). The zero value enforces it, as
 	// State does. The transition into abandoned is held either way (C-02 v1.2).
 	WithoutOwnership bool
+
+	// Objects is the object store the answers are written to before their
+	// facts go out, and the snapshots with them (§4.3, §4.9); nil keeps the
+	// world in memory only, as the double of shared/testkit/state does.
+	Objects Store
+	// Clock stamps taken_at and written_at of a snapshot, the one wall clock
+	// State reads (§6.2); nil selects clock.Real.
+	Clock clock.Clock
+	// SnapshotEvery is the number of applied facts after which a snapshot is
+	// written (MV_SNAPSHOT_EVERY_FACTS, §4.9); zero or less writes none on
+	// the count.
+	SnapshotEvery int
+	// RulesVersion is the version of the rules the process runs, which the
+	// pointer records (§4.4).
+	RulesVersion string
+	// Writer names the writer of the pointer; empty selects Writer().
+	Writer string
 }
 
 // Applier turns the proposals of one world into facts (state-and-mechanics.md
@@ -84,6 +101,18 @@ type Applier struct {
 	owners         ownership
 	checkOwnership bool
 
+	objects      Store
+	clock        clock.Clock
+	every        int
+	rulesVersion string
+	writer       string
+	// cursor is the offset of system_events past the last proposal the
+	// Applier answered, and sinceSnapshot the facts applied since the last
+	// snapshot. Only the goroutine that calls Apply touches them, and a
+	// snapshot is written by that goroutine or after it has ended.
+	cursor        int64
+	sinceSnapshot int
+
 	mu sync.Mutex
 	// failure is what stopped the world, or nil. It stays for the life of the
 	// Applier, over a Stop and a Start of its context.
@@ -93,6 +122,10 @@ type Applier struct {
 	retrying int
 	// laws are the invariants of step 8; SetInvariants replaces them.
 	laws []mechanics.Invariant
+	// lastSnapshot is the pointer of the last snapshot written, and
+	// snapshotErr the failure of an attempt after it.
+	lastSnapshot *LatestPointer
+	snapshotErr  error
 }
 
 // NewApplier builds the Applier of one world.
@@ -117,7 +150,21 @@ func NewApplier(cfg ApplierConfig) (*Applier, error) {
 	if timers == nil {
 		timers = clock.RealTimers{}
 	}
+	wall := cfg.Clock
+	if wall == nil {
+		wall = clock.Real{}
+	}
+	writer := cfg.Writer
+	if writer == "" {
+		writer = Writer()
+	}
 	return &Applier{
+		objects:      cfg.Objects,
+		clock:        wall,
+		every:        cfg.SnapshotEvery,
+		rulesVersion: cfg.RulesVersion,
+		writer:       writer,
+
 		worldID: cfg.WorldID,
 		store:   cfg.Store,
 		pub:     cfg.Publisher,
@@ -150,20 +197,43 @@ func (a *Applier) lawsInForce() []mechanics.Invariant {
 // Apply answers one event of system_events.
 //
 // A refusal is not an error: it is an entity.update.rejected on the bus, and the
-// proposal was handled. The answer is published before anything of it is kept,
-// and an event that does not go out is published again — the same event, with
-// its id and its bytes — until it does. This is the decision on Ma-1 of review
-// #1 of T-055 (dev-log T-055, iteration 2); state-and-mechanics.md §9 has no
-// row for a failed Publish before a PUT yet, T-057 writes it. Handing the
-// failure to the bus instead would have it redeliver the proposal and, after
-// its last attempt, park it in dead_letters: the events already out would stay
-// on the bus, the world would not have moved, and the next proposal would
-// announce another fact under the same version.
+// proposal was handled. The entities of an answer are written to the object
+// store first (Config.Objects, C-02 "Гарантии"), its events are published
+// next, and the working set keeps the answer last. An event that does not go
+// out is published again — the same event, with its id and its bytes — until
+// it does. This is the decision on Ma-1 of review #1 of T-055 (dev-log T-055,
+// iteration 2), kept for the facts after the write as well: state-and-mechanics.md
+// v0.4, §9, "Ошибка `Publish` ответа — факта или отказа, до и после PUT".
+// Handing the failure to the bus instead would have it redeliver the proposal
+// and, after its last attempt, park it in dead_letters: the events already out
+// would stay on the bus, the world would not have moved, and the next proposal
+// would announce another fact under the same version.
 //
 // ctx is the lifetime of the world: it ends those attempts, never a publication
-// under way. Once it has ended one, the world is stopped with ErrPublishFailed,
-// and every later call returns ErrWorldStopped without deciding anything.
+// or a write under way. Once it has ended one, the world is stopped with
+// ErrPublishFailed (or ErrPersistFailed), and every later call returns
+// ErrWorldStopped without deciding anything.
+//
+// An answered proposal moves the cursor of the world past its offset in
+// system_events, and the facts it applied may complete the count of a snapshot
+// (§4.9), which is then written before Apply returns.
 func (a *Applier) Apply(ctx context.Context, ev eventbus.Event) error {
+	if err := a.answer(ctx, ev); err != nil {
+		return err
+	}
+	if pos, ok := eventbus.PositionFromContext(ctx); ok && pos.Topic == eventbus.TopicSystemEvents {
+		a.cursor = pos.Offset + 1
+	}
+	if a.objects != nil && a.every > 0 && a.sinceSnapshot >= a.every {
+		// A snapshot that fails is reported by /health and the log; the
+		// proposal was answered all the same.
+		_, _ = a.snapshot(ctx, SnapshotInterval, &ev)
+	}
+	return nil
+}
+
+// answer decides one event of system_events and publishes the answer.
+func (a *Applier) answer(ctx context.Context, ev eventbus.Event) error {
 	if !IsProposal(ev.Type) {
 		return nil
 	}
@@ -220,8 +290,7 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
 	if a.alreadyApplied(p) {
-		a.log.Debug("proposal already applied", "proposal_id", p.ID, "event_id", p.Event.ID)
-		return nil
+		return a.resendUnpublished(ctx, p)
 	}
 	if _, exists := a.store.Get(a.worldID, ref.ID); exists {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonDuplicateEntity, Ref: &ref})
@@ -239,14 +308,18 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 		}
 	}
 	fact := createdFact(p.Event, a.source, created, p.ID)
-	created.SetFactEventID(fact.ID)
+	if err := a.persist(ctx, p, []written{{entity: created}}); err != nil {
+		return err
+	}
 	if err := a.publish(ctx, p.ID, fact); err != nil {
 		return err
 	}
+	created.SetFactEventID(fact.ID)
 	if err := a.store.Put(a.worldID, created); err != nil {
 		return a.keepFailed(p, err)
 	}
 	a.remember(p.ID)
+	a.sinceSnapshot++
 	a.log.Info("entity created", "entity_id", ref.ID, "entity_type", ref.Type,
 		"proposal_id", p.ID, "event_id", fact.ID)
 	return nil
@@ -262,9 +335,9 @@ type planned struct {
 
 // applyUpdate answers entity.update.proposed (§4.5 p. 1–12).
 //
-// Every change set is decided on a copy, and nothing is kept until every event
-// of the answer is out: then the copies replace the originals and the proposal
-// is remembered. atomic=true refuses the package on its first problem;
+// Every change set is decided on a copy. The copies are written to the object
+// store, the events of the answer are published, and only then the copies
+// replace the originals and the proposal is remembered (§4.5 p. 10–12). atomic=true refuses the package on its first problem;
 // atomic=false refuses the change sets that failed and applies the rest
 // (§4.5 p. 9), and last_change.batch_size is the number applied.
 func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
@@ -284,8 +357,7 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
 	if a.alreadyApplied(p) {
-		a.log.Debug("proposal already applied", "proposal_id", p.ID, "event_id", p.Event.ID)
-		return nil
+		return a.resendUnpublished(ctx, p)
 	}
 
 	var plans []planned
@@ -315,15 +387,19 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 	slices.SortFunc(plans, func(x, y planned) int { return cmp.Compare(x.entity.ID, y.entity.ID) })
 	events := make([]eventbus.Event, 0, len(plans)+len(refusals))
 	committed := make([]*entity.Entity, 0, len(plans))
+	writes := make([]written, 0, len(plans))
 	for _, plan := range plans {
+		from := plan.entity.Version
 		e := commit(plan, a.lastChange(p, len(plans)))
-		fact := updatedFact(p.Event, a.source, e, plan.changed, p)
-		e.SetFactEventID(fact.ID)
-		events = append(events, fact)
+		events = append(events, updatedFact(p.Event, a.source, e, plan.changed, p))
 		committed = append(committed, e)
+		writes = append(writes, written{entity: e, fromVersion: from})
 	}
 	for _, r := range refusals {
 		events = append(events, rejectedFact(p.Event, a.source, p.ID, r))
+	}
+	if err := a.persist(ctx, p, writes); err != nil {
+		return err
 	}
 	if err := a.publish(ctx, p.ID, events...); err != nil {
 		return err
@@ -331,10 +407,14 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 	if len(committed) == 0 {
 		return nil
 	}
+	for i, e := range committed {
+		e.SetFactEventID(events[i].ID)
+	}
 	if err := a.store.Put(a.worldID, committed...); err != nil {
 		return a.keepFailed(p, err)
 	}
 	a.remember(p.ID)
+	a.sinceSnapshot += len(committed)
 	for _, e := range committed {
 		a.log.Info("entity updated", "entity_id", e.ID, "version", e.Version,
 			"cause", p.Cause, "proposal_id", p.ID, "event_id", e.LastEventID)
