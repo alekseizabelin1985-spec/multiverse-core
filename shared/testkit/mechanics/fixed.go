@@ -363,8 +363,8 @@ func (m *FixedMechanics) Roll(causeEventID string, rollIndex int, formula, purpo
 // rules/dark-forest.yaml.
 func (m *FixedMechanics) Stats(kind string) (mech.Actor, bool) { return m.rules.Stats(kind) }
 
-// Invariants are the laws in force, straight out of the rule set — every Check
-// still nil until EPIC-002 writes them (T-054).
+// Invariants are the laws in force, straight out of the rule set, checks
+// included: a law is not a number a double may fix.
 func (m *FixedMechanics) Invariants() []mech.Invariant { return m.rules.Invariants() }
 
 func lookup(actors map[string]*mech.Actor, id, role string) (*mech.Actor, error) {

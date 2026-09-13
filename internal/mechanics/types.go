@@ -251,8 +251,11 @@ type Invariant struct {
 	// list is what tells a reader which of them is the one that matters.
 	Where []string
 
-	// Check is nil for an invariant no Applier can decide — one that needs the
-	// journal rather than the world (inv-07, inv-08) — and for every invariant
-	// until EPIC-002 implements it (T-054).
+	// Check looks at the world as it would be after a change, from the
+	// entities the change touches, and answers every break it finds in a fixed
+	// order; nil is no break (invariants.go). It is nil for an invariant no
+	// Applier can decide — one that needs the journal rather than the world
+	// (inv-07, inv-08) — and for the laws of a group until increment I2 writes
+	// them (inv-04, inv-05, inv-06; T-066).
 	Check func(v StateView, touched []string) []Violation
 }
