@@ -1096,6 +1096,173 @@
   - `infrastructure.md:734`, §4.5 п. 12 (критерий F-1): проверка приводит `gitleaks git --redact --log-opts="integration/mvp-1..HEAD" .`. Это историческая запись F-1, но после решения о судьбе `integration/mvp-1` строку привести к стволу gitflow (`develop..HEAD`, на `develop` — `main..HEAD`) или пометить «на момент F-1». Вместе с пунктом о судьбе ветки, devops-engineer.
   - `infrastructure.md` §3.1, строка задания `security`: в тексте `security-events: write` (SARIF), а в `go.yml` — `pull-requests: read` без SARIF. Редакционно, devops-engineer.
 
+### T-449: Документы по решениям system-architect (ревизия 4, продолжение) · Размер: M · Статус: done · Волна 1 · contract-change
+- **Причина.** Пакет решений system-architect#1 оркестратор принял 2026-09-13. Он отвечает на вопросы четырёх задач:
+  - T-050 (EPIC-002, приёмка с условием подтверждения);
+  - T-053 (EPIC-002, вопросы Р1–Р5);
+  - T-206 (EPIC-003, Mi-4 и Mi-6 ревью, бэклог бюджета);
+  - T-448 (EPIC-002).
+
+  Решения нужно внести в контракты и документы до того, как на них начнут опираться задачи эпиков. Туда же — бэклог приёмки T-444: замечания 1, 3, 4 и шаблон файлов тестов роя в ADR-001.
+- **Что сделать** (только документы; код — T-053, T-448, T-450, T-451, T-209, T-250):
+  - `architecture/contracts.md` v0.12 — сводка; C-02 (абзац «Код расходится» закрыт T-050, каноническая форма значений, заготовка v1.6 «ожидает T-448»); C-03 v1.3; C-07 v1.4 (`limit_money`); C-14 (запись истории v1.2a); C-15 v1.3 (правило «локальный адрес»);
+  - `architecture/components/state-and-mechanics.md` §3.2 (равенство элементов), §3.3 (каноническая форма), §5.4 (позиция побега);
+  - `analysis/data-model.md` §3.3 (`flee`);
+  - ADR-005 доп. 2 п. 3 (правило «локальный адрес»); ADR-001 доп. 2026-09-13 п. 1 (направление зависимостей `internal/llm`), п. 3 (шаблон `**/internal/swarm/**_test.go`); ADR-012 п. 4 (пометка «дополнено C-03 v1.3»);
+  - `architecture/components/gateway-and-bot.md` §8.1 (`group_move`); `plan/ownership.md` строка `test/e2e/**` (запятая).
+  - Правки помечены «(изм. T-449)». `design.md` EPIC-002 (I1-4) не правится — это строка тимлиду. Строки DoD — в карточке.
+- **DoD:**
+  1. У каждого затронутого контракта — версия в заголовке и запись в истории (C-03 v1.3, C-07 v1.4, C-14 v1.2a, C-15 v1.3); сводка v0.12 с колонкой «Кто прав».
+  2. Если в карточке T-448 нет готового текста, C-02 v1.6 остаётся заготовкой «ожидает T-448».
+  3. Текст C-03 v1.3 совпадает с кодом T-053 в его рабочей папке: `Actor.Version`, `Actor.Kind`, `Action.At`, отказ при `Version <= 0` и при пустом `At`.
+  4. Перечень случаев правила «локальный адрес» в C-15 и в ADR-005 совпадает дословно.
+  5. CRLF сохранён, байтов NUL нет, строка таблицы провайдеров КД роя не сдвинута; `gitleaks dir --redact -c .gitleaks.toml` по изменённым файлам в копии — 0 находок.
+- **Ссылки:** пакет решений system-architect (отчёт 2026-09-13); `epics/EPIC-002-state-mechanics/tasks/T-050.md`, `T-053.md`; `epics/EPIC-003-swarm-llm-laws/review.md` (T-206, Mi-4, Mi-6); приёмка T-444 (`tasks/T-444.md`, «Замечания»); ADR-003 п. 6, ADR-013 п. 1, ADR-005 доп. 2 п. 3.
+- **Исполнитель:** system-architect#1 (Opus). Ветка `task/T-449-docs-architect-decisions` от эпика после слияния T-444 и T-445, папка `.worktrees/T-449`. Карточка — `tasks/T-449.md`.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/3/6/5, вернуть), итерации 2 и ревью #2 (code-reviewer#3, 0/0/2/6, принять). Итераций ревью — 2. DoD 1–5 сверен при приёмке:
+  - версии и записи истории у C-03 v1.3, C-07 v1.4, C-14 v1.2a, C-15 v1.3, у C-02 — v1.5a и v1.6; сводка v0.12 с колонкой «Кто прав»;
+  - C-02 v1.6 внесён текстом из карточки T-448 с пометкой «вступает в силу со слиянием T-448» (п. 2 DoD снят поручением оркестратора на итерацию 2);
+  - C-03 v1.3 совпадает с кодом T-053 в `epic/EPIC-002-state-mechanics` (`24f1baf`): `types.go:53`, `:60`, `:140`; `changes.go:209` (`Version <= 0`), `:225` (пустой `At`); `actor.go:30`; `rules.go:717`;
+  - пять пунктов правила «локальный адрес» в C-15 и ADR-005 совпадают побайтно;
+  - CRLF у 12 файлов, NUL нет; `swarm-llm-laws.md` не изменён (строка 521 с `gitleaks:allow`); `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0; `gitleaks dir` по копии 12 файлов с конфигурацией ветки и кончика эпика (`dcdb530`), с `.gitleaksignore` и без — 0.
+
+  R2-Mi-1, R2-Mi-2 и шесть Nit ревью #2 при приёмке не правились: `contracts.md` правит только system-architect. Решением оркестратора они переданы в T-456. Слияние с эпиком: пересечение только в `tasks.md`, `review.md`, `dev-log.md`, везде дописывание в конец. У `tasks.md` нет драйвера `appendtail`, поэтому ждать конфликта хвоста; разрешение — объединение: раздел T-453 эпика, затем T-449 и T-456. Подробно — карточка, «Приёмка (tech-lead)».
+- **Бэклог (из ревью T-449, 2026-09-13)** — отдельные задачи, не блокируют:
+  - КД роя, `swarm-llm-laws.md:533`: строка `budget{kind,limit,window}` после C-07 v1.4 неполна для `kind=cloud`. Править вместе с T-250 или со следующей нормализацией КД роя, с перепроверкой отпечатка `.gitleaksignore` (строка 521). system-architect.
+  - `infrastructure.md:360`, `:622`: прежнее определение «локального» (loopback, `host.docker.internal`, RFC 1918). Привести ссылкой на C-15 v1.3. devops-engineer (T-450 или отдельно).
+  - C-03, «Состояние реализации на 2026-09-11» (`ErrNotImplemented`): датированная строка при слиянии EPIC-002 в develop. Там же перечислить в C-03 полный набор путей `ChangesFor`, включая `loot_claimed_by` (`changes.go:156`). system-architect.
+
+### T-456: C-08 v1.4 и нормализация КД шлюза · system-architect · S–M · Статус: todo · после T-449
+- **Причина (оркестратор, 2026-09-13).**
+  - Решение system-architect#1 по T-303: новый код `503 forget_incomplete` принят с условиями, а в контрактах и КД шлюза его нет. КД шлюза расходится с кодом T-303.
+  - Вопрос дедлайна чтения long-poll из ревью T-446.
+  - Minor и Nit ревью #2 T-449, которые при приёмке не правятся: `contracts.md` правит только system-architect.
+- **Версия.** Номер C-08 v1.4 уже занят T-444 («двойники шлюза и таймауты маршрутов»). Номер новой записи (ожидаемо v1.5) выбирает system-architect; название задачи оставлено как в журнале.
+- **Состав** (только документы; код — T-303, T-311, T-314, T-355):
+  1. C-08, `503 forget_incomplete` с условиями:
+     - любой `/forget` отвечает 503, пока сжатие отложено;
+     - заголовок `Retry-After`;
+     - безусловное `CompactLinks` в `Start`;
+     - отличие от `503 bus_unavailable`;
+     - бот не говорит «удалено» до ответа 200 (T-311).
+
+     Заголовок и запись истории.
+  2. `api-contracts.md` §1.6 — строка кода `forget_incomplete`.
+  3. КД шлюза, всё по коду T-303:
+     - §3 — пакет `internal/gateway/handlers`;
+     - §5.1 — порядок `request_id` и `recover`, `nolog`;
+     - §6 — сигнатуры `links.Store`;
+     - §7.5 и §9.
+
+     ADR-019 — дополнение.
+  4. Дедлайн чтения для long-poll: не меньше `wait_ms + 5 с` либо 0 (вопрос ревью T-446).
+  5. Строки DoD для T-303, T-311, T-314, T-355 — в карточке, тимлиду EPIC-004.
+  6. `contracts.md` C-02, замечания ревью #2 T-449:
+     - R2-Mi-1 — пометка «вступает в силу со слиянием T-448» у норм v1.6 в «Вход State», «Выход State» и «Гарантиях» (`:322`, `:323`, `:356` на момент ревью);
+     - R2-Mi-2 — порядок «элемент предка, которого нет среди затронутых путей, идёт после их элементов» (уже в тексте v1.6 карточки T-448, итерация 2).
+
+     Сверить C-02 v1.6 с итоговой карточкой T-448, пометки «вступает в силу» снять при её слиянии.
+  7. Nit ревью #2 T-449:
+     - R2-N-1 — каноническая форма дважды названа в строке версии v0.12;
+     - R2-N-2 — числовые записи хоста и `127.0.0.1.` не ужесточение относительно T-206;
+     - R2-N-3 — КД State §3.3: числа в `attributes` отвергает проверка создания;
+     - R2-N-4 — КД State §5.1: комментарий `ActorFromEntity` v1.3;
+     - R2-N-5 — класс `invalid` в C-15 и ADR-005, одинаково: IPv6 без скобок, символы после `]`;
+     - R2-N-6 — строка DoD T-450 в карточке T-449 (п. 8).
+  8. Строка DoD T-450: IPv4-адрес с точкой на конце (`127.0.0.1.`, `10.0.0.1.`) — `cloud`. Нужны строки таблицы; точка у адресов не снимается в `llm-endpoint.sh` и `LlmEndpoint.psm1`; шапка таблицы исправлена.
+- **DoD:**
+  1. У изменённых контрактов — версия в заголовке и запись в истории; строка сводки в `contracts.md`.
+  2. Текст C-08 о `forget_incomplete` совпадает с кодом T-303 (коды, `Retry-After`, `CompactLinks` в `Start`). КД шлюза §3, §5.1, §6 совпадают с кодом T-303 в его ветке.
+  3. C-02 v1.6 совпадает с итоговой карточкой T-448. R2-Mi-1, R2-Mi-2, R2-N-1…R2-N-6 закрыты или отклонены с обоснованием.
+  4. Правки помечены «(изм. T-456)». CRLF сохранён, байтов NUL нет, строка 521 КД роя не сдвинута; `gitleaks dir` по изменённым файлам — 0.
+- **Ссылки:** `journal.md` 2026-09-13 (решения system-architect#1, заведение T-456, ревью #2 T-449); `review.md`, «T-449 · ревью #2»; ревью T-303 и T-446; карточка T-448, «Текст C-02 v1.6 для T-449».
+- **Исполнитель:** system-architect#1, метка `contract-change`. Ветка `task/T-456-c08-forget-incomplete-gateway-kd` от эпика после слияния T-449. Параллельно с T-449 не вести: тот же `contracts.md`.
+
+### T-446: Ревизия контрактов 4 — runtime и раскладка cmd · Размер: M · Статус: done · Волна 1 · contract-change
+- **Причина.** Решения system-architect#1 от 2026-09-13 (ревизия контрактов 4, пункты 6 и 7; тексты — T-444, `contracts.md` v0.11: C-01 v1.8, §16 п. 8, ADR-001 доп. п. 7).
+  - (6) HTTP-сервер процесса один на все контексты, и контракт о его таймаутах молчал. КД шлюза §5.1 требовал таймаутов маршрутов, а процесс останавливает HTTP раньше контекстов (`serve.go:339`). `Shutdown` не отменяет контексты запросов, поэтому long-poll до 25 с переживает `ShutdownTimeout` 5 с (`http.go:15`), и `srv.Stop` падает по дедлайну.
+  - (7) Регистрация контекстов (`contexts.go`), подкоманды `mvctl` (`main.go`) и строки реестра (`registry.go`) лежали в общих файлах EPIC-001. Их правили бы три ветки эпиков одновременно.
+- **Состав.**
+  - `shared/runtime/http.go`: `ReadHeaderTimeout 5s` (было 10 с), `IdleTimeout 120s`; `ReadTimeout`/`WriteTimeout` сервера не ставятся. `runtime.SetDeadlines(w, read, write) error` — через `http.ResponseController`, время `clock.Real` в любом режиме. `runtime.ShuttingDown(ctx) <-chan struct{}` — через `http.Server.BaseContext`, канал закрывается в начале `HTTP.Stop`. `ShutdownTimeout` не меняется.
+  - `cmd/multiverse`: порядок и `init` — в `contexts.go`; фабрики — переменные пакета в `contexts_state.go` (`state`, `mechanics`), `contexts_swarm.go` (`llm`, `laws`, `swarm` = хук `newSwarm`), `contexts_gateway.go`, `contexts_memory.go`. В файлах те же заглушки.
+  - `cmd/mvctl`: `main.go` собирает `cli.NewRegistry(slices.Concat(foundation(), stateCmds(), swarmCmds(), opsCmds())...)`; `commands_state.go`, `commands_swarm.go`, `commands_ops.go` содержат `cli.Reserved`. `internal/cli` не менялся.
+  - `shared/contracts`: `registry.go` собирает `definitions` из `registry_gateway.go`, `registry_state.go`, `registry_swarm.go`, `registry_ops.go`; легаси-типы EPIC-001 остаются в `registry.go`.
+  - `test/e2e/main_test.go`: единственный `TestMain` пакета и `registerPackageSetup(owner, setup)` (бэклог итерации 3 T-444).
+- **DoD.**
+  1. Тест: long-poll, ждущий 25 с, завершается меньше чем за 1 с после `Stop`; «http shutdown» в логе процесса нет.
+  2. Тест: `SetDeadlines` обрывает медленную запись при ручных часах в `Deps` — время реальное.
+  3. Тест порядка: `runtime.Names()` = state, laws, mechanics, llm, swarm, gateway, memory при любом порядке файлов (мутант: переименовать файл владельца — зелёный; регистрация из `init` файла владельца — красный).
+  4. Вывод `mvctl help` побайтно совпадает с прежним.
+  5. `All()` реестра до и после разделения совпадает (типы, порядок, поля).
+  6. `MV_SWARM_FAKE` работает как раньше: тесты T-255 зелёные.
+  7. После раздела `golangci-lint run ./...` (depguard T-445) — 0 issues.
+  8. Регистратор `test/e2e`: порядок подготовок по имени владельца, завершения в обратном, при ошибке второй подготовки завершается первая и пакет падает; повторная регистрация — ошибка.
+  9. Мутанты — в копии дерева в scratch, без `-overlay`, контрольный первым; `go build ./... && go vet ./...`, `mvctl contracts check`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `make test`, `make ci BASE=develop`.
+- **Ссылки:** карточка `tasks/T-446.md`; `contracts.md` v0.11 (C-01 v1.8, §16 п. 8) и ADR-001 доп. 2026-09-13 п. 7 — в T-444; КД шлюза §5.1; `ownership.md` v0.6 §1, §3.
+- **Исполнитель:** developer#2 (TEAM-1, Opus). Ветка `task/T-446-runtime-cmd-layout` от эпика после слияния T-445, папка `.worktrees/T-446`. `contracts.md` не правится (текст — T-449).
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/2/1/4, вернуть), итерации 2 и ревью #2 (code-reviewer#3, 0/0/0/1, принять). Итераций ревью — 2; Nit ревью #2 (шапка карточки) исправлен при приёмке. DoD 1–9 сверен. На слитом с кончиком эпика `647c5d8` дереве: `go build`/`go vet` — 0, `go test -short` — 27 ok, e2e — ok, `golangci-lint` (и с тегом `e2e`) — 0 issues, `contracts check` — 65 типов, `mvctl help` побайтно как прежде. Go-код эпика после базы не менялся. Ссылки на §16 п. 8, ADR-001 доп. п. 7 и `ownership.md` v0.6 §1, §3 п. 6–7 после T-449 не сдвинулись. Слияние: `Makefile` — без конфликта (сдвиг 4 строки), `dev-log.md`/`review.md` — `appendtail`, `tasks.md` — конфликт хвостов, объединение (разделы эпика, затем T-446). Отметка владельца `cmd/multiverse` и `cmd/mvctl` (мягкий режим) — tech-lead#1, в карточке. Будущие слияния: T-303 — конфликт в `contexts.go`, фабрика `newGateway` переезжает в `contexts_gateway.go` (рецепт в карточке); T-060 — пересечений нет, пробное слияние с `epic/EPIC-002-state-mechanics` зелёное; T-454 — только хвосты документов. Строка DoD T-256 для tech-lead#2 — в карточке.
+- **Бэклог (из T-446, 2026-09-13)** — отдельные задачи, не блокируют:
+  - tech-writer, на develop (`ownership.md` §3 п. 3). В `CLAUDE.md` и `README.md` дописать файлы владельцев. Карта каталогов называет «`cmd/mvctl/main.go` — реестр» и «заглушки (`cmd/multiverse/contexts.go`)»; нужно добавить `contexts_<владелец>.go`, `commands_<владелец>.go`, `registry_<владелец>.go` и регистратор `registerPackageSetup` в `test/e2e/main_test.go`.
+  - При появлении `shared/runtime/README.md` описать `SetDeadlines`/`ShuttingDown` с примером long-poll из `shutdown_test.go`. Сейчас их описывают только doc-комментарии и C-01 v1.8.
+  - Дедлайн чтения для long-poll (КД шлюза §5.1 п. 8: `wait_ms + 5 с` или 0) уже передан в T-456, п. 4 состава. Отдельной задачи не нужно.
+  - Через оркестратора — tech-lead#2: в DoD T-256 уточнить, что хук снимается строкой `newSwarmContext` в `contexts_swarm.go`, а константа `swarmContext` лежит в `contexts.go` EPIC-001. Через оркестратора — tech-lead#3: в T-303 фабрику `newGateway` положить в `contexts_gateway.go`, `contexts.go` не править.
+
+### T-454: CI на Linux — гонка данных в `testkit/state` и флак fight-05 стенда `cmd/multiverse` · Размер: S · Статус: done · Волна 1
+- **Причина (оркестратор, 2026-09-13)**: первый прогон `go.yml` на Linux (run 34754402826, `develop` `447b892`) красный в `unit`, `race`, `integration`. (1) DATA RACE `shared/testkit/state/consumer_test.go` — `TestAConsumerBuildsItsProjectionFromTheStub`: `(*projection).Handle` пишет в горутине `membus.Subscribe`, `waitFor` читает без синхронизации. (2) Флак `cmd/multiverse` `TestTheProcessRunsTheFightsOfIAlpha/fight-05` под `-race`: «nobody resolved the attack of player-A on wolf-alpha within 2s … the fake had not yet learnt wolf-alpha from entity.created when player-A entered». Локально `-race` недоступен (нет cgo).
+- **Состав**:
+  1. Проекция потребителя под мьютексом, чтение через `seen` (копия отказов); проверки прежние. Аудит «обработчик пишет — тест читает» по `shared/testkit/**`, `cmd/multiverse`, `test/e2e`: других гонок нет; скрытая передача `stand.bus/world` из горутины `process.run` в тест (детектор молчал из-за аннотации `ioSync` на вводе-выводе сокета) сделана явной каналом `opened`.
+  2. Стенд `cmd/multiverse` ждёт готовности двойника по событию: обёртка транспорта `learning` отмечает `entity.created` каждой сущности bootstrap после успешного возврата обработчика `system_events` двойника; персонаж входит только после этого (`ready`, бюджет 10 с — предохранитель). Регрессия `TestTheStandWaitsUntilTheFakeHasLearntTheWorld` (факты держатся, пока стенд не начнёт ждать) воспроизводит текст CI на мутанте без ожидания.
+  3. Попутно (стресс `-cpu 1`): конец боя читался из журнала раньше, чем двойник публиковал `encounter.ended` (death «ended ""» 5–7 из 200). Стенд ждёт событие с id из `closed_by_event_id` закрытого энкаунтера.
+- **DoD**: мутанты M0 (контроль), M2 (без ожидания — красный, текст CI), M3 (конец боя сразу — 7/200 красных на `-cpu 1`); стресс `-count=50 -cpu 1,2,4,8` fight-тестов и `shared/testkit/state` — ok; `go build/vet`, `go test -short ./...` (27 ok), e2e, `golangci-lint` (0), `make test` — зелёные; `-race` не запускался (gcc нет). Должны позеленеть `unit`, `race`, `integration`; не проверены «Coverage floor» `unit` и e2e-часть `make test-race` (в прогоне не выполнялись).
+- **Метка**: нет. Правки только в `_test.go`; production-код заглушек и `cmd/multiverse/*.go` не менялись.
+- **Исполнитель**: developer#2 (Opus). Ветка `task/T-454-ci-race-testkit-state-fight05` (от эпика `dcdb530`). Карточка — `tasks/T-454.md`.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/0/1/3). Mi-1 закрыт при приёмке: unit-тесты `learning` без процесса (`cmd/multiverse/fake_contexts_learning_test.go`). `ready` не возвращается, пока двойник не обработал все факты; отметка только после возврата обработчика; ошибка двойника отметки не даёт. Мутанты в копии дерева: R1 (`ready` не ждёт `learnt`), R3 (отметка до обработчика), R6' (отметка при ошибке) — красные 10/10, контроль C0 — ошибка компиляции. N-1 (сообщение без `missing()`), N-2 (`unlearnt`: отказ двойника или факт не дошёл), N-3 (перенос комментария) — внесены без повторного ревью. Прогоны: build/vet, `-count=3` testkit и `cmd/multiverse`, `-count=10 -cpu 1,4` IAlpha и проекции, e2e, `golangci-lint` 0, `make ci BASE=epic/EPIC-001-foundation` — зелёные; `-race` — только CI. С T-446 (уже в эпике) — чисто; с T-303 (EPIC-004, `startProcess`) моделирование `git merge-file` — 0 конфликтов, рецепт на случай конфликта — карточка, «Приёмка».
+- **Бэклог (из T-454, 2026-09-13)** — отдельные задачи, не блокируют:
+  - `/health` у `swarm.FakeContext`/`FakeEncounter` — ok только после догоняния журнала, по образцу stateful-контекстов C-14; тогда обёртка `learning` стенда `cmd/multiverse` не нужна. Решение за tech-lead#2 (EPIC-003, владелец `shared/testkit/swarm`); до T-256 вряд ли оправдано.
+  - Runbook (`Docs/ops/runbook.md`) и README: гонки проверяют только задания CI `unit`/`race`/`integration`, пока у разработчиков нет cgo (`make test`/`make ci` пишут `test-race: SKIPPED`); либо установка gcc в инструкцию разработчика — решение владельца. tech-writer, сверка — devops-engineer.
+
+### T-450: Единое правило «локальный адрес» для скриптов и линтера compose · Размер: M · Статус: done · Волна 1
+- **Причина (решение system-architect#1, заведена оркестратором)**: правило «локальный адрес» было записано трижды и по-разному:
+  - гейт облака платформы `IsLocalEndpoint` в `internal/llm` (EPIC-003, T-206): loopback, `localhost`, `host.docker.internal`, RFC 1918;
+  - `scripts/lib/llm-endpoint.sh` / `LlmEndpoint.psm1`: то же плюс `0.0.0.0`, `::`, `fd??:`, `fe80:` по строковому префиксу, без имени сервиса;
+  - `scripts/compose-lint.sh`, правило 6: сервис своего файла и всё, что `ipaddress` Python называет private, включая `0.0.0.0/8` и адреса документации.
+  Поэтому `MV_OLLAMA_URL=http://ollama:11434` линтер принимал, а платформа отвергала.
+- **Правило** (решение architect#1). Ответ — один из трёх:
+  - `local`: loopback `127.0.0.0/8` и `::1`, `localhost` и `*.localhost`, `host.docker.internal`, однословное имя без точки (сервис compose), RFC 1918, link-local `169.254.0.0/16` и `fe80::/10`, IPv6 ULA `fc00::/7`, IPv4-mapped формы всех перечисленных;
+  - `invalid`: `0.0.0.0` и `::`, локальный хост без явного порта, порт вне 1–65535, отказы `normalizeURL` T-206 (`?`, `#`, userinfo, не http/https);
+  - `cloud`: всё остальное — публичные адреса, имена с точкой (включая `.local`), CGNAT `100.64.0.0/10`, адреса документации, числовые формы.
+- **Состав**:
+  1. `testdata/llm/local-endpoints.tsv` — единая таблица случаев: URL, ответ, причина; не меньше 40 строк, все классы и граничные формы.
+  2. `llm_endpoint_classify` в `llm-endpoint.sh` и `Get-LlmEndpointClass` в `LlmEndpoint.psm1` — классификация по правилу. `llm-server`/`llm-bench` берут класс оттуда же; изменения поведения описаны.
+  3. Правило 6 `compose-lint.sh` вызывает функцию скрипта вместо своего `is_private`; фикстуры для ollama и `0.0.0.0`.
+  4. Тесты паритета sh и pwsh по таблице — в стенде `testdata/script-parity` (T-405).
+  5. `infrastructure.md` (новый §6.3.1, строка правила 6 в §3.1.1; §6.4 и §4.2 не тронуты), `Docs/ops/runbook.md` §3.
+  - Go-тест `IsLocalEndpoint` по таблице — T-451 (EPIC-003), не здесь. ADR-005 и C-15 — T-449.
+- **DoD**:
+  1. Таблица ≥ 40 строк, все три класса. Покрыты граничные формы, регистр, завершающая точка, IPv6 в скобках, mapped-формы, числовые формы, порты 0/65536/без порта, `?` и `#`.
+  2. Обе реализации отвечают на каждую строку как таблица; `kind` (причина одним словом) у двух половин совпадает. Проверки стенда `T01`/`T02` выполняются при любом `-run`.
+  3. `compose-lint` без своей копии правила; `bash scripts/compose-lint.sh` и `--fixtures` зелёные, новые фикстуры отвергаются правилом 6 по своей причине.
+  4. Мутанты краснеют: «однословное имя — облако» и «`0.0.0.0` не any-address» — в обеих половинах стенда и в фикстурах `compose-lint`; контрольный мутант первым.
+  5. `make scripts-parity`, `make parity-mutants`, `bash -n`, разбор `.ps1`, `make ci BASE=develop` — зелёные.
+- **Исполнитель**: devops-engineer#2 (Opus). Ветка `task/T-450-local-endpoint-table` (от эпика с T-405, `ab6cb1d`). Карточка — `tasks/T-450.md`.
+- **Решения исполнителя** (уточнения правила, записаны в шапке таблицы; на ревью architect#1):
+  - завершающая точка снимается только у зарезервированных имён (`localhost.`, `*.localhost.`, `host.docker.internal.` — `local`); IPv4 с точкой (`127.0.0.1.`, `0.0.0.0.`) и `ollama.` — `cloud` (решение system-architect#1, итерация 2);
+  - однословное имя начинается с буквы и состоит из `[a-z0-9_-]`;
+  - записанный порт считается явным, включая `:80`; ведущие нули порта незначимы;
+  - `host:` с пустым портом, скобки не вокруг IPv6 и `%` в хосте (экранирование, зона IPv6) — `invalid`;
+  - из `0.0.0.0/8` any-address — только `0.0.0.0`; `::127.0.0.1` и `64:ff9b::/96` — не mapped-формы.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #2 (0/0/1/2), итераций ревью — 2. При приёмке закрыты:
+  - Mi-R2-1: userinfo вырезается из печатаемого значения до первого отказа, одинаково в `llm-endpoint.sh` и `LlmEndpoint.psm1`. Проверки: сценарии `H61`–`H66` с `Absent: FAKEPW123`, мутант M28, фикстура `bad-llm-url-userinfo`; мутант `compose-lint` C8 красный;
+  - N-R2-1: строка про точку выше;
+  - N-R2-2: `infrastructure.md` §3.1.2 — 29 мутантов, 105 сценариев, `T01`/`T02`; §4.2 п. 4 — ссылка на §6.3.1.
+
+  Прогоны зелёные: `make scripts-parity` (107 PASS, 2 KNOWN-FAILING, `T01`/`T02` по 123), мутанты M00, M01, M18–M28, `compose-lint` и `--fixtures` (58 bad, 11 good), `bash -n`, разбор `.ps1`, `secrets-scan`, `gitleaks dir`. Слияние: T-450, затем T-455. Три файла сливаются без конфликтов; в `tasks.md` конфликт от дописывания в конец с обеих сторон. Подробности — в карточке, раздел «Приёмка (tech-lead)».
+- **Бэклог (из приёмки T-450, 2026-09-13)** — отдельные строки, не блокируют:
+  1. T-451 (DoD): Go-тест читает таблицу и `endpointStandCases`; `canonicalHost` не снимает точку у IPv4; `needsExplicitPort` — любой `local`; `0.0.0.0`/`::` — ошибка конфигурации; тексты ошибок не печатают userinfo.
+  2. T-456 (DoD, C-15): символы хоста, которые отвергает `url.Parse` (пробел, `\`, `^`, `` ` ``, `{`, `|`, `}`), — в список `invalid`; ни одна реализация не печатает userinfo в текстах отказов.
+  3. Nit: комментарий `LLM_EP_RAW` в `llm-endpoint.sh:152` («with any userinfo masked») устарел.
+  4. Из итерации 2 исполнителя: топологическая проверка `kind=service` в `compose-lint` (N-3 ревью #1); скорость `llm_parse_url` без fork; сценарий на `//` в конце пути (ревью #1, п. 4).
+
 ### T-455: CI `compose-lint` на `develop` — окружение процесса скрывало заглушку `CHROMA_IMAGE` · Размер: XS · Статус: done · Волна 1
 - **Причина (оркестратор, 2026-09-13)**: первый прогон CI на `develop` (run 34754402826, коммит `447b892`, job 103716226089). Задание `compose-lint` упало на шаге «The house rules»: `error while interpolating services.chromadb.image: required variable CHROMA_IMAGE is missing a value`. Шаг `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` перед ним прошёл, фикстуры и hadolint пропущены.
 - **Найдено (devops-engineer#1)**: не `.env` владельца — копия без `.env` проходит, а с `--env-file` compose `.env` не читает. Шаг «Read the pinned versions» экспортирует `build/versions.env` в `$GITHUB_ENV`, в том числе пустой по D-3 `CHROMA_IMAGE`. Переменная процесса у compose выше `--env-file`, и она скрыла заглушку `.github/ci.env`. Шаг `config -q` читает только `docker-compose.yml`, где `CHROMA_IMAGE` нет.

@@ -123,7 +123,7 @@ erDiagram
 |---|---|---|---|---|
 | `id` = `player_id` | string | да | Псевдоним; новый при новом персонаже | не выводится из внешнего ID |
 | `hp`, `hp_max` | int | да | 10/10 на старте | `0 ≤ hp ≤ hp_max` (инвариант 2) |
-| `atk`, `def`, `dmg`, `flee` | int / формула | да | Из правил боя (`+2`, `12`, `d6`, `+2`) | копия из `RulesDocument` при создании; меняются только правилами |
+| `atk`, `def`, `dmg`, `flee` | int / формула | да | Из правил боя (`+2`, `12`, `d6`, `+2`) | копия из `RulesDocument` при создании; меняются только правилами. `flee` — строка-модификатор (`"+2"`, `"2"`) или целое; `null` или отсутствие — «не убегает»; дробное число, `bool`, объект — дефект данных, механика отказывает громко (изм. T-449; T-050, `Entity.Flee`) |
 | `status` | enum | да | `alive, dead, abandoned, ascended_final` (`abandoned` — покинутый после `/forget`, FR-061; сведение 3) | терминальные: `dead`, `abandoned`, `ascended_final`; `abandoned` только из `alive`, предлагает gateway (`cause=forget`), для inv-01/целей NPC/scope = `dead` |
 | `position` | string | да | `outside:{world_id}` или `region_id` | ровно одна (инвариант 10) |
 | `scope` | ScopeRef | да | `solo:{player_id}` или `group:{group_id}` | ровно один (инвариант 6) |

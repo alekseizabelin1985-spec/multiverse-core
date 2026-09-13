@@ -124,7 +124,7 @@ func healthScenarios() []Scenario {
 			Steps: health(Expect{Exit: 1, Stderr: []string{"has no host"}})},
 		{ID: "H28", Title: "health: a query string", Script: scriptServer,
 			Env:   map[string]string{"MV_LLM_URL": "http://127.0.0.1:{PORT}/?x=1"},
-			Steps: health(Expect{Exit: 1, Stderr: []string{"carries a query or a fragment"}})},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"carries a query or a fragment"}, Absent: []string{"x=1"}})},
 		{ID: "H29", Title: "health: a fragment", Script: scriptServer,
 			Env:   map[string]string{"MV_LLM_URL": "http://127.0.0.1:{PORT}#top"},
 			Steps: health(Expect{Exit: 1, Stderr: []string{"carries a query or a fragment"}})},
@@ -224,6 +224,33 @@ func healthScenarios() []Scenario {
 		{ID: "H56", Title: "health: nobody listens and MV_LLM_BIN is set", Script: scriptServer,
 			Env: map[string]string{"MV_LLM_URL": "http://127.0.0.1:{DEAD}", "MV_LLM_BIN": "{DOUBLE}"}, Program: &DoubleConfig{},
 			Steps: health(Expect{Exit: 1, Contains: []string{"unreachable — the process is not running (make llm-up)"}})},
+		// T-450 review #2 Mi-R2-1: every refusal that prints the value cuts the
+		// user information out of it, the ones that come before the check of the @
+		// included. FAKEPW123 is a fake password; it must never reach the output.
+		{ID: "H61", Title: "health: user information in an address with a query is not printed (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://user:FAKEPW123@127.0.0.1:{PORT}/?x=1"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=http://…@127.0.0.1:<PORT>/… carries a query or a fragment"},
+				Absent: []string{"FAKEPW123", "x=1"}})},
+		{ID: "H62", Title: "health: user information in an address with the scheme ftp is not printed (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "ftp://user:FAKEPW123@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=ftp://…@127.0.0.1:<PORT> uses scheme 'ftp'"},
+				Absent: []string{"FAKEPW123"}})},
+		{ID: "H63", Title: "health: user information in an address without a scheme is not printed (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "user:FAKEPW123@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=…@127.0.0.1:<PORT> has no scheme"},
+				Absent: []string{"FAKEPW123"}})},
+		{ID: "H64", Title: "health: user information in an address with a character outside ASCII is not printed (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://user:FAKEPW123Ä@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=http://…@127.0.0.1:<PORT> carries a character outside printable ASCII"},
+				Absent: []string{"FAKEPW123"}})},
+		{ID: "H65", Title: "health: a password with a bare ? is not printed in front of the cut (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://u:FAKEPW123?w@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=http://… carries a query or a fragment"},
+				Absent: []string{"FAKEPW123"}})},
+		{ID: "H66", Title: "health: a password with a bare / is not printed by the sentence about the port (T-450 review #2 Mi-R2-1)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://u:x/FAKEPW123@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=http://…@127.0.0.1:<PORT> has a non-numeric port 'x'"},
+				Absent: []string{"FAKEPW123"}})},
 	}
 }
 
@@ -387,6 +414,18 @@ func upDownScenarios() []Scenario {
 		{ID: "D06", Title: "down: MV_LLM_URL empty", Script: scriptServer,
 			Env:   map[string]string{"MV_LLM_URL": ""},
 			Steps: []Step{{Action: "down", Expect: Expect{Exit: 1, Stderr: []string{"has no value"}}}}},
+		// T-450: the table testdata/llm/local-endpoints.tsv is run through both
+		// modules by T01/T02; these two carry a change of the rule into the script.
+		{ID: "D07", Title: "down: the any-address 0.0.0.0 is a configuration error, no longer this machine (T-450)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://0.0.0.0:{DEAD}"},
+			Steps: []Step{{Action: "down", Expect: Expect{Exit: 1,
+				Stderr: []string{"llm: MV_LLM_URL=http://0.0.0.0:<DEAD> names 0.0.0.0, the any-address: a server listens there, a client cannot call it"},
+				Absent: []string{"nothing to stop"}}}}},
+		{ID: "D08", Title: "down: an address of the LAN without a port is refused like a loopback one (T-450)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://192.168.1.10"},
+			Steps: []Step{{Action: "down", Expect: Expect{Exit: 1,
+				Stderr: []string{"llm: MV_LLM_URL=http://192.168.1.10 has no port; a local address is written with the port its runtime listens on, and 80, the default of the scheme, is a port nobody chose"},
+				Absent: []string{"is not an address of this machine"}}}}},
 	}
 }
 

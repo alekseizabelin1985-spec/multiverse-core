@@ -61,6 +61,12 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-secret-number.yml` | 3 | `MV_LLM_API_KEY: 1234567890` — a literal YAML reads as a number is still a literal (T-429 review #1 N-1) |
 | `bad-secret-flow-mapping.yml` | 3 | a literal password in a flow mapping, `environment: {KEY: value, ...}` (T-429; T-413 review #1 N-1) |
 | `bad-secret-multiline-plain.yml` | 3 | `MV_LLM_API_KEY:` with a literal on the next line — a key WITH a value to YAML, not a key without one (T-429; T-413 review #2) |
+| `bad-llm-url-any-address.yml` | 6 | `MV_OLLAMA_URL` at `0.0.0.0` — an invalid address, not a local one; the old copy of the rule took it for private (T-450) |
+| `bad-llm-url-dotted-name.yml` | 6 | `MV_OLLAMA_URL` at `ollama.local` — any name with a dot is the cloud (T-450) |
+| `bad-llm-url-no-port.yml` | 6 | `MV_OLLAMA_URL` at `http://ollama` — a local host without a port is invalid, not only a loopback one (T-450) |
+| `bad-llm-url-dotted-quad.yml` | 6 | `MV_LLM_URL` at `127.0.0.1.` — a dotted quad with the root dot is a DNS name, the cloud (T-450 review #1 M-1) |
+| `bad-llm-url-query.yml` | 6 | `MV_OLLAMA_URL` with a query — invalid, and the report prints the value only up to the `?` (T-450 review #1 N-2) |
+| `bad-llm-url-userinfo.yml` | 6 | `user:FAKEPW123@` in four addresses refused before the check of the `@` — the query, `ftp://`, no scheme, a character outside ASCII: the report prints `…@` in place of the user information (T-450 review #2 Mi-R2-1) |
 | `bad-required-outside-default.yml` | 7 | a `${VAR:?}` on a service outside the default profile set, which breaks `docker compose` for everybody (T-397) |
 | `bad-env-example-comment.yml` | 7 | an empty variable with an inline comment in the paired `bad-env-example-comment.env`: compose reads the comment as the value, so `${VAR:?}` never fires (T-397) |
 | `bad-required-unmarked.yml` | 7 | a `${VAR:?}` of the always-loaded file whose variable the paired `bad-required-unmarked.env` does not mark `[required]` — the operator following the README skips it (T-412 acceptance, T-413) |
@@ -100,6 +106,7 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-yaml-doubled-quote.yml` | 8 | `'it''s # ${MV_X}'`: `''` is one quote, so the `#` is text (T-429; N-1) |
 | `bad-yaml-block-scalar-comment.yml` | 8 | a line `# ${MV_X}` inside a `\|` block, which is text, not a comment (T-429; N-1) |
 | `bad-yaml-multiline-quoted-comment.yml` | 8 | `# ${MV_X}` on the continuation line of a quoted string (T-429; N-1) |
+| `good-llm-url-local.yml` | — | `http://ollama:11434` (the case of T-450: the linter and the platform now agree), a one-word name that is not a service of the file, a written `:80`, an IPv4-mapped RFC 1918 address and an IPv6 ULA. Rule 6 is `llm_endpoint_classify` of `scripts/lib/llm-endpoint.sh`, held to `testdata/llm/local-endpoints.tsv` |
 | `good-network-set.yml` | — | the six network addresses naming services in the right shape, and `MV_LLM_URL`, `MV_TELEGRAM_HEALTH_ADDR`, `MV_MEMORY_URL` that the old guess mistook (N-4) |
 | `good-escaped-dollar.yml` | — | `$${MV_X:-d}` and `$$MV_X` in a command: text for the container's shell (N-1) |
 | `good-comment-after-bare-key.yml` | — | keys with no value followed by a YAML comment, one quoting `${MV_X}` (N-5) |
