@@ -30,6 +30,8 @@
 | `AI_AGENT_INSTRUCTIONS.md` | Инструкция режима работы одного ассистента-соавтора («CONSULT/RESEARCH/ARCHITECTURE/…», стек Java/Python) — не соответствует ни стеку (Go), ни процессу команды из ролей (`.dev-team.json`) | `CLAUDE.md`, `.dev-team.json`, роли команды (`Docs/dev-team/plan/teams.md`) | T-398 |
 | `AUTOMATION-SETUP.md` | Список subagent'ов/skills/MCP-серверов на момент установки; состав разошёлся с фактическим (`.claude/agents/*`, `.claude/skills/*`, `.mcp.json`) и не поддерживался при их изменении | сами каталоги `.claude/agents/**`, `.claude/skills/**`, файл `.mcp.json` (самоописание, отдельный документ не требуется) | T-398 |
 | `Docs/LIVING_WORLDS_IMPLEMENTATION_STATUS.md` | Отчёт о готовности той же отклонённой архитектуры Entity-Actor («Core Implementation Complete ✅ ~85%»), статус не подтверждён кодом — `requirements/inventory.md` INV-23, `project/open-questions.md` | `Docs/dev-team/architecture/overview.md` | T-398 |
+| `shared/agent/README.md` → `Docs/archive/shared/agent/README.md` | Описание as-is Agent GM Core (router, lifecycle, pipeline, worker pool, блупринт v1, импорт `multiverse-core/shared/agent`); код перенесён в `services/_archive/shared/agent/`, путь сохранён, чтобы не столкнуться с этим `README.md` | `Docs/dev-team/architecture/components/swarm-llm-laws.md` §2, §13; ADR-015; код `shared/agent/{types,blueprint,parser,placeholders}.go` | T-201 |
+| `shared/agent/MIGRATION.md` → `Docs/archive/shared/agent/MIGRATION.md` | Инструкция миграции на тот же as-is Agent GM Core (формат блупринта v1) — не соответствует формату v2 (C-11) | `swarm-llm-laws.md` §13, §17 (миграция от narrative-orchestrator); ADR-015 | T-201 |
 
 ## Кандидаты на перенос (решение будущей задачей, здесь только список к рассмотрению)
 

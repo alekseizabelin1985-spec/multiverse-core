@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"multiverse-core.io/shared/clock"
 )
 
 // LODConfig конфигурация адаптивного LOD
@@ -70,6 +72,11 @@ type LODManager struct {
 
 	// callbacks обратные вызовы при изменении LOD
 	callbacks []LODCallback
+
+	// clock and timers come from the caller so that replay and tests drive
+	// the time of LOD changes (shared/clock, ADR-001 addendum p. 2).
+	clock  clock.Clock
+	timers clock.Timers
 }
 
 // LODCallback вызывается при изменении LOD
@@ -87,12 +94,14 @@ type LODMetrics struct {
 }
 
 // NewLODManager создает новый менеджер LOD
-func NewLODManager(config LODConfig) *LODManager {
+func NewLODManager(config LODConfig, clk clock.Clock, timers clock.Timers) *LODManager {
 	return &LODManager{
 		config:      config,
 		agentLOD:    make(map[string]LODLevel),
 		lastHighLOD: make(map[string]time.Time),
 		metrics:     &LODMetrics{},
+		clock:       clk,
+		timers:      timers,
 	}
 }
 
@@ -112,7 +121,7 @@ func (lm *LODManager) SetAgentLOD(agentID string, lod LODLevel) {
 	}
 
 	lm.agentLOD[agentID] = lod
-	lm.lastHighLOD[agentID] = time.Now()
+	lm.lastHighLOD[agentID] = lm.clock.Now()
 
 	// Обновляем метрики
 	lm.metrics.mu.Lock()
@@ -121,7 +130,7 @@ func (lm *LODManager) SetAgentLOD(agentID string, lod LODLevel) {
 	} else {
 		lm.metrics.totalUpgrades++
 	}
-	lm.metrics.lastChangeTime = time.Now()
+	lm.metrics.lastChangeTime = lm.clock.Now()
 	lm.metrics.mu.Unlock()
 
 	// Вызываем callbacks
@@ -240,14 +249,14 @@ func (lm *LODManager) GetStats() map[string]interface{} {
 
 // Start запускает периодическую проверку LOD
 func (lm *LODManager) Start(ctx context.Context, getMetrics func() (playerDensity int, queueDepth int, llmLatency time.Duration)) {
-	ticker := time.NewTicker(lm.config.CheckInterval)
+	ticker := lm.timers.Every(lm.config.CheckInterval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-ticker.C():
 			playerDensity, queueDepth, llmLatency := getMetrics()
 
 			lm.metrics.mu.Lock()
@@ -281,7 +290,7 @@ func (lm *LODManager) DecayLOD(agentID string) {
 		return
 	}
 
-	if time.Since(lastLOD) > lm.config.DecayTime {
+	if lm.clock.Now().Sub(lastLOD) > lm.config.DecayTime {
 		currentLOD := lm.GetAgentLOD(agentID)
 		if currentLOD < LODFull {
 			lm.SetAgentLOD(agentID, LODFull)
