@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:38:23+03:00",
+  "updatedAt": "2026-09-14T02:41:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4624,7 +4624,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10802,7 +10802,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Ревью #2: порядок записи хода, Withdrawn",
       "startedAt": "2026-09-14T02:35:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:41:44+03:00"
     },
     {
       "instance": "architect#3",
@@ -10812,7 +10812,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Решения по received/accepted и остатку гонки",
       "startedAt": "2026-09-14T02:35:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:41:44+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10832,6 +10832,16 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Ревью #1: снапшот шлюза, восстановление, /health",
       "startedAt": "2026-09-14T02:38:23+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Итерация 3: мутанты Acked/Withdrawn, 503 на истёкший бюджет",
+      "startedAt": "2026-09-14T02:41:44+03:00",
       "finishedAt": null
     }
   ],
@@ -15065,6 +15075,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-309 · итерация 2 (developer#3): И2-1 readmodel.RepairFromStateSnapshot (чтение только при stale, сверка state_hash, замена при версии не ниже, до сдвига курсоров), И2-2 без снапшотов в replay, И2-3 no_laws_version, И2-4 тест слияния концов сессий, И2-5 кэш проверки БД по clock.Real в replay. Мутан"
+    },
+    {
+      "at": "2026-09-14T02:41:44+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 · решения architect#3 по итерации 2: вариант (а) — received не вводится, запись хода до публикации и Withdrawn приняты, КД §4.2/§5.5 приведены к коду; остаток гонки при сбое брокера — «Известное поведение» (теряется только аналитика хода, доставки не страдают; защита через ошибку обработчика о"
+    },
+    {
+      "at": "2026-09-14T02:41:44+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 · ревью #2 (code-reviewer#3): принять — 0/0/1/3. Откат без гонок (одно соединение, условный DELETE), turns_count не уходит в минус, повтор после 503 идемпотентен; реализаций actions.Turns вне T-308 нет. Mi-1 мутанты Acked(ctx)/Withdrawn(ctx) зелёные и устаревший тест порядка; N-2 истёкший бюдж"
     }
   ],
   "blockers": [],
