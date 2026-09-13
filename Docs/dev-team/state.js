@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:35:01+03:00",
+  "updatedAt": "2026-09-14T02:38:23+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4638,7 +4638,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10762,7 +10762,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Итерация 2: И2-1…И2-5 по решениям architect#3",
       "startedAt": "2026-09-14T02:10:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:38:23+03:00"
     },
     {
       "instance": "developer#2",
@@ -10782,7 +10782,7 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Отметка владельца EPIC-001 по T-471",
       "startedAt": "2026-09-14T02:25:14+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:38:23+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10822,6 +10822,16 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Приёмка T-057, строки T-058/T-059",
       "startedAt": "2026-09-14T02:35:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Ревью #1: снапшот шлюза, восстановление, /health",
+      "startedAt": "2026-09-14T02:38:23+03:00",
       "finishedAt": null
     }
   ],
@@ -15043,6 +15053,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-057 · итерация 2 (developer#2): snapshot.created без скоупа с единым конвертом, size_bytes/duration_ms, SnapshotTimeout 10 с (Stop укладывается в срок), досылка при живом интенте того же proposal_id не публикует и останавливает мир persist_failed, cause из записи коммита, тест 8 снапшотов на возра"
+    },
+    {
+      "at": "2026-09-14T02:38:23+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-471 · отметка владельца EPIC-001 (tech-lead#1): поставлена. MV_RULES_PATH и умолчание подтверждены; отказ старта state не ломает compose (core получает переменную, книга в образе); WORKDIR /home/nonroot совпадает с настройками базового образа по digest; рецепт встречи с T-469 проверен на копии EPI"
+    },
+    {
+      "at": "2026-09-14T02:38:23+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 · итерация 2 (developer#3): И2-1 readmodel.RepairFromStateSnapshot (чтение только при stale, сверка state_hash, замена при версии не ниже, до сдвига курсоров), И2-2 без снапшотов в replay, И2-3 no_laws_version, И2-4 тест слияния концов сессий, И2-5 кэш проверки БД по clock.Real в replay. Мутан"
     }
   ],
   "blockers": [],
