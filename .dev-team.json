@@ -16,7 +16,7 @@
   "parallelism": {
     "maxTeams": 1,
     "maxAgentsPerRole": 2,
-    "maxParallelAgents": 2
+    "maxParallelAgents": 6
   },
   "models": {
     "profile": "balanced",
@@ -28,6 +28,6 @@
     "epic": 13,
     "team": 3,
     "adr": 28,
-    "task": 440
+    "task": 441
   }
 }

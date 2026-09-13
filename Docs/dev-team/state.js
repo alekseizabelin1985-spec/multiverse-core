@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T03:16:34+03:00",
+  "updatedAt": "2026-09-13T10:36:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -818,28 +818,32 @@ window.DEVTEAM_STATE =
         {
           "id": "T-398",
           "title": "Свести раскол docs/ и Docs/, вычистить устаревшие файлы-инструкции (QWEN.md и др.)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "tech-writer#1",
+          "startedAt": "2026-09-13T10:31:50+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-398.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-398.md",
+          "branch": "task/T-398-docs-case-split",
+          "worktree": ".worktrees/T-398"
         },
         {
           "id": "T-399",
           "title": "Привести infrastructure.md к состоянию после T-397",
-          "status": "todo",
+          "status": "in-progress",
           "assignee": "architect#1",
-          "startedAt": null,
+          "startedAt": "2026-09-13T10:31:50+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-399.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-399.md",
+          "branch": "task/T-399-infrastructure-after-t397",
+          "worktree": ".worktrees/T-399"
         },
         {
           "id": "T-400",
@@ -2040,17 +2044,63 @@ window.DEVTEAM_STATE =
         {
           "id": "T-440",
           "title": "Редакционно: overview.md §18.1 — порядок E → Qwen3.6 → C → A и правило выбора (доп. 3 ADR-005); владение infrastructure.md в ownership.md привести к факту",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T03:06:07+03:00",
+          "finishedAt": "2026-09-13T10:36:13+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 450,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 03:06",
+              "to": "13.09 03:10",
+              "duration": "4m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 03:10",
+              "to": "13.09 03:15",
+              "duration": "5m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 03:15",
+              "to": "13.09 03:20",
+              "duration": "4m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 03:20",
+              "to": "13.09 10:33",
+              "duration": "7h 13m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 10:33",
+              "to": "13.09 10:36",
+              "duration": "2m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-440-overview-order-ownership",
+          "worktree": ".worktrees/T-440"
+        },
+        {
+          "id": "T-441",
+          "title": "Delivery: не писать «event parked in dead letters», когда запись в dead_letters не удалась (после Close) — из ревью T-436",
+          "status": "in-progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T10:31:50+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks.md",
-          "branch": "task/T-440-overview-order-ownership",
-          "worktree": ".worktrees/T-440"
+          "branch": "task/T-441-no-false-parked-warn",
+          "worktree": ".worktrees/T-441"
         }
       ],
       "defects": [],
@@ -5849,7 +5899,7 @@ window.DEVTEAM_STATE =
       "task": "T-440",
       "action": "итерация 2 по ревью #1 (M-1, Mi-1…Mi-4, Nit)",
       "startedAt": "2026-09-13T03:15:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T03:20:08+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -5859,6 +5909,66 @@ window.DEVTEAM_STATE =
       "task": "T-437",
       "action": "ревью --alias и пина llama.cpp",
       "startedAt": "2026-09-13T03:16:34+03:00",
+      "finishedAt": "2026-09-13T10:35:33+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-440",
+      "action": "ревью #2 итерации 2",
+      "startedAt": "2026-09-13T03:20:08+03:00",
+      "finishedAt": "2026-09-13T10:33:19+03:00"
+    },
+    {
+      "instance": "architect#1",
+      "role": "architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-399",
+      "action": "infrastructure.md после T-397",
+      "startedAt": "2026-09-13T10:31:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-398",
+      "action": "раскол docs/ и Docs/, устаревшие инструкции в _archive",
+      "startedAt": "2026-09-13T10:31:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-441",
+      "action": "ложный Warn parked после Close",
+      "startedAt": "2026-09-13T10:31:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-440",
+      "action": "приёмка редакционных правок U-2",
+      "startedAt": "2026-09-13T10:33:19+03:00",
+      "finishedAt": "2026-09-13T10:36:13+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-437",
+      "action": "приёмка T-437 по DoD",
+      "startedAt": "2026-09-13T10:35:33+03:00",
       "finishedAt": null
     }
   ],
@@ -8442,6 +8552,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-436 закоммичена f57f3e2 (контракт-набор на временной Redpanda на дереве коммита зелёный), слита в эпик (adadca5). T-440 начата (system-architect#1)"
+    },
+    {
+      "at": "2026-09-13T10:31:50+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Параллельность 2 → 6 (указание пользователя до 50 % недельного лимита). Начаты T-399 (architect#1), T-398 (tech-writer#1), T-441 (developer#1); T-405 — после слияния T-437"
     }
   ],
   "blockers": [],
