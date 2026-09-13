@@ -141,7 +141,8 @@
 # --fixtures runs the linter over its own fixtures in testdata/compose-lint:
 # every bad-*.yml must be rejected by exactly the rule its `# expect-rule: N`
 # line names, and its message must contain every `# expect-text: ...` line of
-# the fixture; every good-*.yml must pass. A fixture rejected by another rule
+# the fixture and none of its `# expect-absent: ...` lines, in any letter case
+# (T-463); every good-*.yml must pass. A fixture rejected by another rule
 # proves nothing about its own (T-411 acceptance). The fixtures run side by
 # side and are judged in a fixed order afterwards (T-429).
 # Environment:
@@ -215,6 +216,7 @@ run_fixtures() {
   # `cat` of each one cost Git Bash more than the runs themselves (T-429).
   local re_rule='^# expect-rule:' re_num='^# expect-rule:[[:space:]]*([0-9]+)[[:space:]]*$'
   local re_text='^# expect-text:[[:space:]]*(.*)$' re_fired='\[rule ([0-9]+)\]'
+  local re_absent='^# expect-absent:[[:space:]]*(.*)$' folded
   # A moved, renamed or mistyped directory must not turn the self-test into a
   # silent pass (T-413 review #1 Mi-3): no fixtures is a failure, not a clean run.
   if [ ! -d "$dir" ]; then
@@ -347,8 +349,25 @@ run_fixtures() {
       continue
     fi
     ok=1
+    folded=${out,,}
     while IFS= read -r line || [ -n "$line" ]; do
       line=${line%$'\r'}
+      # `# expect-absent: ...` is a fragment the refusal must NOT contain, in
+      # any letter case: a fake password planted in the value (T-463). This
+      # failure does not echo the report — it holds the fragment. An
+      # `expect-text` failure of the same fixture below still echoes it, and a
+      # broken mask fails both, so the fragment does reach the output then; it
+      # is the fake value of a committed fixture (T-463 review #2 N-8).
+      if [[ $line =~ $re_absent ]]; then
+        text=${BASH_REMATCH[1]}
+        [ -n "$text" ] || continue
+        if [[ $folded == *"${text,,}"* ]]; then
+          echo "compose-lint: $bad was rejected by rule $expected, but the report prints '$text', which its '# expect-absent:' line forbids" >&2
+          ok=0
+          failed=1
+        fi
+        continue
+      fi
       [[ $line =~ $re_text ]] || continue
       text=${BASH_REMATCH[1]}
       [ -n "$text" ] || continue
@@ -708,8 +727,17 @@ PY
 : >"$work/llm-verdicts.bin"
 while IFS= read -r -d '' llm_service && IFS= read -r -d '' llm_key && IFS= read -r -d '' llm_url; do
   llm_endpoint_classify "$llm_url" "$llm_key"
-  printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
-    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" >>"$work/llm-verdicts.bin"
+  # An @ anywhere in the value may end a password with a bare / in it, so rule
+  # 6 names the host of such a value in NO sentence — its own sentence of the
+  # cloud included, which does not come from the judge (C-15 v1.5, T-463 review
+  # #1 Ma-1). The flag travels with the verdict; the host itself is not blanked,
+  # so the verdict stays what the function said.
+  llm_masked=0
+  case "$llm_url" in
+  *@*) llm_masked=1 ;;
+  esac
+  printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
+    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" "$llm_masked" >>"$work/llm-verdicts.bin"
 done <"$work/llm-urls.bin"
 
 # Rule 3's second half needs the work tree, not the model. The scope is what
@@ -1121,7 +1149,8 @@ for name, svc in sorted(services.items()):
         )
 
 # The verdicts of llm_endpoint_classify (scripts/lib/llm-endpoint.sh), taken
-# in bash before this program started: service, key, class, kind, host, error.
+# in bash before this program started: service, key, class, kind, host, error,
+# and 1 when the value holds an @ (then no sentence names the host, T-463).
 # No second copy of the rule lives here (T-450). The error is printed as the
 # function wrote it: llm_parse_url cuts the query and the fragment off the value
 # it echoes, and the user information in front of the last @ as well — before
@@ -1131,15 +1160,28 @@ for name, svc in sorted(services.items()):
 # log; the fixture bad-llm-url-userinfo holds that with a fake password.
 with open(os.path.join(work, "llm-verdicts.bin"), "rb") as fh:
     fields = [f.decode("utf-8", errors="replace") for f in fh.read().split(b"\0")[:-1]]
-if len(fields) % 6:
+if len(fields) % 7:
     print("compose-lint: the verdicts of llm_endpoint_classify are malformed "
-          f"({len(fields)} fields, want groups of 6)", file=sys.stderr)
+          f"({len(fields)} fields, want groups of 7)", file=sys.stderr)
     sys.exit(2)
-for i in range(0, len(fields), 6):
-    name, key, verdict, kind, llm_host, reason = fields[i:i + 6]
+for i in range(0, len(fields), 7):
+    name, key, verdict, kind, llm_host, reason, masked = fields[i:i + 7]
     if verdict == "local":
         continue
-    if verdict == "cloud":
+    if verdict == "cloud" and masked == "1":
+        # What the parser calls the host may be the head of a password
+        # (http://pw.example/x@10.0.0.5:8080), so neither the value nor the
+        # host is printed (C-15 v1.5, T-463 review #1 Ma-1).
+        fail(
+            6,
+            f"{name}: {key} points at a host which is not a local address "
+            f"(testdata/llm/local-endpoints.tsv); a cloud endpoint needs "
+            "MV_LLM_CLOUD_ENABLED=true and never a compose default "
+            "(SEC-15, ADR-005 add. 2 p. 3) (the value and its host are not "
+            "printed: the value holds an @, and what stands in front of it "
+            "may be a key)",
+        )
+    elif verdict == "cloud":
         fail(
             6,
             f"{name}: {key} points at {llm_host!r}, which is not a local address "

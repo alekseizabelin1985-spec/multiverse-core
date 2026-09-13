@@ -17,7 +17,9 @@ CI job `compose-lint` call it right after the linter has passed on the real
 compose files. A `bad-*.yml` fails the run when it passes the linter, when it has
 no `# expect-rule:` line, when any other rule fires as well (a fixture red for
 two reasons stops proving either the moment one is fixed — T-411 acceptance), or
-when an `# expect-text:` fragment is missing from the refusal (T-413). The run
+when an `# expect-text:` fragment is missing from the refusal (T-413), or
+when an `# expect-absent:` fragment is present in it in any letter case — a fake
+secret planted in the value (T-463). The run
 also fails when a fixture carries two `# expect-rule:` lines, when a fixture is
 named `*.yaml` (only `*.yml` is read), and when the directory is missing or
 holds no bad or no good fixture at all — a moved directory must not turn the
@@ -67,6 +69,8 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-llm-url-dotted-quad.yml` | 6 | `MV_LLM_URL` at `127.0.0.1.` — a dotted quad with the root dot is a DNS name, the cloud (T-450 review #1 M-1) |
 | `bad-llm-url-query.yml` | 6 | `MV_OLLAMA_URL` with a query — invalid, and the report prints the value only up to the `?` (T-450 review #1 N-2) |
 | `bad-llm-url-userinfo.yml` | 6 | `user:FAKEPW123@` in four addresses refused before the check of the `@` — the query, `ftp://`, no scheme, a character outside ASCII: the report prints `…@` in place of the user information (T-450 review #2 Mi-R2-1) |
+| `bad-llm-url-at-after-path.yml` | 6 | `http://fakepw/x@127.0.0.1:8888`, once in mixed case — an `@` after the first `/` leaves the head of a password where the parser sees the host; the report prints the value by its scheme alone, and the `# expect-absent:` lines hold `fakepw`, `127.0.0.1` and `/x@` out of it in any letter case (C-15 v1.5, T-463) |
+| `bad-llm-url-at-cloud.yml` | 6 | `http://fakepw.example/x@10.0.0.5:8080`, once in mixed case — the same `@` after the first `/`, but the host is a name with a dot, so the refusal is rule 6's own sentence of the cloud, not the judge's; it names no host either, and `# expect-absent:` holds `fakepw`, `10.0.0.5` and `/x@` out of the report (C-15 v1.5, T-463 review #1 Ma-1) |
 | `bad-required-outside-default.yml` | 7 | a `${VAR:?}` on a service outside the default profile set, which breaks `docker compose` for everybody (T-397) |
 | `bad-env-example-comment.yml` | 7 | an empty variable with an inline comment in the paired `bad-env-example-comment.env`: compose reads the comment as the value, so `${VAR:?}` never fires (T-397) |
 | `bad-required-unmarked.yml` | 7 | a `${VAR:?}` of the always-loaded file whose variable the paired `bad-required-unmarked.env` does not mark `[required]` — the operator following the README skips it (T-412 acceptance, T-413) |
