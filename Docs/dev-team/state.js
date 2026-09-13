@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:04:03+03:00",
+  "updatedAt": "2026-09-13T18:06:20+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4421,7 +4421,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
@@ -9295,7 +9295,7 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Итерация 2: переходы встречи, MinIO, сроки старта",
       "startedAt": "2026-09-13T17:37:12+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:06:20+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9355,6 +9355,16 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Отметка владельца: vars.go, .env.example, mvctl",
       "startedAt": "2026-09-13T18:04:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "Приёмка T-304 readmodel и consumer",
+      "startedAt": "2026-09-13T18:06:20+03:00",
       "finishedAt": null
     }
   ],
@@ -12550,6 +12560,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-205 принята TEAM-2/tech-lead#2: Mi-1 закрыт (CurrentFrom однократно перечитывает каталог на пару мир/версия), Mi-2 описан (отклонение 13), Mi-3/Mi-4/N-1/N-2/N-3 закрыты; 13 мутантов убиты, internal/laws 98,7 %. Строки DoD T-234 (WorldView реализует WorldVersions, все id реестра в Config.Checks) и "
+    },
+    {
+      "at": "2026-09-13T18:06:20+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-304 · итерация 2 (TEAM-3/developer#1): Mi-1 v1.5 честно описана, сверка хеша — только v1.6 (DoD T-309); Mi-2 закрыт документом (переход уникален в пределах процесса) + DoD T-307/T-351 — таблица переходов требует решения architect#3 и ломает тесты T-302; Mi-3…Mi-5 тесты; Mi-6 неверная настройка Min"
     }
   ],
   "blockers": [],
