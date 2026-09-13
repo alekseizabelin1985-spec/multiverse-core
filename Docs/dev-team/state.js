@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:20:50+03:00",
+  "updatedAt": "2026-09-13T16:24:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -11944,6 +11944,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-303 принята TEAM-3/tech-lead#3: DoD сверен; R2-Mi-1 (два теста повтора каскада, мутант R1 красный) и R2-N-1 (тест часового сжатия) закрыты; В-1 (startProcess с временным MV_GATEWAY_DATA_DIR, проверка файлом-заглушкой — C:\\data не меняется) и В-2 (runbook: проверка тома :ro, chown/chmod вместо удал"
+    },
+    {
+      "at": "2026-09-13T16:24:06+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние D (постоянное разрешение): epic/EPIC-001-foundation → develop (a7a8fc6), состав — T-449, T-446. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с незакоммиченными файлами владельца нет, ветка эпика сохранена. Синхронизация develop → EPIC-003 (2ad8d4f), EPIC-0"
     }
   ],
   "blockers": [],
