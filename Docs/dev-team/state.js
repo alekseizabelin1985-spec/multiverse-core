@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:00:01+03:00",
+  "updatedAt": "2026-09-13T14:07:40+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2639,16 +2639,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-054",
           "title": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#1",
+          "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-002-state-mechanics/tasks/T-054.md"
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-054.md",
+          "branch": "task/T-054-solo-invariants",
+          "worktree": ".worktrees/T-054"
         },
         {
           "id": "T-055",
@@ -4000,16 +4002,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-439",
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "todo",
-          "assignee": "architect#2",
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/architect#2",
+          "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md",
-          "subwave": "A"
+          "subwave": "A",
+          "branch": "task/T-439-narrative-length-cap",
+          "worktree": ".worktrees/T-439"
         },
         {
           "id": "T-447",
@@ -4041,14 +4045,33 @@ window.DEVTEAM_STATE =
         {
           "id": "T-452",
           "title": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие комментарии T-053, remove без value при отсутствующем new (XS, до T-062)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:04:30+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 33,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:31",
+              "to": "13.09 13:45",
+              "duration": "13m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:45",
+              "to": "13.09 13:53",
+              "duration": "8m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:53",
+              "to": "13.09 14:04",
+              "duration": "10m"
+            }
+          ],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-452.md",
           "branch": "task/T-452-fake-encounter-fallen-character",
           "worktree": ".worktrees/T-452"
@@ -8206,7 +8229,7 @@ window.DEVTEAM_STATE =
       "task": "T-453",
       "action": "ревью #1 T-453 (TEAM-1)",
       "startedAt": "2026-09-13T13:48:51+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:02:45+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -8226,7 +8249,7 @@ window.DEVTEAM_STATE =
       "task": "T-060",
       "action": "итерация 2 T-060: проводка Bus, Derive replay",
       "startedAt": "2026-09-13T13:52:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:07:40+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8236,7 +8259,7 @@ window.DEVTEAM_STATE =
       "task": "T-452",
       "action": "приёмка T-452 (TEAM-2)",
       "startedAt": "2026-09-13T13:53:41+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:04:30+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8246,6 +8269,46 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "ревью #1 T-449 (TEAM-1)",
       "startedAt": "2026-09-13T14:00:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "приёмка T-453 с правкой Minor/Nit",
+      "startedAt": "2026-09-13T14:02:45+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
+      "startedAt": "2026-09-13T14:03:36+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую ",
+      "startedAt": "2026-09-13T14:03:36+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "приёмка T-060 (TEAM-1)",
+      "startedAt": "2026-09-13T14:07:40+03:00",
       "finishedAt": null
     }
   ],
