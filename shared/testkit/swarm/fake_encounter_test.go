@@ -406,7 +406,7 @@ func TestThePackageKeepsTheOrderTheFightersWereTouchedIn(t *testing.T) {
 func TestEveryProposalPassesTheOwnershipTable(t *testing.T) {
 	fight, fightBus := fightStub(t)
 	openFight(t, fight, fightBus)
-	swingUntilOver(t, fight, fightBus)
+	swingUntilTheWolfFalls(t, fight, fightBus)
 
 	flight, flightBus := fightStub(t)
 	openFight(t, flight, flightBus)
@@ -489,7 +489,7 @@ func TestTheWolfDies(t *testing.T) {
 	enc, bus := fightStub(t)
 	openFight(t, enc, bus)
 
-	swingUntilOver(t, enc, bus)
+	swingUntilTheWolfFalls(t, enc, bus)
 
 	ended := onlyOne(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded)
 	if reason, _ := ended.Path().GetString("reason"); reason != entity.ResolutionNPCDead {
@@ -529,7 +529,7 @@ func TestTheEncounterEntityRecordsTheFightItHeld(t *testing.T) {
 	enc, bus := fightStub(t)
 	openFight(t, enc, bus)
 	encounterID := encounterOf(t, onlyOne(t, bus, eventbus.TopicSystemEvents, swarm.TypeCreateProposed))
-	swingUntilOver(t, enc, bus)
+	swingUntilTheWolfFalls(t, enc, bus)
 
 	ended := onlyOne(t, bus, eventbus.TopicWorldEvents, swarm.TypeEncounterEnded)
 	proposals := ofType(eventsOf(t, bus, eventbus.TopicSystemEvents), swarm.TypeUpdateProposed)
@@ -587,7 +587,7 @@ func TestTheEncounterEntityRecordsTheFightItHeld(t *testing.T) {
 func TestTheTrophyIsHandedOutOnce(t *testing.T) {
 	enc, bus := fightStub(t)
 	openFight(t, enc, bus)
-	swingUntilOver(t, enc, bus)
+	swingUntilTheWolfFalls(t, enc, bus)
 
 	// Two more swings after the fight is over, the way an impatient player
 	// would send them.
@@ -1654,6 +1654,26 @@ func eventWhere(t *testing.T, want func(string) bool, build func() eventbus.Even
 	}
 	t.Fatal("no event of the sequence lands on the outcome this test is about")
 	return eventbus.Event{}
+}
+
+// swingUntilTheWolfFalls attacks until the fight ends with every blow of the
+// character landing and every bite of the wolf missing, so that the fight ends
+// with the wolf dead whatever else a run spends identifiers on. The dice of
+// FixedMechanics follow the cause event, and which event ids a test reaches
+// used to depend on how many ids the double of State consumed (T-056: State
+// derives the ids of its facts from the proposal and consumes none).
+func swingUntilTheWolfFalls(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
+	t.Helper()
+	for i := 0; i < 20; i++ {
+		if _, open := enc.ActiveEncounter(playerA); !open {
+			return
+		}
+		act(t, enc, attackWhere(t, func(id string) bool {
+			return hits(tkmech.Verdict(id, 0)) && !hits(tkmech.Verdict(id, 2))
+		}))
+		answer(t, enc, bus)
+	}
+	t.Fatalf("the wolf is still standing after twenty landed blows (%d events)", len(allEvents(t, bus)))
 }
 
 // swingUntilOver attacks until the fight ends, the way a player would. Twenty

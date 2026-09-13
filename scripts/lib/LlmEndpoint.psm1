@@ -181,7 +181,7 @@ function New-LlmEndpoint {
     Path         = ''
     Url          = ''  # the address as configured, canonical: what is printed
     Probe        = ''  # the same address as reachable from THIS machine
-    Raw          = ''  # the configured value, trimmed
+    Raw          = ''  # the configured value, trimmed, NOT masked: an accepted value may hold an @ after the first / (Set-LlmEndpointClass does not print it then)
     Var          = ''
     Provider     = ''
     Has          = $false
@@ -595,12 +595,26 @@ function Set-LlmEndpointClass {
   $answer = Get-LlmHostClass $Endpoint.Host
   $Endpoint.Class = $answer.Class
   $Endpoint.Kind = $answer.Kind
+  # An @ anywhere in the value may be the end of a password with a bare / in
+  # it: http://pw/x@127.0.0.1:8888 parses as the host pw without a port. Such a
+  # value is printed by its scheme alone and its host is not named (C-15 v1.5,
+  # T-463). The search is ordinal; the bash twin is the same, statement for
+  # statement.
+  $masked = $Endpoint.Raw.Contains('@', [StringComparison]::Ordinal)
   if ($Endpoint.Class -eq 'invalid') {
     # The sentence follows the kind, not the class (T-450 review #1 N-5).
     if ($Endpoint.Kind -eq 'unspecified') {
-      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+      if ($masked) {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Scheme)://… names the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      } else {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+      }
     } else {
-      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), which is not an address a client can call ($($Endpoint.Kind))"
+      if ($masked) {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Scheme)://… names a host which is not an address a client can call ($($Endpoint.Kind)) (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      } else {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), which is not an address a client can call ($($Endpoint.Kind))"
+      }
     }
     return
   }
@@ -612,10 +626,20 @@ function Set-LlmEndpointClass {
   # default of the scheme — there 443 and 80 are what the vendor documents.
   if ($Endpoint.Class -eq 'local' -and -not $Endpoint.PortWritten) {
     $Endpoint.Class = 'invalid'
+    # .Port here is the default of the scheme, never a part of the value, so the
+    # masked sentences keep it.
     if ($Endpoint.Kind -in 'loopback', 'localhost', 'docker-host') {
-      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; the local runtime would bind $($Endpoint.Port), the default of the scheme, and the probe would knock there — write the port you mean"
+      if ($masked) {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Scheme)://… has no port; the local runtime would bind $($Endpoint.Port), the default of the scheme, and the probe would knock there — write the port you mean (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      } else {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; the local runtime would bind $($Endpoint.Port), the default of the scheme, and the probe would knock there — write the port you mean"
+      }
     } else {
-      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; a local address is written with the port its runtime listens on, and $($Endpoint.Port), the default of the scheme, is a port nobody chose"
+      if ($masked) {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Scheme)://… has no port; a local address is written with the port its runtime listens on, and $($Endpoint.Port), the default of the scheme, is a port nobody chose (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      } else {
+        $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; a local address is written with the port its runtime listens on, and $($Endpoint.Port), the default of the scheme, is a port nobody chose"
+      }
     }
   }
 }

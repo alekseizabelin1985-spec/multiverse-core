@@ -149,7 +149,7 @@ LLM_EP_PORT=''
 LLM_EP_PATH=''
 LLM_EP_URL=''    # the address as configured, canonical: what is printed
 LLM_EP_PROBE=''  # the same address as reachable from THIS machine
-LLM_EP_RAW=''    # the configured value with any userinfo masked
+LLM_EP_RAW=''    # the configured value, trimmed, NOT masked: an accepted value may hold an @ after the first / (llm_endpoint_judge does not print it then)
 LLM_EP_VAR=''
 LLM_EP_PROVIDER=''
 LLM_EP_HAS=0
@@ -648,6 +648,17 @@ llm_endpoint_judge() {
   llm_host_class "$LLM_EP_HOST"
   LLM_EP_CLASS=$LLM_HOST_CLASS
   LLM_EP_KIND=$LLM_HOST_KIND
+  # An @ anywhere in the value — not only in front of the host, which
+  # llm_parse_url refuses — may be the end of a password with a bare / in it:
+  # http://pw/x@127.0.0.1:8888 parses as the host pw without a port, and the
+  # sentence about the port used to print the whole value, pw included. Such a
+  # value is printed by its scheme alone and its host is not named, in every
+  # sentence below (C-15 v1.5 "Печать значения", the rule of aboutTheHost in
+  # internal/llm, T-463). Without an @ the sentences are what they were.
+  local masked=0
+  case "$LLM_EP_RAW" in
+  *@*) masked=1 ;;
+  esac
   case "$LLM_EP_CLASS" in
   invalid)
     # The sentence follows the kind, not the class (T-450 review #1 N-5): today
@@ -655,10 +666,18 @@ llm_endpoint_judge() {
     # of that order must not turn its refusal into talk of the any-address.
     case "$LLM_EP_KIND" in
     unspecified)
-      LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+      if [ "$masked" = 1 ]; then
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_SCHEME://… names the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      else
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+      fi
       ;;
     *)
-      LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, which is not an address a client can call ($LLM_EP_KIND)"
+      if [ "$masked" = 1 ]; then
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_SCHEME://… names a host which is not an address a client can call ($LLM_EP_KIND) (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      else
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, which is not an address a client can call ($LLM_EP_KIND)"
+      fi
       ;;
     esac
     return 1
@@ -672,12 +691,22 @@ llm_endpoint_judge() {
     # default of the scheme — there 443 and 80 are what the vendor documents.
     if [ "$LLM_EP_PORT_WRITTEN" != 1 ]; then
       LLM_EP_CLASS=invalid
+      # $LLM_EP_PORT here is the default of the scheme, never a part of the
+      # value, so the masked sentences keep it.
       case "$LLM_EP_KIND" in
       loopback | localhost | docker-host)
-        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; the local runtime would bind $LLM_EP_PORT, the default of the scheme, and the probe would knock there — write the port you mean"
+        if [ "$masked" = 1 ]; then
+          LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_SCHEME://… has no port; the local runtime would bind $LLM_EP_PORT, the default of the scheme, and the probe would knock there — write the port you mean (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+        else
+          LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; the local runtime would bind $LLM_EP_PORT, the default of the scheme, and the probe would knock there — write the port you mean"
+        fi
         ;;
       *)
-        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; a local address is written with the port its runtime listens on, and $LLM_EP_PORT, the default of the scheme, is a port nobody chose"
+        if [ "$masked" = 1 ]; then
+          LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_SCHEME://… has no port; a local address is written with the port its runtime listens on, and $LLM_EP_PORT, the default of the scheme, is a port nobody chose (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+        else
+          LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; a local address is written with the port its runtime listens on, and $LLM_EP_PORT, the default of the scheme, is a port nobody chose"
+        fi
         ;;
       esac
       return 1
