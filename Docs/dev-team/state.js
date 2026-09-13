@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:41:31+03:00",
+  "updatedAt": "2026-09-13T14:45:09+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2404,7 +2404,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-449",
           "title": "Документы по решениям system-architect: C-03 v1.3 (T-053), тексты T-050, правило «локальный адрес» (ADR-005/C-15), направление зависимостей internal/llm (ADR-001), limit_money (C-07)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T13:49:33+03:00",
           "finishedAt": null,
@@ -2494,6 +2494,19 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks/T-455.md",
           "branch": "task/T-455-ci-compose-lint-chroma-image",
           "worktree": ".worktrees/T-455"
+        },
+        {
+          "id": "T-456",
+          "title": "C-08 v1.4: 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll (system-architect, после T-449)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-456.md"
         }
       ],
       "defects": [],
@@ -8419,7 +8432,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "Итерация 2 T-449 и подтверждение решений T-448",
       "startedAt": "2026-09-13T14:16:04+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:45:09+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8559,6 +8572,26 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Итерация 2: SetDeadlines и long-poll, имена владельцев e2e",
       "startedAt": "2026-09-13T14:41:31+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Ревью #2: документы по пакету решений",
+      "startedAt": "2026-09-13T14:45:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Итерация 2: /data в образе, 503 с условиями, замечания ревью",
+      "startedAt": "2026-09-13T14:45:09+03:00",
       "finishedAt": null
     }
   ],
@@ -11274,6 +11307,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-446 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/2/1/4. Раскладка по владельцам, реестр (65 типов, порядок), вывод mvctl, ShuttingDown без гонки — верны; 90 параллельных прогонов дедлайнов зелёные. Ma-2 doc SetDeadlines неверен: у запроса без тела истечение дедлайна чтения отменяет r.Context()"
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · итерация 2 (system-architect#1): закрыты Ma-1…Ma-3, Mi-1…Mi-6, N-1…N-5 — C-02 v1.5a/v1.6 (текст из карточки T-448 с пометками «вступает в силу со слиянием T-448»), C-03 Version <= 0 и kind NPC обязателен, КД State §5.1/§3.2/§3.3, C-15 = ADR-005 (принцип, пять пунктов, «права таблица»), C-07 "
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения system-architect#1: (1) T-448 — см. карточку (граница |x| ≤ 2^53−1 и др.); (2) 503 forget_incomplete принят с условиями: любой /forget → 503 пока сжатие отложено, Retry-After, безусловное CompactLinks в Start, бот не говорит «удалено» до 200 (T-311); (3) уточнения T-450 подтверждены, кроме I"
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-456 (system-architect#1, contract-change, S–M, после T-449): C-08 v1.4 — 503 forget_incomplete с условиями, api-contracts.md §1.6, КД шлюза §3/§5.1/§6/§7.5/§9 по коду T-303, ADR-019 доп.; дедлайн чтения для long-poll (≥ wait_ms + 5 с или 0, вопрос из ревью T-446); строки DoD T-303/T-311/T"
     }
   ],
   "blockers": [],
