@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:44:45+03:00",
+  "updatedAt": "2026-09-13T22:05:27+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2591,7 +2591,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-463",
           "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T19:48:25+03:00",
           "finishedAt": null,
@@ -2890,11 +2890,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -3356,13 +3356,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-209",
           "title": "B4 · Парсер ответа, компиляция схем, проверка языка",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:54:53+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T22:05:27+03:00",
           "reviewIterations": 2,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 116,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-209.md",
           "subwave": "D"
@@ -4603,7 +4603,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-311",
           "title": "Бот: flow и render",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T21:19:59+03:00",
           "finishedAt": null,
@@ -4687,7 +4687,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-317",
           "title": "README gateway и бота, runbook §6, .env.example",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
@@ -10051,7 +10051,7 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Итерация 2: маски отказов, проверка --dir",
       "startedAt": "2026-09-13T21:01:18+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:05:27+03:00"
     },
     {
       "instance": "developer#2",
@@ -10061,7 +10061,7 @@ window.DEVTEAM_STATE =
       "task": "T-311",
       "action": "flow и render бота",
       "startedAt": "2026-09-13T21:19:59+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:05:27+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10101,7 +10101,7 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Приёмка парсера",
       "startedAt": "2026-09-13T21:30:30+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:05:27+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10111,7 +10111,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Ревью #1 владения и инвариантов",
       "startedAt": "2026-09-13T21:31:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:05:27+03:00"
     },
     {
       "instance": "developer#1",
@@ -10131,6 +10131,46 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "README шлюза и бота, runbook",
       "startedAt": "2026-09-13T21:44:45+03:00",
+      "finishedAt": "2026-09-13T22:05:27+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Итерация 2: каждому набору ответ, канонический путь",
+      "startedAt": "2026-09-13T22:05:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-311",
+      "action": "Ревью #1 flow/render",
+      "startedAt": "2026-09-13T22:05:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-463",
+      "action": "Ревью #2",
+      "startedAt": "2026-09-13T22:05:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-317",
+      "action": "Ревью #1 документации",
+      "startedAt": "2026-09-13T22:05:27+03:00",
       "finishedAt": null
     }
   ],
@@ -13908,6 +13948,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Запущены T-306 (TEAM-3/developer#1: characters, worlds/players, session и turns, аналитика C-10 без идентификаторов игрока — R2-M-1 A) и T-317 (tech-writer#1: README шлюза и бота, runbook ротации токена, сверка .env.example). Новые задачи роя EPIC-003 не берутся до ответа пользователя о приоритете I"
+    },
+    {
+      "at": "2026-09-13T22:05:27+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние J (постоянное разрешение): epic/EPIC-004-gateway-bot → develop, состав — T-301…T-305 (шлюз), T-310 (ядро бота), T-318 (текст FR-009). make ci BASE=develop на 745f6da — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация: EPIC-001, EPIC-002 без конфликтов; "
+    },
+    {
+      "at": "2026-09-13T22:05:27+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-209 принята tech-lead#2: Mi-5 (valueScanner — после закрытия значения кавычки прозы не строки), Mi-6 (opensArray учитывает строки), N-4 (незакрытый <think> в любом месте, BOM), N-5 (K1/K2/K5 убиты); 12 мутантов; индекс 0.3.12 — шесть строк DoD T-212 (признак обреза от провайдера, Identifiers, нарр"
+    },
+    {
+      "at": "2026-09-13T22:05:27+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/2/5/2. Ma-1 набор неатомарного пакета остаётся без ответа (дубль по Ref.ID); Ma-2 неканонический путь (\"status.\", \".description\") обходит нормы владения и матрицу статуса. Mi-1 rest по сущности после операций; Mi-2/Mi-3 тесты окна и префиксов; M"
+    },
+    {
+      "at": "2026-09-13T22:05:27+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-311 выполнена TEAM-3/developer#2: render (notice.go из T-318, справка, ошибки §10.5, клавиатуры, доставка с пометкой ИИ/шаблона и разбиением по 4096), flow (FSM с TTL 15 мин и кэшем 1 ч на shared/clock, согласие только кнопкой после отправки уведомления, Р-2 A, Р-3 A, Mi-5, /forget confirm без Res"
     }
   ],
   "blockers": [],
