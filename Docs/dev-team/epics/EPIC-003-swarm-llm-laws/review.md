@@ -2204,3 +2204,96 @@ Mi-5). Неизвестная облачная пара даёт `ErrNoPrice`, �
 5. **Подключение контекста `llm`.** Финальная стадия `build/Dockerfile:31` копирует только `/out/`, файла
    `config/llm-prices.yaml` в образе нет. При `MV_LLM_PRICES=config/llm-prices.yaml` загрузка упадёт. Поддерживаю
    п. 1 бэклога автора.
+
+---
+
+## T-452 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-2)
+
+### Границы ревью
+
+Ветка `task/T-452-fake-encounter-fallen-character`, папка `.worktrees/T-452`, HEAD = `epic/EPIC-003-swarm-llm-laws` (`b18ecd6`).
+Коммитов у задачи нет, поэтому ревьюировалось рабочее дерево (`git diff` + неотслеживаемая карточка), а не `diff <эпик>...HEAD`:
+- код: `shared/testkit/swarm/fake_encounter.go` (`wound`, два комментария про T-053), `shared/testkit/swarm/fake_encounter_test.go`;
+- артефакты: раздел T-452 в `tasks.md`, карточка `tasks/T-452.md`, запись в `dev-log.md`.
+
+Эталоны (чтением): `shared/contracts/ownership.go` (строки `task`/`player` и `task`/`npc`), `data-model.md` §3.3/§3.4
+(`died_at`, `killed_by` — только у NPC), решение system-architect#1 от 2026-09-13 «Р3 — дефект двойника» (по тексту
+задачи), `shared/testkit/state/apply.go:360-368` (`corpsePaths`), потребители `cmd/multiverse/fake_contexts_test.go`,
+`shared/testkit/gateway`, `test/e2e`.
+
+**Метод.** Прогоны — на рабочем дереве (только чтение). Мутанты — в копии дерева в scratch
+(`git ls-files -co --exclude-standard` без `services/`, `Docs/`, `.claude/`, `.qwen/`, `.env`), без `-overlay`;
+`go list` подтвердил, что пакет собирается из копии. Замена точная, с проверкой «ровно одно вхождение»; после каждого
+мутанта файлы восстановлены из рабочей папки и сверены `cmp`. В конце копия и скрипт удалены по сохранённым точным путям.
+Docker, стенд `:8888`, `.env` не трогались.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 3.
+
+Правка точная: `npcFell := dead && target.Type == entity.TypeNPC` разделяет `status` (любому павшему) и запись о смерти
+с трофеем (только NPC). Порядок операций NPC прежний: `hp, status, died_at, killed_by`, затем `loot_claimed_by` и трофей.
+Новый тест доказателен: сверяет весь поток предложений прогона с `OwnershipRules()` и точный набор путей павшего персонажа.
+
+### Проверено
+
+1. **Другие ветки `wound` не задеты.**
+   - Смерть NPC в обмене: `TestTheWolfDies` (`status`, `killed_by`, `loot_claimed_by`, теперь и непустой `died_at`) — зелёный.
+     Лог `TestEveryProposalPassesTheOwnershipTable`: `update npc cause=combat level=task paths=[died_at hp killed_by loot_claimed_by status]`.
+   - Трофей один раз и `loot_claimed_by`: `TestTheTrophyIsHandedOutOnce` — зелёный. Вход в ветку трофея теперь по `npcFell`,
+     прежнее условие `!dead || target.Type != TypeNPC` — его логическое отрицание, то есть эквивалент.
+   - Смерти NPC от свободной атаки и одновременной смерти обоих в двойнике **нет**. Свободная атака бьёт только
+     бегущего персонажа (`fake_encounter.go:913-925`), а павший от удара волк не отвечает (`fake_encounter.go:846-860`).
+     Проверять эти ветки не на чем. Гибель персонажа при отступлении закрыта подтестом `struck fleeing`.
+   - Рана без смерти: только `hp`, как прежде (`update player cause=combat level=task paths=[hp]` в логе).
+2. **Тест `TestAFallenCharacterIsProposedOnlyWhatTheOwnershipTableAllows` (`fake_encounter_test.go:659-714`).**
+   - Проверяется весь пакет: каждое `entity.create/update.proposed` источника `testkit/swarm` за прогон, по каждому
+     набору изменений (`proposalsOf`), включая встречу и волка. Точный набор путей павшего персонажа — `[hp status]`;
+     предложение со смертью ровно одно (`fell != 1` → `Fatal`), `cause` сверяется с веткой.
+   - `ownershipAllows` (`:1864-1890`) повторяет семантику `OwnershipRule`: `Proposer` = `meta.agent.level`,
+     `EntityTypes`/`Causes` с подстановочными `*`, `Create` только для создания, пути — префиксы (`p`, `p.`, `p[`),
+     и все пути набора покрыты **одной** строкой. Это совпадает с doc-комментариями `ownership.go:31-43`. Условия
+     §4.6 вне формы таблицы (gateway `rest`/`forget`, исключения строк `*`) к уровню `task` не относятся.
+   - Мутанты ревьюера (контрольный первым):
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный: `func broken( {` перед `wound` | **красный**: `fake_encounter.go:1179:14: syntax error` |
+| R1 | `npcFell := dead` (дефект возвращён) | **красный**: `TestTheCharacterDies`; оба подтеста — `DENY update player … paths=[died_at hp killed_by status]` и расхождение точного набора |
+| R2 | R1 + в тесте отключена проверка точного набора (`false && !slices.Equal`) | **красный**: оба подтеста только по `DENY` — проверка таблицей сама по себе ловит дефект, а не опирается на точный набор |
+| R3 | в `fled` `causeName: CauseFlee` → `CauseCombat` | **красный**: `struck fleeing` — «fell in a package with cause=combat, want flee»; `bitten in an exchange` зелёный, как и должно |
+| R4 | павшему персонажу добавлен разрешённый таблицей `encounter_id` | **красный**: оба подтеста — `[encounter_id hp status], want exactly [hp status]` (ловит только точный набор) |
+
+   Заявленные автором M0–M7 с моими R0–R4 не расходятся.
+3. **Потребители.** `grep` по дереву без `services/`: `died_at`/`killed_by` вне `shared/entity` читают только
+   `ownership.go:91` (строка NPC), `testkit/state/apply.go:367` (`corpsePaths` — общий список путей трупа любого типа,
+   `died_at` у персонажа не ожидает) и сам двойник. В `test/e2e`, `cmd/multiverse`, `shared/testkit/gateway`, в
+   `testdata`/схемах/YAML упоминаний нет. `cmd/multiverse/fake_contexts_test.go:367` проверяет смерть персонажа по
+   нарративу и `players_out`, а `shared/testkit/gateway/combat_test.go:640` — по `status`. Оба зелёные.
+4. **Раздел T-452 в `tasks.md`** — после §11, см. N-2.
+5. **Прогоны** (go1.26.8 windows/amd64, golangci-lint 2.13.2):
+   - `go build ./... && go vet ./...` — 0; `go vet -tags e2e ./test/e2e/...` — 0; `gofmt -l shared/testkit/swarm` — пусто;
+   - `go test -short -count=1 ./...` — 29 ok, FAIL нет;
+   - `go test -tags e2e -count=1 ./test/e2e/...` — ok (13,3 s);
+   - `golangci-lint run ./...` — 0 issues.
+6. **Артефакты.** Карточка и dev-log соответствуют диффу. Метка `contract-change` не нужна: `ownership.go`, схемы и
+   `shared/eventbus` не менялись. Файлы вне владения (`.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/`) в дифф
+   задачи не попали.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| N-1 | Nit | `shared/testkit/swarm/fake_encounter.go:132-134` | После правки абзац рваный: строка `// testkit/mechanics.FixedMechanics — and swapping one` вдвое короче соседних. `gofmt` комментарии не переформатирует. | Переформатировать абзац до обычной ширины. |
+| N-2 | Nit | `Docs/dev-team/epics/EPIC-003-swarm-llm-laws/tasks.md:1142` | Номерная задача стоит внутри «## 11. Бэклог двойников … (без номера; номер выдаёт оркестратор при взятии в работу)». Читается как пункт бэклога без номера. В перечне номеров эпика (`tasks.md:15`) T-452 нет, а «Волна 1» — прежнее имя волн; с ревизии 4 в §6 подволны A…N. | Перенести раздел перед «## 11», сразу за T-419 (`:1124-1135`), либо завести «## 12. Задачи из ревью других эпиков». В `:15` дописать T-452. Волну указать в терминах §6 или «вне подволн». Делает tech-lead#2 / оркестратор при закрытии. |
+| N-3 | Nit | `shared/testkit/swarm/fake_encounter_test.go:682-691` | Цикл «каждое предложение `testkit/swarm` → `ownershipAllows` → `DENY`» повторяет `:416-431`. | По желанию вынести помощник `denyOutsideOwnership(t, bus) []proposal`, общий для двух тестов. Не блокирует. |
+
+### Открытые вопросы
+
+Нет.
+
+### Предложения в бэклог
+
+1. Поддерживаю п. 1 и п. 2 бэклога автора. Экспортируемая проверка `contracts.Allows(...)` (владелец —
+   system-architect, `contract-change`) убрала бы третью копию логики в T-056. Проверка `level_violation` в `FakeState`
+   (владелец — EPIC-002) поймала бы следующий такой дефект у любого потребителя, а не только в тестах `FakeEncounter`.

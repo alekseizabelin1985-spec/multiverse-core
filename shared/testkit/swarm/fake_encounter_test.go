@@ -418,15 +418,8 @@ func TestEveryProposalPassesTheOwnershipTable(t *testing.T) {
 			if ev.Source != contracts.SourceTestkitSwarm {
 				continue
 			}
-			for _, want := range proposalsOf(t, ev) {
+			for _, want := range checkOwnership(t, ev) {
 				kinds[want.kind()] = true
-				if ownershipAllows(want) {
-					t.Logf("OK   %s", want)
-					continue
-				}
-				t.Errorf("DENY %s: no rule of §4.6 lets a %s agent change a %s "+
-					"with cause=%s on %v (create=%v)", want,
-					want.level, want.entityType, want.cause, want.paths, want.create)
 			}
 		}
 	}
@@ -518,6 +511,13 @@ func TestTheWolfDies(t *testing.T) {
 	assertOp(t, ops, entity.AttrStatus, entity.StatusDead)
 	assertOp(t, ops, entity.AttrKilledBy, playerA)
 	assertOp(t, ops, "loot_claimed_by", playerA)
+	if !slices.ContainsFunc(ops, func(op entity.Op) bool {
+		diedAt, _ := op.Value.(string)
+		return op.Op == entity.OpSet && op.Path == entity.AttrDiedAt && diedAt != ""
+	}) {
+		t.Errorf("no operation sets %s of the wolf; the respawn cooldown counts from it: %v",
+			entity.AttrDiedAt, ops)
+	}
 }
 
 // TestTheEncounterEntityRecordsTheFightItHeld is the other half of "one action,
@@ -636,7 +636,69 @@ func TestTheCharacterDies(t *testing.T) {
 	}
 	ops := opsFor(t, bus, playerA)
 	assertOp(t, ops, entity.AttrStatus, entity.StatusDead)
-	assertOp(t, ops, entity.AttrKilledBy, wolfID)
+	// A character keeps no death record: died_at and killed_by belong to an NPC
+	// (data-model.md §3.3, §3.4), and the task row over a player lists neither.
+	assertNoOp(t, ops, entity.AttrDiedAt)
+	assertNoOp(t, ops, entity.AttrKilledBy)
+}
+
+// TestAFallenCharacterIsProposedOnlyWhatTheOwnershipTableAllows is the death of
+// a character held against contracts.OwnershipRules(), on both ways a character
+// falls: bitten in the exchange of an attack (cause=combat) and struck by the
+// free attack of a failed flight (cause=flee). Every proposal of the run has to
+// pass the table whole, and the change set of the fallen character is hp and
+// status and nothing more — anything else is refused by the real State with
+// level_violation, and the whole package with it (T-452).
+func TestAFallenCharacterIsProposedOnlyWhatTheOwnershipTableAllows(t *testing.T) {
+	lastHitPoint := []func(*entity.Entity){
+		attr(playerA, entity.AttrHP, 1),
+		attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40),
+	}
+	for _, tc := range []struct {
+		name  string
+		cause string
+		fight func(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus)
+	}{
+		{"bitten in an exchange", swarm.CauseCombat, swingUntilOver},
+		{"struck fleeing", swarm.CauseFlee, func(t *testing.T, enc *swarm.FakeEncounter, _ *membus.Bus) {
+			act(t, enc, fleeWhere(t, func(id string) bool {
+				return !hits(tkmech.Verdict(id, 0)) && hits(tkmech.Verdict(id, 1))
+			}))
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			enc, bus := fightStubWith(t, lastHitPoint...)
+			openFight(t, enc, bus)
+			tc.fight(t, enc, bus)
+
+			fell := 0
+			for _, ev := range eventsOf(t, bus, eventbus.TopicSystemEvents) {
+				if ev.Source != contracts.SourceTestkitSwarm {
+					continue
+				}
+				checkOwnership(t, ev)
+				if ev.Type != swarm.TypeUpdateProposed {
+					continue
+				}
+				for _, set := range changeSets(t, ev) {
+					if set.Ref().ID != playerA || !setsStatusDead(set.Ops) {
+						continue
+					}
+					fell++
+					cause, _ := ev.Path().GetString("cause")
+					if cause != tc.cause {
+						t.Errorf("the character fell in a package with cause=%s, want %s", cause, tc.cause)
+					}
+					if got, want := pathsOf(set.Ops), []string{entity.AttrHP, entity.AttrStatus}; !slices.Equal(got, want) {
+						t.Errorf("the fallen character is proposed %v, want exactly %v", got, want)
+					}
+				}
+			}
+			if fell != 1 {
+				t.Fatalf("%d proposals put the character down, this test is about exactly one", fell)
+			}
+		})
+	}
 }
 
 // TestAFailedFlightIsAnsweredWithAFreeAttack is the third end of the DoD, and
@@ -1774,20 +1836,29 @@ func proposalsOf(t *testing.T, ev eventbus.Event) []proposal {
 	case swarm.TypeUpdateProposed:
 		var out []proposal
 		for _, set := range changeSets(t, ev) {
-			paths := make([]string, 0, len(set.Ops))
-			for _, op := range set.Ops {
-				if !slices.Contains(paths, op.Path) {
-					paths = append(paths, op.Path)
-				}
-			}
-			slices.Sort(paths)
 			out = append(out, proposal{op: "update", entityType: set.Ref().Type,
-				cause: cause, level: level, paths: paths})
+				cause: cause, level: level, paths: pathsOf(set.Ops)})
 		}
 		return out
 	default:
 		return nil
 	}
+}
+
+// checkOwnership holds every proposal ev carries against ownershipAllows,
+// fails the test on each one no row covers, and returns them all.
+func checkOwnership(t *testing.T, ev eventbus.Event) []proposal {
+	t.Helper()
+	proposals := proposalsOf(t, ev)
+	for _, p := range proposals {
+		if ownershipAllows(p) {
+			t.Logf("OK   %s", p)
+			continue
+		}
+		t.Errorf("DENY %s: no rule of §4.6 lets a %s agent change a %s "+
+			"with cause=%s on %v (create=%v)", p, p.level, p.entityType, p.cause, p.paths, p.create)
+	}
+	return proposals
 }
 
 // ownershipAllows answers the question State answers on step 6 of §4.5: is
@@ -2070,6 +2141,36 @@ func assertOp(t *testing.T, ops []entity.Op, path string, want any) {
 		}
 	}
 	t.Errorf("no operation sets %s to %v; the proposals hold %v", path, want, ops)
+}
+
+func assertNoOp(t *testing.T, ops []entity.Op, path string) {
+	t.Helper()
+	for _, op := range ops {
+		if op.Path == path {
+			t.Errorf("an operation touches %s: %v", path, op)
+		}
+	}
+}
+
+func setsStatusDead(ops []entity.Op) bool {
+	for _, op := range ops {
+		if op.Op == entity.OpSet && op.Path == entity.AttrStatus && op.Value == entity.StatusDead {
+			return true
+		}
+	}
+	return false
+}
+
+// pathsOf is the sorted set of paths a change set touches.
+func pathsOf(ops []entity.Op) []string {
+	paths := make([]string, 0, len(ops))
+	for _, op := range ops {
+		if !slices.Contains(paths, op.Path) {
+			paths = append(paths, op.Path)
+		}
+	}
+	slices.Sort(paths)
+	return paths
 }
 
 func itemOf(t *testing.T, op entity.Op) entity.Item {
