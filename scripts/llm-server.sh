@@ -309,6 +309,22 @@ stop_server_if_ours() {
   return 1
 }
 
+# model_alias prints the id the server has to report for a model file: the file
+# name without a trailing .gguf. Either separator ends the directory part, since
+# MV_LLM_MODEL_FILE is a D:\Models\... path on the owner's stand and a /models/...
+# path on Linux. Only .gguf is dropped, not "whatever follows the last dot":
+# Qwen3.8-27B would otherwise become Qwen3. The twin, Get-ModelAlias in
+# llm-server.ps1, applies the same rule character for character.
+model_alias() {
+  local name=${1-}
+  name=${name##*/}
+  name=${name##*\\}
+  case "$name" in
+  *.[gG][gG][uU][fF]) name=${name%.*} ;;
+  esac
+  printf '%s' "$name"
+}
+
 pinned_build() {
   sed -n 's/^[[:space:]]*LLAMACPP_BUILD[[:space:]]*=[[:space:]]*\(.*\)$/\1/p' \
     "$repo_root/build/versions.env" | head -n 1
@@ -566,7 +582,18 @@ up)
       llm_fail 'llm: MV_LLM_MODEL_FILE is not set (single mode needs -m)'
       exit 1
     }
-    server_args+=(-m "$model_file")
+    model_id=$(model_alias "$model_file")
+    [ -n "$model_id" ] || {
+      llm_fail "llm: MV_LLM_MODEL_FILE=$model_file names no file, so the server would have no model id to report"
+      exit 1
+    }
+    # --alias is what GET /v1/models reports. Without it llama-server reports
+    # the path to the file, and nothing that matches a model by name finds it:
+    # the blueprint validator (C-11 rule 7a), the Health of the provider
+    # (degraded(model_not_resident)) and make bench, which skips the phases
+    # (ADR-005 execution note p. 6, T-437). Router mode names the models by
+    # file stem on its own, so the alias belongs to single mode only.
+    server_args+=(-m "$model_file" --alias "$model_id")
   fi
 
   if [ "$with_ui" = 1 ]; then
@@ -583,6 +610,7 @@ up)
   mode=single
   [ "$router" = 1 ] && mode=router
   llm_say "llm: starting $bin on $llm_host:$LLM_EP_PORT ($mode mode); the platform calls it at $LLM_EP_URL"
+  [ "$router" = 0 ] && llm_say "llm: the model is reported as $model_id (--alias, the file stem that blueprints name)"
   rm -f "$log_file"
   nohup "$bin" "${server_args[@]}" >"$log_file" 2>&1 &
   server_pid=$!
@@ -625,7 +653,7 @@ up)
   # "the server answers" indicator. `make bench` measures it separately (B2)
   # and it never enters p50/p95.
   model_name=""
-  [ "$router" = 0 ] && model_name=$(basename "${model_file%.gguf}")
+  [ "$router" = 0 ] && model_name=$model_id
   started=$(date +%s%3N 2>/dev/null || date +%s000)
   # The status code is checked, not just the exit code of curl: without it a 404
   # from a server with another set of endpoints was reported as a successful
