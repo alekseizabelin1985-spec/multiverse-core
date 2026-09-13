@@ -1517,3 +1517,156 @@ Mi-1…Mi-5 закрыты тестами: мутанты R2, R3, R6–R9 рев
 - Отказ Telegram на пустой текст (Mi-5) — известное поведение Bot API («message text is empty»). Реальный Telegram не вызывался.
 - Регрессию клиента в других эпиках проверял `grep` по кончикам `.worktrees/EPIC-00{1,2,3,4}` и `T-306` (только чтение) и прогоном `./internal/gateway/...` в T-311. Ветки других эпиков не собирались.
 - Доставку `deliver` (T-312) и e2e (T-314/T-315) не проверял — их ещё нет.
+
+## T-317 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-317-gateway-bot-docs` (`.worktrees/T-317`), база `745f6da` — совпадает с кончиком `epic/EPIC-004-gateway-bot`. Изменения не закоммичены:
+  - новые: `internal/gateway/README.md`, `cmd/telegram-bot/README.md`;
+  - правка: `Docs/ops/runbook.md`, только §6 (остальные разделы diff не затрагивает);
+  - документы: карточка T-317 и запись dev-log.
+- Сверено с:
+  - раздел «### T-317» и DoD-common в `tasks.md`; строки приёмок T-310 и T-318 в DoD T-317; DoD T-311, T-312;
+  - карточка T-318, «Условия, при которых текст правдив» и «Условия правдивости У-1…У-9 — носители», `NoticeText` §1;
+  - карточка `EPIC-001-foundation/tasks/T-463.md` (статус `todo`, части (а)–(в), п. 6 «строка для T-317»);
+  - КД `components/gateway-and-bot.md` §2 (таблица блоков), §11.4;
+  - код: `internal/gateway/{context.go, api/router.go, api/middleware.go, handlers/links.go, links/forget.go, links/store.go, store/{open,compact,retention}.go}`, `cmd/telegram-bot/internal/{config,privacy,updates,access}`, `cmd/multiverse/{serve.go,main_test.go}`, `shared/env/vars.go`, `.env.example`, `.golangci.yml`, `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`, `Makefile`, `scripts/compose-lint.sh`, `shared/testkit/gateway/harness.go`.
+- Карта владения не нарушена: код, `.env.example`, `CLAUDE.md` не менялись.
+
+### Вердикт
+**Вернуть.** Critical 0 · Major 2 · Minor 11 · Nit 8.
+
+Сделано хорошо:
+- списки переменных совпадают с манифестом и с тем, что код читает на самом деле;
+- статус «готово / не готово» по T-306…T-309, T-311, T-312 и T-463 выделен отдельно, отсутствие `main.go` бота названо прямо;
+- проверены и верны: маршруты, порядок middleware, поведение `replay`, коды выхода, `409`, лимиты отказов;
+- условия правдивости У-1, У-2, У-4, У-5 названы условиями, а не готовыми фактами.
+
+Возврат из-за двух Major:
+- Ma-1: `/health` описан с проверкой БД, которой в коде нет;
+- Ma-2: процедура ротации предлагает вписать токен в URL, и он попадает в историю оболочки. Сама проверка при этом делается отозванным токеном и ничего не показывает.
+
+### Проверено ревьюером
+- `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код 0.
+- Относительные ссылки и пути — скрипт Python в scratch (`t317r1-links.py`), удалён по точному пути. Markdown-ссылок `[..](..)` в новых README нет, все пути даны в обратных кавычках. Каждый путь, названный существующим, есть в дереве. `api/gateway.openapi.yaml` находится только от корня (N-3). Пути, помеченные как будущие (`internal/flow`, `render/notice.go`, `outbox/`, `snapshot/`), отсутствуют, как и сказано. Таблицы корректны: число столбцов в строках совпадает.
+- Секреты: grep по трём файлам на `\d{5,}:[A-Za-z0-9_-]{10,}`, `AAA…`, `minioadmin`, `password` — пусто. Токены только в виде плейсхолдеров `<токен>`, `<цифры>:<секрет>`.
+- Цели `make up`, `make logs`, `make health`, переменные `PROFILES`/`COMPOSE_ENV_FILES` и правила 2 и 4 `compose-lint` есть в `Makefile` и `scripts/compose-lint.sh`. Команды Docker, стенда и сети не запускались.
+
+Верно по дереву:
+- переменные `MV_GATEWAY_*`, `MV_TELEGRAM_*`, `MV_WORLD_ID`, `MV_MINIO_*`, `MV_GM_PATH` и их смысл;
+- `--bus=memory` требует `--contexts=all` (`serve.go:160`, `main_test.go:80`), `MV_CORE_ADDR` по умолчанию `127.0.0.1:8090`;
+- 4 маршрута (`router.go:67-70`), порядок `Chain` (`middleware.go:100-103`), 64 КиБ, 5 с, `noLogOperations`;
+- `replay` без лимитера и уборки (`context.go:215-231`);
+- поля `/health`: `projection`, `mode`, `links_compaction`, `projection_error`, `bus` (кроме Ma-1);
+- `ExitCode` 0/1/3 (`updates.go:43-51`), `409` из-за второго экземпляра или webhook (`telegram.go:83`), `WithUpdatesChannelCap(0)`;
+- `config.Load`: форма токена, `ErrTokenMissing`, соль и её длина; `Redact` `bot<цифры>:…`;
+- отказ «Доступ по приглашению.»: не больше 1 на чат и 10 на весь бот (`gate.go:49`), `bot_denied_total`;
+- порты `127.0.0.1:8088` и `127.0.0.1:8089`, токен только через `environment:` (`docker-compose.bot.yml`), соль и лимит команд в compose не переданы (T-463 (в));
+- `/setjoingroups` → Disable: и в README, и в runbook, с верной причиной (SEC-07).
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `internal/gateway/README.md:117-118` | «`links_store`, `gateway_store` — `ok`/`fail` (реальная проверка БД, кэш результата не чаще раза в 10 с)». В коде обе детали — константа `runtime.StatusOK`, пока контекст запущен (`context.go:460-461`). Ни проверки БД, ни кэша нет. КД §11.4 прямо говорит: «В коде T-303 `links_store` и `gateway_store` — `ok`, пока контекст запущен; настоящая проверка БД … — T-309». Нереализованное описано как готовое, а оператор будет доверять `ok` при недоступной базе. | «`links_store`, `gateway_store` — сейчас всегда `ok`, пока контекст запущен; настоящая проверка БД — T-309». Заодно: `bus` появляется только со значением `fail`, `bus: ok` в ответе нет. | открыто |
+| Ma-2 | Major | `cmd/telegram-bot/README.md:119-121`; `Docs/ops/runbook.md:512-516` | «(`https://api.telegram.org/bot<токен>/getWebhookInfo` — `deleteWebhook`, если он есть)». (1) Совет исполняется вставкой токена в командную строку или адресную строку браузера. Токен уходит в историю оболочки (`~/.bash_history`, история PSReadLine), в аргументы процесса и в историю и синхронизацию браузера. Процедура по SEC-08 сама создаёт утечку. (2) Шаг 5 runbook: «проверить, что webhook для него [старого токена] не установлен». После `/revoke` из шага 1 старый токен получает `401`, и проверка ничего не показывает. Проверять надо новым токеном. | Шаг «проверить webhook» — новым токеном и без токена в команде. Например, Git Bash: `IFS= read -rs TG_TOKEN` (ввод не отображается и не пишется в историю) → `printf 'url = "https://api.telegram.org/bot%s/getWebhookInfo"\n' "$TG_TOKEN" \| curl -sS -K -` → при непустом `"url"` тот же приём с `deleteWebhook` → `unset TG_TOKEN`. `printf` встроен в оболочку, а `curl -K -` читает URL из stdin, поэтому токена нет ни в истории, ни в argv. Добавить явный запрет: не открывать URL с токеном в браузере и не вставлять в чаты вывод `docker compose config` и `docker inspect telegram-bot`, где токен виден открыто. | открыто |
+| Mi-1 | Minor | `internal/gateway/README.md:164-168` | «`/forget` … планирует сжатие … если сжатие не завершилось сразу, … повторный `/forget` отвечает `503 forget_incomplete`, пока фоновая уборка (раз в час, `sweep`) не закончит его». По коду всё иначе. Сжатие выполняется в том же вызове, а не планируется (`forget.go:117-120`). Первый же `/forget` отвечает `503` (`handlers/links.go:148-151`). Повтор сам пробует сжатие и при успехе отвечает `200 {deleted:false}` (`forget.go:88-93`). `Sweep` добивает отметку раз в минуту (`retention.go:13`, `links/store.go:270`), раз в час идёт отдельный `Compact`, ещё раз — при старте. | «`/forget` удаляет строку и сразу сжимает `links.db`. Если сжатие не прошло (например, базу держит читатель), ответ — `503 forget_incomplete` с `Retry-After: 5`, `/health` — `degraded` с `links_compaction: pending`. Отметку снимает первый успешный повтор `/forget`, уборка раз в минуту, часовое сжатие или рестарт». | открыто |
+| Mi-2 | Minor | `internal/gateway/README.md:27, 32, 53` | Таблица «эти пакеты в дереве отсутствуют» включает `shared/testkit/gateway`, но пакет есть (`harness.go`, `Harness` v0, T-018). Нет только `FakeGateway` с HTTP-обвязкой. Строка 53: `client/` «используется ботом, `shared/testkit/gateway`». Сейчас его импортируют только тесты `internal/gateway` и `cmd/multiverse`, бот начнёт с T-311. | Строка: «`FakeGateway` и HTTP-обвязка рядом с `Harness` v0 (`shared/testkit/gateway` уже есть) — T-308». Для `client/`: «клиент C-08; потребители — бот (с T-311) и `FakeGateway` (T-308)». | открыто |
+| Mi-3 | Minor | `internal/gateway/README.md:61-73` | Команды «Как поднять локально» не задают `MV_GATEWAY_DATA_DIR`. По умолчанию это `/data` (`vars.go:98`). На Linux и macOS без root старт падает, на Windows создаётся `\data` в корне диска (runbook §2, строки 189-194). Строка 101 таблицы это упоминает, но команды в таком виде не работают. | Перед обеими командами: `export MV_GATEWAY_DATA_DIR="$HOME/.multiverse/gateway"` (вне репозитория) со ссылкой на runbook §2. | открыто |
+| Mi-4 | Minor | `cmd/telegram-bot/README.md:186-189` | «правило для `cmd/telegram-bot` пока не принято отдельно; граница проверяется тестом `go list -deps`». На этом дереве правило есть: `cmd-telegram-bot` (`.golangci.yml:385-396`) и исключение в `internal-unlisted` (`:178-179`). | «Граница — правило depguard `cmd-telegram-bot` (только `internal/gateway/client` и `internal/gateway/api`, без `shared/eventbus`); вторая линия — тест `go list -deps` в `internal/config/imports_test.go` (переедет в пакет бота с T-312)». | открыто |
+| Mi-5 | Minor | `cmd/telegram-bot/README.md:5-7` | «Собственного хранилища у бота нет: состояние диалога и связка `chat_id → player_id` — на стороне шлюза (`links.db`)». По КД §2 (таблица блоков) у бота «ничего персистентного; в памяти — только состояние диалога на чат (TTL), кэш `chat_id → player_id` (TTL)». FSM `flow` с TTL 15 мин тоже живёт в боте (T-311). | «Персистентного хранилища у бота нет: связка аккаунта с игроком — в `links.db` шлюза; состояние диалога и кэш `chat_id → player_id` — в памяти бота с TTL (T-311)». | открыто |
+| Mi-6 | Minor | `cmd/telegram-bot/README.md:72` | Пример `make up PROFILES=memory,bot` стоит в том же README, где правило У-2 (строки 143-147) запрещает `memory`, пока в allow-list есть кто-то кроме владельца. Пример подталкивает к нарушению условия правдивости FR-009. | Пример оставить, но рядом написать: «`memory`/`legacy` — только пока allow-list состоит из владельца (У-2, «Данные игроков»)». Для внешних игроков пример — `make up PROFILES=bot`. | открыто |
+| Mi-7 | Minor | `cmd/telegram-bot/README.md:78, 131-133` | Прямые `docker compose -f docker-compose.yml -f docker-compose.bot.yml up -d telegram-bot` и `… logs` даны без `COMPOSE_ENV_FILES`. Без переменной compose падает на первом `*_IMAGE` (врезка runbook, строки 28-36; шапка `docker-compose.bot.yml`). В runbook это закрывает общая врезка, в README предупреждения нет. | Перед командами: `export COMPOSE_ENV_FILES=.env,build/versions.env` (PowerShell: `$env:COMPOSE_ENV_FILES = ".env,build/versions.env"`) со ссылкой на врезку runbook. | открыто |
+| Mi-8 | Minor | `Docs/ops/runbook.md:523-524, 535-538` | (1) Проверки через голый `docker compose ps` зависят от набора `-f`. Без `-f docker-compose.bot.yml` или `-f docker-compose.legacy.yml` сервисов `telegram-bot`, `chromadb` и `semantic-memory` нет в модели, и `ps` может их не показать. Список У-2 неполон: нет `memory` (`docker-compose.yml:392-394`) и `narrative-orchestrator` (`docker-compose.legacy.yml:113-114`). (2) `/telegram-bot health --url …` на хосте не существует: бинарник есть только в образе. | (1) Проверка, не зависящая от файлов: `docker ps --filter label=com.docker.compose.project=<проект> --format '{{.Names}}'`, где нет `qdrant`, `neo4j`, `memory`, `chromadb`, `semantic-memory`, `narrative-orchestrator`. (2) Здоровье бота — `make health PROFILES=<набор>,bot` (проба `127.0.0.1:8089`, `Makefile:386-388`) или `docker compose -f docker-compose.yml -f docker-compose.bot.yml exec telegram-bot /telegram-bot health` после T-312. | открыто |
+| Mi-9 | Minor | `Docs/ops/runbook.md:565-581` | Прежний хвост §6 («**`PROFILES=` замещает активный набор…**» и «Проверка: … `logs --tail=50`») остался после новых подразделов. Теперь он стоит под заголовком «Другие правила эксплуатации бота», к которому не относится, и повторяет шаги 3-4 ротации (строки 499-511). | Предупреждение про `PROFILES=` перенести в шаг 3 (одна фраза и ссылка на раздел 2), повтор «Проверка: …» удалить. | открыто |
+| Mi-10 | Minor | `Docs/ops/runbook.md:495-498, 520` | Чек-лист: «`MV_TELEGRAM_BOT_TOKEN` в `.env` обновлён, нигде больше не хранится». Шага для копий `.env` вне рабочей папки нет. Раздел 4 (строка 453) восстанавливает `.env` «из менеджера паролей владельца». Без обновления записи там восстановление на чистой машине вернёт отозванный токен, и бот выйдет с кодом 1. | Шаг 2: «обновить запись `.env` в менеджере паролей (раздел 4); резервные копии `.env` рядом с репозиторием обновить или удалить». Пункт чек-листа — так же. | открыто |
+| Mi-11 | Minor | карточка T-317, «Выполнение»; `tasks.md:410, 411, 414` | Два пункта DoD без следа выполнения. (1) «Раздел runbook … проверен „сухим прогоном“ (шаги выполнимы без доступа к прод-токену)». (2) Согласование правки runbook с devops (поле «Метка» карточки; строки приёмок T-318 и T-310). В карточке и dev-log нет ни результата, ни явного переноса. | (1) Записать результат сухого прогона: какие шаги пройдены без токена; шаги, требующие бинарника, — перенос на T-390 со ссылкой. (2) Согласование devops — через tech-lead#3; отметить в карточке. | открыто |
+| N-1 | Nit | `cmd/telegram-bot/README.md:131-133`; `Docs/ops/runbook.md:508-511, 522` | Проверка «токена нет» — глазами по `logs --tail=50`. Утечка при старте может уйти выше 50 строк, а глазами токен узнает только тот, кто его помнит. | `… logs telegram-bot \| grep -cE 'bot[0-9]+:[A-Za-z0-9_-]{20,}'` → `0`: шаблон без самого токена, по всему логу контейнера. | открыто |
+| N-2 | Nit | `Docs/ops/runbook.md:491-494, 519` | «`/token` для получения нового без явного отзыва старого». Фраза читается так, будто старый токен останется рабочим. Ревьюер это не проверял (сеть вне поручения), но у бота один действующий токен. | Нейтрально: «`/revoke` (или «API Token → Revoke» в меню бота) — выпустить новый токен; старый перестаёт действовать». Сверить с текущим интерфейсом @BotFather при сухом прогоне (Mi-11). | открыто |
+| N-3 | Nit | `internal/gateway/README.md:134-135` | Путь `api/gateway.openapi.yaml` в README каталога `internal/gateway` читается как `internal/gateway/api/…`, а файл лежит в корне. «Остальные операции появляются вместе с T-306/T-307» — операции I2 появятся с T-352, T-354 и T-356. | «`api/gateway.openapi.yaml` в корне репозитория»; «с T-306/T-307 (I1) и T-352/T-354/T-356 (I2)». | открыто |
+| N-4 | Nit | `internal/gateway/README.md:161-162, 165` | «более широкие права — отказ старта»: на Windows проверка прав пропускается (`store/open.go:213-215`). «`checkpoint` + `incremental_vacuum`»: в коде порядок обратный (`store/compact.go:28-32`). | «(кроме Windows, где POSIX-прав нет)»; «`incremental_vacuum` + `wal_checkpoint(TRUNCATE)`». | открыто |
+| N-5 | Nit | `internal/gateway/README.md:37-38, 129-130, 148-150`; `cmd/telegram-bot/README.md:17-19, 103-104` | Язык. (1) «Не описывай эти возможности как готовые…» — указание авторам на «ты» в документе оператора. (2) «— трекер задачи» — непонятно. (3) «не логируют тело и код причины ошибки за пределами `request_id`/`code`» — по коду в лог идут ровно `request_id` и `code` (`middleware.go:180-191`), а фраза читается как «код не логируется». (4) «см. «Открытые вопросы» отчёта задачи» — отчёта в репозитории нет. (5) Комментарий compose дан в кавычках как цитата, хотя в файле он по-английски. | (1) Убрать или заменить на «Статус обновляется вместе с T-306…T-309». (2) «полный состав — T-309». (3) «Для них в журнал запроса пишутся только `request_id` и `code`». (4) Ссылка на карточку T-463, часть (в). (5) Пересказ без кавычек. | открыто |
+| N-6 | Nit | `cmd/telegram-bot/README.md:167-168`; `Docs/ops/runbook.md:531-533` | DoD (`tasks.md:411`) требует ссылку на карточку T-318, а в тексте только путь в кавычках. Кликабельных ссылок в новых README нет вообще. | `[tasks/T-318.md](../../Docs/dev-team/epics/EPIC-004-gateway-bot/tasks/T-318.md)`; так же для runbook (`../dev-team/epics/…`) и КД. | открыто |
+| N-7 | Nit | карточка T-317:10; `tasks.md:401` | «Ветка» — `task/T-317-docs-gateway-bot`, фактическая ветка — `task/T-317-gateway-bot-docs`. | Оркестратору: привести к фактическому имени. | открыто |
+| N-8 | Nit | `cmd/telegram-bot/README.md:137-139`; `Docs/ops/runbook.md:528-529` | Вводная пересказывает обещание `/start` («записи удаляются автоматически», «копия связки ≤ 30 дней») без фразы, на которой стоит У-1: «В резервных копиях игры эти записи могут храниться ещё до 30 дней сверх указанных сроков». Сами правила верны. | Добавить эту фразу в вводную, чтобы правило про архивы `make backup` читалось как следствие. | открыто |
+
+### Вопросы tech-writer — рекомендация
+1. **Нет `main.go` бота.** README и §6 runbook не откладывать до T-312: статус «бинарника нет» записан честно, этого достаточно. Предложение tech-lead#3 — строка DoD T-312: «`cmd/telegram-bot/README.md` (статус, `/health`, коды выхода из `main`) и `Docs/ops/runbook.md` §6 (снять пометку „выполнимо после T-312“, сухой прогон ротации) обновлены». И строка DoD T-311: «таблица статуса `cmd/telegram-bot/README.md` — `flow`/`render` готовы».
+2. **Строка для `CLAUDE.md`.** В этой задаче не править: DoD (`tasks.md:412`), владелец — tech-writer (EPIC-001 F-9). `CLAUDE.md` живёт в `develop`, а `internal/gateway` пока только в ветке эпика. Поэтому правка идёт одним заходом при контрольном слиянии I1-α или I1 EPIC-004 в `develop`. Там же исправить устаревшее «`gateway` — заглушка» в «Статус кода». Предлагаемые строки карты каталогов: `cmd/telegram-bot/  # Telegram-бот игрока (EPIC-004); main.go — T-312, до неё бинарник не собирается (cmd/telegram-bot/README.md)` и `internal/gateway/  # контекст gateway (C-08): links, actions, readmodel, consumer; статус — internal/gateway/README.md`.
+
+### Предложения в бэклог (вне границ T-317)
+1. Runbook §8, карточка `gateway` (строка 606): «том `gateway-data` зарезервирован, `internal/gateway` ещё не реализован» — неверно с T-303. Раздел 4 (строки 457-461) про `multiverse db backup` для `links.db` сверить с деревом. Владелец — tech-writer и devops.
+2. T-463 п. 6: когда появится `multiverse db backup`, в README бота и runbook записать формат имён `links-<date>.db.age` и `gateway-<date>.db` и порядок «открытая копия удаляется сразу после `docker cp`».
+3. `docker-compose.bot.yml`: порт `127.0.0.1:8089:8089` и URL healthcheck зашиты литералами, при другом `MV_TELEGRAM_HEALTH_ADDR` проба промахнётся. Для `gateway` это уже решено через `MV_CORE_ADDR` (T-408). Решает devops.
+
+### Риски и допущения
+- Поведение Telegram (`401` на отозванный токен, `409` при активном webhook, работа `/token` у @BotFather) проверено по коду и документации проекта, без сети.
+- Утверждение Mi-8 «`docker compose ps` может не показать сервисы вне модели» зависит от версии compose; предложенная проверка через `docker ps` от версии не зависит.
+- Docker, стенд LLM, `.env` и `— копия.env` не трогал. В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке.
+
+## T-317 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-317-gateway-bot-docs` (`.worktrees/T-317`), база `745f6da`. Изменения не закоммичены: новые `internal/gateway/README.md` и `cmd/telegram-bot/README.md`; правка `Docs/ops/runbook.md` (по diff затронут только §6); карточка T-317 и dev-log.
+- Повторная итерация: проверены исправления Ma-1, Ma-2, Mi-1…Mi-11, N-1…N-8 и регрессия в переписанных местах. Каждое утверждение исправлений сверено с кодом дерева, а не с текстом ревью #1.
+- Сверено с кодом и конфигурацией: `internal/gateway/{context.go, handlers/links.go, links/forget.go, links/store.go, store/{compact,open,retention}.go, api/middleware.go}`, `cmd/telegram-bot/internal/{access/gate.go, privacy/privacy.go, updates/updates.go, config/imports_test.go}`, `shared/env/vars.go`, `.golangci.yml` (`internal-gateway`, `cmd-telegram-bot`), `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`, `Makefile` (`ACTIVE_PROFILES`, `health`, `logs`), `shared/testkit/gateway`, карточка T-318 («Условия правдивости»).
+- Карта владения не нарушена: код, `.env.example`, `CLAUDE.md`, `tasks.md` не менялись.
+
+### Вердикт
+**Принять.** Critical 0 · Major 0 · Minor 2 · Nit 2 (новые; открытые из ревью #1 — только Mi-11, часть 2, и N-7 для `tasks.md` — адресованы оркестратору).
+
+Оба Major закрыты. Новые Minor касаются только удобства процедуры проверки webhook и не создают утечку: их можно исправить в T-312, когда снимается пометка «выполнимо после T-312» (строка DoD T-312 из ревью #1), или отдельной правкой до приёмки — на усмотрение tech-lead#3.
+
+### Проверено ревьюером
+- `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код 0.
+- Ссылки: скрипт Python в scratch (`t317r2-links.py`), удалён по точному пути. Относительных Markdown-ссылок: `cmd/telegram-bot/README.md` — 2, runbook — 4, карточка T-317 — 3; битых — 0. Пути в обратных кавычках, которых нет в дереве, — только заявленные будущими (`internal/flow`, `internal/render`, `internal/deliver`, `render/notice.go`, `outbox/`, `snapshot/`, `bin/telegram-bot`) и имена символов или библиотек. `api/gateway.openapi.yaml` есть в корне.
+- Синтаксис процедуры webhook проверен по документации, без выполнения и без сети:
+  - `help read` (bash в Git Bash): `-r` не даёт обратной косой черте экранировать символы, `-s` не выводит ввод с терминала. Без `-e` ввод не идёт через Readline и в историю не попадает. `IFS=` сохраняет пробелы по краям;
+  - `printf` — встроенная команда оболочки (`type printf`), поэтому токен не попадает в argv внешнего процесса. В истории остаётся литерал `"$TG_TOKEN"`. Переменная не экспортирована и не передаётся `curl` через окружение;
+  - `curl --manual` (8.21.0), `-K, --config`: имя файла `-` — чтение конфигурации из stdin. URL задаётся строкой `url = "…"`, в кавычках значимы только `\\ \" \t \n \r \v`. В токене (`[0-9]+:[A-Za-z0-9_-]+`) таких символов нет. Продолжение строки `\` с `| curl` на следующей строке в runbook записано верно;
+  - запрет выкладывать `docker compose config` и `docker inspect telegram-bot` есть в обоих местах. Интерполяция `${MV_TELEGRAM_BOT_TOKEN:?…}` в `docker-compose.bot.yml:63` подтверждает, что в выводе токен открыт.
+- Команды Docker, стенда, сети и `curl` к Telegram не запускались.
+
+### Статус замечаний ревью #1
+
+| # | Статус | Проверка по дереву |
+|---|---|---|
+| Ma-1 | закрыто | `internal/gateway/README.md:124-126` — «сейчас всегда `ok`, пока контекст запущен; настоящая проверка — T-309» — совпадает с `context.go:460-461`. Ключ `bus` только со значением `fail` (`context.go:477-480`) — верно. `fail` до `Start` и после `Stop` (`context.go:406-409, 455-456`), значения `projection` `ok/missing/stale` (`readmodel/model.go:43-49`) — верно. |
+| Ma-2 | закрыто | Оба места: проверка **новым** токеном, `IFS= read -rs` → `printf … \| curl -sS -K -` → `unset`. Токена нет в URL команды, argv и истории; запрет на URL в браузере и на вывод `config`/`inspect` есть. Шаг «проверить старым токеном» удалён. Остались недочёты PowerShell-варианта и порядка шагов — новые Mi-12, Mi-13, утечки нет. |
+| Mi-1 | закрыто | Сжатие в том же вызове (`forget.go:117-120`); `503 forget_incomplete` + `Retry-After: 5` (`handlers/links.go:31, 148-151`); отметку снимают повтор (`forget.go:88-93`), `Sweep` раз в минуту (`links/store.go:270-271`, `retention.go:13`), часовой `Compact` (`context.go:389`), `Stop`/рестарт (`context.go:164, 424-428`). |
+| Mi-2 | закрыто | `shared/testkit/gateway` есть (`harness.go`), строка переписана; `client/` сейчас импортируют только тесты — «бот (с T-311) и `FakeGateway` (T-308)» верно. |
+| Mi-3 | закрыто | `export MV_GATEWAY_DATA_DIR=…` перед обеими командами; умолчание `/data` — runbook §2. |
+| Mi-4 | закрыто | Правило `cmd-telegram-bot` (`.golangci.yml:385-396`): allow `internal/gateway/client$`, `internal/gateway/api$`, deny `internal`, `shared/eventbus`; тест `go list -deps` (`config/imports_test.go:37`). |
+| Mi-5 | закрыто | Вводная соответствует КД §2. |
+| Mi-6 | закрыто | Условие У-2 и `PROFILES=bot` рядом с примером. |
+| Mi-7 | закрыто | `COMPOSE_ENV_FILES` (bash и PowerShell) перед прямой командой; соответствует шапке `docker-compose.bot.yml:20-22`. |
+| Mi-8 | закрыто | `docker ps --filter label=com.docker.compose.project=…`; список дополнен `memory` (`docker-compose.yml:392`) и `narrative-orchestrator` (`docker-compose.legacy.yml:113`). `make health` пробует `127.0.0.1:8089` (`Makefile:386-388`). |
+| Mi-9 | закрыто | Хвоста §6 нет; предупреждение `PROFILES=` — в шаге 3 со ссылкой на раздел 2. |
+| Mi-10 | закрыто | Шаг 2 и чек-лист: менеджер паролей (раздел 4, строка 453) и копии `.env`. |
+| Mi-11 | частично | (1) Сухой прогон записан в карточке по шагам; перенос шагов 3–4 на T-390 обоснован (нет `main.go`). (2) Согласование правки runbook с devops не выполнено, передано оркестратору и tech-lead#3. Ревью это не блокирует, но это пункт DoD: закрыть до приёмки. |
+| N-1 | закрыто | `grep -cE` по всему логу; шаблон совпадает с формой, которую вырезает `privacy.go:38`. Уточнение — N-9. |
+| N-2 | закрыто | Формулировка нейтральна, сверка с @BotFather — открытый пункт живого прогона. |
+| N-3 | закрыто | «в корне репозитория»; T-352/T-354/T-356. |
+| N-4 | закрыто | `store/open.go:213-215` (Windows); порядок `incremental_vacuum` → `wal_checkpoint(TRUNCATE)` (`store/compact.go:28-32`). |
+| N-5 | закрыто | Фраз «Не описывай», «трекер», «отчёт задачи» нет; «только `request_id` и `code`» — верно (`middleware.go:36, 180-191`); комментарий compose пересказан без кавычек и по смыслу верно (`docker-compose.bot.yml:53-55`). |
+| N-6 | закрыто | Ссылки на T-318 (оба README, runbook), T-463, КД — все резолвятся. |
+| N-7 | частично | Карточка исправлена; `tasks.md:401` по-прежнему `task/T-317-docs-gateway-bot` — у оркестратора. |
+| N-8 | закрыто | Фраза У-1 в обоих местах дословно совпадает с `NoticeText` (T-318, строка 66). |
+
+### Новые замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Mi-12 | Minor | `Docs/ops/runbook.md:540-541`; `cmd/telegram-bot/README.md:139-140` | PowerShell-вариант дан словами («аналогично, токен через `Read-Host -AsSecureString`, конфигурация `curl` через stdin»), готовой команды нет. Утечки текст не создаёт, но выполнить его буквально нельзя. (1) В Windows PowerShell 5.1 `curl` — псевдоним `Invoke-WebRequest`, и `curl -sS -K -` падает на разборе параметров. (2) Из `SecureString` ещё нужно получить строку, и способ не назван. Оператор будет импровизировать, и самый короткий путь — вставить токен в URL, то есть тот сценарий, который закрывал Ma-2. | Дать команду: `$s = Read-Host -AsSecureString` → `$t = [System.Net.NetworkCredential]::new('', $s).Password` → ``"url = `"https://api.telegram.org/bot$t/getWebhookInfo`"" \| curl.exe -sS -K -`` → `Remove-Variable s, t`. Явно `curl.exe`, не `curl`. В истории PSReadLine остаётся литерал `$t`; ввод `Read-Host` в историю не пишется. | открыто |
+| Mi-13 | Minor | `Docs/ops/runbook.md:511-543` | Порядок шагов противоречит тексту. Шаг 3 перезапускает бота, шаг 5 проверяет webhook и заканчивается фразой «снять его перед перезапуском». Если оператор идёт по порядку и webhook у бота есть, после шага 3 процесс выходит с кодом 3 (`updates.go:47-48`) и уходит в цикл рестартов. README (`:142-143`) сам предупреждает об этом цикле. | Переставить проверку webhook перед перезапуском (шаг 3 ↔ шаг 5, чек-лист — в том же порядке). Второй вариант — в шаге 5 написать: «если после шага 3 бот вышел с кодом 3 — снять webhook и перезапустить ещё раз». | открыто |
+| N-9 | Nit | `Docs/ops/runbook.md:526-527`; `cmd/telegram-bot/README.md:157` | Шаблон `bot[0-9]+:[A-Za-z0-9_-]{20,}` ловит только форму с префиксом `bot`, то есть только то, что вырезает `Redact` (`privacy.go:38`). Голый `<цифры>:<секрет>`, например из будущей ошибки конфигурации `main.go`, проверка «токена нет» пропустит. | `grep -cE '[0-9]{5,}:[A-Za-z0-9_-]{30,}'` покрывает обе формы, `bot<redacted>` не совпадает. | открыто |
+| N-10 | Nit | `Docs/ops/runbook.md:490, 521, 543`; `internal/gateway/README.md:127` | (1) В runbook пути `internal/updates.ErrUnauthorized`, `internal/privacy`, `internal/updates.ErrConflict` читаются от корня репозитория, где `internal/` — контексты платформы, а этих пакетов нет. Полный путь назван только во врезке «Статус». (2) «нового мира ещё нет снапшота» — пропущено «у». | (1) `cmd/telegram-bot/internal/…` при первом упоминании в шаге или один раз после врезки «Статус». (2) «у нового мира ещё нет снапшота». | открыто |
+
+### Предложения в бэклог
+- Без изменений к ревью #1: runbook §8, карточка `gateway`; формат имён копий по T-463 п. 6; литералы порта в `docker-compose.bot.yml`.
+- Строки DoD T-311, T-312 и строки `CLAUDE.md` в карточке (раздел «Передать») записаны верно, дословно из ревью #1. Внести их — оркестратору и tech-lead#3.
+
+### Риски и допущения
+- Поведение Telegram не проверялось по сети: `409` на `getUpdates` при активном webhook, судьба webhook после `/revoke`, путь меню @BotFather. Процедура это оговаривает («сверить при живом прогоне», T-390/T-391).
+- Утверждение Mi-12 о псевдониме `curl` относится к Windows PowerShell 5.1. В PowerShell 7 псевдонима нет, но `curl.exe` работает в обеих версиях.
+- Docker, стенд LLM, `.env` и «— копия.env» не трогал. В рабочей папке задачи добавил только этот раздел и строку в карточке.
