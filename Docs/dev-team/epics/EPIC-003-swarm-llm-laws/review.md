@@ -1724,3 +1724,186 @@ Id строится до пакета и называется в `opened_by_even
 1. T-229: применить `WithCauseID` к `narrative.output` (у двойника id нарративов по-прежнему из генератора —
    названо автором) и проверку `ev.ID != ""` до неё в каждом обработчике, выводящем id из причины.
 2. T-230: взять проверку пустого `id` из исправления Mi-A в образец агента встречи.
+
+---
+
+## T-206 · ревью #1 · 2026-09-13 · code-reviewer#1
+
+### Границы ревью
+
+Ветка `task/T-206-llm-gateway-types`, папка `.worktrees/T-206`, HEAD = `epic/EPIC-003-swarm-llm-laws` (`1c2ee7e`).
+Коммитов у задачи нет, поэтому ревьюировалось рабочее дерево, а не `diff <эпик>...HEAD`:
+- новые файлы: `internal/llm/{types,config,prices}.go` и тесты к ним, `internal/llm/providers/registry.go` и
+  тест, `config/llm-prices.yaml`;
+- правки: `shared/env/vars.go` (+5 объявлений), `.env.example` (+10 строк);
+- артефакты: карточка `tasks/T-206.md`, запись в `dev-log.md`.
+
+Эталоны:
+- раздел T-206 в `tasks.md` и уточнения оркестратора в карточке;
+- КД `swarm-llm-laws.md` §3 (API), §9.1, §14 (строка `internal/llm`);
+- ADR-005 доп. 2 п. 1–3 и доп. 3;
+- `.golangci.yml` (`internal-llm`);
+- решения ревизии 4 (журнал develop 2026-09-13: 1a, 1c, п. 9);
+- T-212/T-213/T-217/T-218 в `tasks.md`;
+- схемы `llm.output*.v1.json`;
+- правило адреса в `scripts/lib/llm-endpoint.sh` и `LlmEndpoint.psm1`, правило 6 в `scripts/compose-lint.sh`.
+
+**Метод.** Прогоны на рабочем дереве (только чтение). Зонды и мутанты — в копии дерева в scratch
+(`git ls-files -co --exclude-standard` без `services/`, `Docs/`, `.claude/`, `.qwen/`, без `.env`), без `-overlay`.
+Зондов два: классификация 30 адресов и нормализация 9 URL; вывод ключа через 17 путей печати и сериализации.
+Мутанты — точной заменой с проверкой «ровно одно вхождение», файл после каждого восстанавливался из эталона.
+В конце четыре файла копии сверены `cmp` с рабочей папкой, копия и эталон удалены по сохранённым точным путям.
+Стенд LLM, Docker-стек, `.env` не трогались. `compose-lint.sh` вызывает только `docker compose config`, демон не нужен.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 6, Nit 5.
+
+Заявления автора подтверждены прогонами. Обхода гейта, при котором внешний адрес считается локальным, не найдено.
+Все расхождения классификации — в сторону «облако», то есть закрытые. Minor касаются трёх вещей:
+- защиты «в глубину» (ключ при неверном глаголе и в YAML; гейт на вручную собранной `Config`);
+- расхождения правила «локальный адрес» между Go, скриптами и `compose-lint`;
+- решения о пакете `guardian`: его стоит принять до T-217, иначе T-213 упрётся в цикл импорта.
+
+Сигнатуры T-206 ни одно из замечаний менять не требует.
+
+### Прогоны
+
+| Команда | Результат |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=1 -cover ./internal/llm/... ./shared/env/...` | ok ×3; покрытие `llm` 99.5 %, `providers` 97.6 %, `env` 95.0 % |
+| `golangci-lint run ./...` | 0 issues (в т. ч. `internal-llm`) |
+| `go run ./cmd/mvctl env check` | 72 переменные, расхождений с `.env.example` нет |
+| `go run ./cmd/mvctl contracts check` | 65 типов, 58 схем — ok |
+| `bash scripts/compose-lint.sh` | ok — 15 сервисов, 3 файла, 8 правил (правило 7 зелёное) |
+| `gitleaks dir` по `internal/llm`, `config/llm-prices.yaml`, `shared/env/vars.go`, `.env.example` | no leaks; `.env.example` исключён `.gitleaks.toml:8` (0 байт), это по дизайну |
+
+### 1. Секреты
+
+Зонд `Secret`/`Config`: ключ **не** печатается через:
+- `fmt`: `%v`, `%+v`, `%#v` (значение и указатель), `%s`, `%q`, `%x`, `%X`, срез и map с `Config`,
+  `fmt.Errorf("%v", cfg)`;
+- `slog`: JSON- и Text-обработчик, в том числе `Config` внутри анонимной структуры;
+- `encoding/json`: через указатель, в map, во вложенной структуре;
+- ошибки `LoadConfig` и гейта, панику `Register`.
+
+Ключ **печатается** через `fmt` с неверным глаголом и через `yaml.v3` (Mi-1). URL с `user@`, query или fragment
+отвергается, ошибка называет только хост. У `Config.LogValue` в выводе только `api_key_set`.
+
+### 2. Гейт облака
+
+Классификация (зонд, `IsLocalEndpoint`):
+- **локальные:** `127.0.0.1`, `127.10.0.1`, `[::1]`, `[::1%25lo]`, `[::ffff:127.0.0.1]`, `[::ffff:10.0.0.1]`,
+  `localhost`, `LocalHost.`, `HOST.DOCKER.INTERNAL`, `host.docker.internal.`, 10/8, 172.16/12, 192.168/16,
+  `HTTP://` (схема приводится к нижнему регистру);
+- **облако:**
+  - адреса «все интерфейсы»: `0.0.0.0`, `[::]`;
+  - `169.254.1.1` (link-local, в том числе адрес метаданных облака) и `100.64.0.1` (CGNAT);
+  - IPv6: `[fc00::1]`, `[fd12:3456::1]`, `[fe80::1%25eth0]`, `[::127.0.0.1]`, `[64:ff9b::7f00:1]`;
+  - однословное `ollama`;
+  - числовые формы `2130706433`, `0x7f000001`, `127.1`, `0177.0.0.1` (`netip` их не разбирает — закрыто);
+- **ошибка разбора:** `127%2e0%2e0%2e1`, `127.0.0.1%2eevil.com`, `localhost%00.evil.com`.
+
+Для `127.0.0.1@evil.com` хост — `evil.com`, для `evil.com#@127.0.0.1` — тоже `evil.com`. Путей «внешний адрес →
+локальный» нет. По ADR-005 доп. 2 п. 3 link-local и CGNAT — облако: они не loopback и не RFC 1918. Решение
+закрытое и верное. 169.254.169.254 в роли «локального» было бы прямым SSRF к метаданным.
+
+Гейт стоит в `providers.New` до фабрики (мутант R5 «гейт после фабрики» убит). Других путей создания провайдера в
+T-206 нет. Оговорка про вручную собранную `Config` — Mi-2.
+
+### 3. `MV_LLM_URL`
+
+- Обязателен для `openai_compat`/`anthropic`, для `fake`/`recorded` не нужен.
+- `MV_OLLAMA_URL` читается только при `ollama`.
+- Хвост: `/v1`, `/v1/`, `//v1//` отбрасываются; `/v1/v1` → `/v1`, `/V1` сохраняется. Совпадает с
+  `llm-endpoint.sh` (там сравнение тоже с учётом регистра).
+- `/v10` и `/prefixv1` не трогаются.
+- `http`/`https` принимаются, `ftp` и значение без схемы — отказ.
+- Порт по умолчанию: см. N-1. Хвостовой `?`: Mi-3.
+
+### 4. Цены
+
+Ненулевая цена локального хоста — ошибка загрузки (для `prompt` и `cached` проверено тестом, для `completion` — нет,
+Mi-5). Неизвестная облачная пара даёт `ErrNoPrice`, пустая таблица (`nil`) — тоже. Нормализация хоста (регистр,
+завершающая точка) совпадает с `EndpointHost`. Хост с портом в таблице отвергается. Для IPv6 нормализация
+неполная — N-2.
+
+### 5. Реестр
+
+`ErrUnknownProvider` оборачивает `ConfigError` (выведенные `openai`/`deepseek` матчат и `llm.ErrConfig`).
+`ErrNotBuiltIn` перечисляет встроенные реализации. Глобальный `defaultRegistry` пополняется только из `init`
+пакетов-провайдеров, по образцу `database/sql`. Тесты работают на `NewRegistry()`, общий реестр только читают.
+Замок `RWMutex` корректен: `Names()` вызывается после `RUnlock`. Опасного для тестов состояния нет.
+
+### 6. `vars.go` и `.env.example`
+
+Пять объявлений добавлены с `IsDuration()`, умолчания равны КД §14. В `.env.example` комментарий стоит над
+переменной (формат T-397/T-404), пометки `[required]` не нужны. Чужие переменные не задеты: дифф `vars.go` — только
++15 строк в блоке llm. Маршрут правки — через EPIC-001/develop (ревизия 4 п. 9, `ownership.md` §1). Автор вынес его
+в отчёт, оркестратор разрешил правку в промпте. Это вопрос процесса, в замечания не входит.
+
+### 7. Отклонения от КД и долг для T-211…T-218
+
+- **`Call` без `Prompt`/`Guard`.** Добавление полей в структуру не ломает вызывающих с именованными литералами.
+  `prompt.Build(Sections) (string, string, string)` корню не нужен, так что `llm → prompt` цикла не даёт.
+- **`Rejection.Reason string`.** Словарь в `guardian/reasons.go` (T-217) проверяется тестом
+  `test/fixtures/TestRejectionReasonsMatchTheGuardianPackage`, строка его не ломает.
+- **Цикл `llm ↔ guardian` — реальный риск (Mi-6).**
+- `Call.LOD string`, `Response.LatencyMs int64`, `Call` без `World`/`Scope` — обоснованы в карточке, долга нет.
+
+### 8. Мутанты ревьюера
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный: синтаксическая ошибка в `prices.go` | убит (сборка) |
+| R1 | `addr.Unmap()` снят | **выжил**: `netip.IsLoopback` сам снимает 4in6, а `::ffff:<RFC 1918>` тестом не покрыт (N-3) |
+| R3 | `endpoint_host` таблицы без приведения регистра | убит `TestCost` |
+| R5 | гейт после фабрики | убит `TestNewStopsACloudEndpointAtTheGate` |
+| R7 | `GoString` печатает значение | убит `TestTheKeyIsNeverPrinted` |
+| R9 | гейт всегда по `MV_LLM_URL`, без учёта провайдера | убит `TestCheckCloudGate` |
+| R10 | `New` не проставляет `cfg.Provider` | убит 2 тестами |
+| R11 | ненулевой `completion_per_1k` у локального хоста принимается | **выжил** (Mi-5) |
+| R13 | `cached` без ограничения сверху | убит `TestCost` |
+| R14 | `For(decision)` → `Degraded` | убит `TestTimeoutsFor` |
+| R21 | `Cost` без правила «локальный = 0» | убит `TestShippedPriceTableLoadsAndLocalCallsAreFree` |
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Суть | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `internal/llm/config.go:70-93` | `Secret` закрыт для `%v/%s/%q/%x/%#v`, slog и JSON, но не для всех путей. **Неверный глагол:** `fmt.Sprintf("%d", key)` даёт `%!d(llm.Secret=<ключ>)`. В `badVerb` fmt печатает значение через reflect, минуя `String()`. Вложенная `Config` с `%d` течёт так же. `go vet` ловит только константную строку формата. **YAML:** `yaml.Marshal(cfg)` печатает `apikey: <ключ>`, а `yaml.v3` уже в зависимостях пакета. | Добавить `func (s Secret) Format(f fmt.State, verb rune)`, всегда пишущий `s.String()`: `Formatter` вызывается и для вложенных полей, и для любого глагола. Добавить `MarshalText` (его учитывают `yaml.v3` и `encoding/xml`) или `MarshalYAML`. В `TestTheKeyIsNeverPrinted` — случаи `%d` и `yaml.Marshal`. |
+| Mi-2 | Minor | `internal/llm/config.go:249-252`, `providers/registry.go:91` | `providers.New` проверяет гейтом только хост. Для провайдера, которому нужен адрес, пустой адрес пропускается, и фабрика вызывается (зонд: `New(openai_compat, Config{})` → `calls=1`). URL с `user:pw@` и `?x=1` уходит в фабрику без проверки: правила `normalizeURL` действуют только через `LoadConfig`. Инвариант «фабрика не видит неразрешённый адрес» держится на том, что у фабрики нет своего умолчания. | В `CheckCloudGate`: при `usesLLMURL`/`ollama` и пустом адресе — `ConfigError` «required»; адрес прогонять через те же проверки, что в `normalizeURL` (учётные данные, query, fragment). Тест на `New` с `Config{}` и с `user@`. |
+| Mi-3 | Minor | `internal/llm/config.go:342` | `http://127.0.0.1:8888?` принимается и нормализуется в `http://127.0.0.1:8888?` (`u.ForceQuery`, `RawQuery == ""`). Провайдер T-208, дописав путь, пойдёт на `/` с query. `llm-endpoint.sh` любой `?`/`#` отвергает, получаются два ответа на одно значение. Пустой `#` молча отбрасывается. | Условие `u.RawQuery != "" \|\| u.ForceQuery \|\| u.Fragment != "" \|\| strings.ContainsAny(raw, "?#")`; строки `"…8888?"` и `"…8888/#"` в `TestLoadConfigRefusesABadURLWithoutEchoingIt`. |
+| Mi-4 | Minor | `internal/llm/config.go:303-328`; `.env.example:228`; КД §14 (строка `internal/llm`) | Правил «локальный адрес» три, и они расходятся. **Go:** loopback, `localhost`, `host.docker.internal`, RFC 1918. **`llm-endpoint.sh`:359-366 и `LlmEndpoint.psm1`:345,358:** дополнительно `0.0.0.0`, `::`, `fd??:*`, `fe80:*`. **`compose-lint.sh`:1031-1044:** любой сервис compose, `is_private` Python (169.254/16, fc00::/7, `2001:db8::/32` и др.). **Следствие:** значение `MV_OLLAMA_URL=http://ollama:11434` (профиль `gpu`, `.env.example:228`, КД §14) `compose-lint` принимает, а платформа отвергает (`ollama` → облако). Обойти можно только `MV_LLM_CLOUD_ENABLED=true`, который включает облачные бюджет и событие. Направление безопасное, но это тот же класс дефекта «два правила на одну переменную», что закрывала T-404. На T-206 не блокирует: `ollama` (T-254) условна, в compose `MV_OLLAMA_URL` не передаётся. | Вынести вопрос архитектору (см. «Открытые вопросы»). Варианты: (а) Go считает локальными также имена сервисов из явного списка (`MV_LLM_LOCAL_HOSTS` или константа `ollama`); (б) из `.env.example`/КД убирается `http://ollama:11434`, а скрипты и `compose-lint` сужаются до правила Go. В обоих случаях — общая таблица случаев и тест паритета Go ↔ sh ↔ ps1 ↔ compose-lint. |
+| Mi-5 | Minor | `internal/llm/prices_test.go:117-118`; `prices.go:102-104` | Пункт DoD «ненулевая цена локального адреса — ошибка загрузки» проверен для `prompt_per_1k` и `cached_prompt_per_1k`. Для `completion_per_1k` проверки нет: мутант R11 (условие без `CompletionPer1K`) выжил. | Случай `"paid completion local": entry с completion_per_1k: 0.1 на localhost` в `TestParsePricesRefusesBadTables`. |
+| Mi-6 | Minor | `internal/llm/types.go:192-209`, `225-256` | Цикл импорта в T-213/T-217 не поставлен в план. T-213 кладёт в корень `gateway.go`, который вызывает `guardian.Evaluate`, и добавляет `Call.Guard guardian.Input`: корень импортирует `guardian`. КД §3 даёт `Verdict{Rejected []Rejection; Status ValidationStatus}`. Если это типы корня, `guardian` должен импортировать `internal/llm` — цикл. Перенести `Rejection` в `guardian` тоже нельзя: в нём `*eventbus.EntityRef`, а DoD T-217 запрещает `guardian` зависеть от `eventbus`. Решаемо без смены сигнатур T-206, но решение должно появиться до T-217. | Зафиксировать в комментарии `Rejection` и в dev-log направление: подпакеты `internal/llm/{guardian,prompt,parser,filter}` корень **не импортируют**. У `guardian` свои `Verdict`/`Rejection` (сущность — `ID`/`Type` строками) и `Status` из 3 значений; шлюз T-213 отображает их в `llm.Rejection`/`llm.ValidationStatus`. Правило depguard «подпакеты `internal/llm/*` не импортируют `internal/llm$`» — в бэклог EPIC-001 (п. 2 ниже). |
+| N-1 | Nit | `internal/llm/config.go:334-349` | Порт не проверяется. Локальный `http://127.0.0.1` без порта принимается (фактически порт 80), `llm-endpoint.sh:396` такое значение отвергает. `:0` и `:99999` Go тоже принимает, скрипт — нет. | При локальном хосте требовать явный порт, порт проверять на 1–65535; тот же текст, что у скрипта. |
+| N-2 | Nit | `internal/llm/prices.go:86`, `config.go:300` | IPv6-хост не канонизируется: `[2001:DB8:0::1]` в URL и `2001:db8::1` в таблице — разные ключи. Итог — `ErrNoPrice` (закрыто, но неожиданно). | Если `netip.ParseAddr` успешен — ключ `addr.Unmap().String()` с обеих сторон. |
+| N-3 | Nit | `internal/llm/config_test.go:258-261` | Выжил R1: снятие `Unmap()` не ловится, т. к. `IsLoopback` снимает 4in6 сам, а `::ffff:10.0.0.1` в списке локальных нет. | Добавить `http://[::ffff:10.0.0.1]` и `http://[::ffff:192.168.0.1]` в `local`. |
+| N-4 | Nit | `internal/llm/prices.go:67-75` | Читается только первый YAML-документ: после `---` таблица молча игнорируется. | После `Decode` — второй `Decode` должен вернуть `io.EOF`, иначе ошибка «one document expected». |
+| N-5 | Nit | `internal/llm/prices.go:116-121` | `Cost(host, …)` ждёт голый хост. Если передать `127.0.0.1:8888` или `[::1]`, локальный вызов получит `ErrNoPrice`, а не 0. | В doc-комментарии: «host — результат `EndpointHost`»; либо `CostOf(url, model, t)`, который сам вызывает `EndpointHost`. |
+
+### Открытые вопросы (оркестратору → system-architect)
+
+1. **Правило «локальный адрес» (Mi-4).** Сейчас их три: Go, скрипты, `compose-lint`. Одно ли это правило? Если
+   одно, считаются ли локальными имена сервисов compose (`ollama`), IPv6 ULA/link-local и `0.0.0.0`? От ответа
+   зависит, работает ли профиль `gpu` с `MV_OLLAMA_URL=http://ollama:11434` без облачного флага.
+2. **Направление зависимостей `llm` ↔ `guardian` (Mi-6).** Чьи типы `Verdict`/`Rejection`/`ValidationStatus`
+   использует страж? Нужно ли правило depguard для подпакетов `internal/llm/*`?
+
+### Предложения в бэклог
+
+1. **Паритет «локального адреса».** Общая таблица случаев (`testdata/llm/endpoints.txt`) и тесты Go, bats/Pester и
+   `compose-lint` против неё — после ответа на вопрос 1.
+2. **depguard (EPIC-001, `.golangci.yml`).** Подпакеты `internal/llm/{guardian,prompt,parser,filter}` не импортируют
+   `internal/llm$`, `guardian` не импортирует `shared/eventbus`.
+3. **T-208/T-254.** Экспортируемые конструкторы провайдеров (`openai_compat.New(cfg)`) либо не экспортировать, либо
+   вызывать в них `cfg.CheckCloudGate()`: иначе создание в обход реестра обходит и гейт. Туда же проверка
+   управляющих символов в `MV_LLM_API_KEY`, как в `llm-endpoint.sh` (`llm_has_control_char`).
+4. **Схема `llm.output.rejected` (T-210/T-211, архитектор).** `budget.limit` — integer, а облачный бюджет
+   `MV_LLM_CLOUD_BUDGET_USD_PER_DAY` дробный (1.25). Для `kind=cloud` лимит в USD в схему не ложится, и
+   `BudgetLimit.Limit int` повторяет это ограничение.
+5. **Подключение контекста `llm`.** Финальная стадия `build/Dockerfile:31` копирует только `/out/`, файла
+   `config/llm-prices.yaml` в образе нет. При `MV_LLM_PRICES=config/llm-prices.yaml` загрузка упадёт. Поддерживаю
+   п. 1 бэклога автора.

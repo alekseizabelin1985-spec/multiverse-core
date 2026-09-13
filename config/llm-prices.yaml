@@ -1,0 +1,42 @@
+# Price table of LLM calls (ADR-005 p. 3, add. 2 p. 3; EPIC-003 T-206).
+# Read by internal/llm (LoadPrices) from the path in MV_LLM_PRICES.
+#
+# Key: (endpoint_host, model). endpoint_host is the host of MV_LLM_URL — lower
+# case, without scheme, port or path; model is the name the provider serves
+# (the `model` of a blueprint). Prices are USD per 1000 tokens. An IP host is
+# compared in its canonical form (2001:DB8:0::1 and 2001:db8::1 are one key;
+# quote an IPv6 host in YAML). The file is one YAML document: a second one
+# after --- is refused, not ignored.
+#
+# Local endpoints (loopback, host.docker.internal, RFC 1918) cost 0 whether or
+# not they are listed, and a non-zero price for one is refused at load. A
+# non-local (endpoint_host, model) that is not listed has NO price: the call
+# is an error for the cost accounting, not a free call.
+#
+# cached_prompt_per_1k is optional: the price of prompt tokens served from the
+# provider's cache (usage.prompt_tokens_details.cached_tokens); absent, they
+# cost as prompt tokens.
+#
+# MVP-1 runs on the local llama-server only, so no cloud endpoint is priced
+# yet. A cloud entry is added together with MV_LLM_CLOUD_ENABLED=true, with the
+# vendor's price list as its source, for example:
+#
+#   - endpoint_host: api.example.com
+#     model: some-model
+#     prompt_per_1k: 0.0
+#     completion_per_1k: 0.0
+#     cached_prompt_per_1k: 0.0
+schema_version: 1
+currency: USD
+prices:
+  # Base configuration E (ADR-005 add. 3; build/versions.env LLM_MODEL_DEFAULT):
+  # the model id is the stem of the file that llama-server serves under --alias
+  # (T-437). Listed to document the key; a local endpoint costs 0 anyway.
+  - endpoint_host: 127.0.0.1
+    model: Qwen3.8-27B-UD-Q3_K_XL
+    prompt_per_1k: 0
+    completion_per_1k: 0
+  - endpoint_host: host.docker.internal
+    model: Qwen3.8-27B-UD-Q3_K_XL
+    prompt_per_1k: 0
+    completion_per_1k: 0

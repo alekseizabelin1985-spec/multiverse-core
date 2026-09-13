@@ -191,6 +191,21 @@ var (
 		"allow prompts of external players to reach a cloud endpoint", IsBool())
 	LLMCloudBudgetUSDPerDay = Declare("MV_LLM_CLOUD_BUDGET_USD_PER_DAY", "0",
 		"daily budget for cloud calls in USD; 0 means no cloud spending is allowed")
+	// The timeouts bound one attempt of a phase; the gateway arms them through
+	// shared/clock, so a replay is not driven by the wall clock (КД EPIC-003
+	// §9.2, §9.5). Decision is reserved: MVP-1 makes no decision calls.
+	LLMTimeoutNarrative = Declare("MV_LLM_TIMEOUT_NARRATIVE", "20s",
+		"timeout of one attempt of the narrative phase", IsDuration())
+	LLMTimeoutTick = Declare("MV_LLM_TIMEOUT_TICK", "30s",
+		"timeout of one attempt of the tick phase", IsDuration())
+	LLMTimeoutDecision = Declare("MV_LLM_TIMEOUT_DECISION", "5s",
+		"timeout of one attempt of the decision phase (reserved, not used by MVP-1)", IsDuration())
+	LLMTimeoutDegraded = Declare("MV_LLM_TIMEOUT_DEGRADED", "3s",
+		"shortened timeout of an attempt while the provider is unavailable, so a recovery is noticed without a restart",
+		IsDuration())
+	LLMPrices = Declare("MV_LLM_PRICES", "config/llm-prices.yaml",
+		"price table of LLM calls per 1000 tokens keyed by (endpoint_host, model); "+
+			"a relative path is resolved against the working directory; local endpoints cost 0")
 	AnthropicAPIKey = Declare("MV_ANTHROPIC_API_KEY", "",
 		"key of the anthropic provider (E-H)",
 		Secret(), RequiredWhen("MV_LLM_PROVIDER", "anthropic"))
