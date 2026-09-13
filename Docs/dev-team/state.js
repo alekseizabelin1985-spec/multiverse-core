@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:07:44+03:00",
+  "updatedAt": "2026-09-13T17:08:19+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3189,16 +3189,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-205",
           "title": "A7 · internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#3",
+          "startedAt": "2026-09-13T17:08:19+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md",
-          "subwave": "B"
+          "subwave": "B",
+          "branch": "task/T-205-laws",
+          "worktree": ".worktrees/T-205"
         },
         {
           "id": "T-206",
@@ -9155,6 +9157,16 @@ window.DEVTEAM_STATE =
       "action": "Ревью #2: порядок поставки shared/recording",
       "startedAt": "2026-09-13T17:03:22+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-205",
+      "action": "internal/laws и mvctl laws",
+      "startedAt": "2026-09-13T17:08:19+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -12211,6 +12223,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-210 принята TEAM-2/tech-lead#2: Mi-4 (M1/M2 убиты), N-1…N-4 закрыты при приёмке; решения владельца: Mi-2 Allow перед каждой попыткой, отказ на повторе — rejected budget_exceeded + ErrBudget (DoD T-212; правка КД §9.2 шаг 1 — architect#2); Mi-3 синхронный Observe (T-212) и MV_SWARM_LLM_WORKERS ≠ 1 "
+    },
+    {
+      "at": "2026-09-13T17:08:19+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-205 (TEAM-2/developer#3, M, подволна B): internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show — схема world.laws.changed в дереве (T-214 принята)."
     }
   ],
   "blockers": [],
