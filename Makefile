@@ -230,9 +230,9 @@ test-race: ## Race detector, repeated, over the concurrent packages and e2e (CI 
 	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...
 
 # `mvctl blueprint validate blueprints/` joins this target together with the
-# command itself, in EPIC-003: the name is reserved in cmd/mvctl/main.go and
-# exits with the usage code until then, which would fail the target for a
-# command that was never written.
+# command itself, in EPIC-003: the name is reserved in
+# cmd/mvctl/commands_swarm.go and exits with the usage code until then, which
+# would fail the target for a command that was never written.
 .PHONY: contracts
 contracts: ## Schemas and the env manifest agree with the code
 	@go run ./cmd/mvctl contracts check
