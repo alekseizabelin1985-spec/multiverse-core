@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:54:53+03:00",
+  "updatedAt": "2026-09-13T19:56:12+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2613,6 +2613,32 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-464.md"
+        },
+        {
+          "id": "T-465",
+          "title": "Стенд паритета: двойник выбирает свободный порт без гонки (флейк H48 bind: address already in use в CI)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-465.md"
+        },
+        {
+          "id": "T-466",
+          "title": "C-01 v1.11 по решению А5 (ReadJournal не двигает часы) и КД State §6.1/§6.2: shared/recording, Advance, форма тела маршрута часов",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-466.md"
         }
       ],
       "defects": [],
@@ -3137,7 +3163,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-458",
           "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
@@ -9792,7 +9818,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Просмотр contract-change T-458 и решение А5",
       "startedAt": "2026-09-13T19:36:55+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:56:12+03:00"
     },
     {
       "instance": "developer#1",
@@ -9862,6 +9888,16 @@ window.DEVTEAM_STATE =
       "task": "T-222",
       "action": "Реестр блупринтов и индекс scope",
       "startedAt": "2026-09-13T19:54:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Итерация 2: метка ReadJournal, шаблон маршрута, форма Error",
+      "startedAt": "2026-09-13T19:56:12+03:00",
       "finishedAt": null
     }
   ],
@@ -13447,6 +13483,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "Запущены T-209 (парсер ответа, компиляция схем, язык; TEAM-2/developer#3 вместо занятого developer#2) и T-222 (реестр блупринтов и индекс scope; TEAM-2/developer#1)."
+    },
+    {
+      "at": "2026-09-13T19:56:12+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · просмотр system-architect#1: одобрено с условиями — итерация 2. У-1 (решение А5, вариант б): ReadJournal помечает контекст, recording.InReadJournal, middleware replay не двигает часы и не ставит Meta.Replay для чтения истории; У-2 шаблон POST /v1/admin/replay/clock с методом (иначе ServeMux "
+    },
+    {
+      "at": "2026-09-13T19:56:12+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "CI на develop (run 34769753575, после push 81eb173): unit, race, e2e, integration, contracts, compose-lint, security — зелёные; красный только scripts-parity — H48 «health: 401 without a key»: двойник стенда не смог слушать 127.0.0.1:41917 (address already in use) — флейк выбора порта на раннере, не"
     }
   ],
   "blockers": [],
