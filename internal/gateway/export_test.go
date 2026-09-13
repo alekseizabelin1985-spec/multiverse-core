@@ -64,3 +64,25 @@ func PendingActions(c *Context) int {
 func SetStartBudgets(c *Context, load, catchUp time.Duration) {
 	c.loadBudget, c.catchUpBudget = load, catchUp
 }
+
+// DeliveryStates counts the deliveries of a started context by state.
+func DeliveryStates(c *Context) (map[string]int, error) {
+	c.mu.Lock()
+	db := c.gatewayDB
+	c.mu.Unlock()
+	rows, err := db.QueryContext(context.Background(), `SELECT state, COUNT(*) FROM deliveries GROUP BY state`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]int{}
+	for rows.Next() {
+		var state string
+		var n int
+		if err := rows.Scan(&state, &n); err != nil {
+			return nil, err
+		}
+		out[state] = n
+	}
+	return out, rows.Err()
+}

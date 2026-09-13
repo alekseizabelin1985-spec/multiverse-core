@@ -1367,3 +1367,860 @@ Mi-1…Mi-5 закрыты тестами: мутанты R2, R3, R6–R9 рев
 - Зонд P4 моделирует срок сдвигом `clock.Manual` в хуке после публикации и паузой 100 мс. На kafka-адаптере не проверялся: интеграционные прогоны вне поручения. На реальном брокере зазор — время `Turns.Accepted` плюс `Keys.Save`.
 - Вывод «к моменту вытеснения клиент уже не повторит» опирается на политику эталонного `internal/gateway/client` (3 повтора). Сторонний клиент с долгими повторами при более чем 4096 сбойных действиях за окно может получить дубль — это тот же остаточный риск.
 - Мутанты и зонды выполнялись только в копии дерева. В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке.
+
+## T-311 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+
+Ветка `task/T-311-bot-flow-render`, папка `.worktrees/T-311`, база `ce7b35a`. Изменения не закоммичены (`git status`):
+- новое: `cmd/telegram-bot/internal/flow` (5 файлов кода, 4 теста) и `cmd/telegram-bot/internal/render` (6 файлов кода, 3 теста), 3 300 строк;
+- правки: `internal/gateway/client/client.go` (+46/−6), `client_test.go` (+45), `cmd/telegram-bot/internal/sender/telegram.go` (+9, `ReplyPolicy`), `access/gate_test.go` (SEC-06 на `client.New`), `tasks/T-311.md`, `dev-log.md`.
+
+Коммитов вне ветки нет. `.golangci.yml`, `go.mod`, `shared/*`, контракты и КД не тронуты. Кончик эпика после базы ушёл на `745f6da` (T-305): тот коммит меняет только `internal/gateway/api/{middleware,router,openapi_test}.go`, пересечений с T-311 нет.
+
+Основания:
+- раздел T-311 в `tasks.md` со строками приёмок T-303, T-310, T-318, T-456;
+- карточки `tasks/T-311.md` и `tasks/T-318.md` (§1 — тексты, §3 — подстроки, решения тимлида);
+- КД `gateway-and-bot.md` §10.2–§10.5, §11.1;
+- C-08 v1.5 («Дополнения v1.5», `contracts.md`);
+- US-008, US-009; FR-009; `api-contracts.md` §1.2–§1.3.
+
+Решения оркестратора приняты как данность:
+- свободный текст у игрока с персонажем → список команд;
+- копия правила имени в боте до `api.ValidCharacterName` (T-306);
+- клиент не повторяет `forget_incomplete`;
+- Р-2 A, Р-3 A;
+- `/help` без `links/consent`.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0 · Major 0 · Minor 7 · Nit 6.
+
+Работа сделана тщательно:
+- константы уведомления побайтно совпадают с T-318;
+- инварианты согласия (кнопка только в `awaiting_consent`, `/help` без `consent`, `/forget confirm` без `resolve`) закреплены тестами и мутантами исполнителя;
+- граница depguard и отказ от повтора `forget_incomplete` соблюдены.
+
+Замечания — пробелы в тестах трёх объявленных свойств (Mi-1…Mi-3), текст ответа не по контракту (Mi-4), пустая часть при нарезке (Mi-5), редакция ошибок (Mi-6) и неверное утверждение о потокобезопасности (Mi-7). Все локальны. Их можно закрыть до слияния без повторного ревью: достаточно проверки тимлидом при приёмке.
+
+### Прогоны (go1.26.8 windows/amd64, рабочая папка T-311)
+
+| Команда | Результат |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/client/...` | ok ×9 пакетов; `updates` запустился напрямую, без `Access is denied` |
+| `go test -short -count=1 ./internal/gateway/...` (регрессия клиента) | ok ×9 пакетов, в том числе `internal/gateway` (`compaction_test`, `context_test`) |
+| `golangci-lint run ./cmd/telegram-bot/...` | 0 issues |
+| `golangci-lint run ./...` | 0 issues (golangci-lint 2.13.2) |
+
+`-race` недоступен (cgo выключен, gcc нет). Конкурентность разобрана чтением (Mi-7).
+
+### Мутанты и пробы ревьюера
+
+Копия `t311r1-mut` в scratch: `go.mod`, `go.sum`, `cmd/telegram-bot`, `internal/gateway/{api,client}`, `shared/{clock,env,eventbus,jsonpath,logging}` по `go list -deps -test`. Без `-overlay`, один мутант на прогон, исходник восстанавливался после каждого. Копия и скрипт удалены по точным путям.
+
+| # | Мутант / проба | Итог |
+|---|---|---|
+| M0 (контрольный, первым) | без изменений | зелёный |
+| M1 | `showNotice` ставит `awaiting_consent`, даже если `Send` уведомления упал | **выжил** → Mi-1 |
+| M2 | `503 forget_incomplete` без `Reset(chat)` (только отметка) | **выжил** → Mi-2 |
+| M3 | `notice_due` у согласившегося игнорируется (`start`, `idle`) | **выжил** → Mi-3 |
+| M4 | `Handle` без `sweepLocked` | выжил → N-2 |
+| M5 | `pack`: `<=` → `<` на границе 4096 | выжил → N-2 |
+| M6 | клиент не повторяет любой контрактный `503` (а не только `forget_incomplete`) | красный: 6 тестов клиента, в том числе `TestForgetIncompleteIsNotRepeatedAndCarriesRetryAfter` |
+| P1 | ответ `502` не по контракту (HTML прокси) на `/look` | игрок получает `"Bad Gateway"` → Mi-4 |
+| P2 | `Split` строки длиннее 4096 с `\n` или `\n\n` в конце; `\n\n` перед длинным абзацем | 3 части, одна пустая; пустая часть — последняя и несёт клавиатуру → Mi-5 |
+| P3 | `ConsentButton` у игрока с персонажем, затем `/look` | шаг `awaiting_consent`, `/look` отвечен уведомлением, действий 0 → N-1 |
+
+Проверка текста уведомления программой (Python, блоки §1 карточки T-318 после приведения CRLF → LF):
+- `NoticeText` (2 341), `ConsentButton` (21), `DeclineButton` (10), `DeclineReply` (161) **равны** константам `render/notice.go`;
+- SHA-256 `NoticeText` совпадает с зашитым в `TestTheNoticeIsTheAcceptedText`;
+- список 24 подстрок теста совпадает с таблицей §3 карточки. Каждая встречается ровно 1 раз, `30 дней` — 3 раза;
+- нетипичные символы — только U+00AB, U+00BB, U+2014, U+2022;
+- в кнопках нет U+00A0/200B/200C/200D/2060/FEFF, `TrimSpace` их не меняет;
+- `notice.go` без CR и BOM. Go к тому же отбрасывает `\r` из raw-строк, так что `text=auto` на Windows текст не меняет.
+
+### Разбор по пунктам поручения
+
+**1. Константы `render/notice.go`** — выполнено, см. проверку выше.
+- Нормализация — один `strings.NewReplacer("ё","е"," "," "," "," ","–","—")` для текста и подстрок (`notice_test.go:50`). `TestTypographyDoesNotFailTheCheck` применяет её к `ё`→`е`, U+00A0 перед «дней» и `—`→`–`. Кнопки сравниваются без нормализации.
+- Четыре мутанта текста из DoD — постоянный тест `TestEditsOfMeaningFailTheCheck`.
+- Константа кнопки одна: `grep` по не-тестовым `.go` находит «Мне есть 18, принимаю» и «Отказаться» только в `notice.go`. `flow` сравнивает `Message.Text == render.ConsentButton`/`DeclineButton` (`onboarding.go:74`, `:129-132`), клавиатура строится из тех же констант (`keyboards.go:14`).
+
+**2. FSM.**
+- Переходы соответствуют КД §10.3 с отклонениями Р-2 A, Р-3 A, Mi-5 и US-008.
+- TTL 15 мин и кэш 1 ч считаются от `Clock.Now()`. Ожидание `202` идёт на `clock.Timers`, `time.Now`/`time.After` нет, `forbidigo` чист. Граница `>=` закреплена тестами `DialogTTL-1`/`DialogTTL` и `PlayerTTL`.
+- `Reset` после `200` и после `forget_incomplete` (`forget.go:31`, `:41`). Для ветки `forget_incomplete` теста нет — Mi-2.
+- Согласие ставится только после успешной отправки уведомления (`flow.go:214-219`). Код верен, теста нет — Mi-1.
+- Путь к `links/consent` без нажатия кнопки не найден. `consent` вызывается ровно в одном месте (`onboarding.go:142`), из `awaitingConsent` по точному совпадению. `idle`, `/help`, `consent_required` ведут в `showNotice`.
+- `/forget confirm` не вызывает `Resolve`: `forget` вызывается до разбора диалога (`flow.go:164-166`) и сам `resolve` не зовёт. Закреплено тестами `…WithoutResolve` и `…EndsTheSameForget`.
+- Отменённый `ctx`: `Handle` возвращается сразу (`flow.go:153`), `fail` и `reply` молчат. Внутри хода между последовательными вызовами (`consent`→`start`→`resolve`, `create`→`Player`) отдельной проверки нет. Настоящий `http.Client` запрос с отменённым `ctx` не отправляет, поэтому это N-6.
+
+**3. Приватность.**
+- Ключи лога — константы `step, command, code, status, error` (`flow.go:130-136`), `msg` — литералы. Профиль (`Username`, `FirstName`) читается только в `matchesProfile` (`onboarding.go:191-199`), не хранится и не логируется. `TestTheLogCarriesNoIdentityNameOrText` проверяет ключи поверх `privacy.Handler`.
+- Текст ошибки пишется как `err.Error()` без `privacy.Redact` (`flow.go:203`, `:229`). Сегодня в нём нет ни внешнего id, ни токена: клиент называет метод и путь, `Sender` редактирует сам. Но защита держится только на том, что T-312 подаст логгер поверх `privacy.Handler`, а в `Options.Log` это не записано — Mi-6.
+- В текст игроку попадает только `message` из таблицы ошибок шлюза (`api.NewError` берёт сообщение из таблицы, `errors.go:141-148`). Внутренних деталей шлюза там нет. Исключение — ответ не по контракту: игрок видит английский `http.StatusText` (Mi-4).
+
+**4. Клиент шлюза.**
+- Условие `repeat(...) && !forgetIncomplete(status, data)` (`client.go:301`) снимает повтор только для `503` с кодом `forget_incomplete`. `bus_unavailable` у `/forget` по-прежнему повторяется (тест, 4 запроса), мутант M6 красный.
+- `ForgetResult.Repeated` сохраняет смысл для сетевых ошибок.
+- `APIError.RetryAfter` — целые секунды, дата и мусор дают 0 (`client.go:433-439`).
+- Другие потребители. `grep` по `.worktrees/EPIC-00{1,2,3,4}` и `T-306` находит `client.Forget` только в `internal/gateway/{compaction,context}_test.go`. Там клиент с `Backoff = client.NoRetry` (`context_test.go:133`), и эти тесты ждут `forget_incomplete` ошибкой — поведение для них не меняется, пакет зелёный. `shared/testkit/gateway` `Forget` не вызывает.
+- `forget_incomplete` и `RetryAfter` в других эпиках читают только сам шлюз и `api`.
+- Строка DoD `tasks.md:297` («клиент повторяет сам (`DefaultBackoff`)») расходится с C-08 v1.5. По решению оркестратора её правят при приёмке — N-5.
+
+**5. depguard.** `flow` импортирует из `internal/*` только `internal/gateway/api` и `internal/gateway/client`, `render` — только `api`. `shared/eventbus` не импортируется. Тесты `flow` дополнительно берут `shared/{clock,logging}`, что правило `cmd-telegram-bot` (lax) разрешает. `golangci-lint run ./cmd/telegram-bot/...` и `./...` — 0 issues.
+
+**6. Риски.**
+- **Блокирующий опрос `202 creating` до 10 с — бэклог, не Major.**
+  - Опрос раз в секунду до 10 раз предписан КД §7.1 и UC-002 E4.
+  - Последовательный обработчик принят КД §10.2 («≤ 6 игроков — достаточно»).
+  - `202` возникает только при задержке `entity.created`, в норме это миллисекунды.
+  - NFR-003 — Should.
+  - Больше весит другое: каждый вызов шлюза в обработчике ограничен только `client.DefaultHTTPTimeout` 35 с × 4 попытки `DefaultBackoff`, и при зависшем шлюзе один ход держит всех дольше опроса. Это решает сборка T-312: клиенту `flow` нужен короткий `HTTP.Timeout`. См. бэклог п. 1–2.
+- **Нарезка по 4096** считается в единицах UTF-16, как в Telegram, и проверена на эмодзи (`TestSplitCountsWhatTelegramCounts`). Режет по абзацам, затем по строкам и словам. Клавиатура уходит с последней частью. Дефект — пустые части (Mi-5).
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Mi-1 | Minor | `flow/flow.go:214-219`; `flow/onboarding_test.go` (нет теста) | **Инвариант «согласие — только после успешной отправки уведомления» не закреплён тестом.** Решение 2 карточки и пункт поручения. Мутант M1 (шаг `awaiting_consent` ставится и при ошибке `Send`) зелёный: после упавшего уведомления нажатие кнопки дало бы `links/consent` с `shown_at` текста, который игрок не получил (FR-009, NFR-045). Код верен. | Unit: `f.sent.FailNext(sender.ErrUnavailable)` → `/start` → `StepOf == Idle`; затем `ConsentButton` → 0 вызовов `consent`, ответ — `NoticeText` с клавиатурой. | открыто |
+| Mi-2 | Minor | `flow/forget.go:31-32`; `flow/forget_test.go:100-130` | **`Reset` после `503 forget_incomplete` не закреплён.** Мутант M2 (без `Reset`, только отметка) зелёный. Тест после 503 шлёт только `/forget confirm`, а этот путь кэш не читает. С мутантом кэш `chat → player_id` удалённой связки живёт до часа, и `/look` уходит действием от забытого `player_id` (US-009, «`Reset` после forget»). | В `TestForgetIncompleteAsksToRepeat…` после первого ответа: `StepOf == Idle`; `/look` → вызов `resolve`, `actions` 0. | открыто |
+| Mi-3 | Minor | `flow/onboarding.go:102-114` (`route`), `:36`, `:91`; `flow/mock_test.go:158` | **`notice_due` у согласившегося учитывается не везде и не тестируется.** (а) `route` (связка `consented`, персонажа нет или он `dead`) игнорирует `notice_due`. Вернувшийся через 30+ дней игрок с погибшим персонажем получает «прежний погиб» без повтора уведомления (FR-009 «после 30 дней неактивности», US-008 последний критерий, UC-001 A1; Should). (б) Фикстура `resolved` ставит `NoticeDue` только для несогласившихся, поэтому ветки `start`/`idle` с `NoticeDue` у согласившегося не выполняются ни одним тестом. Мутант M3 зелёный. | В `route` при `consented && NoticeDue` отправлять `NoticeText` (без клавиатуры согласия) перед подсказкой имени. Unit: `resolved("consented","alive"/"dead", …)` с `NoticeDue: true` → `NoticeText` первым сообщением; `/look` при промахе кэша → уведомление, затем «Принято.». | открыто |
+| Mi-4 | Minor | `flow/flow.go:227-234`; `render/errors.go:45-55`; `internal/gateway/client/client.go:426` | **Ответ не по контракту показывается игроку английским статусом.** `apiError` для тела без `error.code` возвращает `APIError{Code: "", Message: http.StatusText}`. `fail` его принимает, `ErrorText` отдаёт `message` как есть: проба P1, `502` прокси → игроку «Bad Gateway». Так же будет с `503`/`504` без JSON после повторов. КД §10.5 требует для сети «сервис недоступен, повторите позже». Утверждение карточки «ответ не по контракту → «Сервис недоступен…»» верно только для `2xx` с неверным телом. | В `fail`: `apiErr.Code == ""` (или `Status >= 500` без кода) → `render.Unavailable`. Unit на `502` с HTML-телом. | открыто |
+| Mi-5 | Minor | `render/delivery.go:109-136` (`pack`), `:60` | **`Split` отдаёт пустые части.** Пустой фрагмент рядом с частью длиннее 4096 уходит отдельным сообщением: длинная строка с `\n` в конце, длинный абзац с `\n\n` в конце, `\n\n` перед длинным абзацем (проба P2). В первых двух случаях пустая часть последняя и несёт клавиатуру. Telegram отклоняет пустой текст (`400`, `ErrRejected`), клавиатура теряется, а `deliver` T-312 получает ошибку посреди доставки. | В `pack` пропускать пустые (после `TrimSpace`) фрагменты при `flush` или отфильтровать части в `Split`. Unit на три формы из P2: частей без текста нет, клавиатура у последней непустой. | открыто |
+| Mi-6 | Minor | `flow/flow.go:203`, `:229`; `:80-82` (`Options.Log`) | **Ошибка пишется в лог без редакции.** `slog.String(keyError, err.Error())` полагается на то, что логгер собран поверх `privacy.Handler`. `Options.Log` этого не требует, а T-312 может подать `logging.New(...)` напрямую. Соседние пакеты бота редактируют текст сами (`sender/telegram.go:212`, `updates/telegram.go:149`). Сегодня в тексте нет внешнего id: клиент называет метод и путь, `Sender` уже отредактирован. Это защита в глубину по пункту SEC-01/02. | `privacy.Redact(err.Error())` в обоих местах. В doc `Options.Log`: «должен быть построен на `privacy.NewHandler`» — строка DoD T-312. | открыто |
+| Mi-7 | Minor | `flow/state.go:97-102` (`d.touched` до `Lock`), `:164-167` (`StepOf` читает `d.step` после `Unlock`); `flow/onboarding.go:177`, `:180`, `:207`, `:232`, `:285` | **Утверждение «`Reset`/`StepOf` из другой горутины безопасны» (карточка, риски) неверно для `StepOf`.** `dialogOf` возвращает указатель, и `StepOf` читает `d.step` вне мьютекса. `Handle` меняет `d.step`, `d.name` и `d.touched` без мьютекса. `StepOf` из `/health` T-312 параллельно с `Handle` — гонка данных. `-race` на Windows её не покажет. `Reset` безопасен: он только удаляет ключ карты. | Копировать шаг под мьютексом (`dialogOf` возвращает значение `dialog`, а `setDialog` пишет копию и `touched` под `Lock`) или записать в doc `StepOf`: «только из горутины `Handle`» и поправить риск карточки. Тест `StepOf` параллельно с `Handle` для CI с `-race`. | открыто |
+| N-1 | Nit | `flow/onboarding.go:74-78` | Случайное нажатие `ConsentButton` игроком с персонажем переводит чат в `awaiting_consent` на 15 мин (проба P3): каждая игровая команда отвечается уведомлением, пока игрок снова не нажмёт кнопку (повторный `consent`) или не отправит `/start`. DoD этого требует («нажатие вне `awaiting_consent` → `NoticeText` и клавиатура»), но о тупике для играющего не говорит. | Оставить. В `HelpText` или в тексте рядом упомянуть `/start`; либо для чата с кэшем игрока показывать уведомление без смены шага. Решение tech-lead#3. | открыто |
+| N-2 | Nit | `flow/flow.go:158`; `render/delivery.go:127` | Мутанты M4 (нет вычистки протухших чатов) и M5 (граница `<=` в `pack`) зелёные. Вычистка подкрепляет утверждение «chat id в памяти не дольше TTL и следующего обновления» (карточка, риски). | Вычистка — тест через `export_test.go` со счётчиком записей: два чата, один протух, после `Handle` другого чата запись удалена. Граница — две части ровно по 4096. | открыто |
+| N-3 | Nit | `internal/gateway/client/client.go:433-439` | `time.Duration(secs) * time.Second` переполняется при `Retry-After` больше ~9,2·10⁹. Значение приходит от своего шлюза. | Ограничить сверху (например, `min(secs, 86400)`). | открыто |
+| N-4 | Nit | `render/delivery.go:88-90` | Нарратив без текста превращается в сообщение из одной пометки «— текст создан ИИ». | Пустой нарратив — без сообщения, как остальные виды (`TrimSpace(d.Text) == ""` до `withMark`). | открыто |
+| N-5 | Nit | `internal/gateway/client/client.go:1`; `tasks.md:297` | Doc пакета ссылается на «C-08 v1.3», поведение уже по v1.5. Строка DoD приёмки T-303 требует повтора `forget_incomplete` клиентом, что расходится с C-08 v1.5 (решение оркестратора — правка при приёмке). | «C-08 v1.5» в doc; строку DoD привести к контракту. | открыто |
+| N-6 | Nit | `flow/onboarding.go:155-158`, `:265-270`, `:39` | Между последовательными вызовами шлюза внутри одного хода `ctx` отдельно не проверяется. С настоящим `http.Client` запрос не уходит; шлюз, не смотрящий на `ctx`, получил бы `resolve` после `consent` и `Player` после `create`. Тест `ctxBlindGateway` проверяет только вход в `Handle`. | `if t.ctx.Err() != nil { return }` перед `t.start()` в `consent` и перед опросом, либо оставить как есть с комментарием. | открыто |
+
+### Вопросы к tech-lead#3 (через оркестратора)
+
+1. **N-1:** принять тупик «кнопка согласия у играющего → 15 мин уведомлений» как есть или показывать уведомление без смены шага.
+2. **Mi-3 (а):** повтор уведомления по `notice_due` в `route` (согласившийся без живого персонажа) — в T-311 или бэклогом вместе с T-320. Требование Should.
+
+### Предложения в бэклог
+
+1. **T-312 (строка DoD):** клиент шлюза для `flow` — короткий `HTTP.Timeout` (≤ 5–10 с) и отдельный от `deliver`. Сейчас один ход при зависшем шлюзе держит всех игроков до 35 с × 4 попытки. Логгер `flow` строится на `privacy.NewHandler` (Mi-6).
+2. **EPIC-004, бэклог (поддерживаю п. 3 исполнителя):** на `202 creating` отвечать «создаётся» сразу и доводить через `/status` или доставку `system`, а не опросом в обработчике.
+3. **T-306:** заменить `flow.ValidName` на `api.ValidCharacterName` (решение оркестратора, бэклог п. 1 исполнителя).
+4. **system-architect:** КД §10.3 — `/help` без `links/consent`, Р-2 A, Р-3 A, текст кнопки, свободный текст → список команд (US-008); КД §10.5 — поведение при ответе не по контракту (Mi-4).
+5. Поддерживаю п. 2, 4, 5 бэклога исполнителя.
+
+### Риски и допущения
+
+- Гонка Mi-7 выведена чтением: `-race` без cgo недоступен.
+- Отказ Telegram на пустой текст (Mi-5) — известное поведение Bot API («message text is empty»). Реальный Telegram не вызывался.
+- Регрессию клиента в других эпиках проверял `grep` по кончикам `.worktrees/EPIC-00{1,2,3,4}` и `T-306` (только чтение) и прогоном `./internal/gateway/...` в T-311. Ветки других эпиков не собирались.
+- Доставку `deliver` (T-312) и e2e (T-314/T-315) не проверял — их ещё нет.
+
+## T-317 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-317-gateway-bot-docs` (`.worktrees/T-317`), база `745f6da` — совпадает с кончиком `epic/EPIC-004-gateway-bot`. Изменения не закоммичены:
+  - новые: `internal/gateway/README.md`, `cmd/telegram-bot/README.md`;
+  - правка: `Docs/ops/runbook.md`, только §6 (остальные разделы diff не затрагивает);
+  - документы: карточка T-317 и запись dev-log.
+- Сверено с:
+  - раздел «### T-317» и DoD-common в `tasks.md`; строки приёмок T-310 и T-318 в DoD T-317; DoD T-311, T-312;
+  - карточка T-318, «Условия, при которых текст правдив» и «Условия правдивости У-1…У-9 — носители», `NoticeText` §1;
+  - карточка `EPIC-001-foundation/tasks/T-463.md` (статус `todo`, части (а)–(в), п. 6 «строка для T-317»);
+  - КД `components/gateway-and-bot.md` §2 (таблица блоков), §11.4;
+  - код: `internal/gateway/{context.go, api/router.go, api/middleware.go, handlers/links.go, links/forget.go, links/store.go, store/{open,compact,retention}.go}`, `cmd/telegram-bot/internal/{config,privacy,updates,access}`, `cmd/multiverse/{serve.go,main_test.go}`, `shared/env/vars.go`, `.env.example`, `.golangci.yml`, `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`, `Makefile`, `scripts/compose-lint.sh`, `shared/testkit/gateway/harness.go`.
+- Карта владения не нарушена: код, `.env.example`, `CLAUDE.md` не менялись.
+
+### Вердикт
+**Вернуть.** Critical 0 · Major 2 · Minor 11 · Nit 8.
+
+Сделано хорошо:
+- списки переменных совпадают с манифестом и с тем, что код читает на самом деле;
+- статус «готово / не готово» по T-306…T-309, T-311, T-312 и T-463 выделен отдельно, отсутствие `main.go` бота названо прямо;
+- проверены и верны: маршруты, порядок middleware, поведение `replay`, коды выхода, `409`, лимиты отказов;
+- условия правдивости У-1, У-2, У-4, У-5 названы условиями, а не готовыми фактами.
+
+Возврат из-за двух Major:
+- Ma-1: `/health` описан с проверкой БД, которой в коде нет;
+- Ma-2: процедура ротации предлагает вписать токен в URL, и он попадает в историю оболочки. Сама проверка при этом делается отозванным токеном и ничего не показывает.
+
+### Проверено ревьюером
+- `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код 0.
+- Относительные ссылки и пути — скрипт Python в scratch (`t317r1-links.py`), удалён по точному пути. Markdown-ссылок `[..](..)` в новых README нет, все пути даны в обратных кавычках. Каждый путь, названный существующим, есть в дереве. `api/gateway.openapi.yaml` находится только от корня (N-3). Пути, помеченные как будущие (`internal/flow`, `render/notice.go`, `outbox/`, `snapshot/`), отсутствуют, как и сказано. Таблицы корректны: число столбцов в строках совпадает.
+- Секреты: grep по трём файлам на `\d{5,}:[A-Za-z0-9_-]{10,}`, `AAA…`, `minioadmin`, `password` — пусто. Токены только в виде плейсхолдеров `<токен>`, `<цифры>:<секрет>`.
+- Цели `make up`, `make logs`, `make health`, переменные `PROFILES`/`COMPOSE_ENV_FILES` и правила 2 и 4 `compose-lint` есть в `Makefile` и `scripts/compose-lint.sh`. Команды Docker, стенда и сети не запускались.
+
+Верно по дереву:
+- переменные `MV_GATEWAY_*`, `MV_TELEGRAM_*`, `MV_WORLD_ID`, `MV_MINIO_*`, `MV_GM_PATH` и их смысл;
+- `--bus=memory` требует `--contexts=all` (`serve.go:160`, `main_test.go:80`), `MV_CORE_ADDR` по умолчанию `127.0.0.1:8090`;
+- 4 маршрута (`router.go:67-70`), порядок `Chain` (`middleware.go:100-103`), 64 КиБ, 5 с, `noLogOperations`;
+- `replay` без лимитера и уборки (`context.go:215-231`);
+- поля `/health`: `projection`, `mode`, `links_compaction`, `projection_error`, `bus` (кроме Ma-1);
+- `ExitCode` 0/1/3 (`updates.go:43-51`), `409` из-за второго экземпляра или webhook (`telegram.go:83`), `WithUpdatesChannelCap(0)`;
+- `config.Load`: форма токена, `ErrTokenMissing`, соль и её длина; `Redact` `bot<цифры>:…`;
+- отказ «Доступ по приглашению.»: не больше 1 на чат и 10 на весь бот (`gate.go:49`), `bot_denied_total`;
+- порты `127.0.0.1:8088` и `127.0.0.1:8089`, токен только через `environment:` (`docker-compose.bot.yml`), соль и лимит команд в compose не переданы (T-463 (в));
+- `/setjoingroups` → Disable: и в README, и в runbook, с верной причиной (SEC-07).
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `internal/gateway/README.md:117-118` | «`links_store`, `gateway_store` — `ok`/`fail` (реальная проверка БД, кэш результата не чаще раза в 10 с)». В коде обе детали — константа `runtime.StatusOK`, пока контекст запущен (`context.go:460-461`). Ни проверки БД, ни кэша нет. КД §11.4 прямо говорит: «В коде T-303 `links_store` и `gateway_store` — `ok`, пока контекст запущен; настоящая проверка БД … — T-309». Нереализованное описано как готовое, а оператор будет доверять `ok` при недоступной базе. | «`links_store`, `gateway_store` — сейчас всегда `ok`, пока контекст запущен; настоящая проверка БД — T-309». Заодно: `bus` появляется только со значением `fail`, `bus: ok` в ответе нет. | открыто |
+| Ma-2 | Major | `cmd/telegram-bot/README.md:119-121`; `Docs/ops/runbook.md:512-516` | «(`https://api.telegram.org/bot<токен>/getWebhookInfo` — `deleteWebhook`, если он есть)». (1) Совет исполняется вставкой токена в командную строку или адресную строку браузера. Токен уходит в историю оболочки (`~/.bash_history`, история PSReadLine), в аргументы процесса и в историю и синхронизацию браузера. Процедура по SEC-08 сама создаёт утечку. (2) Шаг 5 runbook: «проверить, что webhook для него [старого токена] не установлен». После `/revoke` из шага 1 старый токен получает `401`, и проверка ничего не показывает. Проверять надо новым токеном. | Шаг «проверить webhook» — новым токеном и без токена в команде. Например, Git Bash: `IFS= read -rs TG_TOKEN` (ввод не отображается и не пишется в историю) → `printf 'url = "https://api.telegram.org/bot%s/getWebhookInfo"\n' "$TG_TOKEN" \| curl -sS -K -` → при непустом `"url"` тот же приём с `deleteWebhook` → `unset TG_TOKEN`. `printf` встроен в оболочку, а `curl -K -` читает URL из stdin, поэтому токена нет ни в истории, ни в argv. Добавить явный запрет: не открывать URL с токеном в браузере и не вставлять в чаты вывод `docker compose config` и `docker inspect telegram-bot`, где токен виден открыто. | открыто |
+| Mi-1 | Minor | `internal/gateway/README.md:164-168` | «`/forget` … планирует сжатие … если сжатие не завершилось сразу, … повторный `/forget` отвечает `503 forget_incomplete`, пока фоновая уборка (раз в час, `sweep`) не закончит его». По коду всё иначе. Сжатие выполняется в том же вызове, а не планируется (`forget.go:117-120`). Первый же `/forget` отвечает `503` (`handlers/links.go:148-151`). Повтор сам пробует сжатие и при успехе отвечает `200 {deleted:false}` (`forget.go:88-93`). `Sweep` добивает отметку раз в минуту (`retention.go:13`, `links/store.go:270`), раз в час идёт отдельный `Compact`, ещё раз — при старте. | «`/forget` удаляет строку и сразу сжимает `links.db`. Если сжатие не прошло (например, базу держит читатель), ответ — `503 forget_incomplete` с `Retry-After: 5`, `/health` — `degraded` с `links_compaction: pending`. Отметку снимает первый успешный повтор `/forget`, уборка раз в минуту, часовое сжатие или рестарт». | открыто |
+| Mi-2 | Minor | `internal/gateway/README.md:27, 32, 53` | Таблица «эти пакеты в дереве отсутствуют» включает `shared/testkit/gateway`, но пакет есть (`harness.go`, `Harness` v0, T-018). Нет только `FakeGateway` с HTTP-обвязкой. Строка 53: `client/` «используется ботом, `shared/testkit/gateway`». Сейчас его импортируют только тесты `internal/gateway` и `cmd/multiverse`, бот начнёт с T-311. | Строка: «`FakeGateway` и HTTP-обвязка рядом с `Harness` v0 (`shared/testkit/gateway` уже есть) — T-308». Для `client/`: «клиент C-08; потребители — бот (с T-311) и `FakeGateway` (T-308)». | открыто |
+| Mi-3 | Minor | `internal/gateway/README.md:61-73` | Команды «Как поднять локально» не задают `MV_GATEWAY_DATA_DIR`. По умолчанию это `/data` (`vars.go:98`). На Linux и macOS без root старт падает, на Windows создаётся `\data` в корне диска (runbook §2, строки 189-194). Строка 101 таблицы это упоминает, но команды в таком виде не работают. | Перед обеими командами: `export MV_GATEWAY_DATA_DIR="$HOME/.multiverse/gateway"` (вне репозитория) со ссылкой на runbook §2. | открыто |
+| Mi-4 | Minor | `cmd/telegram-bot/README.md:186-189` | «правило для `cmd/telegram-bot` пока не принято отдельно; граница проверяется тестом `go list -deps`». На этом дереве правило есть: `cmd-telegram-bot` (`.golangci.yml:385-396`) и исключение в `internal-unlisted` (`:178-179`). | «Граница — правило depguard `cmd-telegram-bot` (только `internal/gateway/client` и `internal/gateway/api`, без `shared/eventbus`); вторая линия — тест `go list -deps` в `internal/config/imports_test.go` (переедет в пакет бота с T-312)». | открыто |
+| Mi-5 | Minor | `cmd/telegram-bot/README.md:5-7` | «Собственного хранилища у бота нет: состояние диалога и связка `chat_id → player_id` — на стороне шлюза (`links.db`)». По КД §2 (таблица блоков) у бота «ничего персистентного; в памяти — только состояние диалога на чат (TTL), кэш `chat_id → player_id` (TTL)». FSM `flow` с TTL 15 мин тоже живёт в боте (T-311). | «Персистентного хранилища у бота нет: связка аккаунта с игроком — в `links.db` шлюза; состояние диалога и кэш `chat_id → player_id` — в памяти бота с TTL (T-311)». | открыто |
+| Mi-6 | Minor | `cmd/telegram-bot/README.md:72` | Пример `make up PROFILES=memory,bot` стоит в том же README, где правило У-2 (строки 143-147) запрещает `memory`, пока в allow-list есть кто-то кроме владельца. Пример подталкивает к нарушению условия правдивости FR-009. | Пример оставить, но рядом написать: «`memory`/`legacy` — только пока allow-list состоит из владельца (У-2, «Данные игроков»)». Для внешних игроков пример — `make up PROFILES=bot`. | открыто |
+| Mi-7 | Minor | `cmd/telegram-bot/README.md:78, 131-133` | Прямые `docker compose -f docker-compose.yml -f docker-compose.bot.yml up -d telegram-bot` и `… logs` даны без `COMPOSE_ENV_FILES`. Без переменной compose падает на первом `*_IMAGE` (врезка runbook, строки 28-36; шапка `docker-compose.bot.yml`). В runbook это закрывает общая врезка, в README предупреждения нет. | Перед командами: `export COMPOSE_ENV_FILES=.env,build/versions.env` (PowerShell: `$env:COMPOSE_ENV_FILES = ".env,build/versions.env"`) со ссылкой на врезку runbook. | открыто |
+| Mi-8 | Minor | `Docs/ops/runbook.md:523-524, 535-538` | (1) Проверки через голый `docker compose ps` зависят от набора `-f`. Без `-f docker-compose.bot.yml` или `-f docker-compose.legacy.yml` сервисов `telegram-bot`, `chromadb` и `semantic-memory` нет в модели, и `ps` может их не показать. Список У-2 неполон: нет `memory` (`docker-compose.yml:392-394`) и `narrative-orchestrator` (`docker-compose.legacy.yml:113-114`). (2) `/telegram-bot health --url …` на хосте не существует: бинарник есть только в образе. | (1) Проверка, не зависящая от файлов: `docker ps --filter label=com.docker.compose.project=<проект> --format '{{.Names}}'`, где нет `qdrant`, `neo4j`, `memory`, `chromadb`, `semantic-memory`, `narrative-orchestrator`. (2) Здоровье бота — `make health PROFILES=<набор>,bot` (проба `127.0.0.1:8089`, `Makefile:386-388`) или `docker compose -f docker-compose.yml -f docker-compose.bot.yml exec telegram-bot /telegram-bot health` после T-312. | открыто |
+| Mi-9 | Minor | `Docs/ops/runbook.md:565-581` | Прежний хвост §6 («**`PROFILES=` замещает активный набор…**» и «Проверка: … `logs --tail=50`») остался после новых подразделов. Теперь он стоит под заголовком «Другие правила эксплуатации бота», к которому не относится, и повторяет шаги 3-4 ротации (строки 499-511). | Предупреждение про `PROFILES=` перенести в шаг 3 (одна фраза и ссылка на раздел 2), повтор «Проверка: …» удалить. | открыто |
+| Mi-10 | Minor | `Docs/ops/runbook.md:495-498, 520` | Чек-лист: «`MV_TELEGRAM_BOT_TOKEN` в `.env` обновлён, нигде больше не хранится». Шага для копий `.env` вне рабочей папки нет. Раздел 4 (строка 453) восстанавливает `.env` «из менеджера паролей владельца». Без обновления записи там восстановление на чистой машине вернёт отозванный токен, и бот выйдет с кодом 1. | Шаг 2: «обновить запись `.env` в менеджере паролей (раздел 4); резервные копии `.env` рядом с репозиторием обновить или удалить». Пункт чек-листа — так же. | открыто |
+| Mi-11 | Minor | карточка T-317, «Выполнение»; `tasks.md:410, 411, 414` | Два пункта DoD без следа выполнения. (1) «Раздел runbook … проверен „сухим прогоном“ (шаги выполнимы без доступа к прод-токену)». (2) Согласование правки runbook с devops (поле «Метка» карточки; строки приёмок T-318 и T-310). В карточке и dev-log нет ни результата, ни явного переноса. | (1) Записать результат сухого прогона: какие шаги пройдены без токена; шаги, требующие бинарника, — перенос на T-390 со ссылкой. (2) Согласование devops — через tech-lead#3; отметить в карточке. | открыто |
+| N-1 | Nit | `cmd/telegram-bot/README.md:131-133`; `Docs/ops/runbook.md:508-511, 522` | Проверка «токена нет» — глазами по `logs --tail=50`. Утечка при старте может уйти выше 50 строк, а глазами токен узнает только тот, кто его помнит. | `… logs telegram-bot \| grep -cE 'bot[0-9]+:[A-Za-z0-9_-]{20,}'` → `0`: шаблон без самого токена, по всему логу контейнера. | открыто |
+| N-2 | Nit | `Docs/ops/runbook.md:491-494, 519` | «`/token` для получения нового без явного отзыва старого». Фраза читается так, будто старый токен останется рабочим. Ревьюер это не проверял (сеть вне поручения), но у бота один действующий токен. | Нейтрально: «`/revoke` (или «API Token → Revoke» в меню бота) — выпустить новый токен; старый перестаёт действовать». Сверить с текущим интерфейсом @BotFather при сухом прогоне (Mi-11). | открыто |
+| N-3 | Nit | `internal/gateway/README.md:134-135` | Путь `api/gateway.openapi.yaml` в README каталога `internal/gateway` читается как `internal/gateway/api/…`, а файл лежит в корне. «Остальные операции появляются вместе с T-306/T-307» — операции I2 появятся с T-352, T-354 и T-356. | «`api/gateway.openapi.yaml` в корне репозитория»; «с T-306/T-307 (I1) и T-352/T-354/T-356 (I2)». | открыто |
+| N-4 | Nit | `internal/gateway/README.md:161-162, 165` | «более широкие права — отказ старта»: на Windows проверка прав пропускается (`store/open.go:213-215`). «`checkpoint` + `incremental_vacuum`»: в коде порядок обратный (`store/compact.go:28-32`). | «(кроме Windows, где POSIX-прав нет)»; «`incremental_vacuum` + `wal_checkpoint(TRUNCATE)`». | открыто |
+| N-5 | Nit | `internal/gateway/README.md:37-38, 129-130, 148-150`; `cmd/telegram-bot/README.md:17-19, 103-104` | Язык. (1) «Не описывай эти возможности как готовые…» — указание авторам на «ты» в документе оператора. (2) «— трекер задачи» — непонятно. (3) «не логируют тело и код причины ошибки за пределами `request_id`/`code`» — по коду в лог идут ровно `request_id` и `code` (`middleware.go:180-191`), а фраза читается как «код не логируется». (4) «см. «Открытые вопросы» отчёта задачи» — отчёта в репозитории нет. (5) Комментарий compose дан в кавычках как цитата, хотя в файле он по-английски. | (1) Убрать или заменить на «Статус обновляется вместе с T-306…T-309». (2) «полный состав — T-309». (3) «Для них в журнал запроса пишутся только `request_id` и `code`». (4) Ссылка на карточку T-463, часть (в). (5) Пересказ без кавычек. | открыто |
+| N-6 | Nit | `cmd/telegram-bot/README.md:167-168`; `Docs/ops/runbook.md:531-533` | DoD (`tasks.md:411`) требует ссылку на карточку T-318, а в тексте только путь в кавычках. Кликабельных ссылок в новых README нет вообще. | `[tasks/T-318.md](../../Docs/dev-team/epics/EPIC-004-gateway-bot/tasks/T-318.md)`; так же для runbook (`../dev-team/epics/…`) и КД. | открыто |
+| N-7 | Nit | карточка T-317:10; `tasks.md:401` | «Ветка» — `task/T-317-docs-gateway-bot`, фактическая ветка — `task/T-317-gateway-bot-docs`. | Оркестратору: привести к фактическому имени. | открыто |
+| N-8 | Nit | `cmd/telegram-bot/README.md:137-139`; `Docs/ops/runbook.md:528-529` | Вводная пересказывает обещание `/start` («записи удаляются автоматически», «копия связки ≤ 30 дней») без фразы, на которой стоит У-1: «В резервных копиях игры эти записи могут храниться ещё до 30 дней сверх указанных сроков». Сами правила верны. | Добавить эту фразу в вводную, чтобы правило про архивы `make backup` читалось как следствие. | открыто |
+
+### Вопросы tech-writer — рекомендация
+1. **Нет `main.go` бота.** README и §6 runbook не откладывать до T-312: статус «бинарника нет» записан честно, этого достаточно. Предложение tech-lead#3 — строка DoD T-312: «`cmd/telegram-bot/README.md` (статус, `/health`, коды выхода из `main`) и `Docs/ops/runbook.md` §6 (снять пометку „выполнимо после T-312“, сухой прогон ротации) обновлены». И строка DoD T-311: «таблица статуса `cmd/telegram-bot/README.md` — `flow`/`render` готовы».
+2. **Строка для `CLAUDE.md`.** В этой задаче не править: DoD (`tasks.md:412`), владелец — tech-writer (EPIC-001 F-9). `CLAUDE.md` живёт в `develop`, а `internal/gateway` пока только в ветке эпика. Поэтому правка идёт одним заходом при контрольном слиянии I1-α или I1 EPIC-004 в `develop`. Там же исправить устаревшее «`gateway` — заглушка» в «Статус кода». Предлагаемые строки карты каталогов: `cmd/telegram-bot/  # Telegram-бот игрока (EPIC-004); main.go — T-312, до неё бинарник не собирается (cmd/telegram-bot/README.md)` и `internal/gateway/  # контекст gateway (C-08): links, actions, readmodel, consumer; статус — internal/gateway/README.md`.
+
+### Предложения в бэклог (вне границ T-317)
+1. Runbook §8, карточка `gateway` (строка 606): «том `gateway-data` зарезервирован, `internal/gateway` ещё не реализован» — неверно с T-303. Раздел 4 (строки 457-461) про `multiverse db backup` для `links.db` сверить с деревом. Владелец — tech-writer и devops.
+2. T-463 п. 6: когда появится `multiverse db backup`, в README бота и runbook записать формат имён `links-<date>.db.age` и `gateway-<date>.db` и порядок «открытая копия удаляется сразу после `docker cp`».
+3. `docker-compose.bot.yml`: порт `127.0.0.1:8089:8089` и URL healthcheck зашиты литералами, при другом `MV_TELEGRAM_HEALTH_ADDR` проба промахнётся. Для `gateway` это уже решено через `MV_CORE_ADDR` (T-408). Решает devops.
+
+### Риски и допущения
+- Поведение Telegram (`401` на отозванный токен, `409` при активном webhook, работа `/token` у @BotFather) проверено по коду и документации проекта, без сети.
+- Утверждение Mi-8 «`docker compose ps` может не показать сервисы вне модели» зависит от версии compose; предложенная проверка через `docker ps` от версии не зависит.
+- Docker, стенд LLM, `.env` и `— копия.env` не трогал. В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке.
+
+## T-317 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-317-gateway-bot-docs` (`.worktrees/T-317`), база `745f6da`. Изменения не закоммичены: новые `internal/gateway/README.md` и `cmd/telegram-bot/README.md`; правка `Docs/ops/runbook.md` (по diff затронут только §6); карточка T-317 и dev-log.
+- Повторная итерация: проверены исправления Ma-1, Ma-2, Mi-1…Mi-11, N-1…N-8 и регрессия в переписанных местах. Каждое утверждение исправлений сверено с кодом дерева, а не с текстом ревью #1.
+- Сверено с кодом и конфигурацией: `internal/gateway/{context.go, handlers/links.go, links/forget.go, links/store.go, store/{compact,open,retention}.go, api/middleware.go}`, `cmd/telegram-bot/internal/{access/gate.go, privacy/privacy.go, updates/updates.go, config/imports_test.go}`, `shared/env/vars.go`, `.golangci.yml` (`internal-gateway`, `cmd-telegram-bot`), `docker-compose.yml`, `docker-compose.bot.yml`, `docker-compose.legacy.yml`, `Makefile` (`ACTIVE_PROFILES`, `health`, `logs`), `shared/testkit/gateway`, карточка T-318 («Условия правдивости»).
+- Карта владения не нарушена: код, `.env.example`, `CLAUDE.md`, `tasks.md` не менялись.
+
+### Вердикт
+**Принять.** Critical 0 · Major 0 · Minor 2 · Nit 2 (новые; открытые из ревью #1 — только Mi-11, часть 2, и N-7 для `tasks.md` — адресованы оркестратору).
+
+Оба Major закрыты. Новые Minor касаются только удобства процедуры проверки webhook и не создают утечку: их можно исправить в T-312, когда снимается пометка «выполнимо после T-312» (строка DoD T-312 из ревью #1), или отдельной правкой до приёмки — на усмотрение tech-lead#3.
+
+### Проверено ревьюером
+- `go run ./cmd/mvctl env check` — `74 variables declared, compared with .env.example`, код 0.
+- Ссылки: скрипт Python в scratch (`t317r2-links.py`), удалён по точному пути. Относительных Markdown-ссылок: `cmd/telegram-bot/README.md` — 2, runbook — 4, карточка T-317 — 3; битых — 0. Пути в обратных кавычках, которых нет в дереве, — только заявленные будущими (`internal/flow`, `internal/render`, `internal/deliver`, `render/notice.go`, `outbox/`, `snapshot/`, `bin/telegram-bot`) и имена символов или библиотек. `api/gateway.openapi.yaml` есть в корне.
+- Синтаксис процедуры webhook проверен по документации, без выполнения и без сети:
+  - `help read` (bash в Git Bash): `-r` не даёт обратной косой черте экранировать символы, `-s` не выводит ввод с терминала. Без `-e` ввод не идёт через Readline и в историю не попадает. `IFS=` сохраняет пробелы по краям;
+  - `printf` — встроенная команда оболочки (`type printf`), поэтому токен не попадает в argv внешнего процесса. В истории остаётся литерал `"$TG_TOKEN"`. Переменная не экспортирована и не передаётся `curl` через окружение;
+  - `curl --manual` (8.21.0), `-K, --config`: имя файла `-` — чтение конфигурации из stdin. URL задаётся строкой `url = "…"`, в кавычках значимы только `\\ \" \t \n \r \v`. В токене (`[0-9]+:[A-Za-z0-9_-]+`) таких символов нет. Продолжение строки `\` с `| curl` на следующей строке в runbook записано верно;
+  - запрет выкладывать `docker compose config` и `docker inspect telegram-bot` есть в обоих местах. Интерполяция `${MV_TELEGRAM_BOT_TOKEN:?…}` в `docker-compose.bot.yml:63` подтверждает, что в выводе токен открыт.
+- Команды Docker, стенда, сети и `curl` к Telegram не запускались.
+
+### Статус замечаний ревью #1
+
+| # | Статус | Проверка по дереву |
+|---|---|---|
+| Ma-1 | закрыто | `internal/gateway/README.md:124-126` — «сейчас всегда `ok`, пока контекст запущен; настоящая проверка — T-309» — совпадает с `context.go:460-461`. Ключ `bus` только со значением `fail` (`context.go:477-480`) — верно. `fail` до `Start` и после `Stop` (`context.go:406-409, 455-456`), значения `projection` `ok/missing/stale` (`readmodel/model.go:43-49`) — верно. |
+| Ma-2 | закрыто | Оба места: проверка **новым** токеном, `IFS= read -rs` → `printf … \| curl -sS -K -` → `unset`. Токена нет в URL команды, argv и истории; запрет на URL в браузере и на вывод `config`/`inspect` есть. Шаг «проверить старым токеном» удалён. Остались недочёты PowerShell-варианта и порядка шагов — новые Mi-12, Mi-13, утечки нет. |
+| Mi-1 | закрыто | Сжатие в том же вызове (`forget.go:117-120`); `503 forget_incomplete` + `Retry-After: 5` (`handlers/links.go:31, 148-151`); отметку снимают повтор (`forget.go:88-93`), `Sweep` раз в минуту (`links/store.go:270-271`, `retention.go:13`), часовой `Compact` (`context.go:389`), `Stop`/рестарт (`context.go:164, 424-428`). |
+| Mi-2 | закрыто | `shared/testkit/gateway` есть (`harness.go`), строка переписана; `client/` сейчас импортируют только тесты — «бот (с T-311) и `FakeGateway` (T-308)» верно. |
+| Mi-3 | закрыто | `export MV_GATEWAY_DATA_DIR=…` перед обеими командами; умолчание `/data` — runbook §2. |
+| Mi-4 | закрыто | Правило `cmd-telegram-bot` (`.golangci.yml:385-396`): allow `internal/gateway/client$`, `internal/gateway/api$`, deny `internal`, `shared/eventbus`; тест `go list -deps` (`config/imports_test.go:37`). |
+| Mi-5 | закрыто | Вводная соответствует КД §2. |
+| Mi-6 | закрыто | Условие У-2 и `PROFILES=bot` рядом с примером. |
+| Mi-7 | закрыто | `COMPOSE_ENV_FILES` (bash и PowerShell) перед прямой командой; соответствует шапке `docker-compose.bot.yml:20-22`. |
+| Mi-8 | закрыто | `docker ps --filter label=com.docker.compose.project=…`; список дополнен `memory` (`docker-compose.yml:392`) и `narrative-orchestrator` (`docker-compose.legacy.yml:113`). `make health` пробует `127.0.0.1:8089` (`Makefile:386-388`). |
+| Mi-9 | закрыто | Хвоста §6 нет; предупреждение `PROFILES=` — в шаге 3 со ссылкой на раздел 2. |
+| Mi-10 | закрыто | Шаг 2 и чек-лист: менеджер паролей (раздел 4, строка 453) и копии `.env`. |
+| Mi-11 | частично | (1) Сухой прогон записан в карточке по шагам; перенос шагов 3–4 на T-390 обоснован (нет `main.go`). (2) Согласование правки runbook с devops не выполнено, передано оркестратору и tech-lead#3. Ревью это не блокирует, но это пункт DoD: закрыть до приёмки. |
+| N-1 | закрыто | `grep -cE` по всему логу; шаблон совпадает с формой, которую вырезает `privacy.go:38`. Уточнение — N-9. |
+| N-2 | закрыто | Формулировка нейтральна, сверка с @BotFather — открытый пункт живого прогона. |
+| N-3 | закрыто | «в корне репозитория»; T-352/T-354/T-356. |
+| N-4 | закрыто | `store/open.go:213-215` (Windows); порядок `incremental_vacuum` → `wal_checkpoint(TRUNCATE)` (`store/compact.go:28-32`). |
+| N-5 | закрыто | Фраз «Не описывай», «трекер», «отчёт задачи» нет; «только `request_id` и `code`» — верно (`middleware.go:36, 180-191`); комментарий compose пересказан без кавычек и по смыслу верно (`docker-compose.bot.yml:53-55`). |
+| N-6 | закрыто | Ссылки на T-318 (оба README, runbook), T-463, КД — все резолвятся. |
+| N-7 | частично | Карточка исправлена; `tasks.md:401` по-прежнему `task/T-317-docs-gateway-bot` — у оркестратора. |
+| N-8 | закрыто | Фраза У-1 в обоих местах дословно совпадает с `NoticeText` (T-318, строка 66). |
+
+### Новые замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Mi-12 | Minor | `Docs/ops/runbook.md:540-541`; `cmd/telegram-bot/README.md:139-140` | PowerShell-вариант дан словами («аналогично, токен через `Read-Host -AsSecureString`, конфигурация `curl` через stdin»), готовой команды нет. Утечки текст не создаёт, но выполнить его буквально нельзя. (1) В Windows PowerShell 5.1 `curl` — псевдоним `Invoke-WebRequest`, и `curl -sS -K -` падает на разборе параметров. (2) Из `SecureString` ещё нужно получить строку, и способ не назван. Оператор будет импровизировать, и самый короткий путь — вставить токен в URL, то есть тот сценарий, который закрывал Ma-2. | Дать команду: `$s = Read-Host -AsSecureString` → `$t = [System.Net.NetworkCredential]::new('', $s).Password` → ``"url = `"https://api.telegram.org/bot$t/getWebhookInfo`"" \| curl.exe -sS -K -`` → `Remove-Variable s, t`. Явно `curl.exe`, не `curl`. В истории PSReadLine остаётся литерал `$t`; ввод `Read-Host` в историю не пишется. | открыто |
+| Mi-13 | Minor | `Docs/ops/runbook.md:511-543` | Порядок шагов противоречит тексту. Шаг 3 перезапускает бота, шаг 5 проверяет webhook и заканчивается фразой «снять его перед перезапуском». Если оператор идёт по порядку и webhook у бота есть, после шага 3 процесс выходит с кодом 3 (`updates.go:47-48`) и уходит в цикл рестартов. README (`:142-143`) сам предупреждает об этом цикле. | Переставить проверку webhook перед перезапуском (шаг 3 ↔ шаг 5, чек-лист — в том же порядке). Второй вариант — в шаге 5 написать: «если после шага 3 бот вышел с кодом 3 — снять webhook и перезапустить ещё раз». | открыто |
+| N-9 | Nit | `Docs/ops/runbook.md:526-527`; `cmd/telegram-bot/README.md:157` | Шаблон `bot[0-9]+:[A-Za-z0-9_-]{20,}` ловит только форму с префиксом `bot`, то есть только то, что вырезает `Redact` (`privacy.go:38`). Голый `<цифры>:<секрет>`, например из будущей ошибки конфигурации `main.go`, проверка «токена нет» пропустит. | `grep -cE '[0-9]{5,}:[A-Za-z0-9_-]{30,}'` покрывает обе формы, `bot<redacted>` не совпадает. | открыто |
+| N-10 | Nit | `Docs/ops/runbook.md:490, 521, 543`; `internal/gateway/README.md:127` | (1) В runbook пути `internal/updates.ErrUnauthorized`, `internal/privacy`, `internal/updates.ErrConflict` читаются от корня репозитория, где `internal/` — контексты платформы, а этих пакетов нет. Полный путь назван только во врезке «Статус». (2) «нового мира ещё нет снапшота» — пропущено «у». | (1) `cmd/telegram-bot/internal/…` при первом упоминании в шаге или один раз после врезки «Статус». (2) «у нового мира ещё нет снапшота». | открыто |
+
+### Предложения в бэклог
+- Без изменений к ревью #1: runbook §8, карточка `gateway`; формат имён копий по T-463 п. 6; литералы порта в `docker-compose.bot.yml`.
+- Строки DoD T-311, T-312 и строки `CLAUDE.md` в карточке (раздел «Передать») записаны верно, дословно из ревью #1. Внести их — оркестратору и tech-lead#3.
+
+### Риски и допущения
+- Поведение Telegram не проверялось по сети: `409` на `getUpdates` при активном webhook, судьба webhook после `/revoke`, путь меню @BotFather. Процедура это оговаривает («сверить при живом прогоне», T-390/T-391).
+- Утверждение Mi-12 о псевдониме `curl` относится к Windows PowerShell 5.1. В PowerShell 7 псевдонима нет, но `curl.exe` работает в обеих версиях.
+- Docker, стенд LLM, `.env` и «— копия.env» не трогал. В рабочей папке задачи добавил только этот раздел и строку в карточке.
+
+## T-306 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-306-characters-sessions` (`.worktrees/T-306`), база — кончик эпика `745f6da`. Изменения не закоммичены: 14 изменённых файлов и 23 новых.
+- Код:
+  - пакеты `internal/gateway/{characters,session,turns}`;
+  - `api/names.go`, `api/router.go`, `handlers/characters.go`, `context.go`;
+  - `links/{store,forget}.go`, `readmodel/model.go`, `actions/{service,turns}.go`;
+  - `shared/env/vars.go`, `.env.example`, `api/gateway.openapi.yaml`;
+  - фикстура `internal/gateway/testdata/analytics/solo-30.jsonl` и тесты.
+- Сверено с:
+  - разделом «T-306» в `tasks.md`, включая строки DoD приёмки T-303 и T-305;
+  - карточкой `tasks/T-306.md`;
+  - КД шлюза §4.2, §5.2, §6, §7.1, §7.6, §11.3;
+  - C-08 (коды `api/errors.go`) и C-10 (`contracts.md` §10, схемы `schemas/events/analytics.*.v1.json`);
+  - ADR-009 (дополнение, п. 2) и ADR-019;
+  - кодом T-302…T-305: `store/open.go`, `consumer`, `actions/service.go`, `actions/publish.go`, `shared/eventbus/kafka.go`.
+- Решения оркестратора 1–7 по вопросам исполнителя учтены, эти пункты замечаниями не считаются. Исключение — объём решения 1 (Mi-5).
+- Карточку и `dev-log.md` в ветке задачи ведёт исполнитель (правило раздела T-302). Это не замечание.
+- Миграции: новых файлов нет, `migrations/gateway/0001_init.sql` и `migrations/links/0001_init.sql` не менялись. Таблицы `sessions`, `turns`, `pending_characters` созданы в T-302. ADR-019 соблюдён.
+
+### Вердикт
+**Принять.** Critical 0 · Major 0 · Minor 6 · Nit 6.
+
+DoD закрыт тестами, прогоны зелёные, мутанты исполнителя сверены с кодом. Из моих семи мутантов шесть зелёные. За каждым стоит либо узкая гонка, либо непокрытая граница. Основные пути работают верно, поэтому Major нет.
+
+Рекомендации:
+- Mi-1, Mi-3 и Mi-4 — короткие правки с тестом, лучше сделать до finish.
+- Mi-2 и Mi-6 — риски доступности и парности, нужно решение system-architect до T-307.
+- Mi-5 — вопрос оркестратору об объёме решения 1.
+
+### Проверено ревьюером (go1.26 windows/amd64, cgo выключен — без `-race`)
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./internal/gateway/...` — 13 пакетов `ok`.
+- `golangci-lint run ./internal/gateway/...` — 0 issues.
+- `go run ./cmd/mvctl env check` — 78 переменных, `.env.example` сверен.
+- `go run ./cmd/mvctl privacy scan internal/gateway/testdata/` — внешних ID нет (1 файл).
+- Мутанты. На каждый — своя копия дерева `scratchpad/t306r1-<имя>`: tar без `.git`, `services`, `Docs`, `.claude`, `.qwen`, `.env`, `.worktrees`. Без `-overlay`, контрольный первым. Замена — единственное вхождение, скрипт проверяет число вхождений. Прогон: `go test -short -count=1 -timeout 300s ./internal/gateway/...`. Каждая копия удалена по точному пути сразу после прогона.
+
+| # | Мутант | Результат |
+|---|---|---|
+| K | контрольный, без изменений | зелёный |
+| M1 | `Tracker.Sweep` не ищет просроченные ходы в статусе `narrated` (`turns/tracker.go:336`) | **зелёный** → N-1 |
+| M2 | `forgetEnded` стирает резерв номеров и у активных сессий (`turns/tracker.go:382`) | **зелёный** → Mi-1 |
+| M3 | `existing` переиздаёт предложение после дедлайна вместо нового `player_id` (`characters/service.go:230`) | **зелёный** → N-6 |
+| M4 | `Touch` ровно через `MV_GATEWAY_SESSION_IDLE` продолжает сессию, `<` → `<=` (`session/manager.go:131`) | **зелёный** → N-2 |
+| M5 | результат фильтра имени не обрезается (`characters/service.go:303`) | **зелёный** → Mi-4 |
+| M6 | sweeper снимает со связки и персонажа, чей факт пришёл (`characters/service.go:372`) | **зелёный** → Mi-3 |
+| M7 | удаление связки не двигает счётчик поколений (`links/forget.go:142`) | **красный**: `TestASweepKeepsTheMarkOfAForgetThatDeletedAfterItsCheckpoint` |
+
+### Разбор по пунктам поручения
+
+**1. Корректность и DoD.**
+- **Ожидание факта.** `propose` ставит ожидание до публикации, а после ожидания решает проекция: персонаж в ней — `201`, иначе `202 {player_id, status: creating}`. Ответ сохраняется под ключом на контексте без отмены. Проверяют `TestALateFactAnswersCreating` и мутант C9 исполнителя.
+- **Снятие со связки.**
+  - `Sweep` берёт строки с `deadline_at <= now`, `OnRejected` переносит дедлайн на «сейчас», синхронный отказ вызывает `clear` сразу.
+  - `DetachPlayer` срабатывает, только если связка ещё указывает на этого игрока. Связку, уже переназначенную новому персонажу, он не трогает (`TestDetachPlayerUnbindsOnlyTheCharacterItNames`).
+  - Ветка «факт пришёл, строка просрочена» не покрыта и оставляет гонку — Mi-3.
+- **Идемпотентность `(link_id, action_key)`.** Блокировка на `link_id`, ключ читается под ней, связка перечитывается. Сохраняются только `200/201/202`. В `gateway.db` нет ни внешнего ID, ни `link_id`: это проверяет тест дампа с контролем.
+- **Тот же `proposal_id` при повторе после `503`** — `TestARepeatAfterABusFailureProposesTheSameCharacter`, мутант C6.
+- **Парность `started/ended`.** Строка пишется до публикации, неопубликованное событие откатывает строку (S4). Неоднозначный отказ брокера пару рвёт — Mi-6.
+- **`seq`.** Резервируется в `Begin` (T5, `TestTheNumberOfATurnIsReservedAtItsBeginning`), после рестарта счёт продолжается от `MAX(seq)`. При гонке с уборкой резерв теряется — Mi-1.
+- **Исходы хода.**
+  - `ok` и `degraded` — по ack последнего адресата.
+  - `timeout` — по дедлайну, один раз, `turns_failed + 1`.
+  - `rejected` — сразу, только с `received_at`/`acked_at`.
+  - Id завершения выводится из действия (`WithCauseID`), поэтому повтор после сбоя шины гасится.
+- **Тесты T-305.** Из тестов `actions` изменён только `helpers_test.go`: двойник `memoryTurns` заменил удалённый по поручению `actions.MemoryTurns`. Тестовые функции не менялись, пакеты `actions` и `gateway` зелёные.
+
+**2. Транзакции и конкурентность.**
+- **Публикация внутри транзакции `gateway.db`** — Mi-2.
+  - У `gateway.db` одно соединение (`store/open.go:116`). `Tracker.Sweep` держит его, пока `Kafka.Publish` ждёт подтверждения `RequireAll`.
+  - Контекст sweeper'а без срока. У писателя kafka-go заданы только `RequiredAcks`, `BatchSize` и `BatchTimeout`, остальные таймауты — по умолчанию.
+  - На исправном одноузловом Redpanda это миллисекунды. При недоступном брокере соединение занято до исчерпания попыток писателя — на каждом просроченном ходе подряд.
+  - T-307 повторит тот же рисунок в транзакции потребителя и ack (`OnDelivered`).
+- **Гонки sweeper'ов с обработчиками.**
+  - `session.Sweep` → `endIdle` перепроверяет простой под `m.mu` — корректно.
+  - `turns.Sweep` перечитывает ход в транзакции и проверяет статус. Шаги `On*` и `Sweep` идут по очереди через единственное соединение — корректно.
+  - `forgetEnded` читает список активных сессий без `t.mu` — Mi-1.
+  - `characters.Sweep` проверяет проекцию до `DetachPlayer` без блокировки связки — Mi-3.
+- **Счётчик поколений окна сжатия** верен. Разобраны все порядки: `DELETE` до и после чтения `began`, до и после checkpoint. Отметка снимается, только если за время сжатия не было удалений. Ошибиться можно лишь в безопасную сторону: `DELETE` между `began` и checkpoint оставляет отметку до следующего сжатия, а sweeper повторяет его раз в минуту. M7 красный.
+- **Id сессии из секунд старта** — N-3. В T-306 конфликт недостижим при `IDLE ≥ 1 с`, достижимым он станет с `End(leave|forget)` (T-352, T-355).
+
+**3. Приватность.**
+- **События C-10.**
+  - `scope` нет ни в конверте, ни в payload. Копии `world` в payload нет, имён нет. `world` в конверте — ключ сообщения.
+  - Обязательные идентификаторы (`session.id`, `participants[].entity.id`, `entity.entity.id`) пишутся по решению оркестратора 1.
+  - Сверх обязательных `turn.completed` пишет необязательные поля: измерения, ссылки на события и `turn.target.entity.id` — Mi-5.
+- **Логи.** `characters` пишет `request_id`, `error`, `handled`, а `clear` — ещё `player_id` и `proposal_id`. Имени и внешних ID нет. Ошибки SQL и шины значений строк не содержат.
+- **Фикстура.** `mvctl privacy scan` чист. Вручную: 33 строки, `actor_kind=ci`, нет ни имени, ни текста игрока.
+- **`gateway.db`.** `pending_characters.name` и `turns.player_name` есть в схеме T-302, а ADR-009 п. 1 разрешает имя персонажа.
+
+**4. `api.ValidCharacterName`.**
+- Табличный тест покрывает: 2 и 32 символа, 1 и 33, кириллицу, CJK, цифры, дефис, таб, перевод строки, двойной пробел, NFD против NFC, невалидный UTF-8.
+- Функция объявлена общим правилом шлюза и бота, но пропускает пробелы по краям (`" Вася "`) — Mi-4. Обрезка результата фильтра тестом не закреплена (M5 зелёный).
+- Имена только из дефисов или цифр (`"--"`, `"12"`) проходят. FR-060 их не запрещает — вопрос architect#3 вместе с NFC.
+
+**5. OpenAPI.**
+- `listWorlds` (`GET /v1/worlds`), `createCharacter` (`POST /v1/characters`) и `getPlayer` (`GET /v1/players/{player_id}`) смонтированы и сняты из `notYetMounted`.
+- Все коды обработчиков объявлены (`TestOpenAPIOperationsOfCharactersDeclareTheirCodes`):
+  - `400` — `name_required`, `name_invalid`, `invalid_request`;
+  - `403 consent_required`;
+  - `404` — `world_not_found`, `player_not_found`;
+  - `422 filter_error`, `500 internal`, `503 bus_unavailable`.
+- Описание `createCharacter` совпадает с порядком проверок в коде и с КД §5.2. `x-nolog` и `x-idempotency` на месте.
+
+**6. Миграции** — см. «Границы ревью»: не менялись, новых нет.
+
+**7. Переменные.**
+- Четыре новые `MV_GATEWAY_*` объявлены с `IsDuration` и есть в `.env.example` (CRLF сохранён).
+- Значение `≤ 0` — ошибка старта с именем переменной (`TestStartRefusesDurationsOfSessionsAndCharactersItCannotUse`).
+- `shared/env/vars.go` принадлежит EPIC-001, нужна отметка tech-lead#1, как в T-305.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Mi-1 | Minor | `internal/gateway/turns/tracker.go:370-387`, `:355-367` | `forgetEnded` читает `Sessions.Active` без `t.mu`, затем под `t.mu` удаляет резервы сессий, которых нет в прочитанном списке. Сессия, открытая в `Begin` между чтением и захватом блокировки, теряет резерв. Сценарий: `Begin` новой сессии резервирует `seq=1`, пакет не публикуется (`503`). Уборка стирает резерв. Другое действие scope читает `MAX(seq)=0`, строки хода ещё нет, и получает `seq=1`. Повтор ключа публикует пакет со старым `seq=1`. `Accepted` падает на `ux_turns_session_seq`, ошибка уходит только в журнал, `turn.completed` для этого хода не будет. Нарушается гарантия строки DoD приёмки T-305. Окно — время одного `SELECT`, поэтому Minor. Уборка резервов тестами не закреплена совсем: M2 зелёный. | Держать `t.mu` на время `Sessions.Active`. Порядок блокировок «`t.mu` → БД» уже есть в `reserve`, а `Active` не берёт `m.mu`. Другой вариант — удалять только id, которые БД подтвердила как `ended`. Тест: сбой пакета → `Tracker.Sweep` → другое действие scope → повтор ключа → `seq` 1 и 2, обе строки в `turns`. M2 должен покраснеть. | открыто |
+| Mi-2 | Minor (риск) | `turns/tracker.go:297-303, 317-331`; `context.go:466`; `characters/service.go:323` | `Tracker.Sweep` публикует `turn.completed` внутри транзакции `gateway.db` на контексте sweeper'а без срока. Соединение одно, поэтому ожидание подтверждения брокера останавливает все обращения к файлу: потребитель, `Keys.Lookup` действий (до `500` по бюджету решения), `GET /v1/players`, `resolve`. `characters.Status` читает на `context.Background()` и ждёт без срока. При исправном брокере это миллисекунды. При недоступном — до исчерпания попыток писателя kafka-go на каждом просроченном ходе подряд. А ходы массово истекают как раз тогда, когда шина лежит. Откат и повтор с тем же id (`WithCauseID`) корректны: целостность не страдает, страдает доступность. T-307 повторит рисунок в `OnDelivered`. | Сейчас: срок на публикацию внутри транзакции (`context.WithTimeout` порядка `api.RequestTimeout`) и срок чтения в `Status`. До T-307 — решение system-architect. Варианты: коммитить статус с отметкой «не опубликовано» и публиковать после коммита с повтором по отметке (id уже детерминирован) или записать принятый риск в КД §7.6. | открыто |
+| Mi-3 | Minor | `characters/service.go:371-381, 392-404` | `Sweep` проверяет `Model.Character` и только потом, без блокировки связки, вызывает `clear` → `DetachPlayer`. Если `entity.created` применится между проверкой и `DetachPlayer` (факт ровно на границе дедлайна), живой персонаж снимется со связки. Следующий `/start` создаст второго персонажа — нарушение A-7. Строку `OnCreated` уже удалил, повторное удаление в `clear` ошибки не даёт. Ветка «факт пришёл, строка просрочена → удалить только строку» не покрыта: M6 зелёный. | После `DetachPlayer` перепроверить проекцию и, если персонаж появился, вернуть связку (`AttachPlayer`). Либо брать блокировку связки из `Create`: нужен `ByPlayer` → `link_id`. Тест ветки «факт есть, строка просрочена»: строка удалена, связка на месте. M6 должен покраснеть. | открыто |
+| Mi-4 | Minor | `api/names.go:36-39`; `api/names_test.go`; `characters/service.go:303` | `ValidCharacterName` задокументирован как единое правило шлюза и бота: T-311 предлагается звать его напрямую. Но он корректен только для уже обрезанной строки: `" Вася "` и `"Вася "` проходят, потому что пробел входит в `NamePattern`. Бот, вызвавший функцию на сыром вводе, пропустит имя, которое шлюз сохранит иначе. В шлюзе обе обрезки на месте, но обрезка результата фильтра тестом не закреплена: M5 зелёный. | В функции отвергать `name != strings.TrimSpace(name)`. В таблицу добавить `" Вася"`, `"Вася "`, `"--"`, `"12"` с решёнными значениями. В `TestTheNameGoesThroughTheInputFilter` добавить фильтр, возвращающий `" Петя "`: в предложении должно быть `"Петя"`. | открыто |
+| Mi-5 | Minor (вопрос) | `turns/store.go:147-213` (`:155` — `turn.target`) | Решение оркестратора 1: «в событиях C-10 ничего сверх обязательных полей схемы». `Payload` пишет и необязательные поля: идентификатор сущности `turn.target.entity.id` (регион, NPC); ссылки на события (`delivery.result_event_id`, `delivery.narrative_event_id`, `absence.surfaced_event_ids`); измерения, ради которых событие и существует (`timings.mechanics_at`, `narrative_at`, `*_ms`, `narrative.agent_*`, `fallback_reason`, `turn.phase1_mode`, `lod`). Без измерений метрики `metrics.md` §2.1 не посчитать, так что буквальное прочтение вряд ли имелось в виду. Но `target` в I2 может указать на игрока — цель группового действия. | Уточнить у оркестратора, относится решение 1 к идентификаторам или ко всем необязательным полям. Минимум сейчас — писать `turn.target` только для `npc`/`region`, с тестом. Если решение буквальное — убрать необязательные поля из `Payload` и перегенерировать фикстуру. | открыто |
+| Mi-6 | Minor | `session/manager.go:286-295, 305-316`; `session/analytics.go:55-57` | Откат строки при ошибке `Publish` верен для явного отказа брокера, но не для неоднозначного: подтверждение потеряно, а событие записано. `Started`/`Ended` — корневые события со случайным id. Неоднозначный сбой в `open` оставляет в топике `session.started`, чья строка удалена. Следующее действие откроет сессию с другим `session.id`, и первому `started` пары не будет. Неоднозначный сбой в `end` вернёт строку в `active`, и следующий sweep опубликует второй `session.ended` с новым id — дубль, который по id не гасится. На деградировавшем брокере это рвёт NFR-036. | Id событий сессии выводить из `session.id` и типа, как `WithCauseID` у хода: тогда повтор `ended` гасится. Для `started` два варианта: не удалять строку при ошибке `Publish`, а помечать «старт не подтверждён» и повторять публикацию с тем же id; или записать остаточный риск для EPIC-005 (`mvctl report` сводит пары по `session.id`). | открыто |
+| N-1 | Nit | `turns/tracker.go:335-336`; `turns/tracker_test.go:193` | Просроченный ход в статусе `narrated` (подтвердили не все адресаты) закрывается `timeout`. Это верно и шире КД §7.6, но тестом не закреплено: M1 зелёный. В T-306 статус `narrated` в проде недостижим, до T-307. | В `TestATurnPastItsDeadlineTimesOut` добавить ход после `OnNarrative` с одним ack из двух. | открыто |
+| N-2 | Nit | `session/manager.go:131`; `session/manager_test.go:178-184` | Граница `Touch` не закреплена: при усилении теста под S5 действие сдвинули на `+5 мин`, и M4 (`<=`) зелёный. У `Sweep` граница проверена (`−1 нс` и ровно `Idle`). Если границы `Touch` и `Sweep` разойдутся, момент конца сессии будет зависеть от тика sweeper'а. | Тест: действие ровно в `last + Idle` открывает новую сессию. | открыто |
+| N-3 | Nit | `session/manager.go:331-333` | `session.id = {scope}:{unix-секунды}`. Вторая сессия scope в ту же секунду нарушит первичный ключ, и `Begin` ответит `500`. В T-306 это недостижимо: `IDLE ≥ 1 с`, а `End(leave|forget)` не вызывается. | В бэклог T-352/T-355 и КД §4.2 (предложение исполнителя): суффикс или миллисекунды. | открыто |
+| N-4 | Nit | `session/manager.go:125-146, 291, 311` | `m.mu` один на все scope и удерживается на время `Publish`. Старт или конец любой сессии задерживает `Begin` всех игроков на время подтверждения брокера. На масштабе MVP-1 незаметно. | Блокировка на scope, как `playerLock`, — когда появится нагрузка. | открыто |
+| N-5 | Nit | `context.go:333-345`; `characters/service.go:132-134` | Не проверяется, что `MV_GATEWAY_CHARACTER_WAIT < MV_GATEWAY_CHARACTER_DEADLINE`. При обратном соотношении sweeper может снять связку, пока `propose` ещё ждёт факт. | Ошибка старта с именами обеих переменных. | открыто |
+| N-6 | Nit | `characters/service.go:217-236` | Граница дедлайна в `existing` не закреплена: M3 зелёный. Там же: если связка указывает на игрока, которого нет ни в проекции, ни в `pending_characters`, молча создаётся новый персонаж. Для мёртвого или снятого это верно, но то же случится и при неполной проекции (например, снапшот старше срока хранения журнала). | Тест: строка с истёкшим дедлайном до прохода sweeper'а → новый `player_id`, связка переназначена. Неполную проекцию — в вопросы architect#3 рядом с `projection=missing`. | открыто |
+
+### Вопросы
+- **Оркестратору:** объём решения 1 (Mi-5).
+- **system-architect, до T-307:**
+  - публикация аналитики внутри транзакции единственного соединения `gateway.db` (Mi-2);
+  - детерминированные id событий сессии (Mi-6).
+- **architect#3:** допустимы ли имена только из дефисов или цифр (Mi-4) — вместе с вопросом NFC; поведение `existing` при неполной проекции (N-6).
+
+### Предложения в бэклог (вне границ T-306)
+1. **T-307:**
+   - `OnDelivered` вызывать ровно один раз на доставку: повторный ack увеличит `delivered_count` и завершит ход раньше срока;
+   - нарратив с `recipients=0` сейчас закончится `timeout`, а не `ok` — решить при подключении.
+2. **T-309:** восстановление при старте по КД §7.6 (предложение исполнителя) — поддерживаю.
+3. **T-311:** проверять имя через `api.ValidCharacterName` после исправления Mi-4.
+4. **T-352/T-355:** N-3.
+5. **К Mi-2:** outbox аналитики в `gateway.db` — вместе с outbox пакета действий из бэклога T-305.
+
+### Риски и допущения
+- `-race` не запускался (cgo выключен). Гонки Mi-1 и Mi-3 найдены чтением и не воспроизведены: точки внедрения нет, а зонд потребовал бы правки кода.
+- Поведение kafka-go при недоступном брокере (Mi-2) оценено по конфигурации писателя в `shared/eventbus/kafka.go`, без интеграционного прогона.
+- `shared/env/vars.go` и `.env.example` — файлы EPIC-001, нужна отметка tech-lead#1.
+- В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке. Мутанты выполнялись в копиях в scratchpad, копии удалены.
+
+## T-312 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+
+Ветка `task/T-312-bot-deliver-main`, папка `.worktrees/T-312`, база — кончик эпика `aa83086`. Изменения не закоммичены (`git status`):
+- новое: `cmd/telegram-bot/internal/deliver/{loop.go, loop_test.go, fakes_test.go}`; `cmd/telegram-bot/{main.go, serve.go, health.go, main_test.go, mocks_test.go, imports_test.go}`;
+- удалено: `cmd/telegram-bot/internal/config/imports_test.go` (перенесён в пакет бинарника, текст теста не изменился, только пакет и комментарий);
+- правки: `cmd/telegram-bot/README.md`, `Docs/ops/runbook.md` §6, карточка `tasks/T-312.md`, `dev-log.md`.
+
+Коммитов вне ветки нет. `shared/*`, `internal/gateway/*`, `go.mod`/`go.sum`, `.env.example`, `.golangci.yml`, `docker-compose.bot.yml`, контракты и КД не тронуты. Правки в `artifactsDir` — только карточка и `dev-log.md`, как положено исполнителю.
+
+Основания:
+- раздел T-312 в `tasks.md` со строками приёмок T-310 (Mi-1, M-1, M-2, N-3), T-311 (риск 6, Mi-6, `ValidName`, README/runbook) и T-317 (README/runbook после `main.go`);
+- карточка `tasks/T-312.md`;
+- КД `gateway-and-bot.md` §8.2–§8.4, §10.2, §10.4, §11.1;
+- ADR-006 п. 3, ADR-018 п. 5–6 и дополнение п. 3;
+- C-08 v1.1–v1.5 (лимиты long-poll, «повтор без ack через 30 с», одна доставка в лизинге на игрока).
+
+Решения оркестратора приняты как данность:
+- доставка без маршрута Telegram подтверждается без отправки, с предупреждением в логе (до ответа system-architect);
+- замена `flow.ValidName` на `api.ValidCharacterName` уходит в DoD T-315 (T-306 не слита);
+- устаревшие имена `MV_BOT_*` в КД §11.3 — вопрос к architect#3.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0 · Major 0 · Minor 4 · Nit 4.
+
+Семантика ack соответствует C-08 и КД §10.4, потери доставки и бесконечного повтора в достижимых сценариях нет. Коды выхода, разделение клиентов, `/health` и подкоманда `health` соответствуют DoD, ADR-018 и `docker-compose.bot.yml`; утверждения README и runbook сверены с кодом. Замечания Minor — три пробела в тестах объявленных свойств цикла доставки (мутанты M2–M4 выжили) и 30-секундный клиент Telegram в обработчике обновлений (Mi-4). Все локальны; их можно закрыть при приёмке без повторного ревью.
+
+### Прогоны (go1.26.8 windows/amd64, рабочая папка T-312)
+
+| Команда | Результат |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/client/...` | ok ×11 пакетов; `updates` запустился напрямую, без `Access is denied` |
+| `golangci-lint run ./...` | 0 issues (в копии дерева `./cmd/telegram-bot/...` — тоже 0) |
+
+`-race` недоступен (cgo выключен). Конкурентность разобрана чтением: `cursor` и `pending` трогает только горутина `Run`; `sender.Telegram` общий у `flow` и цикла, но состояния между вызовами не держит. Бинарник не запускался, Docker, стенд LLM и api.telegram.org не трогались.
+
+### Мутанты ревьюера
+
+Копия дерева `t312r1-tree` в scratch (без `.git`, `Docs`, `services`, `.env`), без `-overlay`, один мутант на прогон, файл восстанавливался из рабочей папки со сверкой `cmp`. Копия и скрипт удалены по точным путям.
+
+| # | Мутант | Итог |
+|---|---|---|
+| M0 (контрольный, первым) | без изменений: `go test ./cmd/telegram-bot/ ./…/deliver/`, `golangci-lint run ./cmd/telegram-bot/...` | зелёный, 0 issues |
+| M1 | `updates.NewTelegram` получает `base` вместо логгера поверх `privacy` (`serve.go:180`) | **выжил** → N-1 |
+| M2 | в `Run` снят сброс `failures = 0` после успешного опроса (`loop.go:151`) | **выжил** → Mi-1 |
+| M3 | отправка, прерванная остановкой, подтверждается: `return true, true` (`loop.go:209`) | **выжил** → Mi-2 |
+| M4 | в `Once` снят `flush` перед опросом (`loop.go:167`): ack с прошлого раза уходит только после следующего long-poll | **выжил** → Mi-3 |
+| M5 | `ErrUnauthorized` не останавливает остаток ответа (`loop.go:233`, `stop=false`) | красный: `TestARevokedTokenAcknowledgesNothingItDidNotSend` |
+| M6 | `keep` без проверки дублей | **выжил** → N-2 |
+| M7 | `deliver/loop.go` импортирует `shared/eventbus` | сборка зелёная, `golangci-lint`: `depguard` правило `cmd-telegram-bot` — 1 issue |
+
+### Разбор по пунктам поручения
+
+**1. Семантика ack** (`loop.go:166-297`).
+- Подтверждаются: отправлено, `ErrBlocked`, `ErrChatNotFound`, `ErrRejected`, доставка без маршрута Telegram (решение оркестратора). Не подтверждаются: `ErrUnavailable`, неизвестная ошибка, отмена `ctx` посреди отправки, `ErrUnauthorized`. Совпадает с DoD (Mi-1 ревью T-310) и КД §10.4. Решение — только по типу ошибки `Sender` через `errors.Is`.
+- `401`: `stop=true`, остаток ответа не отправляется, отправленное до него подтверждается (`TestARevokedToken…`, M5 красный). Цикл после этого опрашивает снова, но при одной доставке в лизинге на игрока следующий ответ приходит не раньше истечения лизинга или с доставками других игроков. Горячего цикла нет; процесс останавливает источник обновлений тем же `401`.
+- Неудачный ack: id остаются в `pending` (без дублей, ≤ 1000), `flush` в начале `Once` повторяет их до long-poll. Код верен, порядок тестом не закреплён — Mi-3.
+- Остановка: `defer ackOnStop` под `context.WithoutCancel` + 5 с. Прерванный на середине `flush` оставляет `pending`, и `ackOnStop` его повторяет. Тест `TestAStoppingLoopAcknowledgesWhatItSent` красный на снятом `ackOnStop` (мутант исполнителя). Прерванная отправка не подтверждается — код верен, теста нет (Mi-2).
+- Backoff опроса: 1, 2, 4 … 30 с на `clock.Timers`, строка лога на каждую ошибку и строка восстановления; сброс после успеха тестом не закреплён — Mi-1.
+- Потери: доставка теряется только при ack без отправки. Такие ветки — «игрок недоступен», `ErrRejected` и «нет маршрута» — предписаны DoD или решением оркестратора. Бесконечного повтора в достижимых сценариях нет: неподтверждённое живёт у шлюза до TTL 24 ч, частота — раз в лизинг. Недостижимый сегодня случай «шлюз навсегда отвергает ack кодом 4xx» — N-4.
+- Длинная пачка (например, `429 retry_after` 35 с на первой доставке) подтверждается позже 30 с лизинга. Дубля не будет, только если `Ack` шлюза принимает id с истёкшим, но никем не перехваченным лизингом (§8.4: `WHERE leased_by = :client`), а sweeper не стирает `leased_by`. Это вопрос реализации T-307 — в рисках.
+
+**2. Коды выхода** (`main.go`, `serve.go:189-233`, `updates.ExitCode`).
+- 0 — сигнал: `Start` возвращает `nil`, тест `TestEachSenderRepeatsByItsOwnPolicy` (`p.cancel()` → 0).
+- 1 — пустой или кривой токен, переменная, `MV_LOG_LEVEL`, занятый порт `/health`, `401 getMe` (`getUpdates` не вызывался), `401 getUpdates` (ровно один вызов) — тесты на каждый случай.
+- 2 — неизвестная подкоманда, лишний аргумент или неизвестный флаг `health`.
+- 3 — `409 getUpdates`.
+- Соответствует ADR-018 п. 6, DoD Mi-1 ревью T-310 и таблице README. Токен, его секретная половина и id в stderr и в логе не найдены (`assertNoSecret`).
+
+**3. Клиенты, таймауты, логгеры.**
+- Отказ постороннему — `NewBestEffortTelegram` со своим клиентом 5 с. Цикл — `DefaultPolicy`. `flow` — `WithPolicy(ReplyPolicy)` того же отправителя (клиент 30 с, Mi-4).
+- Шлюз: у `flow` свой клиент 6 с и `Backoff{1, 200 мс}`, у цикла — 35 с и `DefaultBackoff`.
+- DoD M-2 ревью T-310 и риск 6 ревью T-311 выполнены, тесты `TestARefusalTelegramDoesNotAnswer…`, `TestAGatewayThatDoesNotAnswer…`, `TestTheWiring…`, `TestTheProductionLimits`.
+- Один логгер `slog.New(privacy.NewHandler(base, redactor))` подан в `access`, `flow`, `deliver`, `updates` и `ErrorLog` отправителей. Тестом проверены первые три (N-1).
+- Лог цикла: ключи `kind`, `reason`, `count`, `error` (через `privacy.Redact`, а `sender` ещё и вырезает chat id), `pause`. `config` в логе — через `LogValue` без токена, соли и id.
+
+**4. `/health` и подкоманда `health`.**
+- `GET /health` → `{"status":"ok","details":{"bot_denied_total","bot_not_private_total","bot_too_often_total"}}`. Только счётчики, без id и токена; `ReadHeaderTimeout` 5 с.
+- `telegram-bot health [--url]`: умолчание из `MV_TELEGRAM_HEALTH_ADDR`, пустой хост, `0.0.0.0` и `::` → `127.0.0.1` (таблица из шести адресов и умолчание манифеста). Код 0 только при 200 и `status: ok`, проба без прокси, таймаут 3 с — внутри `timeout: 5s` compose.
+- Healthcheck `docker-compose.bot.yml` (`/telegram-bot health --url http://127.0.0.1:8089/health`, `entrypoint /telegram-bot`) совпадает с кодом. `build/Dockerfile` собирает `./cmd/...` в `/`. `make health` пробует `:8089` по коду 200 — совпадает.
+- `status` всегда `ok` — записано в README, runbook и рисках карточки; предложение исполнителя в бэклог поддерживаю.
+
+**5. Гонка при старте** (`serve.go:211-216`). Цикл доставки стартует до `getMe` внутри `Source.Start`.
+- С отозванным токеном цикл успевает взять доставки в лизинг и получить `401`: они не подтверждаются и вернутся через 30 с. Отправить их этим токеном всё равно нельзя, потери нет.
+- С `restart: unless-stopped` такой цикл повторяется на каждом рестарте. Цена — сдвиг выдачи на 30 с, счётчик `attempts` и лишние строки `Error` в логе.
+- При `409` второй экземпляр с тем же токеном может отправить и подтвердить часть доставок: токен рабочий, `ackOnStop` подтверждает отправленное. Отправка, прерванная остановкой, может прийти игроку дважды.
+- Риск низкий — N-3.
+
+**6. depguard и тест импортов.**
+- Правило `cmd-telegram-bot` покрывает новые файлы: M7 даёт `depguard` 1 issue. `golangci-lint run ./...` — 0.
+- `imports_test.go` перенесён в `package main` без изменения логики: `go list -deps ./cmd/telegram-bot/...`, проверка `sawBot`, запрет `internal/*` кроме `client`/`api`, запрет `modernc.org/sqlite` и `goose`. Старый файл удалён, тест зелёный.
+
+**7. README и runbook.**
+- README: статус (бинарник собирается, `make build` → `bin/`), таблица частей и «Как устроен процесс» совпадают с кодом. Сверено: таймауты, `ReplyPolicy` (2 попытки, `429` ≤ 3 с), `DefaultPolicy` (3 попытки через 1 с, `429` до 60 с × 5), повтор ack клиентом на сеть и `503`, long-poll без повтора. То же для таблицы решений по ответам Telegram, «только в памяти», `/health`, подкоманды и кодов выхода.
+- Runbook §6: врезка «выполнима только после T-312» и оговорка «до T-312» сняты. Шаги 4–5 явно оставлены за T-390 со ссылкой. Строки лога `deliveries not polled` и `answer not delivered` существуют (`loop.go:156`, `flow/flow.go:206`).
+- Пометок «после T-312» в `.md` вне `Docs/dev-team` и в коде не осталось. Устаревший комментарий «The binary lands in EPIC-004» в `docker-compose.bot.yml` — файл devops, бэклог п. 4.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/telegram-bot/internal/deliver/loop.go:151`; `loop_test.go:379-413` | **Сброс паузы после восстановления опроса не закреплён тестом.** Мутант M2 (без `failures = 0`) зелёный. С ним после одного сбоя шлюза любая следующая одиночная ошибка ждёт уже 30 с, а строка «deliveries polled again» пишется на каждый успешный опрос. Тест подаёт восемь ошибок подряд, затем успех, и новых ошибок после успеха не даёт. | Продолжить сценарий: ошибка, ошибка, успех, ошибка → паузы `[1s 2s 1s]`; одна строка «polled again». | открыто |
+| Mi-2 | Minor | `loop.go:208-210`; `loop_test.go:335-375` | **«Отправка, прерванная остановкой, не подтверждается» не закреплено тестом** — ветка «без потери» пункта 1 поручения. Мутант M3 (`return true, true`) зелёный. `cancellingSender` отменяет `ctx` после успешной отправки, и следующая доставка до `Send` не доходит (проверка `ctx.Err()` в `Once`). С мутантом доставка, чей `sendMessage` оборван `SIGTERM`, подтверждается и может не дойти до игрока. | Отправитель, который ждёт `ctx.Done()` и возвращает `ctx.Err()` на второй доставке; после `Run`: `unacked() == [b1]`, ни один вызов `Ack` не содержит `b1`. | открыто |
+| Mi-3 | Minor | `loop.go:167`; `loop_test.go:316-333` | **«Неудачный ack повторяется перед следующим опросом» — порядок тестом не проверяется.** Мутант M4 (без `flush` в начале `Once`) зелёный: `ackCalls` одинаковы, потому что конечный `flush` второго `Once` шлёт те же id. С мутантом ack ждёт следующий long-poll (до 25 с) и всю его пачку. Лизинг 30 с истекает, и после отзыва лизинга шлюзом сообщение приходит игроку повторно. Имя теста обещает именно порядок. | Писать опросы и ack в один журнал фейка (`journal` уже есть) и сравнивать `ack a1` → `poll` → … Либо во втором `Once` отдать пустой ответ с ошибкой опроса и проверить, что ack `[a1]` всё равно ушёл. | открыто |
+| Mi-4 | Minor | `cmd/telegram-bot/serve.go:131`, `:166`; `serve.go:23-34` (комментарий `limits`) | **Ответы `flow` идут через HTTP-клиент Telegram с таймаутом 30 с.** Зависший `sendMessage` держит единственный обработчик обновлений до 30 с × 2 попытки `ReplyPolicy` + 1 с, около 61 с. Всё это время стоят команды всех игроков. Комментарий `limits` обосновывает отдельные короткие клиенты тем же доводом («must hold the commands of the other players for seconds»), но к Telegram его не применяет. DoD прямо требует короткую политику повторов, а не таймаут, и README честно пишет 30 с, поэтому это не Major. | Отдельный `sender.NewTelegram` для `flow` со своим клиентом (например, `FlowTelegramTimeout` 10 с в `limits`) и `ReplyPolicy`; unit по образцу `TestARefusalTelegramDoesNotAnswer…` для ответа игроку; строка README. Либо решение tech-lead#3 «принять» с записью в риски runbook. | открыто |
+| N-1 | Nit | `serve.go:179-181`; `main_test.go:230-248` | Логгер источника обновлений не проверяется тестом сборки. M1 (`Log: base`) зелёный. Сегодня это почти эквивалентно: `updates` пишет постоянные строки и текст через `privacy.ErrorLog`. Но пункт «логгеры всех пакетов через `privacy.NewHandler`» закреплён только для трёх. | Хранить `updates.TelegramOptions` в `bot` (как `flowOpts`) и добавить `"updates"` в таблицу проверки `*privacy.Handler`. | открыто |
+| N-2 | Nit | `loop.go:255-265` | Отсутствие дублей в `pending` не закреплено (M6 зелёный). Дубль появляется, если id подтверждён, ack не дошёл, а доставка после лизинга выдана и отправлена снова. Вреда мало: шлюз вернёт лишний id в `unknown`. | Unit: ack падает, лизинг истекает, та же доставка отправлена снова → следующий ack `[a1]`, а не `[a1 a1]`. | открыто |
+| N-3 | Nit | `serve.go:210-216` | Цикл доставки стартует до `getMe` (пункт 5 разбора). Потери нет. С отозванным токеном и `restart: unless-stopped` каждый рестарт берёт доставки в лизинг, пишет `Error` на каждую и сдвигает выдачу на 30 с. | Запускать цикл после успешного `getMe`: колбэк `OnReady` в `updates.TelegramOptions` или `bot.New` отдельно от `Start`. Можно бэклогом. | открыто |
+| N-4 | Nit | `loop.go:271-286` | Ack, который шлюз отвергает навсегда (`4xx`, не `503`), повторяется перед каждым опросом без конца. Доставки при этом каждые 30 с отправляются игрокам повторно до TTL 24 ч. Сегодня недостижимо: `403 client_*` валит и опрос, `413` при ≤ 1000 id не наступает, `400` на id от самого шлюза не ожидается. | На `*client.APIError` со статусом `4xx` — строка `Error` и сброс `pending`, либо оставить с комментарием. | открыто |
+
+### Вопросы к tech-lead#3 (через оркестратора)
+
+1. **Mi-4:** отдельный короткий клиент Telegram для ответов `flow` в T-312 или принять 30 с × 2 с записью в риски.
+2. **T-307 (риск ниже):** `Ack` шлюза должен принимать id с истёкшим, но никем не перехваченным лизингом (sweeper не стирает `leased_by`), иначе пачка дольше 30 с даёт дубли. Нужна строка DoD T-307 или уточнение КД §8.4.
+
+### Предложения в бэклог
+
+1. Поддерживаю п. 1 исполнителя: `/health` бота — `degraded` при N неудачных опросах подряд или `ErrUnauthorized` отправки.
+2. Поддерживаю п. 2–3 исполнителя (`.gitignore` для бинарника в корне, строка `cmd/telegram-bot` в `CLAUDE.md`).
+3. Цикл доставки после `getMe` (N-3) — вместе с п. 1, если не закрывается при приёмке.
+4. devops: комментарий `docker-compose.bot.yml` «The binary lands in EPIC-004 … starts working the moment cmd/telegram-bot exists» и «moves out of compose entirely in EPIC-004» — привести к факту после слияния T-312.
+5. Защитная пауза цикла, если шлюз отдал пустой ответ заметно раньше `wait` (например, в режиме `replay` или при остановке шлюза): сейчас такой ответ означал бы опрос без паузы. Проверить вместе с реализацией long-poll в T-307/T-309.
+
+### Риски и допущения
+
+- Outbox шлюза (T-307) ещё не реализован. Поведение ack после истёкшего лизинга, отзыв лизинга sweeper'ом и досрочный пустой ответ long-poll проверены только по КД §8.2–§8.4 и фейку `outbox` в тестах.
+- Гонок чтением не найдено; `-race` без cgo недоступен.
+- Живой Telegram, Docker-образ и healthcheck compose не запускались. Соответствие сверено по `docker-compose.bot.yml`, `build/Dockerfile` и `Makefile`.
+
+## T-307 · ревью #1 · 2026-09-14 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-307-outbox-deliveries` (`.worktrees/T-307`), база — кончик эпика `a7d379e`. Изменения не закоммичены: 17 изменённых файлов, 14 новых (включая пакет `outbox/`), в индексе — только перенос фикстуры (`R`, 100 %).
+- Код:
+  - пакет `internal/gateway/outbox` (`types`, `store`, `longpoll`, `render`, `sweeper`, golden);
+  - `consumer/{deliveries,handle_combat,handle_entity,handle_encounter,handle_narrative}.go`;
+  - `handlers/deliveries.go`, `api/{middleware,router,openapi_test}.go`, `context.go`;
+  - `turns/tracker.go`, `characters/service.go`, `actions/publish.go`;
+  - `shared/env/vars.go`, `.env.example`, `api/gateway.openapi.yaml`, `internal/gateway/README.md`;
+  - перенос `solo-30.jsonl` и `turns/fixture_test.go`.
+- Сверено с:
+  - разделом «T-307» в `tasks.md`, включая строки приёмок T-304, T-305 и T-306;
+  - карточкой `tasks/T-307.md`;
+  - КД шлюза §4.2, §5.1, §5.2, §8.1–§8.4, §10.4, §11.2, §11.3;
+  - C-05 (схема `narrative.output`), C-08 (DTO `api/dto.go`), ADR-006, ADR-019;
+  - потребителями: `internal/gateway/client/longpoll.go` и `cmd/telegram-bot/internal/deliver/loop.go` из `origin/task/T-312-bot-deliver-main`;
+  - производителем отказов `internal/state/facts.go` (`rejectedFact`).
+- Решения оркестратора 1–7 по вопросам исполнителя учтены. Где код им не соответствует, это замечание: решение 1 — Mi-1, решение 3 — Ma-1.
+- Карточку и `dev-log.md` в ветке задачи ведёт исполнитель (правило раздела T-302). Это не замечание.
+- Миграции: каталог `internal/gateway/migrations` не менялся, новых файлов нет. Id доставки выводится из ключа (решение 7), поэтому идемпотентность открытия встречи обходится без `0002_*`. ADR-019 соблюдён.
+
+### Вердикт
+**Вернуть.** Critical 0 · Major 1 · Minor 2 · Nit 3.
+
+Семантика outbox верна. Потери доставки и дубля сверх «не менее одного раза» в достижимых сценариях я не нашёл. Long-poll не держит соединение и отвечает сразу при остановке. HTTP-форма совместима с клиентом и ботом T-312. Прогоны зелёные.
+
+Вернуть приходится из-за одного Major: решение оркестратора 3 не реализовано. Ход, у адресата которого нет связки, всегда уходит в `timeout`. Правка короткая. Итерации 2 достаточно проверить Ma-1, Mi-1, Mi-2 и регрессию от них.
+
+### Проверено ревьюером (go1.26 windows/amd64, cgo выключен — без `-race`)
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./internal/gateway/... ./cmd/telegram-bot/...` — 22 пакета `ok`.
+- `golangci-lint run ./internal/gateway/...` — `0 issues.`
+- `go run ./cmd/mvctl env check` — 80 переменных, `.env.example` сверен.
+- `go run ./cmd/mvctl privacy scan testdata/` — внешних ID нет (173 файла).
+- Мутанты. Одна копия дерева `scratchpad/t307r1-mutants`: tar без `.git`, `services`, `Docs`, `bin`. Без `-overlay`, контрольный первым. Скрипт проверяет, что заменяемый фрагмент встречается ровно один раз, и после прогона возвращает файл из рабочей папки (`cmp`). Перед удалением изменённые файлы сверены с рабочей папкой (`cmp` пуст). Копия удалена по точному пути.
+- Зонд Ma-1 — временный тест в той же копии, удалён до удаления копии. Нарратив адресатам `player-A` (со связкой) и `player-C` (без связки), ack доставки `player-A`. Итог: ход `narrated`, `recipients_count=2`, `delivered_count=1`, `turn.completed` нет; строка `player-C` — `dropped`.
+
+| # | Мутант | Результат |
+|---|---|---|
+| K | контрольный: `outbox`, `consumer`, `handlers`, `gateway`, `turns` | зелёный |
+| R1 | доставка без платформы пишется `pending`, а не `dropped` (`outbox/store.go:80-82`) | красный: `TestADeliveryWithoutAPlatformIsWrittenDropped` |
+| R2 | `Expire` сравнивает `created_at`, а не `expires_at` (`outbox/store.go:279-280`) | красный по `./internal/gateway/...`: `TestALateAckIsTakenUntilTheDeliveryIsLeasedAgain`. Собственный тест `TestExpireDropForPlayerAndPurge` при этом **зелёный** → N-2 |
+| R3 | `Poll` не передаёт `runtime.ShuttingDown` (`handlers/deliveries.go:92`) | красный: `TestTheLongPollAnswersWhenTheProcessStops` |
+| R4 | отказ State всегда с общим текстом, без `action_type` хода (`consumer/handle_entity.go:123`) | красный: `TestARefusalOfAMoveOrARestReachesThePlayer` |
+| R5 | `onDelivered` двигает ход на ack доставки любого вида, не только `narrative` (`handlers/deliveries.go:142`) | красный: `TestAckAnswersAndMovesTheTurnOfANarrative` |
+| R6 | в `data` доставки нарратива не пишется `absence` (`consumer/handle_narrative.go:52-54`) | **зелёный** → Mi-2 |
+| R7 | `living` не отбрасывает мёртвых (`consumer/deliveries.go:120`) | красный: `TestADecisionReachesThePlayersOfItsScope`, `TestTheFactsAPlayerHearsAbout` |
+| R8 | `NOT EXISTS` в `Lease` как в SQL КД §8.2 (`x.seq < d.seq` вместо `<>`, `outbox/store.go:158`) | зелёный — эквивалентный мутант: `<>` строже только для игрока с доставками двух платформ, в MVP-1 это недостижимо |
+
+### Разбор по пунктам поручения
+
+**1. Семантика outbox.**
+- **Идемпотентная постановка.** `INSERT … ON CONFLICT (id) DO NOTHING`. Id выводится из `(event_id, player_id, kind)` или из `(encounter_id, transition, player_id)` с длинами компонентов (коллизий через разделитель нет). Повтор события шиной и повтор после рестарта строку не добавляют. `processed_events` и курсор эффектов пишутся в той же транзакции, что и доставки.
+- **Одна доставка на игрока, по порядку.** `ROW_NUMBER` по кандидатам плюс `NOT EXISTS` действующего лизинга игрока. Разобраны порядки:
+  - голова в лизинге — остальные закрыты;
+  - лизинг головы истёк — снова выдаётся голова;
+  - голова подтверждена — выдаётся следующая.
+
+  Выдать `seq2` раньше `seq1` той же платформы нельзя. Проверяют M1 и M20 исполнителя.
+- **Лизинг и поздний ack.** `Ack` принимает `pending AND leased_by = client` независимо от `leased_until`, `ReleaseExpiredLeases` оставляет `leased_by`. Перехвата нет: после лизинга другим клиентом поздний ack первого — `unknown`. Дубль возможен, только если тот же клиент снова взял доставку, — это оговорено исполнителем. Для бота T-312 (один клиент платформы, пакет до 100 и ack после отправки всех) такая семантика убирает дубли при пакете дольше 30 с.
+- **Повторная выдача и TTL.** `Lease` сравнивает `leased_until < now` сам и от sweeper'а не зависит. Sweeper только будит ждущих, переводит просроченные `pending` в `dropped` (24 ч) и удаляет завершённые старше 7 дней.
+- **Long-poll без соединения.** Звонок берётся до лизинга. Транзакция `Lease` закрыта до возврата. Ожидание идёт на канале, по звонку, раз в `WakeEvery` и по сроку. `RouteFor` читает `links.db`, а не `gateway.db`. Звонок из `Enqueue` до коммита безопасен: `BeginTx` ждущего ждёт единственное соединение до коммита потребителя. Проверяет `TestServeWaitsWithoutTheConnectionAndWakesOnTheBell`.
+- **Остановка.** `Poll.Stop` = `runtime.ShuttingDown`: пустой ответ сразу (R3 красный). Отмена запроса клиентом — выход без записи ответа.
+- **Сбой между записью и ack.** Разобраны три случая:
+  - лизинг закоммичен, ответ не дошёл (обрыв, дедлайн записи, ошибка `RouteFor`) — доставка выдаётся снова через 30 с;
+  - ack потерян — повтор ack отдаёт `unknown`, сообщение не дублируется;
+  - ack не дошёл, лизинг истёк — повторная выдача тому же боту, дубль сообщения. Это «не менее одного раза» ADR-006.
+
+  Потери нет ни в одном из сценариев.
+- **`/forget`.** Хуки идут до `deleteLink` и вне транзакции `links.db`, поэтому взаимной блокировки двух БД с одним соединением (потребитель держит `gateway.db` и читает `links.db`) нет. Доставка, поставленная между `DropForPlayer` и удалением связки, отбрасывается при лизинге («нет маршрута»): внешний ID не уходит.
+
+**2. Consumer.**
+- **Идемпотентность.** Всё в транзакции диспетчера, id детерминированы. Открытие встречи после рестарта идемпотентно по `TransitionDeliveryID` (`TestAnEncounterOpeningIsDeliveredOnceAcrossARestart`, M9 исполнителя).
+- **Порядок `narrative.output`.** Доставка встаёт в очередь в момент обработки события, `seq` — порядок топика. Перестановок по `kind` или `based_on` нет.
+- **Отказы State.** Текст — `Refused(action_type)`, кода State в нём нет (R4 красный). Совпадение `proposal_id` с `actions.ProposalID` отсекает чужие пакеты и создание персонажа.
+- **Пропуск отказа без хода и без `entity`.** Риск низкий. `internal/state/facts.go:84-92` пишет `entity` всегда, когда отказ относится к сущности: `version_conflict`, `unknown_entity`, `dead_entity`, `invalid_op` по операции. Без `entity` остаются только отказы всего предложения как некорректного (`internal/state/apply.go:165, 177, 229`), то есть дефект самого шлюза. Чтобы игрок не узнал об отказе, должны совпасть два условия: такой отказ и гонка «факт раньше `Turns.Accepted`» на единственном соединении, окно — миллисекунды. `Warn` в журнале достаточно.
+- **Нарратив без связки у адресата** — Ma-1.
+
+**3. Транзакции.**
+- **`turn.completed`.** Публикация со сроком `PublishTimeout` = 5 с и обёрткой `ErrPublish`. Места вызова: транзакция потребителя (только `recipients=0`), транзакция ack (`onDelivered`) и транзакция sweeper'а ходов. Зависание освобождает соединение (M13 исполнителя). `characters.Status` читает со сроком (M14).
+- **Другие публикации в транзакциях `gateway.db`.** Не нашёл.
+  - `analytics.session.*` (`session/manager.go:286-316`) публикуется после одиночного `ExecContext` через `*sql.DB`, вне транзакции: соединение не держит.
+  - `turns.Rejected` публикует до вставки строки, тоже вне транзакции.
+  - `characters.propose` и `actions` публикуют вне транзакций.
+  - Остаточный риск прежний (N-4 ревью T-306): публикация сессии в sweeper'е идёт без срока и держит `session.Manager.mu`. Зависший брокер задерживает `Begin` действий, а с T-307 — и `outbox.Sweep` в том же тике (`context.go:512-515`). На выдачу это не влияет: `Lease` сам проверяет срок лизинга.
+- **Оценка по решению 2: повторная доставка при зависшем брокере.** Цепочка при нынешнем коде:
+  1. Каждый вызов ack, в пакете которого есть доставка последнего адресата нарратива, держит `gateway.db` до 5 с, откатывается целиком и отвечает `503`.
+  2. Клиент повторяет `503` трижды (200/400/800 мс): один `flush` бота длится около 21 с.
+  3. `Loop.Once` вызывает `flush` до и после опроса, поэтому опросы идут примерно раз в 42 с. К этому времени лизинги 30 с истекли, и тот же пакет выдаётся и отправляется снова.
+  4. Итог: каждое сообщение пакета повторяется игроку примерно раз в 40–45 с, около 14 копий за 10 минут сбоя, пока брокер не вернётся или не истечёт TTL 24 ч. Очередь каждого такого игрока стоит на этой доставке.
+  5. Радиус больше одного хода: откат одного `onDelivered` возвращает ack **всех** доставок пакета, включая `mechanics` и `system` других игроков без аналитики.
+  6. Попутно `gateway.db` занято около 5 с из каждых 7. `resolve` по сроку `Status` отвечает `creating`, действия — `503` (шина всё равно недоступна).
+
+  Доставки при этом не теряются. Снять цену без изменения C-08 нельзя: `AckResponse` не называет подтверждённые id, поэтому частичный откат клиенту не выразить. Полностью её убирает вариант «отметка „не опубликовано“ и повтор по ней» — вопрос system-architect. Цифры зависят от поведения писателя kafka-go и не проверены интеграционным прогоном.
+
+**4. Приватность.**
+- **Логи.** Пишутся `delivery_id`, `player_id`, `event_id`, `correlation_id`, `request_id` и текст ошибок хранилищ. Текста нарратива, маршрута и `external_id` нет.
+- **Ошибки.** В ошибках `Enqueue` и `Lease` только внутренние id. `RouteFor` сканирует `external_id` в строку, поэтому ошибка преобразования со значением невозможна.
+- **Golden.** 17 текстов: вымышленные «Вася», «Волк», «Тёмный лес», id NPC `wolf-alpha`. Чужих данных нет. `privacy scan` чист.
+- **`gateway.db`.** Маршрут не пишется, только в ответ (SEC-12, `TestServeGivesNoRouteOfAnotherPlatform`).
+
+**5. HTTP.**
+- **Дедлайны.** Обычные операции — чтение и запись 10 с через `Config.SetDeadlines` (M18 исполнителя). Long-poll — запись `min(wait + 5 с, 30 с)`, без дедлайна чтения. `runtime.SetDeadlines(…, 0, …)` чтение не трогает, а после заголовков у сервера процесса дедлайна чтения нет. Край — N-3.
+- **`openapi_test`.** Зелёный, три операции сняты из `notYetMounted`. У `ackDeliveries` добавлен `503`.
+- **Совместимость с клиентом и ботом T-312.**
+  - Параметры `after` (строка курсора), `limit ≤ 100`, `wait_ms ≤ 25000` совпадают.
+  - `DefaultHTTPTimeout` клиента 35 с больше предельного ответа 30 с.
+  - Тело ack — `{ids}`, ответ — `{acked, unknown}`, повтор `503` клиентом.
+  - `deliveries` — `[]`, а не `null` (M24 исполнителя). Маршрут `telegram` — строковый `external_id`, как читает `chatOf`.
+  - Бот подтверждает доставку без маршрута. Шлюз такую не выдаёт, это вторая линия защиты.
+
+**6. Миграции** — см. «Границы ревью»: не менялись, новых нет.
+
+**7. Переменные.** `MV_GATEWAY_DELIVERY_LEASE` и `MV_GATEWAY_DELIVERY_TTL` объявлены с `IsDuration`, есть в `.env.example` (CRLF сохранён). Значение `≤ 0` — ошибка старта. `shared/env/vars.go` принадлежит EPIC-001, нужна отметка tech-lead#1.
+
+**8. Фикстура.**
+- Перенос `git mv` со сходством 100 %, пустой каталог удалён.
+- `solo30Path` = `../../../testdata/analytics/solo-30.jsonl`, `TestSolo30Fixture` зелёный.
+- Уведомление EPIC-005 — в карточке.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `internal/gateway/turns/tracker.go:279-289`; `consumer/handle_narrative.go:22, 41-46, 64`; `consumer/deliveries.go:100-102`; `outbox/store.go:80-82` | Решение оркестратора 3 не реализовано: доставка адресату без связки должна считаться доставленной, и ход завершается `ok`/`degraded`, а не `timeout`. Сейчас `OnNarrative` пишет `recipients_count = len(recipients)` до постановки, а доставка адресату без связки пишется сразу `dropped`. Для такой строки `OnDelivered` не вызывается никогда, и ход с таким адресатом всегда уходит в `timeout` с `turns_failed + 1`. Подтверждено зондом (см. «Проверено ревьюером»). Тем же путём ход не завершается ещё в двух случаях: адресат в `recipients` повторён (id доставки схлопывается, а счётчик — нет; `uniqueItems` в схеме нет) и адресат не `player`. Строка DoD называет случай «доставлять некому», тест покрывает только `recipients=0`. | Считать адресатом хода то, что реально ставится в очередь. Вариант: в `Deliveries.OnNarrative` сначала собрать уникальных адресатов-игроков и их связки. `recipients_count` передавать в `Turns.OnNarrative` числом адресатов со связкой: `0` — ход завершается сразу, как сейчас. Другой вариант — после `Enqueue` вызвать `OnDelivered` в той же транзакции на каждую доставку, записанную `dropped`. По желанию то же для `Store.Drop` в `Serve` (нет маршрута), но в MVP-1 это недостижимо после `DropForPlayer`. Тесты: (а) `player-A` со связкой и `player-C` без неё → ack `player-A` → один `turn.completed ok`; (б) все адресаты без связки → `turn.completed` при `OnNarrative`, `turns_failed` не растёт; (в) повторённый адресат → одна доставка, ход завершается по одному ack. | открыто |
+| Mi-1 | Minor | `internal/gateway/handlers/deliveries.go:18-25`; `handlers/deliveries_test.go:123-129`; `api/gateway.openapi.yaml` (описание `pollDeliveries`) | Решение оркестратора 1 (условно, до system-architect): доставки получает и `ci-harness`. В коде платформа есть только у `telegram-bot`. Харнесс T-308 и e2e T-313 доставок не увидят, а их ходы с нарративом уйдут в `timeout`. Уровень задан решением. | `ClientPlatforms["ci-harness"] = links.PlatformTelegram` — вариант (а) вопроса 1 исполнителя: связки HTTP создаются только для `telegram`. Поправить тест и описание в OpenAPI, в карточке отметить условность до ответа system-architect. Проверить, что при `MV_GATEWAY_CLIENT_IDS` без `ci-harness` (prod) клиент получает `403` раньше обработчика (`TestTheContextDeliversThroughTheLongPoll` или тест `api`). Если system-architect выберет (б) или (в), правка ограничится таблицей. | открыто |
+| Mi-2 | Minor | `consumer/handle_narrative.go:47-63`; `consumer/deliveries_test.go:441-474` | Поля доставки нарратива из DoD и C-08 проверены не все. Тест сверяет `narrative_event_id`, `kind` и `filter`, но не `absence` (R6 зелёный), `round_seq` и `fallback_reason` в строке доставки. `fallback_reason` бот выводит пометкой шаблона (КД §10.4), `absence` — сводка отсутствия US-038. | В `TestTheNarrativeIsDeliveredInTheOrderOfTheTopic` или отдельном тесте подать нарратив с `absence{since_at, background_events_count}`, `round{seq: 3}` и `generated_by=template` + `fallback_reason`. Проверить `data.absence`, `round_seq = 3`, `fallback_reason` в строке и в `api.Delivery` после `Serve`. R6 должен покраснеть. | открыто |
+| N-1 | Nit | `outbox/render.go:159-177`; `consumer/handle_combat.go:40-73` | Текст решения одинаков для всех адресатов. В группе `combat.decided` уходит всем живым участникам, и «Вы вырвались из боя.», «Попадание! Урон 3.» получат и те, кто не бил и не бежал. Групповой бой — I2, путь проверен только unit-тестом, поэтому Nit. | В бэклог T-352/T-353: в групповом scope — текст от третьего лица с именем атакующего («Лена: попадание! Урон 3.»), golden на групповые варианты. | открыто |
+| N-2 | Nit | `outbox/store_test.go:238-249` | `TestExpireDropForPlayerAndPurge` не отличает `expires_at` от `created_at`: «свежие» строки созданы ровно в `now`, и строгое `<` оставляет их `pending` при любом из столбцов (R2 зелёный на своём тесте). Мутант убивает только поздний ack через `Sweep`. | Создать «свежие» строки на секунду раньше `now` (TTL не истёк, `created_at < now`) и проверить, что они остались `pending`. | открыто |
+| N-3 | Nit | `outbox/longpoll.go:127-161`; `handlers/deliveries.go:84-87` | Дедлайн записи — `wait + 5 с`. Последний `Lease` может начаться у самого срока ожидания: пробуждение и срок в `select` приходят вместе, выбор случаен. Тогда `BeginTx` ждёт соединение, занятое транзакцией ack или потребителя, до `PublishTimeout` = 5 с, и ответ с уже взятыми в лизинг доставками не успевает до дедлайна записи. Доставки выдаются снова через 30 с, потерь нет; сценарий требует зависшего брокера. | Проверять срок перед повторным `Lease` (не лизинговать, если `deadline.C()` уже готов) или давать `Lease` контекст со сроком «дедлайн записи − запас». | открыто |
+
+### Вопросы
+- **system-architect:**
+  - вариант публикации аналитики и цена «со сроком» — оценка выше (решение 2): около 14 копий сообщения за 10 минут сбоя, откат ack захватывает весь пакет;
+  - платформа клиента для `ci-harness` (Mi-1, решение 1);
+  - темп клиента после раннего пустого ответа — правка C-08 (решение 5).
+- **architect#3:** КД §11.2 о лизинге в replay (решение 4), формат id доставки в КД §4.2 (решение 7), доставки на конец встречи (решение 6). Возражений по коду нет.
+
+### Предложения в бэклог (вне границ T-307)
+1. **T-352/T-353:** N-1 — тексты правил для группового scope.
+2. **T-309:** `outbox_pending`, `outbox_oldest_age_s` в `/health` (предложение исполнителя) — поддерживаю.
+3. **Отдельная задача:** публикация `analytics.session.*` в sweeper'е — срок публикации или вынос из-под `session.Manager.mu`, вместе с N-4 ревью T-306.
+4. **T-312 / T-315:** пауза бота после пустого ответа раньше `wait_ms` (решение 5). Отдельно — не держать повтор ack при `503` дольше срока лизинга: `flush` около 21 с перед каждым опросом удлиняет цикл вдвое.
+5. **T-316:** контракт-тест outbox на Redpanda — поведение ack при недоступном брокере, замер цифр оценки по решению 2.
+
+### Риски и допущения
+- `-race` не запускался (cgo выключен). Порядок «звонок до коммита» и отсутствие взаимной блокировки двух БД разобраны чтением.
+- Оценка повторов при зависшем брокере сделана по коду клиента, бота T-312 и конфигурации писателя kafka-go, без интеграционного прогона.
+- Код бота T-312 читался из `origin/task/T-312-bot-deliver-main`, в ветке T-307 его нет. При слиянии нужна повторная сверка формы.
+- `shared/env/vars.go` и `.env.example` — файлы EPIC-001, нужна отметка tech-lead#1.
+- В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке. Мутанты и зонд выполнялись в копии в scratchpad, копия удалена по точному пути.
+
+## T-307 · ревью #2 · 2026-09-14 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+- Повторная итерация: проверены только исправления по ревью #1 (Ma-1, Mi-1, Mi-2, N-2, N-3) и регрессия от них. Основание — раздел «Итерация 2» карточки `tasks/T-307.md`.
+- Ветка `task/T-307-outbox-deliveries` (`.worktrees/T-307`), база — `a7d379e`, изменения не закоммичены.
+- Код итерации 2:
+  - `consumer/{deliveries.go, handle_narrative.go}`, `turns/tracker.go`, `handlers/deliveries.go`, `outbox/longpoll.go`;
+  - тесты `consumer/deliveries_test.go`, `turns/{tracker_test,outbox_steps_test,fixture_test}.go`, `handlers/deliveries_test.go`, `outbox/{longpoll_test,store_test}.go`, `deliveries_test.go`;
+  - `api/gateway.openapi.yaml`, `internal/gateway/README.md`.
+- Сверено с: C-10 (`schemas/events/analytics.turn.completed.v1.json`, `metrics.md` §2.1 и таблица событий), КД шлюза §7.6 и диаграмма хода (`gateway-and-bot.md:646-659`), каскад `/forget` (`links/forget.go`, `context.go:182-185`), `shared/env/vars.go` (`MV_GATEWAY_CLIENT_IDS`).
+
+### Вердикт
+**Принять.** Critical 0 · Major 0 · Minor 0 · Nit 2.
+
+Ma-1 исправлен так, как предлагало ревью #1. Все три случая покрыты тестом, мутанты исполнителя и ревьюера на них красные. Mi-1, Mi-2 и N-2 закрыты. N-3 закрыт в дешёвой части, остаток честно отнесён в бэклог. Регрессии не нашёл. Новые Nit — остаток Ma-1 при `/forget` (N-4) и незаписанный смысл `recipients_count` (N-5); ни один не мешает приёмке.
+
+### Проверено ревьюером (go1.26.8 windows/amd64, cgo выключен — без `-race`)
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./internal/gateway/... ./cmd/telegram-bot/...` — 22 пакета `ok`.
+- `golangci-lint run ./internal/gateway/...` — `0 issues.`; `gofmt -l internal/gateway` — пусто.
+- Мутанты. Копия дерева `scratchpad/t307r2-mutants` (tar без `.git`, `services`, `Docs`, `bin`, `.worktrees`), без `-overlay`. Контрольный прогон первым. Скрипт проверяет, что заменяемый фрагмент встречается ровно один раз, и после прогона возвращает файл из рабочей папки со сверкой `filecmp`. Перед удалением все изменённые файлы сверены с рабочей папкой — совпадают. Копия и скрипт удалены по точным путям.
+
+| # | Мутант | Результат |
+|---|---|---|
+| K | контрольный: `turns`, `consumer`, `handlers`, `outbox`, `gateway` | зелёный |
+| R2-1 | `OnNarrative` зовёт `completeDelivered` при `recipients > 1`, а не `> 0` (`turns/tracker.go:289`) | зелёный — **эквивалентный**: `completeDelivered` сам выходит при `delivered_count < recipients_count`, а при нарративе `delivered_count = 0`; ветка `> 0` только экономит чтение строки |
+| R2-2 | завершение при нарративе ищет ход по `ev.ID`, а не по `correlation_id` (`turns/tracker.go:292`) | красный: `TestATurnCountsOnlyTheRecipientsItCanReach` («no recipient with a link»), `TestANarrativeWithoutRecipientsCompletesItsTurn` |
+| R2-3 | `Poll` берёт платформу `ci-harness` для любого клиента (`handlers/deliveries.go:99`) | красный: `TestTheContextDeliversThroughTheLongPoll` — `mvctl` получил доставку. Тесты `handlers` при этом зелёные: SEC-12 для клиента без платформы держит только тест контекста |
+| R2-4 | `wireOf` не переносит `RoundSeq` в ответ long-poll (`outbox/longpoll.go:218`) | красный: `TestANarrativeDeliveryCarriesAbsenceRoundAndFallback` (часть `Serve`) |
+| R2-5 | в ход передаётся `len(rs)` — уникальные адресаты, включая без связки (`consumer/handle_narrative.go:54`) | красный: `TestATurnCountsOnlyTheRecipientsItCanReach` |
+
+### Разбор по пунктам поручения
+
+**1. Ma-1 — адресаты хода.**
+- Реализация (`consumer/deliveries.go:86-116`, `handle_narrative.go:44-74`):
+  - `recipients` проходит `players` по порядку, отбрасывает пустые и повторы и читает связку каждого игрока один раз;
+  - `linked` считает адресатов с платформой;
+  - адресат не `player` отсекается ещё при разборе payload.
+
+  Условие «со связкой» совпадает с условием `Enqueue`: `Platform == ""` → `dropped`. Считаются ровно те доставки, которые пишутся `pending`. Порядок шагов — `recipients` → `Turns.OnNarrative(linked)` → `write`: связки читаются один раз, всё в транзакции consumer.
+- **(а) Адресат без связки.** `player-A` со связкой и `player-C` без неё: одна `pending`, `recipients_count = 1`, `turn.completed` до ack нет, после ack `player-A` — один `ok`.
+- **(б) Повторённый адресат.** `player-A` дважды: одна доставка, `recipients_count = 1`, один ack завершает ход.
+- **(в) Никого со связкой.** `completeDelivered` вызывается прямо в `OnNarrative`, ход завершается `ok` до любого ack. `narrative_at` — момент применения, как у `recipients=0` из T-306.
+- **После дедлайна.** Во всех трёх подслучаях тест сдвигает часы на 2 минуты и зовёт `Sweep`: второго `turn.completed` нет, `turns_failed = 0`. Проверил, что ход действительно закрыт: `Sweep` берёт только `open(status)`, а `finish` переводит строку в `completed`.
+- **Регрессия.** Путь `recipients=0` из T-306 (`TestANarrativeWithoutRecipientsCompletesItsTurn`) не изменился. Мутант R2-2 роняет оба теста. Второй нарратив с той же `correlation_id` (смерть после текста хода, C-05 v1.4 п. 8) строку хода не трогает: `UPDATE … status IN (accepted, mechanics_applied)`. При `0` адресатов его `completeDelivered` на уже `narrated`/`completed` ходе ничего не делает. Поведение то же, что до итерации.
+- **Смысл `recipients_count` — сверка с C-10 и `metrics.md`.**
+  - Противоречия нет. Схема C-10 (`analytics.turn.completed.v1.json:65`) задаёт только `integer ≥ 0` без описания. `metrics.md` (таблица событий) определяет завершение хода как «доставлен всем адресатам scope». Диаграмма КД (`gateway-and-bot.md:658`) — `delivered_count == recipients_count`.
+  - Новый смысл — «адресаты, до которых доставка может дойти», — это частный случай решения оркестратора 3: адресат без связки считается доставленным. `delivered_count ≤ recipients_count` сохраняется: `OnDelivered` считает только на `narrated`, а ход закрывается на равенстве.
+  - S2 `group_view_consistency` (`metrics.md:116`) сравнивает те же два поля. Участник группы без связки — это только игрок после `/forget`, а он `abandoned` и из scope выходит. Метрика не искажается.
+  - Смысл нигде не записан — N-5.
+- **Оставшееся окно.** Оно шире, чем сказано в карточке («после `/forget` недостижимо»), — N-4. Путей два, оба только у игрока, который делает `/forget`:
+  1. **Нарратив поставлен до `/forget` и ещё не подтверждён.** Например, игрок нажал «забыть» во время генерации текста, а доставка уже в очереди. `DropForPlayer` переводит её в `dropped`, `OnDelivered` не вызывается, и ход уходит в `timeout` с `turns_failed + 1`. Если бы нарратив пришёл после удаления связки, тот же ход завершился бы `ok` сразу. Результат зависит от гонки.
+  2. **Нарратив поставлен между `DropForPlayer` и `deleteLink`** (`links/forget.go:95-102`). Связка ещё есть, доставка `pending` и посчитана. Затем `Serve` не находит маршрут, делает `Drop`, и ход уходит в `timeout`. Окно — миллисекунды: в MVP-1 хук один, а `deleteLink` идёт сразу за ним.
+
+  Потерь и утечек нет: внешний ID не уходит. Эффект — одна лишняя строка `timeout` в `unanswered_action_ratio` у сессии, завершённой `forget`. Для приёмки S1 (e2e соло без `/forget` посреди хода) недостижимо.
+
+**2. Mi-1 — `ci-harness`.**
+- `handlers.ClientPlatforms` содержит `telegram-bot → telegram` и `ci-harness → telegram`. Условность до решения system-architect записана в комментарии (`handlers/deliveries.go:18-33`), в README (стр. 202-203) и в описании `pollDeliveries` в OpenAPI (стр. 453).
+- `TestTheHarnessTakesTheDeliveriesOfTelegram`:
+  - таблица — ровно две строки;
+  - допущенный `ci-harness` опрашивает с `Platform = telegram`;
+  - при `MV_GATEWAY_CLIENT_IDS` без `ci-harness` — `403 client_unknown` и `svc.polls == 0`, то есть отказ до обработчика (`api/middleware.go:236-238`);
+  - у `mvctl` платформы нет.
+
+  В тесте контекста клиент без платформы теперь `mvctl`, R2-3 это подтверждает.
+- **Риск общей очереди.** Очередь одна на платформу, а `leased_by` лишь закрепляет лизинг. Если `telegram-bot` и `ci-harness` одновременно опрашивают один шлюз, каждый лизингует и подтверждает доставки чужих игроков:
+  - харнесс заберёт и подтвердит сообщения живых игроков Telegram — они их не получат (`delivered`, повтора не будет);
+  - бот попытается отправить сообщения тестовых игроков на их тестовые `external_id`;
+  - харнесс увидит внешние ID живых игроков.
+
+  Когда это возможно:
+  - **prod** — нет: `ci-harness` не допущен;
+  - **CI (T-313)** — нет: бота в процессе e2e нет;
+  - **dev-стек** — да: `MV_GATEWAY_CLIENT_IDS` по умолчанию содержит `ci-harness` (`shared/env/vars.go:100`), и e2e-харнесс, запущенный против стека с профилем `bot`, делит очередь с ботом.
+
+  Идентификация клиента — только заголовок `X-Client-Id` (ADR-009 п. 9, сеть внутренняя), поэтому защиты кроме allow-list нет. Уровень задан условным решением оркестратора, это не замечание к коду. Вопрос system-architect — ниже. Вариант (б) исполнителя (платформа `ci` для связок харнесса) риск снимает полностью.
+
+**3. Mi-2, N-2, N-3.**
+- **Mi-2.** `TestANarrativeDeliveryCarriesAbsenceRoundAndFallback` проверяет `data.absence`, `round_seq = 3` и `fallback_reason = timeout` в строке `deliveries`, а затем в `api.Delivery` после `Serve` — ещё `generated_by` и `narrative_event_id`. R6 ревью #1 — красный (I7/I8 исполнителя), мой R2-4 на уровне ответа long-poll — тоже красный.
+- **N-2.** Свежие строки поставлены за 2 с до `Expire`: `created_at < now`, `expires_at` далеко впереди. `Expire` по `created_at` отбросил бы и их — R2 красный на собственном тесте (I5).
+- **N-3.** `Serve` после истечения срока:
+  - после `select` без выхода (звонок или пробуждение раз в секунду) неблокирующая проверка `deadline.C()` возвращает пустой список без нового лизинга (`outbox/longpoll.go:170-174`);
+  - сработавший таймер `RealTimers` (Go 1.23+) и `ManualTimers` (буфер 1) остаётся готовым к чтению, поэтому проверка надёжна для обоих;
+  - `wait == 0` по-прежнему выходит после первого лизинга, остановка — первым `select`;
+  - `TestServeLeasesNothingOnceTheWaitIsOver` делает 20 раундов с уже сработавшими таймерами и строкой, которая появляется до ожидания: без правки вероятность пройти ≈ (1/3)^20, тест не флакает.
+
+  Остаток (лизинг, начатый до срока, ждёт соединение дольше дедлайна записи) отнесён в бэклог, в коде есть комментарий. Потерь нет: доставки выдаются снова после лизинга.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `consumer/deliveries.go:86-116`; `consumer/handle_narrative.go:44-54`; `turns/tracker.go:282-292` | Итерация 1: адресат без связки или повторённый не давал ходу завершиться. | Исправлено: в ход передаётся число уникальных игроков со связкой, `0` завершает ход при нарративе; тест на три случая, мутанты R2-2, R2-5, I1–I3 красные. | закрыто |
+| Mi-1 | Minor | `handlers/deliveries.go:30-33`; `handlers/deliveries_test.go:134-153`; `api/gateway.openapi.yaml:453` | Итерация 1: у `ci-harness` не было платформы вопреки решению 1. | Исправлено условно до решения system-architect; `403` без допуска проверен. Риск общей очереди — в «Рисках». | закрыто |
+| Mi-2 | Minor | `consumer/deliveries_test.go:636-670` | Итерация 1: `absence`, `round_seq`, `fallback_reason` не проверялись. | Исправлено: строка и ответ `Serve`; R6 и R2-4 красные. | закрыто |
+| N-1 | Nit | `outbox/render.go:159-177` | Итерация 1: тексты правил в групповом scope. | Перенесено в T-352/T-353 по поручению. | в бэклоге |
+| N-2 | Nit | `outbox/store_test.go:238-271` | Итерация 1: тест `Expire` не отличал `expires_at` от `created_at`. | Исправлено; R2 красный на своём тесте. | закрыто |
+| N-3 | Nit | `outbox/longpoll.go:162-174` | Итерация 1: лизинг у самого срока ожидания. | Исправлено в дешёвой части; остаток (срок `Lease` по дедлайну записи) — в бэклоге исполнителя. | закрыто |
+| N-4 | Nit | `internal/gateway/context.go:182-185`; `links/forget.go:95-102`; `outbox/longpoll.go:199-205`; карточка T-307, «Итерация 2», «Остаток» | Остаток Ma-1 шире записанного. (1) Нарратив, поставленный до `/forget` и не подтверждённый, `DropForPlayer` переводит в `dropped`: ход уходит в `timeout`, а тот же нарратив после удаления связки завершил бы ход `ok` — исход зависит от гонки. (2) Нарратив, поставленный между `DropForPlayer` и `deleteLink`, считается адресатом и отбрасывается в `Serve` без маршрута → `timeout`. Эффект только аналитический (`unanswered_action_ratio` сессии `forget`); потерь и утечек нет. | Расширить пункт бэклога исполнителя 2: завершать шаг хода для отброшенной доставки `narrative` в одном месте — в `DropForPlayer` и в `Drop` (например, `OnDelivered` в той же транзакции, либо отдельный `OnDropped`). Либо зафиксировать решением, что ход игрока, сделавшего `/forget` посреди хода, законно `timeout`. В карточке исправить «после `/forget` это недостижимо». | открыто (бэклог) |
+| N-5 | Nit | `turns/tracker.go:238-248`; `schemas/events/analytics.turn.completed.v1.json:65`; `gateway-and-bot.md:658`; `metrics.md` (таблица событий, `analytics.turn.completed`) | Смысл `delivery.recipients_count` уточнён («уникальные игроки-адресаты со связкой»), но записан только в комментарии кода и карточке. Для C-10 и `metrics.md` это не противоречие (решение оркестратора 3), однако потребитель аналитики EPIC-005 может читать поле как `len(recipients[])` события `narrative.output`. | architect#3: одна фраза в КД §7.6. Владелец C-10 (EPIC-005): `description` у `recipients_count` в схеме при следующей правке. Кода не касается. | открыто (документы) |
+
+### Вопросы
+- **system-architect** (к прежним вопросам ревью #1): для Mi-1 — общая очередь `telegram-bot` и `ci-harness` в dev-стеке. `MV_GATEWAY_CLIENT_IDS` по умолчанию допускает харнесс. Харнесс, запущенный против стека с ботом, подтверждает сообщения живых игроков и видит их внешние ID. Если вариант (а) остаётся, нужно одно из двух: запрет запускать харнесс против стека с профилем `bot` (runbook, T-308) или вариант (б) — платформа `ci`.
+- **architect#3:** N-4 — считается ли ход игрока, сделавшего `/forget` посреди хода, законным `timeout`; N-5 — фраза о `recipients_count` в КД §7.6.
+
+### Предложения в бэклог (вне границ T-307)
+1. **N-4:** шаг хода для доставки `narrative`, отброшенной `DropForPlayer` или `Drop`, — расширение пункта 2 бэклога исполнителя.
+2. **T-308 / runbook:** не запускать харнесс против шлюза, у которого работает бот (до решения по Mi-1), или связки платформы `ci`.
+3. **T-316 / T-313:** e2e-проверка `ci-harness` через long-poll, когда харнесс появится. Сейчас платформу харнесса видит только unit-тест `handlers` и таблица.
+4. Прежние предложения ревью #1 (T-352/T-353, T-309, публикация `analytics.session.*`, T-312/T-315, T-316) в силе.
+
+### Риски и допущения
+- `-race` не запускался (cgo выключен). Неблокирующая проверка срока в `Serve` разобрана чтением для `RealTimers` и `ManualTimers`.
+- R2-1 признан эквивалентным по коду `completeDelivered`. Если там уберут условие `delivered_count < recipients_count`, мутант станет значимым, и тест случая (а) его поймает (`atOnce = false`).
+- Оценка риска общей очереди сделана по коду `Lease`/`Ack` и `shared/env/vars.go` без прогона двух клиентов.
+- В рабочей папке задачи ревьюер добавил только этот раздел и строку в карточке. Мутанты выполнялись в копии в scratchpad, копия удалена по точному пути.

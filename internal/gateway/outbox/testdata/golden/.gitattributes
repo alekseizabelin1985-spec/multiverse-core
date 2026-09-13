@@ -1,0 +1,3 @@
+# Golden texts of the rules of the outbox (T-307): a conflict takes one side
+# whole, and go test -run TestRenderGolden -update writes the text again.
+*.txt text eol=lf merge=binary

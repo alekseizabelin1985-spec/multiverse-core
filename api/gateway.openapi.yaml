@@ -216,7 +216,12 @@ paths:
       operationId: listWorlds
       tags: [characters]
       summary: List the worlds
-      description: llm.cloud_enabled is the last config.cloud_enabled seen by the gateway, false by default (C-08 v1.2, SEC-21).
+      description: |
+        Every world of the projection of the gateway, by world_id, with its
+        regions by region_id and laws_version. No world yet is an empty list.
+        llm.cloud_enabled is the last config.cloud_enabled seen by the gateway,
+        false by default (C-08 v1.2, SEC-21); until the gateway projects that
+        event (T-320) it is always false.
       parameters:
         - $ref: '#/components/parameters/ActorKind'
       responses:
@@ -233,7 +238,42 @@ paths:
       operationId: createCharacter
       tags: [characters]
       summary: Create a character
-      description: Idempotent by (link_id, action_key); a repeat returns the first answer and the same player_id.
+      description: |
+        The gateway proposes the character to State (entity.create.proposed)
+        and waits for its fact up to MV_GATEWAY_CHARACTER_WAIT (2 s): 201 with
+        the character when it comes in time, 202 {player_id, status: creating}
+        when it does not. A creating character reads status=creating in
+        GET /v1/players/{player_id} and character_status=creating in
+        resolveLink until its fact comes; without the fact by
+        MV_GATEWAY_CHARACTER_DEADLINE (60 s), or refused by State, it is taken
+        off the link, reads player_not_found and none, and the next request
+        creates a new player_id.
+
+        Checks, in this order; the first that fails is the answer:
+        invalid_request (external_platform other than telegram, an empty
+        external_id, action_key missing or longer than 64 bytes);
+        consent_required (no link, or a link not consented); then the answer
+        kept under the key; then the character of the link: 200
+        {created: false} with the living character (a second one is not
+        created), 202 again for one still creating; a dead or abandoned
+        character is replaced by a new player_id on the same link;
+        world_not_found (nothing is proposed); name_required (empty after trim),
+        name_invalid (2..32 characters: letters, digits, space, hyphen, no two
+        spaces in a row, no combining marks). The name then goes through the
+        input filter of the gateway (FR-056) and the result is checked by the
+        same rule: a name the filter blocks or turns into no name is
+        name_invalid, a failure of the filter is 422 filter_error; the proposal
+        gets the name the filter returned.
+
+        Idempotency (C-08 v1.1, SEC-03): 200, 201 and 202 are kept under
+        (link_id, action_key) for 24 hours in the file of links, which /forget
+        deletes with the link; a repeat returns the first answer and the same
+        player_id. A refusal is not kept: a repeat checks again. 503
+        bus_unavailable means the proposal did not go out: the repeat with the
+        same key proposes the same player_id under the same proposal_id, which
+        State applies once. 500 internal answers a creation State refused.
+        link_id is never returned, and gateway.db holds neither the external
+        account nor link_id.
       x-nolog: true
       x-idempotency: action_key
       parameters:
@@ -272,7 +312,15 @@ paths:
       operationId: getPlayer
       tags: [characters]
       summary: State of a character
-      description: Not a turn, publishes nothing. While creating, only player_id, name, world_id and status are present.
+      description: |
+        Not a turn, publishes nothing. The character as the projection of the
+        gateway holds it: status (alive, dead, abandoned), hp, position (kind
+        region or outside), scope, group, the open encounter with its NPCs,
+        inventory, the weather and time of the world when the world has them,
+        the active session of its scope (session_id, turns_count) and version.
+        While creating, only player_id, name, world_id and status=creating are
+        present. A player the gateway knows neither from its projection nor as
+        a creating character is 404 player_not_found.
       parameters:
         - $ref: '#/components/parameters/ActorKind'
         - $ref: '#/components/parameters/PlayerId'
@@ -390,7 +438,22 @@ paths:
       description: |
         One active long-poll per client (a second one answers 409
         poll_in_progress). Deliveries of one player come strictly in order, one
-        at a time; without an ack a delivery is given again after 30 s.
+        at a time; without an ack a delivery is given again after
+        MV_GATEWAY_DELIVERY_LEASE (30 s).
+
+        The answer comes as soon as there are deliveries for the client, when
+        wait_ms is over, or at once with an empty list when the gateway stops.
+        wait_ms above 25000 and limit above 100 are brought down to them; a
+        value that is not a number, limit below 1, a negative wait_ms or after
+        is 400 invalid_request. cursor is the largest seq given so far, or
+        after when nothing was given.
+
+        route is filled from the link at the moment of the answer, and only for
+        a client of the platform of the link (SEC-12): in MVP-1 telegram-bot
+        and ci-harness take the deliveries of telegram (ci-harness provisionally,
+        until system-architect decides; prod does not admit it), and no other
+        client has a platform. A delivery whose player has no link any more is
+        dropped and not given.
       parameters:
         - $ref: '#/components/parameters/ActorKind'
         - $ref: '#/components/parameters/ClientIdPath'
@@ -413,6 +476,17 @@ paths:
       operationId: ackDeliveries
       tags: [deliveries]
       summary: Acknowledge deliveries
+      description: |
+        Marks delivered the deliveries this client leased and that are still
+        pending, also after the lease ran out, as long as nobody leased them
+        again. Other ids — unknown, of another client, already delivered or
+        dropped — come back in unknown and are not an error; a repeat of an
+        acknowledged id is unknown.
+
+        The acknowledgement of the last recipient of a narrative completes its
+        turn and publishes analytics.turn.completed. When the bus does not take
+        it, nothing of the call is acknowledged: 503 bus_unavailable, and the
+        client repeats the call.
       parameters:
         - $ref: '#/components/parameters/ActorKind'
         - $ref: '#/components/parameters/ClientIdPath'
@@ -431,6 +505,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '413': { $ref: '#/components/responses/PayloadTooLarge' }
         '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /v1/clients/{client_id}/stream:
     get:
