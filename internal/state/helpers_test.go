@@ -115,8 +115,13 @@ func fixtureWith(t *testing.T, cfg state.ApplierConfig) *fixture {
 	t.Helper()
 	sources := testkit.Deterministic(t, "t055")
 	eventbus.SetRegistry(contracts.Default())
-	f := &fixture{store: memstore.New(), journal: &journal{}, log: &lockedBuffer{}, clock: sources.Clock}
+	f := &fixture{store: cfg.Store, journal: &journal{}, log: &lockedBuffer{}, clock: sources.Clock}
+	if f.store == nil {
+		f.store = memstore.New()
+	}
 	cfg.WorldID, cfg.Store, cfg.Publisher, cfg.Timers = world, f.store, f.journal, sources.Timers
+	// A snapshot stamps taken_at from the same manual clock (T-057).
+	cfg.Clock = sources.Clock
 	cfg.Log = slog.New(slog.NewJSONHandler(f.log, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	applier, err := state.NewApplier(cfg)
 	if err != nil {

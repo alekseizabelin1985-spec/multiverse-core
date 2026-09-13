@@ -27,10 +27,13 @@ var stateDefinitions = []Spec{
 		[]string{SourceState, SourceTestkitState},
 		[]string{SourceGateway, SourceSwarm, SourceMemory}),
 	// Every stateful context publishes its own snapshot; the consumers read
-	// the latest.json pointer at start (C-14 v1.1).
-	systemEvent("snapshot.created", OwnerState,
+	// the latest.json pointer at start (C-14 v1.1). The world of a snapshot is
+	// in the envelope only — the payload does not carry it and snapshot.key is
+	// relative to snapshots-{world} — so a publisher that forgot it hears so
+	// from Publish (C-14 v1.3, C-01 v1.10).
+	worldRequired(systemEvent("snapshot.created", OwnerState,
 		[]string{SourceState, SourceSwarm, SourceGateway},
-		[]string{SourceState, SourceSwarm, SourceGateway, SourceMvctl}),
+		[]string{SourceState, SourceSwarm, SourceGateway, SourceMvctl})),
 	// The type belongs to EPIC-002 (mechanics), the encounter agent publishes
 	// it (C-03), and FakeEncounter does the same on membus.
 	gameEvent("dice.rolled", OwnerState,
