@@ -28,6 +28,16 @@ directory: a relative `-f` belongs to the caller, not to the repository root
 can be overridden with `COMPOSE_LINT_FIXTURES`, which is how the self-test
 itself is tested. The fixtures run side by side (`COMPOSE_LINT_JOBS`, the number
 of processors by default) and are judged in the order of the files (T-429).
+Every run starts with each name that the env files of the linter,
+`build/versions.env` and `.env.example` declare exported EMPTY — what the CI
+job did to `CHROMA_IMAGE` by exporting `build/versions.env` through
+`$GITHUB_ENV`. Compose prefers the environment of its process to any
+`--env-file`, so the linter drops those names before it calls compose; without
+that for the names of its `--env-file`, the fixtures that take a value from
+those files fail, the good ones included, on any machine and not only in CI.
+Dropping the names of `.env.example` (or of a paired `.env`) is a precaution
+the fixtures cannot check: a fixture's `${VAR:?}` must resolve in the model of
+rules 1-6 first, and that model reads the `--env-file` alone (T-455).
 
 Rules 3, 7 and 8 read a fixture the way compose reads it: through `docker
 compose config --no-interpolate`, the values after YAML and before
