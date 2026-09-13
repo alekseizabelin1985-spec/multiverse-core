@@ -70,6 +70,13 @@ EPIC-005 читает в обоих режимах; у всех трёх пол�
 `replay.state_hash_before`, `replay.state_hash_after`) один шаблон
 `^sha256:[0-9a-f]{64}$`, и его же выдаёт `entity.StateHash`.
 
+Условная обязательность полей записи модели (C-07 v1.3, T-445) — какие поля
+`llm.output` обязательны и запрещены при каждом `validation_status`, и что
+несёт `llm.output.rejected` при `budget_exceeded` и `unknown_entity`, —
+проверяется не парой фикстур, а таблицей случаев в
+`shared/contracts/llmrecord_test.go`: по валидному и невалидному документу на
+каждую ветку `if/then` схемы.
+
 ### Чего схема не проверяет и проверить не может
 
 Правила C-02, которые связывают несколько полей или несколько элементов,
@@ -133,7 +140,7 @@ EPIC-005 читает в обоих режимах; у всех трёх пол�
 | `world.law_breach.review_decided` | нет `reviewer_kind` — решение G1 требует отличать `human` от `timeout` |
 | `world.law_breach.rolled_back` | пустая строка в `retconned_fact_ids` |
 | `llm.output` | `validation_status: "rejected_unknown_entity"` — значение из `data-model.md` §7.2 v0.2, удалённое сведением 3: статус описывает исход конвейера, причина живёт в `llm.output.rejected.reason` (C-07 v1.2, ADR-017 доп. 1) |
-| `llm.output.rejected` | `reason: "budget"` — слово из другого словаря: так называется `narrative.output.fallback_reason` для той же ситуации, а причина отказа зовётся `budget_exceeded` |
+| `llm.output.rejected` | `reason: budget_exceeded` вместе с `llm_output` — ссылка на запись вызова, которого не было: при исчерпанном бюджете модель не вызывается, поэтому `llm_output` запрещён, а `budget` обязателен (C-07 v1.3, T-445). До T-445 фикстура ломала словарь (`reason: "budget"`); по новой схеме такой документ падал бы сразу на двух правилах, и словарь теперь держит случай `budget used as a reason` в `shared/contracts/blockv_test.go` |
 | `narrative.output` | `recipients: []` — рассказчик отфильтровал молчащих игроков; C-05 требует всех игроков scope, включая `idle` |
 | `content.incident.recorded` | лишнее поле `incident.text` — ровно то, ради отсутствия чего событие и заведено: инцидент несёт версию фильтра и ссылку на запись, но не текст (ADR-016 п. 3) |
 | `config.cloud_enabled` | `enabled: "false"` строкой — значение `MV_LLM_CLOUD_ENABLED`, переданное как прочитано из окружения |
@@ -157,6 +164,11 @@ EPIC-005 читает в обоих режимах; у всех трёх пол�
 `cost_usd`, `response_len`, `parse.reasoning_len`, `attempt`, `budget.limit`) —
 тоже счётчики и доли. Хеши промпта и ответа объявлены строками по той же
 причине, что и `content_hash`.
+
+Форма хешей записи модели и блупринта (`content_hash`, `prompt_hash`, `response_hash`) — `sha256:` и 64 шестнадцатеричные цифры в нижнем
+регистре, шаблон схемы `^sha256:[0-9a-f]{64}$` (C-07 v1.3, T-445); та же
+форма у `state_hash` (`shared/entity.StateHash`). Хеш без префикса, в верхнем
+регистре или длиной 63 схема не принимает.
 
 Единственные поля, которые могли бы в этот предел упереться, — `content_hash`
 в `agent.spawned` и `agent.blueprint_reloaded`: это SHA-256 блупринта
