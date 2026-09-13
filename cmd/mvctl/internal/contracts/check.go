@@ -295,20 +295,32 @@ var actorKinds = []string{
 // and without an agent. Only the fields a policy reads are filled — the payload
 // and its schema are the business of Validate, which the tests of
 // shared/contracts run over the examples of api-contracts.md §2.3.
+//
+// Every fixture names a world. The rule holds a type against its topic by
+// actor kind and agent only; a topic has no rule for the world, so a fixture
+// without one would be refused by a type with WorldRequired and accepted by
+// its topic, and the check would report a policy that is right (C-01 v1.10;
+// review #1 of T-460, Mi-1).
 func policyFixtures(typ string) []policyFixture {
 	agent := &eventbus.AgentRef{ID: "agent-1", Level: "task", Blueprint: "fixture"}
+	world := &eventbus.WorldRef{Entity: eventbus.EntityRef{ID: "world-1", Type: "world"}}
 	fixtures := make([]policyFixture, 0, 2*len(actorKinds))
 	for _, kind := range actorKinds {
 		fixtures = append(fixtures,
 			policyFixture{
-				name:  "actor_kind=" + kind + " without meta.agent",
-				event: eventbus.Event{Type: typ, Meta: eventbus.Meta{ActorKind: kind}},
+				name: "actor_kind=" + kind + " without meta.agent",
+				event: eventbus.Event{
+					Type:  typ,
+					World: world,
+					Meta:  eventbus.Meta{ActorKind: kind},
+				},
 			},
 			policyFixture{
 				name: "actor_kind=" + kind + " with meta.agent",
 				event: eventbus.Event{
-					Type: typ,
-					Meta: eventbus.Meta{ActorKind: kind, Agent: agent},
+					Type:  typ,
+					World: world,
+					Meta:  eventbus.Meta{ActorKind: kind, Agent: agent},
 				},
 			})
 	}

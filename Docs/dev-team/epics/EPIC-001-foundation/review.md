@@ -16854,3 +16854,82 @@ R2-Mi-2 можно закрыть до старта T-061 и T-221.
 - Код бота — кончик `epic/EPIC-004-gateway-bot` `c92eb22` на момент ревью. Когда T-311/T-312 добавят `main.go` и новые пакеты, прогон нужно повторить в их ревью.
 - Поведение depguard («каждое совпавшее правило проверяется отдельно») выведено из R4, R5 и R1b, а не из исходников depguard.
 - `--uniq-by-line=false` задан, чтобы находки двух списков на одной строке не схлопнулись. Во всех мутантах была одна находка или ни одной.
+
+## T-460 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-1)
+
+Задача: `eventbus.Permanent`, `ErrPermanent`, `Policy.World` (`WorldRule`, `WorldOptional`, `WorldRequired`) по C-01 v1.10; два contract-кейса на `membus` и kafka. Метка `contract-change`. Ветка `task/T-460-permanent-policy-world` от `a0d45d2`, изменения не закоммичены. Сверка — `git diff a0d45d2` и неотслеживаемые файлы рабочей папки `.worktrees/T-460`.
+
+### Что проверено
+
+- **Дифф целиком:** `shared/eventbus/{delivery,registry}.go`, `README.md`; новые `permanent_test.go`, `policy_world_test.go`, `membus/policy_world_test.go`; `shared/testkit/contract/{contract.go,membus_test.go,redpanda_integration_test.go}`; карточка, `dev-log.md`.
+- **Источники:** `contracts.md` — C-01 v1.10 (`:272`–`:278`, история `:405`–`:408`), C-02 v1.7 (`:451`); КД State §9 (`state-and-mechanics.md:763`–`:787`); DoD — карточка `T-456.md:116`–`:121`.
+- **Код рядом:** `kafka.go:384`–`:395` и `membus.go:447`–`:458` (обе реализации читают через `Delivery.Deliver`), `membus.go:205` (`Publish` → `Route`), `cmd/mvctl/internal/contracts/check.go:239`–`:315` (правило (г) — второй потребитель `Policy.Check`).
+- **Кончики эпиков (только чтение):** `EPIC-002` `281348a`, `EPIC-003` `b9a169c`, `EPIC-004` `c92eb22`.
+
+### Сверка по пунктам задания
+
+1. **Соответствие C-01 v1.10.**
+   - `Permanent(nil)` → `nil` (`delivery.go:46`). Обёртка `Unwrap() []error{ErrPermanent, cause}`: `errors.Is` по обоим, `errors.As` доходит до причины, текст — текст причины. Повторная обёртка `fmt.Errorf("…: %w")` остаётся окончательной.
+   - Порядок в `Deliver` (`delivery.go:147`–`:169`): паника → `deadLetter` сразу, отмена не проверяется, поведение v1.5 не тронуто; затем `ctx.Err()` → возврат без письма; затем `ErrPermanent` → `parkPermanent`. Под отменой `Permanent` не паркуется, повторная доставка работает; проверка отмены стоит раньше парковки.
+   - `parkPermanent` (`:179`–`:191`): письмо `attempts` = номер вызова, запись под `WithoutCancel`. Строка `Error` с `handled=true` пишется после записи письма, без `panic`/`stack`. Неудачная запись идёт прежним путём `logNotParked`: `handled=false`, ошибка из `Deliver`.
+   - `WorldRequired` (`registry.go:122`–`:131`): `World == nil` и пустой `World.Entity.ID` → `ErrPolicyViolation`. `Check` вызывают `Route` (публикация, обе шины) и `Delivery.validate` (чтение, обе шины), так что отдельной проверки не нужно. Deprecated-типы политику не проверяют, как и раньше.
+   - Реестр не менялся: в `shared/contracts` дифф пуст, ненулевого `World` нет.
+2. **Совместимость с EPIC-002 (T-055, `internal/state`).**
+   - `ErrPermanent`/`Permanent` на кончиках EPIC-002/003/004 не встречаются.
+   - `ErrWorldStopped` оборачивает причину через `%w` (`apply.go:422`, `:437`). Причины — ошибки `Publish` и хранилища; ни одна не несёт `ErrPermanent`. `Publish` обеих шин асинхронен и ошибок чужих обработчиков не возвращает. Паника worker'а оборачивается через `%v` (`worker.go:108`).
+   - `Stop` State опирается на «ошибка под отменой → офсет не фиксируется». Этот путь сохранён и стоит раньше новой ветки.
+   - Поведение `internal/state` после слияния develop → EPIC-002 не меняется. Неключевых литералов `eventbus.Policy{…}` нет ни в одном дереве, так что новое поле ничего не ломает при компиляции.
+   - Семь изменённых файлов кода на кончиках эпиков с `a0d45d2` не менялись, конфликтов в коде не будет.
+3. **Публичный API не шире контракта.**
+   - В `eventbus` добавлены `ErrPermanent`, `Permanent`, `WorldRule`, `WorldOptional`, `WorldRequired`, `Policy.World` — ровно перечень C-01 v1.10. `permanentError` и `parkPermanent` не экспортированы.
+   - В `shared/testkit/contract` — `Target.Stalled`, `StalledBus`, `StalledBackoff` (решение оркестратора п. 2). Потребители `contract.Target` во всём дереве и во всех рабочих папках (`EPIC-001…004`, `T-203`, `T-208`, `T-305`, `T-318`, `T-458`, `T-461`) — только `membus_test.go` и `redpanda_integration_test.go` самого пакета. Оба в ветке дополнены; других потребителей нет.
+4. **Качество contract-теста.**
+   - *Застывшая шина.* Паузы `time.Hour` на `clock.Manual`, который никто не двигает. Если окончательную ошибку примут за обычную, подписка повиснет на первой паузе: следующее событие не придёт за `Timeout`, `ReadRange` упрётся в `readCtx`. Отсутствие пауз кейс доказывает. Проверки `attempts = 1` и текста причины идут и по подписке, и по журналу.
+   - *Сторож `checkItStalls`.* Обычная ошибка на той же шине за 300 мс не повторяется. Он ловит подмену `StalledBackoff` нулями (M6 разработчика).
+   - *Флейк 300 мс с `-race`.* Ложного красного не бывает: ручной таймер не срабатывает ни при какой задержке, `calls` больше 1 не станет. Медленный CI может дать только ложный зелёный сторожа, и только для шины с реальными паузами короче ≈ 300 мс. На основной кейс это не влияет. Первый вызов ждётся через `waitFor` с `Timeout`.
+   - Порядок `defer` верный: `sub.stop` раньше `Release`.
+   - *Кейс под отменой.* Проверяет «письма нет» и «новая подписка той же группы получает событие снова». Возврат `ctx.Err()` снаружи `Subscribe` не виден; его закрывает unit `TestDeliverDoesNotParkAPermanentErrorUnderCancellation`.
+5. **Мутанты ревьюера.** Копии `t460r1-<имя>` в scratch, без `-overlay`, замена скриптом с `assert count == 1`. Прогон: `go test -short -count=1 ./shared/eventbus/... ./shared/testkit/contract/` (unit и contract на membus, kafka не запускался). Копии удалены по точным путям.
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный, без изменений | **зелёный**, 3 пакета ok |
+| R1 | «`Permanent` оборачивает `nil`» — проверка `err == nil` удалена | **красный**: `TestPermanentKeepsTheCauseAndItsText` |
+| R2 | «`errors.As` не доходит до причины» — `Unwrap() error { return ErrPermanent }` + метод `Is`, делегирующий причине (`errors.Is` по обоим остаётся истинным) | **красный**: `…KeepsTheCauseAndItsText` («errors.As does not reach the cause») |
+| R3 | «`WorldRequired` при чтении не проверяется» — в `Delivery.validate` политика с `World = WorldOptional` | **красный**: `TestDeliverParksAnEventTheWorldRuleRejects…` (eventbus), `TestReadParksAnEventWithoutTheWorld…` (membus) |
+| R4 | строка `failed permanently` до записи письма | **красный**: `TestDeliverReportsAFailingSinkForAPermanentError` (две строки лога) |
+| R5 | `attempts` окончательной ошибки всегда 1 | **красный**: `TestDeliverParksAPermanentErrorWithTheNumberOfItsCall` |
+| R6 | паника со значением `Permanent(…)` при живом контексте идёт в `parkPermanent`: `if panicked && (ctx.Err() != nil \|\| !errors.Is(err, ErrPermanent))` | **зелёный** — см. Mi-2 |
+
+6. **Прогоны** (go1.26.8 windows/amd64).
+   - `go build ./... && go vet ./...` — 0; `go vet -tags integration ./shared/eventbus/... ./shared/testkit/contract/` — 0.
+   - `go test -short -count=1 ./shared/...` — все пакеты ok. Оба новых contract-кейса на membus: 0,31 с и 0,01 с.
+   - `golangci-lint run ./shared/...` — 0 issues; `--build-tags integration` по `eventbus`/`contract` — 0 issues.
+   - `go run ./cmd/mvctl contracts check` — «65 types, 8 topics, 58 schema files checked»; `gofmt -l shared/` — пусто.
+   - `-race` не запускался: нет cgo.
+
+### Замечания
+
+| # | Уровень | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/mvctl/internal/contracts/check.go:269`–`:270`, `:298`–`:315` | Правило (г) сверяет политику типа с политикой топика на восьми фикстурах `policyFixtures`. У фикстур нет `World`. Если владелец поставит `WorldRequired` типу на `player_events`, `llm_records` или `narrative_output`, `spec.Policy.Check` отвергнет все восемь, а политика топика примет. `contracts check` покраснеет ложным «policy refuses actor_kind=human without meta.agent, which player_events allows». Сейчас не проявляется: первые типы с правилом (`entity.*.proposed`, T-056) идут в `system_events`, где правила топика нет. Но новое поле ломает посылку правила «политику держат против фикстур, а не сравнивают по полям» | Дать фикстурам мир: `World: &eventbus.WorldRef{Entity: eventbus.EntityRef{ID: "world-1", Type: "world"}}`. Правило (г) по-прежнему проверяет только `actor_kind`/`agent`. Плюс тест `check_test.go` на тип с `WorldRequired` на `player_events`. Сейчас однострочной правкой или в бэклог tech-lead#1 до первой строки `WorldRequired` на правленом топике |
+| Mi-2 | Minor | `shared/eventbus/permanent_test.go:167`–`:189` | Комментарий теста обещает «a permanent error does not borrow its trace», но проверяется только текст письма под отменой. Мутант R6 выжил: паника со значением `Permanent(…)` при живом контексте уходит в `parkPermanent`. К строке паники (`handled=false`, `stack`) добавляется `Error` «failed permanently» с `handled=true`. C-01 v1.10: «`ErrHandlerPanic` и `handled=false` остаются за перехватом паники». Текст письма и `attempts` совпадают, поэтому ни один тест разницы не видит | В `TestDeliverKeepsAPanicApartFromAPermanentError` (или отдельным случаем при живом контексте) подключить `recordingLog` и проверить: запись одна, у неё есть `panic` и `stack`, `handled=false`, строки «failed permanently» нет. Прогнать R6 — должен покраснеть |
+| N-1 | Nit | `shared/testkit/contract/contract.go:99` | `StalledBackoff` — экспортированная изменяемая переменная, общая для обеих целей. Кейс или цель, переписавшие элемент, незаметно сломают сторож другой цели | Функция `StalledBackoff() []time.Duration`, возвращающая новый срез, или копия `slices.Clone` в целях |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 1.
+
+Код соответствует C-01 v1.10 и DoD карточки T-456: порядок «паника → отмена → окончательная», `Permanent(nil)`, `errors.Is/As`, `WorldRequired` при публикации и при чтении на обеих шинах. Застывшая шина доказывает отсутствие пауз, флейка на `-race` не даёт. Поведение `internal/state` EPIC-002 при синхронизации не меняется. Mi-1 — скрытое взаимодействие нового поля с `mvctl contracts check` вне нынешних строк реестра. Mi-2 — пробел теста при верном коде. Оба закрываются малыми правками до коммита или записями в бэклог, вердикт от выбора не зависит.
+
+### Предложения в бэклог
+
+1. tech-lead#1 (EPIC-001): Mi-1, если не закрыт в T-460. Срок — до первой строки `WorldRequired` у типа на `player_events`/`llm_records`/`narrative_output`.
+2. tech-lead#1: contract-кейс «предложение без мира» после T-056 (п. 1 бэклога разработчика). Выигрыш мал: обе шины проверяют через тот же `Delivery`, а R3 уже ловят unit-тесты `eventbus` и `membus`.
+3. system-architect: C-01 не говорит, что делать с голым `ErrPermanent` без причины. Сейчас такое событие паркуется с текстом «eventbus: permanent handler error». Можно явно разрешить или запретить.
+
+### Риски и допущения
+
+- Kafka-вариант обоих кейсов не запускался (запрет задания). Его зелёный прогон взят из карточки: один интеграционный прогон разработчика, 26 кейсов.
+- `-race` недоступен (нет cgo). Оценка флейка `checkItStalls` — рассуждением: ручные таймеры не срабатывают, поэтому ложный красный невозможен.
+- Совместимость с EPIC-002 проверена по кончику `281348a` рабочей папки `.worktrees/EPIC-002`. Незакоммиченные правки T-055/T-056 в других папках не смотрелись.
