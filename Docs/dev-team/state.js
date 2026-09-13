@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:50:50+03:00",
+  "updatedAt": "2026-09-13T15:56:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2393,7 +2393,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:46:40+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -2505,7 +2505,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-454",
           "title": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race) и флак fight-05 в TestTheProcessRunsTheFightsOfIAlpha",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T14:36:44+03:00",
           "finishedAt": null,
@@ -3114,13 +3114,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-201",
           "title": "A1 · shared/agent v2: типы блупринта, парсер, плейсхолдеры, чистка пакета",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T12:52:40+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T15:56:06+03:00",
           "reviewIterations": 3,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 175,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-201.md",
           "subwave": "A",
@@ -8729,7 +8729,7 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "CI: гонка testkit/state и флак fight-05 (возобновление)",
       "startedAt": "2026-09-13T15:25:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:56:06+03:00"
     },
     {
       "instance": "developer#1",
@@ -8789,7 +8789,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Ревью #2 T-446 (возобновление)",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:56:06+03:00"
     },
     {
       "instance": "devops-engineer#2",
@@ -8849,7 +8849,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Отметка владельца: .golangci.yml и архив",
       "startedAt": "2026-09-13T15:39:15+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:56:06+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -8869,6 +8869,26 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Приёмка T-439 ADR-029 и потолок нарратива",
       "startedAt": "2026-09-13T15:50:50+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Приёмка T-446 на слитом с эпиком дереве",
+      "startedAt": "2026-09-13T15:56:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "Ревью #1: гонка testkit/state, флак fight-05",
+      "startedAt": "2026-09-13T15:56:06+03:00",
       "finishedAt": null
     }
   ],
@@ -11716,6 +11736,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-439 · ревью #2 (TEAM-2/code-reviewer#2): принять — 0/0/3/6. ADR-029 девять пунктов, статичная схема и поэлементный отброс; арифметика E 160/185/140, Qwen3.6 210/285/220 и 400/665/530, тест T-203 краснеет на прежних 210. Mi-9 для background_refs пробел C-07 создали ярлыки (US-018 крит. 2, ADR-017 д"
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201: отметка владельца EPIC-001 (tech-lead#1) — согласовано: .golangci.yml один блок, проба слияния с T-445 без конфликта, forbidigo действует (мутанты time.Now/time.Since ловятся); дописывание индексов архива в задаче допустимо (прецеденты T-003, волна 0), 16 переименований R100. Коммит 0f3b7b9, "
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · ревью #2 (TEAM-1/code-reviewer#3): принять — 0/0/0/1. Ma-1/Ma-2/Mi-1/N-1…N-4 закрыты; окна дедлайнов под нагрузкой (8×10×cpu1 при 64 занятых процессах) — зелёные, запас ≈1,7 с; ReadHeaderTimeout не задевает long-poll (проба). Приёмка — tech-lead#1 со сборкой на слитом с кончиком эпика дереве"
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 выполнена TEAM-1/developer#2 (возобновление): гонка — проекция под мьютексом; скрытая передача полей стенда из горутины process.run — через канал; флак fight-05 — обёртка транспорта learning, персонаж входит после того, как двойник усвоил весь начальный мир (сигнал, не срок); попутный флак enc"
     }
   ],
   "blockers": [],
