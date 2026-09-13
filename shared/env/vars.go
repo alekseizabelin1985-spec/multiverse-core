@@ -103,6 +103,16 @@ var (
 		"clients allowed to send X-Actor-Kind ci or sim")
 	CoreURL = Declare("MV_CORE_URL", "http://127.0.0.1:8090",
 		"core address the gateway proxies /v1/admin/* to (D-7)")
+	GatewayRateActionsPerMin = Declare("MV_GATEWAY_RATE_ACTIONS_PER_MIN", "30",
+		"actions a player may send in any minute (SEC-11); the 31st of the default answers 429", IsInt())
+	GatewayRateActionsBurst = Declare("MV_GATEWAY_RATE_ACTIONS_BURST", "5",
+		"actions a player may send in a row before the per-minute rate applies (SEC-11)", IsInt())
+	GatewayInputFilter = Declare("MV_GATEWAY_INPUT_FILTER", "noop",
+		"input filter of the texts of players (FR-056); MVP-1 has only noop, any other value fails the start",
+		OneOf("noop"))
+	GatewayEncounterGrace = Declare("MV_GATEWAY_ENCOUNTER_GRACE", "10s",
+		"how long an active encounter may run without its task agent before its actions answer encounter_unavailable",
+		IsDuration())
 
 	// --- core -------------------------------------------------------------
 
@@ -302,6 +312,15 @@ var (
 		"long polling timeout of getUpdates, in seconds", IsInt())
 	TelegramHealthAddr = Declare("MV_TELEGRAM_HEALTH_ADDR", ":8089",
 		"listen address of /health of the bot")
+	// T-310. The names follow MV_TELEGRAM_* of this block; component §11.3
+	// still says MV_BOT_ACTION_KEY_SALT and MV_BOT_RATE_COMMANDS_PER_MIN, the
+	// final names are architect#3's to confirm there.
+	TelegramActionKeySalt = Declare("MV_TELEGRAM_ACTION_KEY_SALT", "",
+		"HMAC key of action_key (ADR-018), at least 16 characters; empty derives it from the bot token by SHA-256",
+		Secret())
+	TelegramCommandsPerMin = Declare("MV_TELEGRAM_COMMANDS_PER_MIN", "20",
+		"commands one Telegram user may send within any 60 seconds before the bot answers \"too often\" (SEC-11, NFR-049)",
+		IsInt())
 )
 
 func init() {
