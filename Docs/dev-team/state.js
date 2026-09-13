@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:52:25+03:00",
+  "updatedAt": "2026-09-13T23:00:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4548,7 +4548,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -10284,7 +10284,7 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Ревью #1 персонажей, сессий, ходов",
       "startedAt": "2026-09-13T22:42:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:00:11+03:00"
     },
     {
       "instance": "developer#2",
@@ -10324,6 +10324,16 @@ window.DEVTEAM_STATE =
       "task": "T-464",
       "action": "Ревью #1 compose",
       "startedAt": "2026-09-13T22:52:25+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-306",
+      "action": "Приёмка персонажей, сессий, ходов",
+      "startedAt": "2026-09-13T23:00:11+03:00",
       "finishedAt": null
     }
   ],
@@ -14227,6 +14237,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-464 выполнена TEAM-1/devops-engineer#1: MV_STATE_WORLDS у core, MV_TELEGRAM_ACTION_KEY_SALT (${VAR:-}) и MV_TELEGRAM_COMMANDS_PER_MIN у бота с умолчаниями манифеста; дыра правила 3 compose-lint — соль литералом проходила, добавлен шаблон MV_.*_SALT; фикстуры 62 bad / 12 good; docker compose config"
+    },
+    {
+      "at": "2026-09-13T23:00:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-306 · ревью #1 (TEAM-3/code-reviewer#2): принять — 0/0/6/6. DoD закрыт, окно сжатия links.db верно. Mi-1 уборка резервов seq без блокировки трекера; Mi-2 публикация аналитики внутри транзакции единственного соединения gateway.db; Mi-3 гонка sweeper персонажей на дедлайне (второй персонаж); Mi-4 Va"
     }
   ],
   "blockers": [],
