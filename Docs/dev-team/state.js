@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:56:38+03:00",
+  "updatedAt": "2026-09-13T15:00:18+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2389,7 +2389,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-446",
           "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:46:40+03:00",
           "finishedAt": null,
@@ -8572,7 +8572,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Итерация 2: SetDeadlines и long-poll, имена владельцев e2e",
       "startedAt": "2026-09-13T14:41:31+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:00:18+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11373,6 +11373,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-054 · ревью #1 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Пять проверок детерминированы, законные пути соло не отвергаются, реестр десяти законов закреплён. Minor-1 inv-01 по участникам отвергает гонку «/forget раньше пакета промаха» (соло) и погибшего участника группы (I2); Minor-2 сторона NPC "
+    },
+    {
+      "at": "2026-09-13T15:00:18+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · итерация 2 (TEAM-1/developer#1): Ma-2 doc SetDeadlines исправлен + тест отмены r.Context() дедлайном чтения у GET (и 0 — жив); Ma-1 владельцы e2e из набора {state, swarm, gateway, ops}; Mi-1 nil-завершение; N-1 порядок All() закреплён по спискам владельцев (без золотого списка типов — иначе "
     }
   ],
   "blockers": [],
