@@ -1,10 +1,11 @@
 # Задачи EPIC-001 «Фундамент» (волна 0)
 
-Версия 0.1.3 · 2026-09-13 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
+Версия 0.1.4 · 2026-09-13 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
 **Правки сведения 3** (`architecture/consolidation.md` §14, `contracts.md` v0.4, `infrastructure.md` v0.3; внесено tech-lead#1): T-001 (F-1 — IDE-каталоги), T-004 (F-6a — `MINIO_REPO`/`LLAMACPP_BUILD`/`LLM_MODEL_DEFAULT`, `extra_hosts`, форк MinIO), T-006 (F-4b-1 — `Spec.Publishers`, строка gateway в `OwnershipRules`, `cause=forget`), T-007 (F-5 — `MV_LLM_*`, условные `OLLAMA_*`), T-008 (F-6b — `llm-server.*`, `make llm-*`, правило `compose-lint`), T-012 (F-7 — CODEOWNERS), T-013 (F-8 — `prompts.jsonl`, порядок E→C→A), T-017 (F-10d — `replay.completed`, `abandoned`), §0 (F-6 +0,5), §9 п. 1. Структура подволн и состав задач не менялись.
 **Правки ревизии контрактов T-416** (`contracts.md` v0.7; ADR-025 подтверждён, ADR-026, ADR-027; внесено tech-lead#1 2026-09-11): T-006 — пометка «таблица владения — единственная истина»; T-413 — пункты T-416 п. 15–16; §8 — `mvctl report`; §9 п. 4 — пометка. Новые задачи T-417 и T-418 завёл оркестратор. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 **Правки 2026-09-13 (tech-lead#1, приёмка T-461; версия 0.1.2)**: добавлены разделы T-460 (`in_progress`), T-461 (`done`) и T-463 (`todo`). Статусы T-400, T-403, T-404, T-408–T-412, T-414, T-417, T-418 и T-439 в заголовках разделов приведены к `state.js` (`todo` → `done`; бэклог приёмки T-456, п. 4). Тексты этих разделов не менялись.
 **Правки 2026-09-13 (tech-lead#1, приёмка T-463; версия 0.1.3)**: T-463 — `done`; ветка раздела приведена к факту, часть (в) отмечена как вынесенная в T-464, п. 8 DoD сужен по решению оркестратора (вариант (б) по Ma-2 ревью #2). Добавлен раздел T-468 (`todo`).
+**Правки 2026-09-13 (tech-lead#1, приёмка T-464; версия 0.1.4)**: добавлены разделы T-464 (`done`, раздела не было — карточку создал исполнитель по поручению оркестратора) и T-469 (`todo`, номер выдан оркестратором). Тексты прочих разделов не менялись.
 Команда TEAM-1 · ветка `epic/EPIC-001-foundation` (от `integration/mvp-1`, создана после F-0, коммит `744fb10`) · волна 0 · G2 утверждён 2026-09-09.
 Основание: `epics/EPIC-001-foundation/design.md` v0.1 (§4 подволны, §5 заглушки v0, §10 тестируемость); `architecture/infrastructure.md` v0.2 (§2.1–§2.5, §3.1–§3.4, §4.5, §4.6, §6.4, §10 чек-лист); `architecture/components/foundation.md` v0.2 (§1–§12, §14); `architecture/contracts.md` v0.2 (C-01, C-02, C-03, C-04, C-05, C-06, C-13, C-14, §17); `plan/epics.md` v0.2 §6; `plan/decomposition-review.md` §2, §3.3, §5.3; `plan/teams.md` §4; `plan/ownership.md` v0.2; ADR-001, ADR-004, ADR-007, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-021.
 
@@ -1397,3 +1398,45 @@
   5. `make scripts-parity`, `bash -n`, разбор `.ps1`, `make compose-lint`, `golangci-lint run ./...` — зелёные; строка для system-architect — снять пометку после слияния; dev-log, карточка.
 - **Метка**: нет. `contracts.md`, ADR и Go-код не меняются.
 - **Исполнитель**: devops-engineer (экземпляр назначает оркестратор). Карточка — `tasks/T-468.md`.
+
+### T-464: Devops — `MV_STATE_WORLDS` и `MV_TELEGRAM_*` в docker-compose · Размер: XS–S · Статус: done · Волна 1 (бэклог)
+- **Причина (оркестратор, 2026-09-13; приёмка T-461)**: часть (в) T-463 вынесена в отдельную задачу. Отметка владельца T-055 (EPIC-002), О-1: `core` не передаёт `MV_STATE_WORLDS`. Отметка владельца T-310 (EPIC-004), замечание 1: `docker-compose.bot.yml` не передаёт `MV_TELEGRAM_ACTION_KEY_SALT` и `MV_TELEGRAM_COMMANDS_PER_MIN`.
+- **Ветка**: `task/T-464-compose-env-passthrough` от `epic/EPIC-001-foundation` (`55ec4c4`), папка `.worktrees/T-464`.
+- **Зависит от**: T-055 (EPIC-002) и T-310 (EPIC-004) — объявления в манифесте ветки через `develop`; не позже T-390. С T-468 не пересекается.
+- **Файлы**: `docker-compose.yml`, `docker-compose.bot.yml`, `scripts/compose-lint.sh` (правила 3 и 8), `testdata/compose-lint/` (фикстуры, `README.md`).
+- **Описание**: подробно — карточка `tasks/T-464.md`. Три переменные передаются в свои сервисы с умолчаниями манифеста: `${MV_STATE_WORLDS:-dark-forest-world}`, `${MV_TELEGRAM_COMMANDS_PER_MIN:-20}`, соль — `${MV_TELEGRAM_ACTION_KEY_SALT:-}` без `:?`. Правило 3 `compose-lint` знает `MV_.*_SALT`: литерал соли раньше проходил все правила.
+- **DoD** (полностью — карточка):
+  1. Строки в `core` и `telegram-bot`, умолчания равны манифесту ветки.
+  2. `make compose-lint` и `--fixtures` — ok.
+  3. В модели `docker compose config` с env-файлом пробы значения доходят до своих сервисов, без строки действует умолчание; печатаются только ключи.
+  4. `mvctl env check` — exit 0.
+  5. `gitleaks dir --redact` по изменённым файлам — no leaks.
+  6. dev-log, карточка; `.env` не открывался.
+- **Метка**: нет. `.env.example`, `shared/env/**`, `contracts.md` и эталон §4.2 не меняются.
+- **Исполнитель**: devops-engineer#1 (TEAM-1, Opus). Ревью — code-reviewer#1. Карточка — `tasks/T-464.md`.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/0/1/2), итераций ревью — 1. DoD 1–6 подтверждены. Все замечания ревью закрыты при приёмке:
+  - Mi-1: правило 3 советует необязательным секретам `${KEY:-}`, а не `:?`;
+  - N-1: комментарий `MUST_BE_REQUIRED` перечисляет законно пустые секреты, включая соль;
+  - N-2: отказы правил 3 и 8 печатают `<withheld>` вместо значения секрета, в фикстурах есть `expect-absent`; правка небольшая, в T-468 не выносилась.
+
+  Фикстуры: 64 bad, 12 good. Мутанты K0 (первым), M1–M7 — KILLED. Три вопроса system-architect (`MV_STATE_WORLDS` и `MV_WORLD_ID`, эталон §4.2, соль в §3.1.1) и слияние с `55ec4c4` описаны в карточке, раздел «Приёмка (tech-lead)».
+- **Бэклог (из T-464, 2026-09-13)**: T-469 (раздел ниже).
+
+### T-469: Devops — переменные шлюза и `MV_ANTHROPIC_API_KEY` в compose; проверка «переменная контекста доходит до своего сервиса» · Размер: S · Статус: todo · Волна 1 (бэклог)
+- **Причина (приёмка T-464, 2026-09-13)**: ревью #1 T-464, рекомендация 1 и п. 3 бэклога. Класс «забыли передать в compose» повторился трижды (T-055, T-310, T-305). Сейчас в compose не попадают четыре `MV_GATEWAY_*` T-305 и `MV_ANTHROPIC_API_KEY`, после слияния T-306 — ещё четыре `MV_GATEWAY_*`. Номер выдан оркестратором.
+- **Ветка**: `task/T-469-context-env-reach` от `epic/EPIC-001-foundation` (после слияния T-464 и синхронизации с `develop`, где есть T-306), папка `.worktrees/T-469`.
+- **Зависит от**: T-464 (слита); T-306 (EPIC-004) — в `develop` и в EPIC-001; решение system-architect по `contracts.md` §16 п. 5 — для частей (б) и (в). Часть (а) можно начать после T-306, не дожидаясь решения. С T-468 не пересекается.
+- **Файлы**: `docker-compose.yml`; `scripts/compose-lint.sh`; `testdata/compose-lint/` (фикстуры, `README.md`); по решению system-architect — `contracts.md` §16 п. 5 и `infrastructure.md` §3.1.1 (правит system-architect).
+- **Описание**: подробно — карточка `tasks/T-469.md`.
+  - (а) `gateway` получает `MV_GATEWAY_RATE_ACTIONS_PER_MIN`, `MV_GATEWAY_RATE_ACTIONS_BURST`, `MV_GATEWAY_INPUT_FILTER`, `MV_GATEWAY_ENCOUNTER_GRACE` (T-305) и `MV_GATEWAY_SESSION_IDLE`, `MV_GATEWAY_TURN_TIMEOUT`, `MV_GATEWAY_CHARACTER_WAIT`, `MV_GATEWAY_CHARACTER_DEADLINE` (T-306) с умолчаниями манифеста. `MV_ANTHROPIC_API_KEY` передаётся сервису контекста `llm` в форме `${VAR:-}`.
+  - (б) Машинная проверка `compose-lint`: каждая переменная контекста доходит до сервиса, где контекст поднят, или помечена как переменная только хоста. Это изменение контракта §16 п. 5, через system-architect.
+  - (в) Общее правило формы передачи — рекомендация ревьюера `${VAR:-<умолчание манифеста>}`; совет правила 8 приводится к правилу.
+- **DoD** (полностью — карточка):
+  1. Восемь `MV_GATEWAY_*` и `MV_ANTHROPIC_API_KEY` в compose; модель `config` с пробой — значения доходят, печатаются только ключи.
+  2. Решение system-architect по §16 п. 5; правило проверки с bad/good-фикстурами; мутант «проверка выключена» краснеет, контрольный — первым.
+  3. Всё, что нашла проверка на настоящих файлах (в том числе `MV_GM_PATH` у `gateway`, найдено при приёмке T-464), передано или помечено.
+  4. Правило формы записано, совет правила 8 и фикстуры приведены к нему.
+  5. `bash -n`, `make compose-lint` и `--fixtures`, `mvctl env check` — зелёные; `gitleaks dir --redact` — no leaks; отказы не печатают значения секретов.
+  6. dev-log, карточка; `.env` не открывался.
+- **Метка**: `contract-change` — части (б) и (в).
+- **Исполнитель**: devops-engineer (экземпляр назначает оркестратор). Карточка — `tasks/T-469.md`.
