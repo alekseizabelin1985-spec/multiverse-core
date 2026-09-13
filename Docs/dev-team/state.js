@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:36:12+03:00",
+  "updatedAt": "2026-09-13T17:37:12+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4421,11 +4421,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -9215,7 +9215,7 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Ревью #1: readmodel и consumer",
       "startedAt": "2026-09-13T17:19:56+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:37:12+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9285,6 +9285,16 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Ревью #1: законы мира",
       "startedAt": "2026-09-13T17:36:12+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "Итерация 2: переходы встречи, MinIO, сроки старта",
+      "startedAt": "2026-09-13T17:37:12+03:00",
       "finishedAt": null
     }
   ],
@@ -12432,6 +12442,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-205 выполнена TEAM-2/developer#3: laws/dark-forest-world.v1.yaml (inv-01…inv-11, law-1/2), internal/laws (строгий Parse, FileSource/ObjectSource, strain, Keeper: Current/Get/Health/Watch/Handle/Subscribe/Bump — world.laws.changed через NewRoot и entity.update.proposed через Derive, proposal_id law"
+    },
+    {
+      "at": "2026-09-13T17:37:12+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-304 · ревью #1 (TEAM-3/code-reviewer#1): принять — 0/0/7/4. Транзакция consumer, дедуп, догон → подписка, остановка верны. Mi-1 v1.5 new:null — проекция хранит null, State удаляет (сверка хеша только v1.6); Mi-2 переходы встречи повторяются после рестарта; Mi-3…Mi-5 ветки без тестов (мутанты R1–R4"
     }
   ],
   "blockers": [],
