@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:43:37+03:00",
+  "updatedAt": "2026-09-13T19:47:30+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2569,7 +2569,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -2578,19 +2578,19 @@ window.DEVTEAM_STATE =
         {
           "id": "T-461",
           "title": "Правило depguard cmd-telegram-bot в .golangci.yml по тексту отметки T-310 (предусловие T-311)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:18:49+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T19:47:30+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 28,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-461.md"
         },
         {
           "id": "T-463",
-          "title": "Devops: удаление архивов make backup старше 30 дней; маскировка значения в llm_endpoint_judge и LlmEndpoint.psm1; MV_STATE_WORLDS и MV_TELEGRAM_* в compose",
+          "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
           "status": "todo",
           "assignee": null,
           "startedAt": null,
@@ -2600,6 +2600,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-463.md"
+        },
+        {
+          "id": "T-464",
+          "title": "Devops: MV_STATE_WORLDS и MV_TELEGRAM_* в docker-compose (после T-055 и T-310 в develop, до T-390)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-464.md"
         }
       ],
       "defects": [],
@@ -9749,7 +9762,7 @@ window.DEVTEAM_STATE =
       "task": "T-461",
       "action": "Приёмка T-461 и индекс EPIC-001 (T-460, T-463)",
       "startedAt": "2026-09-13T19:31:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:47:30+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9759,7 +9772,7 @@ window.DEVTEAM_STATE =
       "task": "T-460",
       "action": "Ревью #1 Permanent и Policy.World",
       "startedAt": "2026-09-13T19:35:33+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:47:30+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9809,6 +9822,16 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Приёмка T-203 и индекс EPIC-003 0.3.9",
       "startedAt": "2026-09-13T19:38:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-460",
+      "action": "Приёмка T-460",
+      "startedAt": "2026-09-13T19:47:30+03:00",
       "finishedAt": null
     }
   ],
@@ -13334,6 +13357,24 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решение пользователя: «Делай пушь автоматически» — push develop и epic/* выполняется без отдельного подтверждения после контрольных слияний и пачек задач, с gitleaks-сканом по коммитам вне origin и прежними запретами (main, теги, force, task/*). Скан: 114 коммитов без слияний (всего 167 с merge), no"
+    },
+    {
+      "at": "2026-09-13T19:47:30+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-461 принята tech-lead#1: правило побайтно, config verify и run — 0; выборочная проверка на кончике EPIC-004 повторена. Индекс EPIC-001 0.1.2: разделы T-460, T-461, T-463 (карточка, DoD с R2-Mi-1), статусы 12 завершённых задач приведены к state.js. Итераций ревью — 1. Коммит e7295ee, слита в epic/E"
+    },
+    {
+      "at": "2026-09-13T19:47:30+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-460 · ревью #1 (TEAM-1/code-reviewer#2): принять — 0/0/2/1. Порядок паника → отмена → Permanent верен; поведение internal/state в EPIC-002 не меняется; застывшая шина доказывает отсутствие пауз. Mi-1 фикстуры правила (г) в mvctl contracts check без мира; Mi-2 тест не различает лог паники и Permane"
+    },
+    {
+      "at": "2026-09-13T19:47:30+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по вопросам приёмки T-461: T-463 делится — части (а) удаление архивов и (б) маскировка значения в скриптах начинаются сейчас, часть (в) переменные MV_STATE_WORLDS и MV_TELEGRAM_* в compose — новая задача T-464 (EPIC-001, devops) после попадания T-055 и T-310 в develop, не позже "
     }
   ],
   "blockers": [],
