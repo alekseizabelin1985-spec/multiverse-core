@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:46:42+03:00",
+  "updatedAt": "2026-09-13T23:51:21+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2669,7 +2669,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-470",
           "title": "Документы по просмотру T-056: C-02 v1.8 (грамматика пути, типы скаляров, rest, дедуп, system), C-03 v1.4, C-14 v1.3 (WorldRequired у snapshot.created), КД State §4, data-model §3.3, ADR-001",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T23:07:57+03:00",
           "finishedAt": null,
@@ -10486,6 +10486,16 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "Итерация 2 contracts v0.15",
       "startedAt": "2026-09-13T23:46:42+03:00",
+      "finishedAt": "2026-09-13T23:51:21+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-470",
+      "action": "Ревью #2 contracts v0.15",
+      "startedAt": "2026-09-13T23:51:21+03:00",
       "finishedAt": null
     }
   ],
@@ -14485,6 +14495,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-470 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/2/4. C-01 v1.11, C-03, C-05, C-14, C-15/ADR-005 (побайтно), ADR-001, КД §6, infrastructure — точно; слияние с b085228 чисто. Ma-1: список скаляров кода расходится с data-model §3 (нет name и last_session_ended_at в коде; нет encounter_chance и"
+    },
+    {
+      "at": "2026-09-13T23:51:21+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 · итерация 2 (system-architect#1): §3 — единственный источник скаляров (добавлены encounter_chance и loot_claimed_by; name и last_session_ended_at вносит приёмка T-056); пометки «Код расходится до T-471» у rest и строки system, оговорка про двойник v0 в develop; Mi-2, N-1…N-4 закрыты; C-15 = A"
     }
   ],
   "blockers": [],
