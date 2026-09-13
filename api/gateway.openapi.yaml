@@ -1,0 +1,952 @@
+# HTTP API v1 of the gateway (contract C-08 v1.3, owner EPIC-004).
+#
+# Sources: architecture/contracts.md C-08 v1.3 and C-04 v1.3 (group without a
+# leader, /forget cascade), C-01 v1.7 (process HTTP server, /health),
+# analysis/api-contracts.md §1, components/gateway-and-bot.md §5.2–§5.6.
+#
+# Skeleton of T-301: operations, parameters, schemas and error responses.
+# Handlers and the response bodies they need are refined task by task
+# (T-303 links, T-305 actions, T-306 characters and worlds, ...). The Go wire
+# types live in internal/gateway/api/dto.go, the error codes in errors.go;
+# internal/gateway/api/openapi_test.go keeps them, the route table and this
+# file in step.
+#
+# Section "admin": the gateway owns this file, EPIC-003 owns the text of
+# /v1/admin/agents* and /v1/admin/llm/usage (C-06, co-ownership). Those
+# operations are reserved here (x-reserved) and are written by EPIC-003 T-239.
+openapi: 3.1.0
+info:
+  title: Multiverse gateway API
+  version: 1.0.0
+  description: |
+    Player entry point of the platform: links and consent, characters, actions,
+    groups, deliveries of results. Clients are the Telegram bot and the CI
+    harness; both use internal/gateway/client.
+
+    Every answer carries the header X-Request-Id (components.headers.XRequestId;
+    set by the middleware of component §5.1, T-303), so operations do not repeat it.
+
+    Every error answer has the body {"error": {"code", "message", "details"}}.
+    A client matches on code; message is plain Russian text for the player.
+servers:
+  - url: http://127.0.0.1:8088
+security:
+  - ClientId: []
+tags:
+  - name: links
+    description: Links of external accounts, consent, /forget. Bodies are never logged (SEC-01/02).
+  - name: characters
+    description: Worlds and characters.
+  - name: actions
+    description: Player actions (C-04 v1.3).
+  - name: groups
+    description: Groups (read side).
+  - name: deliveries
+    description: Long-poll of the outbox and acknowledgements.
+  - name: service
+    description: Service operations of the gateway itself for the CI harness and the operator (api-contracts.md §1.8).
+  - name: admin
+    description: |
+      Reserved. Proxy of /v1/admin/agents* and /v1/admin/llm/usage to the process HTTP server of core
+      (MV_CORE_URL, C-06). The operations are specified by EPIC-003 T-239
+      through a change to this file reviewed by EPIC-004.
+  - name: process
+    description: Endpoints of the process HTTP server (shared/runtime, C-01 v1.7), not of the gateway context.
+
+paths:
+  /v1/links/resolve:
+    post:
+      operationId: resolveLink
+      tags: [links]
+      summary: Resolve an external account into a player
+      description: |
+        Creates a pending_consent link with a new link_id on the first call and
+        updates last_seen_at on every call. link_id is not returned (SEC-03).
+      x-nolog: true
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResolveRequest' }
+      responses:
+        '200':
+          description: The state of the link and of the character.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResolveResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/links/consent:
+    post:
+      operationId: consentLink
+      tags: [links]
+      summary: Record the notice, the consent and the age confirmation
+      description: Any of the three flags not true answers 400 consent_incomplete and the link stays pending_consent.
+      x-nolog: true
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConsentRequest' }
+      responses:
+        '200':
+          description: The link is consented.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsentResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/links:
+    delete:
+      operationId: forgetLink
+      tags: [links]
+      summary: Delete the link (/forget)
+      description: |
+        Cascade of C-04 v1.3 in this order: the outbox of the player is dropped;
+        a living character gets status=abandoned (and a new leader or none for
+        its group), group.left {cause: forget}; the active session ends with
+        end_reason=forget; the link is deleted physically. Without a link the
+        answer is 200 {deleted: false, player_id_detached: null}; player_id_detached
+        is always present and null when no character was detached. The semantics
+        is refined by T-303 (SEC-26).
+      x-nolog: true
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgetRequest' }
+      responses:
+        '200':
+          description: What was removed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForgetResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/admin/links/{player_id}:
+    delete:
+      operationId: adminForgetLink
+      tags: [service]
+      summary: Delete the link of a player (operator)
+      description: The same cascade as forgetLink, addressed by player_id. Operator clients only.
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/PlayerId'
+      responses:
+        '200':
+          description: What was removed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForgetResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/worlds:
+    get:
+      operationId: listWorlds
+      tags: [characters]
+      summary: List the worlds
+      description: llm.cloud_enabled is the last config.cloud_enabled seen by the gateway, false by default (C-08 v1.2, SEC-21).
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      responses:
+        '200':
+          description: The worlds with their regions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WorldsResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/characters:
+    post:
+      operationId: createCharacter
+      tags: [characters]
+      summary: Create a character
+      description: Idempotent by (link_id, action_key); a repeat returns the first answer and the same player_id.
+      x-nolog: true
+      x-idempotency: action_key
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCharacterRequest' }
+      responses:
+        '200':
+          description: A living character already exists (created=false).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateCharacterResponse' }
+        '201':
+          description: The character is created (created=true).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateCharacterResponse' }
+        '202':
+          description: Creation accepted, the fact is not there yet (status=creating).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateCharacterResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/players/{player_id}:
+    get:
+      operationId: getPlayer
+      tags: [characters]
+      summary: State of a character
+      description: Not a turn, publishes nothing. While creating, only player_id, name, world_id and status are present.
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/PlayerId'
+      responses:
+        '200':
+          description: The character.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CharacterState' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/players/{player_id}/actions:
+    post:
+      operationId: postAction
+      tags: [actions]
+      summary: Send an action
+      description: |
+        202 after validation and the broker acknowledgement (C-08: p95 <= 300 ms).
+        group.* answers 200 with the group when the fact arrives within
+        MV_GATEWAY_FACT_WAIT, otherwise 202 with status=pending. A repeat of
+        action_key returns the first answer, 4xx included; 503 means the action
+        was not accepted and the key was not stored. For a group move no_leader
+        is checked before not_leader (C-04 v1.3).
+      x-idempotency: action_key
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/PlayerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ActionRequest' }
+      responses:
+        '200':
+          description: A group.* action whose fact arrived in time.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupView' }
+        '202':
+          description: The action is accepted, or a group.* action is pending.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ActionAccepted'
+                  - $ref: '#/components/schemas/ActionPending'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '422': { $ref: '#/components/responses/UnprocessableEntity' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /v1/groups/{group_id}:
+    get:
+      operationId: getGroup
+      tags: [groups]
+      summary: State of a group
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/GroupId'
+      responses:
+        '200':
+          description: The group.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroupView' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/clients/{client_id}/deliveries:
+    get:
+      operationId: pollDeliveries
+      tags: [deliveries]
+      summary: Long-poll the outbox
+      description: |
+        One active long-poll per client (a second one answers 409
+        poll_in_progress). Deliveries of one player come strictly in order, one
+        at a time; without an ack a delivery is given again after 30 s.
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/ClientIdPath'
+        - $ref: '#/components/parameters/After'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/WaitMs'
+      responses:
+        '200':
+          description: Deliveries, possibly none.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveriesResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/clients/{client_id}/deliveries/ack:
+    post:
+      operationId: ackDeliveries
+      tags: [deliveries]
+      summary: Acknowledge deliveries
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/ClientIdPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AckRequest' }
+      responses:
+        '200':
+          description: Acknowledged and unknown ids.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AckResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/clients/{client_id}/stream:
+    get:
+      operationId: streamDeliveries
+      tags: [deliveries]
+      summary: Push stream of deliveries (reserved, E-H)
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/ClientIdPath'
+      responses:
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '501': { $ref: '#/components/responses/NotImplemented' }
+
+  /v1/scopes/{scope_id}/rounds/close:
+    post:
+      operationId: closeRound
+      tags: [service]
+      summary: Close the open round explicitly
+      description: Publishes round.closed with close_reason=explicit. ci only.
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/ScopeId'
+      responses:
+        '200':
+          description: The closed round.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RoundCloseResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/admin/sessions:
+    get:
+      operationId: adminSessions
+      tags: [service]
+      summary: Active sessions (operator)
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      responses:
+        '200':
+          description: Active sessions without external identifiers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSessions' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/admin/agents/{agent_id}/tick:
+    post:
+      operationId: adminTick
+      tags: [admin]
+      summary: Immediate tick of an agent (reserved)
+      x-reserved: EPIC-003 T-239
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        default:
+          description: Reserved; the answer of core is specified by EPIC-003 T-239.
+
+  /v1/admin/agents:
+    get:
+      operationId: adminAgents
+      tags: [admin]
+      summary: Active agents by level (reserved)
+      x-reserved: EPIC-003 T-239
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      responses:
+        default:
+          description: Reserved; the answer of core is specified by EPIC-003 T-239.
+
+  /v1/admin/llm/usage:
+    get:
+      operationId: adminLlmUsage
+      tags: [admin]
+      summary: LLM usage by phase, level and provider (reserved, Should)
+      x-reserved: EPIC-003 T-239
+      x-actor-kind: [ci]
+      parameters:
+        - $ref: '#/components/parameters/ActorKind'
+      responses:
+        default:
+          description: Reserved; the answer of core is specified by EPIC-003 T-239.
+
+  /health:
+    get:
+      operationId: health
+      tags: [process]
+      summary: Health of the process
+      description: Served by the process HTTP server (shared/runtime, C-01 v1.7) for all contexts of the process; open, the port is bound to loopback.
+      security: []
+      responses:
+        '200':
+          description: ok or degraded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: fail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+components:
+  securitySchemes:
+    ClientId:
+      type: apiKey
+      in: header
+      name: X-Client-Id
+      description: Client instance id; must be listed in MV_GATEWAY_CLIENT_IDS, otherwise 403 client_unknown (C-08 v1.3).
+
+  parameters:
+    ActorKind:
+      name: X-Actor-Kind
+      in: header
+      required: false
+      description: Kind of actor; ci and sim only for clients listed in MV_GATEWAY_ACTOR_KIND_CLIENTS, otherwise 403 actor_kind_forbidden.
+      schema:
+        type: string
+        enum: [human, ci, sim]
+        default: human
+    PlayerId:
+      name: player_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    GroupId:
+      name: group_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    ClientIdPath:
+      name: client_id
+      in: path
+      required: true
+      description: Must equal X-Client-Id, otherwise 403 client_mismatch (SEC-12).
+      schema: { type: string, minLength: 1 }
+    ScopeId:
+      name: scope_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    After:
+      name: after
+      in: query
+      required: false
+      description: Opaque cursor of the previous answer.
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+    WaitMs:
+      name: wait_ms
+      in: query
+      required: false
+      schema: { type: integer, minimum: 0, maximum: 25000, default: 25000 }
+
+  headers:
+    XRequestId:
+      description: Request id (ULID), also in the log line of the request.
+      schema: { type: string }
+    RetryAfter:
+      description: Seconds until the next action is accepted.
+      schema: { type: integer, minimum: 1 }
+
+  # x-error-codes lists the codes a response carries; every code of
+  # internal/gateway/api/errors.go appears under the response of its status.
+  responses:
+    BadRequest:
+      description: 'Request does not match the contract. Codes: invalid_request, unknown_action, text_invalid, name_required, name_invalid, consent_incomplete.'
+      x-error-codes: [invalid_request, unknown_action, text_invalid, name_required, name_invalid, consent_incomplete]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: invalid_request, message: Некорректный запрос. } }
+    Forbidden:
+      description: 'Client or actor not allowed. Codes: consent_required, actor_kind_forbidden, client_unknown, client_mismatch.'
+      x-error-codes: [consent_required, actor_kind_forbidden, client_unknown, client_mismatch]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: client_unknown, message: Клиент не допущен. } }
+    NotFound:
+      description: 'Codes: player_not_found, world_not_found, unknown_target.'
+      x-error-codes: [player_not_found, world_not_found, unknown_target]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: player_not_found, message: Персонаж не найден. } }
+    Conflict:
+      description: |
+        Precondition of the action does not hold. Codes: character_dead (also for
+        abandoned), in_encounter, not_in_encounter, target_dead, no_leader
+        (group move with leader_id null, checked before not_leader), not_leader,
+        not_in_region, already_acted, no_open_round, poll_in_progress,
+        already_in_group, not_in_group, group_full, group_in_encounter,
+        encounter_unavailable, character_alive_exists (strict mode, not used).
+      x-error-codes:
+        - character_dead
+        - in_encounter
+        - not_in_encounter
+        - target_dead
+        - no_leader
+        - not_leader
+        - not_in_region
+        - already_acted
+        - no_open_round
+        - poll_in_progress
+        - already_in_group
+        - not_in_group
+        - group_full
+        - group_in_encounter
+        - encounter_unavailable
+        - character_alive_exists
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: no_leader, message: У группы нет лидера. } }
+    PayloadTooLarge:
+      description: 'Body over 64 KiB (SEC-11). Codes: payload_too_large.'
+      x-error-codes: [payload_too_large]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: payload_too_large, message: Слишком большой запрос. } }
+    UnprocessableEntity:
+      description: 'InputFilter failed, fail-closed (FR-056). Codes: filter_error.'
+      x-error-codes: [filter_error]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: filter_error, message: Не удалось проверить текст. } }
+    RateLimited:
+      description: '30 actions per minute per player_id, burst 5 (SEC-11). Codes: rate_limited.'
+      x-error-codes: [rate_limited]
+      headers:
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: rate_limited, message: 'Слишком много действий, подождите.' } }
+    InternalError:
+      description: 'Defect of the gateway (NFR-012). Codes: internal.'
+      x-error-codes: [internal]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: internal, message: Внутренняя ошибка. } }
+    NotImplemented:
+      description: 'Reserved route (MVP-1: /stream). Codes: not_implemented.'
+      x-error-codes: [not_implemented]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: not_implemented, message: Не реализовано. } }
+    Unavailable:
+      description: 'A dependency is down; the action is not accepted and action_key is not stored, the client repeats with the same key. Codes: bus_unavailable, state_unavailable.'
+      x-error-codes: [bus_unavailable, state_unavailable]
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: { code: bus_unavailable, message: 'Сервис временно недоступен, повторите.' } }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { $ref: '#/components/schemas/ErrorBody' }
+      required: [error]
+    ErrorBody:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+      required: [code, message]
+
+    ResolveRequest:
+      type: object
+      properties:
+        external_platform: { type: string, enum: [telegram] }
+        external_id: { type: string, minLength: 1 }
+      required: [external_platform, external_id]
+    ResolveResponse:
+      type: object
+      properties:
+        link_status: { type: string, enum: [none, pending_consent, consented] }
+        player_id: { type: [string, 'null'] }
+        world_id: { type: [string, 'null'] }
+        character_status: { type: string, enum: [none, creating, alive, dead] }
+        notice_due: { type: boolean }
+      required: [link_status, player_id, world_id, character_status, notice_due]
+    ConsentRequest:
+      type: object
+      properties:
+        external_platform: { type: string, enum: [telegram] }
+        external_id: { type: string, minLength: 1 }
+        notice_shown: { type: boolean }
+        consent: { type: boolean }
+        age_confirmed: { type: boolean }
+        shown_at: { type: string, format: date-time }
+      required: [external_platform, external_id, notice_shown, consent, age_confirmed, shown_at]
+    ConsentResponse:
+      type: object
+      properties:
+        link_status: { type: string, enum: [consented] }
+        consent_at: { type: string, format: date-time }
+        age_confirmed_at: { type: string, format: date-time }
+        notice_shown_at: { type: string, format: date-time }
+      required: [link_status, consent_at, age_confirmed_at, notice_shown_at]
+    ForgetRequest:
+      type: object
+      properties:
+        external_platform: { type: string, enum: [telegram] }
+        external_id: { type: string, minLength: 1 }
+      required: [external_platform, external_id]
+    ForgetResponse:
+      type: object
+      properties:
+        deleted: { type: boolean }
+        player_id_detached: { type: [string, 'null'] }
+      required: [deleted, player_id_detached]
+
+    WorldsResponse:
+      type: object
+      properties:
+        worlds:
+          type: array
+          items: { $ref: '#/components/schemas/WorldSummary' }
+      required: [worlds]
+    WorldSummary:
+      type: object
+      properties:
+        world_id: { type: string }
+        name: { type: string }
+        regions:
+          type: array
+          items: { $ref: '#/components/schemas/RegionSummary' }
+        laws_version: { type: string }
+        llm: { $ref: '#/components/schemas/WorldLLM' }
+      required: [world_id, name, regions, laws_version, llm]
+    RegionSummary:
+      type: object
+      properties:
+        region_id: { type: string }
+        name: { type: string }
+      required: [region_id, name]
+    WorldLLM:
+      type: object
+      description: Only whether texts go to a cloud model; never a provider, URL or key (SEC-21).
+      properties:
+        cloud_enabled: { type: boolean }
+      required: [cloud_enabled]
+
+    CreateCharacterRequest:
+      type: object
+      properties:
+        external_platform: { type: string, enum: [telegram] }
+        external_id: { type: string, minLength: 1 }
+        world_id: { type: string, minLength: 1 }
+        character_name: { type: string }
+        action_key: { type: string, minLength: 1, maxLength: 64 }
+      required: [external_platform, external_id, world_id, character_name, action_key]
+    CreateCharacterResponse:
+      type: object
+      properties:
+        player_id: { type: string }
+        character: { $ref: '#/components/schemas/CharacterState' }
+        created: { type: boolean }
+        status: { type: string, enum: [creating] }
+      required: [player_id]
+
+    CharacterState:
+      type: object
+      properties:
+        player_id: { type: string }
+        name: { type: string }
+        world_id: { type: string }
+        status: { type: string, enum: [creating, alive, dead, abandoned] }
+        hp: { type: integer }
+        hp_max: { type: integer }
+        position: { $ref: '#/components/schemas/PositionRef' }
+        scope: { $ref: '#/components/schemas/ScopeRef' }
+        group: { $ref: '#/components/schemas/GroupView' }
+        encounter: { $ref: '#/components/schemas/EncounterView' }
+        inventory:
+          type: array
+          items: { $ref: '#/components/schemas/Item' }
+        world: { $ref: '#/components/schemas/WorldView' }
+        session: { $ref: '#/components/schemas/SessionRef' }
+        version: { type: integer }
+      required: [player_id, name, world_id, status]
+    PositionRef:
+      type: object
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        name: { type: string }
+      required: [kind, id]
+    ScopeRef:
+      type: object
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [solo, group] }
+      required: [id, type]
+    GroupView:
+      type: object
+      properties:
+        group_id: { type: string }
+        leader_id:
+          type: [string, 'null']
+          description: null when no living member is left (C-08 v1.2, BR-13).
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/GroupMember' }
+        position: { $ref: '#/components/schemas/PositionRef' }
+        encounter: { $ref: '#/components/schemas/EncounterView' }
+        state: { type: string }
+      required: [group_id, leader_id, members]
+    GroupMember:
+      type: object
+      properties:
+        player_id: { type: string }
+        name: { type: string }
+        participation: { type: string, enum: [active, idle] }
+        status: { type: string, enum: [creating, alive, dead, abandoned] }
+      required: [player_id, name, participation]
+    EncounterView:
+      type: object
+      properties:
+        encounter_id: { type: string }
+        npcs:
+          type: array
+          items: { $ref: '#/components/schemas/NPCView' }
+        my_state: { type: string }
+        round_seq: { type: integer, minimum: 1 }
+      required: [encounter_id, npcs]
+    NPCView:
+      type: object
+      properties:
+        npc_id: { type: string }
+        name: { type: string }
+        hp: { type: integer }
+        hp_max: { type: integer }
+        status: { type: string }
+      required: [npc_id, name, hp, hp_max, status]
+    Item:
+      type: object
+      properties:
+        item_id: { type: string }
+        kind: { type: string }
+        name: { type: string }
+      required: [item_id, kind, name]
+    WorldView:
+      type: object
+      properties:
+        weather: { type: string }
+        time_of_day: { type: string }
+        day: { type: integer }
+    SessionRef:
+      type: object
+      properties:
+        session_id: { type: string }
+        turns_count: { type: integer, minimum: 0 }
+      required: [session_id, turns_count]
+
+    ActionRequest:
+      type: object
+      properties:
+        action_key: { type: string, minLength: 1, maxLength: 64 }
+        type:
+          type: string
+          enum: [enter, leave, look, attack, flee, rest, say, defend, group.create, group.join, group.leave]
+        target:
+          type: [string, 'null']
+          description: region_id for enter, npc_id for attack, group_id for group.join.
+        text:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 500
+          description: say only; 1..500 characters after trim, no control characters.
+        client_ts: { type: [string, 'null'], format: date-time }
+      required: [action_key, type]
+    ActionAccepted:
+      type: object
+      properties:
+        correlation_id: { type: string }
+        turn: { $ref: '#/components/schemas/TurnRef' }
+        status: { type: string, enum: [accepted] }
+        acked_at: { type: string, format: date-time }
+      required: [correlation_id, turn, status, acked_at]
+    ActionPending:
+      type: object
+      properties:
+        status: { type: string, enum: [pending] }
+        group_id: { type: string }
+        correlation_id: { type: string }
+      required: [status, group_id, correlation_id]
+    TurnRef:
+      type: object
+      properties:
+        seq: { type: integer, minimum: 1 }
+        session_id: { type: string }
+        round_seq: { type: integer, minimum: 1 }
+      required: [seq, session_id]
+
+    Delivery:
+      type: object
+      properties:
+        id: { type: string }
+        player_id: { type: string }
+        route: { $ref: '#/components/schemas/DeliveryRoute' }
+        kind: { type: string, enum: [ack, mechanics, narrative, world_event, group, system] }
+        correlation_id: { type: string }
+        event_id: { type: string }
+        round_seq: { type: integer, minimum: 1 }
+        generated_by: { type: string, enum: [rules, llm, template] }
+        fallback_reason: { type: string }
+        narrative_event_id: { type: string }
+        text: { type: string, description: Plain text without markup (SEC-10). }
+        data: { type: object, additionalProperties: true }
+        created_at: { type: string, format: date-time }
+      required: [id, player_id, kind, correlation_id, event_id, generated_by, text, created_at]
+    DeliveryRoute:
+      type: object
+      description: Given only to a client of the platform of the link (SEC-12).
+      properties:
+        external_platform: { type: string }
+        external_id: { type: string }
+      required: [external_platform, external_id]
+    DeliveriesResponse:
+      type: object
+      properties:
+        deliveries:
+          type: array
+          items: { $ref: '#/components/schemas/Delivery' }
+        cursor: { type: string }
+      required: [deliveries, cursor]
+    AckRequest:
+      type: object
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items: { type: string }
+      required: [ids]
+    AckResponse:
+      type: object
+      properties:
+        acked: { type: integer, minimum: 0 }
+        unknown:
+          type: array
+          items: { type: string }
+      required: [acked, unknown]
+
+    RoundCloseResponse:
+      type: object
+      properties:
+        round: { $ref: '#/components/schemas/ClosedRound' }
+      required: [round]
+    ClosedRound:
+      type: object
+      properties:
+        seq: { type: integer, minimum: 1 }
+        close_reason: { type: string, enum: [all_acted, timeout, explicit] }
+      required: [seq, close_reason]
+
+    AdminSessions:
+      type: object
+      properties:
+        sessions:
+          type: array
+          items: { $ref: '#/components/schemas/AdminSession' }
+      required: [sessions]
+    AdminSession:
+      type: object
+      properties:
+        session_id: { type: string }
+        kind: { type: string, enum: [solo, group] }
+        scope: { $ref: '#/components/schemas/ScopeRef' }
+        world_id: { type: string }
+        actor_kind: { type: string, enum: [human, ci, sim] }
+        started_at: { type: string, format: date-time }
+        turns_count: { type: integer, minimum: 0 }
+      required: [session_id, kind, scope, world_id, actor_kind, started_at, turns_count]
+
+    Health:
+      type: object
+      description: runtime.Status of the process (shared/runtime); details per context.
+      properties:
+        status: { type: string, enum: [ok, degraded, fail] }
+        details: { type: object, additionalProperties: true }
+      required: [status]
