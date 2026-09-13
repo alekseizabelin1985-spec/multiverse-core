@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:36:44+03:00",
+  "updatedAt": "2026-09-13T14:39:15+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2688,7 +2688,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-054",
           "title": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#1",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
@@ -3024,7 +3024,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-201",
           "title": "A1 · shared/agent v2: типы блупринта, парсер, плейсхолдеры, чистка пакета",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T12:52:40+03:00",
           "finishedAt": null,
@@ -4273,11 +4273,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -8369,7 +8369,7 @@ window.DEVTEAM_STATE =
       "task": "T-054",
       "action": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
       "startedAt": "2026-09-13T14:03:36+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:39:15+03:00"
     },
     {
       "instance": "architect#2",
@@ -8449,7 +8449,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Ревью #1: links и HTTP-слой gateway",
       "startedAt": "2026-09-13T14:16:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:39:15+03:00"
     },
     {
       "instance": "developer#1",
@@ -8459,7 +8459,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Итерация 3: хеш дат и ключей, кириллица в плейсхолдерах",
       "startedAt": "2026-09-13T14:22:33+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:39:15+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8519,6 +8519,26 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (проф",
       "startedAt": "2026-09-13T14:36:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Ревью #1: инварианты соло",
+      "startedAt": "2026-09-13T14:39:15+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Ревью #3: итерация 3 shared/agent",
+      "startedAt": "2026-09-13T14:39:15+03:00",
       "finishedAt": null
     }
   ],
@@ -11198,6 +11218,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Первый прогон CI go на develop (447b892, run 34754402826) — failure. unit/race/integration: DATA RACE в shared/testkit/state/consumer_test.go (projection.Handle пишет, waitFor читает без синхронизации) — локально -race недоступен (нет cgo), поэтому не виден; unit: флак fight-05 в TestTheProcessRunsT"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 выполнена TEAM-1/developer#1: Check у inv-01/02/03/09/10 в internal/mechanics/invariants.go; законы записаны как свойства мира «после» от затронутых id (touched — id по КД §4.5 п. 8); inv-01 только со стороны встречи (ради /forget и чужой смерти NPC), inv-09 — died_at/killed_by у нетерминально"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · ревью #1 (TEAM-3/code-reviewer#1): вернуть — 0/1/6/7. Ma-1 контекст gateway в compose открывает SQLite в /data, каталога нет в образе, nonroot + том root 0755 → gateway не стартует, make up красный (известно с T-302, T-303 делает действующим). Mi-1 гонка /forget с AttachPlayer (DELETE без ус"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · итерация 3 (TEAM-2/developer#1): Ma-2 даты с меткой time:<RFC3339> (одна дата в разной записи — один хеш; отступление: другое смещение — другой хеш), неэкспортируемые поля внутри any — ошибка; Mi-5 ключи с меткой типа; Mi-6 кириллица и комбинируемые знаки; N-1 числа по значению; N-2 fence. 2"
     }
   ],
   "blockers": [],
