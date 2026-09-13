@@ -13,3 +13,7 @@ testdata/recordings/*.jsonl merge=binary
 # get the same file the pointer describes: CRLF would make it 4686 bytes where
 # the pointer says 4531.
 testdata/fixtures/** text eol=lf
+# The table of the local address (T-450) is read by bash, PowerShell and Go; a
+# CRLF checkout would put a CR into the last field of every row for a reader that
+# forgets to strip it.
+testdata/llm/*.tsv text eol=lf

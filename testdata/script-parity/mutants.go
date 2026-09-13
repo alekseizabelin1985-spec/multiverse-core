@@ -74,6 +74,39 @@ var mutants = []mutant{
 	// in the Reports of K01 — only the summary over every bench scenario sees it.
 	{id: "M17", title: "X5 of review #2: Stop-Bench of llm-bench.ps1 writes to stderr, three items of K01 no longer differ",
 		file: "scripts/llm-bench.ps1", anchor: `  Write-Host "bench: $Message" -ForegroundColor Red`, replace: `  [Console]::Error.WriteLine("bench: $Message")`, run: "^[BK]\\d\\d$"},
+	// T-450: the rule of the local address. The table (T01/T02) runs whatever
+	// -run selects; the scenarios named here carry the rule into llm-server.
+	{id: "M18", title: "llm-endpoint.sh: a one-word name is the cloud again (T-450)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: `      LLM_HOST_CLASS=local LLM_HOST_KIND=service`, replace: `      LLM_HOST_CLASS=cloud LLM_HOST_KIND=name`, run: "^D0[78]$"},
+	{id: "M19", title: "LlmEndpoint.psm1: a one-word name is the cloud again (T-450)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `    $answer.Class = 'local'; $answer.Kind = 'service'`, replace: `    $answer.Class = 'cloud'; $answer.Kind = 'name'`, run: "^D0[78]$"},
+	{id: "M20", title: "llm-endpoint.sh: 0.0.0.0 is no longer the any-address (T-450)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: `  if [ "$a" = 0 ] && [ "$b" = 0 ] && [ "$c" = 0 ] && [ "$d" = 0 ]; then`, replace: `  if false; then`, run: "^D07$"},
+	{id: "M21", title: "LlmEndpoint.psm1: 0.0.0.0 is no longer the any-address (T-450)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `  if ($A -eq 0 -and $B -eq 0 -and $C -eq 0 -and $D -eq 0) {`, replace: `  if ($false) {`, run: "^D07$"},
+	{id: "M22", title: "llm-endpoint.sh: the IPv4-mapped forms are the cloud again (T-450)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: `    00000000000000000000ffff*)`, replace: `    00000000000000000000ffff-never*)`, run: "^D0[78]$"},
+	{id: "M23", title: "LlmEndpoint.psm1: a LAN address without a port passes again, as before T-450",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `  if ($Endpoint.Class -eq 'local' -and -not $Endpoint.PortWritten) {`, replace: `  if ($Endpoint.Class -eq 'local' -and -not $Endpoint.PortWritten -and $Endpoint.Kind -in 'loopback', 'localhost', 'docker-host') {`, run: "^D08$"},
+	// T-450 review #1. M-1: the root dot is dropped from a dotted quad again, so
+	// 127.0.0.1. is loopback — in each half on its own, because a fix in bash
+	// alone passed the stand green (R2 of the review). Mi-3: the order of two
+	// refusals changes in one half, the class and the kind stay, only the sentence
+	// differs (R1 of the review). Mi-2: a backslash in the host is classified
+	// again instead of refused.
+	{id: "M24", title: "llm-endpoint.sh: the root dot is dropped from a dotted quad again, 127.0.0.1. is loopback (T-450 review #1 M-1)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: `  if [[ $host =~ $LLM_IPV4_RE ]]; then`, replace: `  if [[ $bare =~ $LLM_IPV4_RE ]]; then`, run: "^D07$"},
+	{id: "M25", title: "LlmEndpoint.psm1: the root dot is dropped from a dotted quad again, 127.0.0.1. is loopback (T-450 review #1 M-1)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `  $m = [regex]::Match($HostName, $script:LlmIPv4Re)`, replace: `  $m = [regex]::Match($bare, $script:LlmIPv4Re)`, run: "^D07$"},
+	{id: "M26", title: "LlmEndpoint.psm1: a percent sign inside brackets is left to the IPv6 parser, the sentence changes and the class does not (T-450 review #1 Mi-3, R1)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `  if ($hostport.Contains('%', [StringComparison]::Ordinal)) {`, replace: `  if ($hostport.Contains('%', [StringComparison]::Ordinal) -and -not $hostport.StartsWith('[', [StringComparison]::Ordinal)) {`, run: "^D07$"},
+	{id: "M27", title: "llm-endpoint.sh: a backslash or a caret in the host is classified again instead of refused (T-450 review #1 Mi-2)",
+		file: "scripts/lib/llm-endpoint.sh", anchor: "    *[' \\^`{|}']*)", replace: "    *'no such host'*)", run: "^D07$"},
+	// T-450 review #2 Mi-R2-1: the user information is printed again by the
+	// refusals that come before the check of the @ — in one half only, so that
+	// the scenarios have to see it by their Absent, not by a divergence alone.
+	{id: "M28", title: "LlmEndpoint.psm1: the refusals before the check of the @ print user:pass@ again (T-450 review #2 Mi-R2-1)",
+		file: "scripts/lib/LlmEndpoint.psm1", anchor: `    $shown = "${shownScheme}…@" + $shownRest.Substring($shownRest.LastIndexOf('@', [StringComparison]::Ordinal) + 1)`, replace: `    $shown = $unqueried`, run: "^H6[1-6]$"},
 }
 
 func runMutants(opt options) int {

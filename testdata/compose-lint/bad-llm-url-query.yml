@@ -1,0 +1,16 @@
+# Rule 6: an address with a query. It is invalid, and the report does not echo
+# the query back — some vendors document the key as `?api_key=…`, and the
+# report of this linter lands in the log of CI (T-450 review #1 N-2). The second
+# expect-text holds the cut: the sentence goes on right after the path.
+#
+# expect-rule: 6
+# expect-text: core: MV_OLLAMA_URL is not an address the platform can use
+# expect-text: MV_OLLAMA_URL=http://ollama:11434/… carries a query or a fragment (the rest of the value is not printed
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: http://ollama:11434/?model=narrator
