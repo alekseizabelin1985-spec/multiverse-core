@@ -351,7 +351,8 @@ func (e *Entity) RespawnTTL() (time.Duration, bool) { return e.AttrDuration(Attr
 func (e *Entity) PerceptionRadius() (float64, bool) { return e.AttrFloat(AttrPerceptionRadius) }
 
 // PlayersPresent are the characters standing in the region — a projection of
-// their positions, checked by inv-10.
+// their positions that may lag behind them; no law checks it — read positions
+// (data-model §3.2).
 func (e *Entity) PlayersPresent() ([]string, bool) { return e.AttrStrings(AttrPlayersPresent) }
 
 // EncounterChance is the probability the region rolls for an encounter.

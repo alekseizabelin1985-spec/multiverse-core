@@ -534,7 +534,7 @@ func TestEveryTurnOfTheFightIsToldOnce(t *testing.T) {
 		changes []func(*entity.Entity)
 		play    func(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus)
 	}{
-		{name: "the wolf falls", play: swingUntilOver},
+		{name: "the wolf falls", play: swingUntilTheWolfFalls},
 		{
 			name: "the character falls",
 			changes: []func(*entity.Entity){attr(playerA, entity.AttrHP, 1),

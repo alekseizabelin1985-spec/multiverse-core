@@ -1,18 +1,22 @@
 package contracts
 
+import "multiverse-core.io/shared/eventbus"
+
 // Types of EPIC-002. The owner adds the line of its type here, reviewed by the
 // system architect (contracts.md §16 p. 8); the order of the lists is in
 // registry.go.
 var stateDefinitions = []Spec{
 	// --- block "b": state, snapshots, dice, replay (owner EPIC-002) ---
 	// The proposals have four publishers: the gateway, the swarm agents, the
-	// CLI loading fixtures and the contract fakes (contracts.md §0 v0.4).
-	systemEvent("entity.create.proposed", OwnerState,
+	// CLI loading fixtures and the contract fakes (contracts.md §0 v0.4). A
+	// proposal names its world in the envelope, and a publisher that forgot it
+	// hears so from Publish (C-02 v1.7, C-01 v1.10): State would pass it over.
+	worldRequired(systemEvent("entity.create.proposed", OwnerState,
 		[]string{SourceGateway, SourceSwarm, SourceMvctl, SourceTestkitSwarm, SourceTestkitGateway},
-		[]string{SourceState}),
-	systemEvent("entity.update.proposed", OwnerState,
+		[]string{SourceState})),
+	worldRequired(systemEvent("entity.update.proposed", OwnerState,
 		[]string{SourceGateway, SourceSwarm, SourceMvctl, SourceTestkitSwarm, SourceTestkitGateway},
-		[]string{SourceState}),
+		[]string{SourceState})),
 	systemEvent("entity.created", OwnerState,
 		[]string{SourceState, SourceTestkitState},
 		[]string{SourceGateway, SourceSwarm, SourceMemory, SourceLLM}),
@@ -36,4 +40,10 @@ var stateDefinitions = []Spec{
 	analyticsEvent("analytics.replay.completed", OwnerState,
 		[]string{SourceState, SourceMvctl, SourceTestkitState},
 		[]string{SourceSwarm, SourceGateway, SourceMvctl}),
+}
+
+// worldRequired puts the rule of the world on the policy of a type (C-01 v1.10).
+func worldRequired(spec Spec) Spec {
+	spec.Policy.World = eventbus.WorldRequired
+	return spec
 }
