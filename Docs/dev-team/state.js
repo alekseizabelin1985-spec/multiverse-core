@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:56:06+03:00",
+  "updatedAt": "2026-09-13T16:00:54+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2524,7 +2524,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/devops-engineer#1",
           "startedAt": "2026-09-13T14:36:44+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3069,7 +3069,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -8779,7 +8779,7 @@ window.DEVTEAM_STATE =
       "task": "T-448",
       "action": "Ревью #2: итерация 2 T-448",
       "startedAt": "2026-09-13T15:26:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:00:54+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -8819,7 +8819,7 @@ window.DEVTEAM_STATE =
       "task": "T-455",
       "action": "Ревью #1: compose-lint без окружения CI",
       "startedAt": "2026-09-13T15:36:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:00:54+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8889,6 +8889,26 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "Ревью #1: гонка testkit/state, флак fight-05",
       "startedAt": "2026-09-13T15:56:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Приёмка T-448 на слитом дереве эпика",
+      "startedAt": "2026-09-13T16:00:54+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Приёмка T-455 compose-lint без окружения CI",
+      "startedAt": "2026-09-13T16:00:54+03:00",
       "finishedAt": null
     }
   ],
@@ -11754,6 +11774,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-454 выполнена TEAM-1/developer#2 (возобновление): гонка — проекция под мьютексом; скрытая передача полей стенда из горутины process.run — через канал; флак fight-05 — обёртка транспорта learning, персонаж входит после того, как двойник усвоил весь начальный мир (сигнал, не срок); попутный флак enc"
+    },
+    {
+      "at": "2026-09-13T16:00:54+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 · ревью #1 (TEAM-1/code-reviewer#1, возобновление): принять — 0/0/1/2. Диагноз подтверждён по логу и воспроизведён без .env; D-3 не ослаблено; проба слияния T-450 → T-455 без текстовых конфликтов, объединённое дерево в окружении CI проходит. Mi-1 declared_names не понимает форму KEY: value; N-"
+    },
+    {
+      "at": "2026-09-13T16:00:54+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/2. Ma-1 и пп. 1–6 решения архитектора закрыты; строгий MarshalJSON не задевает другие эпики (никто не собирает Change вручную); симуляции синхронизации EPIC-003/004 зелёные. Mi-3 тест null в changedPayload двойника, Mi-4 устаревшая строка ка"
     }
   ],
   "blockers": [],
