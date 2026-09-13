@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:39:39+03:00",
+  "updatedAt": "2026-09-13T14:40:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4082,11 +4082,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-439",
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8469,7 +8469,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Ревью #1: потолок длины нарратива, ярлыки eK/bK",
       "startedAt": "2026-09-13T14:23:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:40:05+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -8539,6 +8539,16 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Ревью #3: итерация 3 shared/agent",
       "startedAt": "2026-09-13T14:39:15+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Итерация 2: ADR-029 ярлыки вызова, замечания ревью",
+      "startedAt": "2026-09-13T14:40:05+03:00",
       "finishedAt": null
     }
   ],
@@ -11242,6 +11252,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-214 и T-215 приняты tech-lead#2 в дереве эпика (fd52e31): contracts check 65/8/58, тесты contracts и fixtures, golangci-lint — зелёные. T-215 Ma-1/Mi-1 закрыты T-445 (условная обязательность llm.output/llm.output.rejected с тестами); открытые Minor/Nit разнесены в DoD T-211/T-217/T-230 и новый §13"
+    },
+    {
+      "at": "2026-09-13T14:40:05+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · ревью #1 (TEAM-2/code-reviewer#2): вернуть — 0/1/8/5. Числа E (160/210/4/2), формула, группа и temperature 0.7 верны — T-203 может брать их. Ma-1 решение о ярлыках eK/bK меняет ADR-017 (правило 3: unknown_entity → schema_invalid на весь ответ, выпадение из NFR-021), ADR-016 (компиляция схемы"
     }
   ],
   "blockers": [],
