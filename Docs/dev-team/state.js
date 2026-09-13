@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:47:30+03:00",
+  "updatedAt": "2026-09-13T19:48:25+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2591,9 +2591,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-463",
           "title": "Devops: удаление архивов make backup старше 30 дней (ежедневное задание) и маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-13T19:48:25+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -9833,6 +9833,16 @@ window.DEVTEAM_STATE =
       "action": "Приёмка T-460",
       "startedAt": "2026-09-13T19:47:30+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-463",
+      "action": "Хранение бэкапов 30 дней и маскировка значения",
+      "startedAt": "2026-09-13T19:48:25+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -13375,6 +13385,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по вопросам приёмки T-461: T-463 делится — части (а) удаление архивов и (б) маскировка значения в скриптах начинаются сейчас, часть (в) переменные MV_STATE_WORLDS и MV_TELEGRAM_* в compose — новая задача T-464 (EPIC-001, devops) после попадания T-055 и T-310 в develop, не позже "
+    },
+    {
+      "at": "2026-09-13T19:48:25+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-463 начата (TEAM-1/devops-engineer#1), части (а) удаление архивов бэкапа и копий SQLite старше 30 дней по возрасту отдельной командой для ежедневного задания и (б) маскировка значения в llm_endpoint_judge/LlmEndpoint.psm1; ветка task/T-463-backup-retention-endpoint-mask от 3f34195."
     }
   ],
   "blockers": [],
