@@ -1,0 +1,3 @@
+Вот ответ:
+
+[{"text":"Волк рычит.","mentions":["e1"],"background_refs":[]}, {"text":"Стая замирает.","mentions":[],"background_refs":["b1"]}]

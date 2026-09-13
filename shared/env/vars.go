@@ -211,6 +211,10 @@ var (
 	LLMTimeoutDegraded = Declare("MV_LLM_TIMEOUT_DEGRADED", "3s",
 		"shortened timeout of an attempt while the provider is unavailable, so a recovery is noticed without a restart",
 		IsDuration())
+	// The share is a fraction, and the manifest has no such kind: the parse and
+	// the range check are in internal/llm/parser (T-209).
+	LLMLatinMaxRatio = Declare("MV_LLM_LATIN_MAX_RATIO", "0.10",
+		"largest share of Latin letters among the letters of an LLM answer, identifiers not counted (NFR-090, ADR-016 p. 2); a value between 0 and 1")
 	LLMPrices = Declare("MV_LLM_PRICES", "config/llm-prices.yaml",
 		"price table of LLM calls per 1000 tokens keyed by (endpoint_host, model); "+
 			"a relative path is resolved against the working directory; local endpoints cost 0")

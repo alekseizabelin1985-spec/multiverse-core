@@ -1,0 +1,16 @@
+Here is the answer in JSON format:
+
+```json
+{
+  "text": "Волк рычит, но не нападает.",
+  "mentions": [
+    "e1",
+    "e2"
+  ],
+  "background_refs": [
+    "b1"
+  ]
+}
+```
+
+Let me know if you need anything else.
