@@ -2092,3 +2092,27 @@ id выводится из причины. «От факта» я прочита
 `golangci-lint run ./...` — 0 issues; `mvctl env check` — 72, 0 проблем; `make test` — exit 0;
 `gitleaks dir` по изменённым файлам — no leaks. Единственная находка без конфигурации проекта —
 пустая строка `MV_LLM_API_KEY=` в `.env.example`: была до задачи, файл исключён `.gitleaks.toml`.
+
+<!-- dev-log T-452 -->
+## developer#2 · T-452 · `FakeEncounter`: павшему персонажу только `hp` и `status` · 2026-09-13
+
+Ветка `task/T-452-fake-encounter-fallen-character` (от `epic/EPIC-003-swarm-llm-laws`, `b18ecd6`), папка
+`.worktrees/T-452`. Коммитов нет, по промпту они запрещены. Таблица DoD и мутанты — в карточке `tasks/T-452.md`.
+
+**Что сделано.** `wound` писал `died_at` и `killed_by` любому павшему бойцу. Теперь их получает только
+павший NPC; персонаж получает `hp` и `status=dead`. Трофей и остальные операции NPC не менялись.
+Комментарии `Mechanics` и `EncounterConfig.Mechanics` больше не ссылаются на T-053.
+
+**Решения по ходу.**
+- Экспортируемой проверки таблицы владения в `shared/contracts` нет, есть только `OwnershipRules()`. Тест
+  использует уже существующий помощник пакета `ownershipAllows`, построенный на ней.
+- `TestEveryProposalPassesTheOwnershipTable` не расширял: его проверка покрытия считает виды предложений
+  без путей, и смерть персонажа там неотличима от раны. Добавлен отдельный тест с двумя путями смерти
+  (`combat`, `flee`) и точным набором путей `[hp status]`.
+- `TestTheCharacterDies` закреплял дефект (`killed_by = wolf` у персонажа) — утверждение заменено на
+  отсутствие `died_at`/`killed_by`. `TestTheWolfDies` дополнен проверкой `died_at` у NPC.
+
+**Как тестировал.** 8 мутантов в копии дерева в scratch, без `-overlay`: контрольный первым, красный;
+все 7 смысловых красные. Копия удалена по точному пути. `go build ./... && go vet ./...` — 0;
+`go test -short -count=1 ./...` — 29 ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` —
+0 issues; `make test` — exit 0 (без `-race`, нет cgo).
