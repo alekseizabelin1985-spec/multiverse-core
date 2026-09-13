@@ -3,18 +3,23 @@
 // environment manifest and prepares the object store (foundation.md §12,
 // design.md §4.1).
 //
-// The table below is the registry of subcommands. Five epics fill it, so the
-// names of the ones that are not written yet are reserved here: a reserved name
+// The registry of subcommands is put together here from one list per owner:
+// foundation() below (EPIC-001) and stateCmds, swarmCmds and opsCmds in
+// commands_<owner>.go. Five epics fill it, so the names of the commands that
+// are not written yet are reserved in the file of their owner: a reserved name
 // exits with the usage code and says which epic owns it, which is cheaper than
 // discovering at merge time that two teams both called their command "report".
 //
-// After wave 0 this file changes only through tech-lead#1: an owner adds the
-// line of their command in one pull request (design.md §4.1).
+// An owner replaces its reserved line with the command in its own file
+// (contracts.md §16 p. 8, ownership.md v0.6). This file and the order of the
+// lists change only through a task of EPIC-001; the help lists the commands
+// alphabetically whatever the order.
 package main
 
 import (
 	"io"
 	"os"
+	"slices"
 
 	"multiverse-core.io/cmd/mvctl/internal/cli"
 	contractscmd "multiverse-core.io/cmd/mvctl/internal/contracts"
@@ -36,22 +41,26 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return commands().Dispatch("mvctl", args, stdout, stderr)
 }
 
-// commands is the registry: implemented commands first, then the names held for
-// the epics that will implement them.
+// commands is the registry: the lists of the owners, the implemented commands
+// of the foundation first.
 func commands() *cli.Registry {
-	return cli.NewRegistry(
-		// --- EPIC-001 (foundation) ---
-		cli.Command{
+	return cli.NewRegistry(slices.Concat(foundation(), stateCmds(), swarmCmds(), opsCmds())...)
+}
+
+// foundation lists the commands of EPIC-001.
+func foundation() []cli.Command {
+	return []cli.Command{
+		{
 			Name:    "contracts",
 			Summary: contractscmd.Summary,
 			Run:     contractscmd.Run,
 		},
-		cli.Command{
+		{
 			Name:    "env",
 			Summary: envcmd.Summary,
 			Run:     envcmd.Run,
 		},
-		cli.Command{
+		{
 			Name:    "storage",
 			Summary: storagecmd.Summary,
 			Run:     storagecmd.Run,
@@ -59,28 +68,17 @@ func commands() *cli.Registry {
 		// The minimal `privacy scan` belongs to F-7 rather than to EPIC-005:
 		// the security job of CI runs it from wave 0 on, and EPIC-005 (T-139)
 		// replaces the implementation behind the same name (decision ОВ-47).
-		cli.Command{
+		{
 			Name:    "privacy",
 			Summary: privacycmd.Summary,
 			Run:     privacycmd.Run,
 		},
-		cli.Command{
+		{
 			Name:    "version",
 			Summary: "print the version this binary was built from",
 			Run:     runVersion,
 		},
-
-		// --- reserved: the owner writes the command in its own epic ---
-		cli.Reserved("world", "create a world, load fixtures, write a snapshot", "EPIC-002"),
-		cli.Reserved("blueprint", "validate and inspect agent blueprints", "EPIC-003"),
-		cli.Reserved("laws", "read and bump the laws of a world", "EPIC-003"),
-		cli.Reserved("record", "record and replay a session", "EPIC-003"),
-		cli.Reserved("golden", "run and update the golden set", "EPIC-005"),
-		cli.Reserved("llm", "report LLM usage and cost", "EPIC-005"),
-		cli.Reserved("memory", "rebuild, reset and query the memory index", "EPIC-005"),
-		cli.Reserved("report", "session and audit reports as CSV", "EPIC-005"),
-		cli.Reserved("trace", "follow one correlation id through the journal", "EPIC-005"),
-	)
+	}
 }
 
 // runVersion prints the build stamp, the way `multiverse version` does.

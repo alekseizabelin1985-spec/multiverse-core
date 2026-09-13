@@ -1,0 +1,15 @@
+# Rule 6: a local address without a port. `ollama` is a service name and
+# therefore local, but the default of the scheme (80) is a port nobody chose;
+# the rule refuses it for every local host, not only for loopback (T-450).
+#
+# expect-rule: 6
+# expect-text: core: MV_OLLAMA_URL is not an address the platform can use
+# expect-text: has no port; a local address is written with the port its runtime listens on
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: http://ollama

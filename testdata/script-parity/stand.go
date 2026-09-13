@@ -187,6 +187,8 @@ dispatch:
 	// The message texts, compared statically. With pwsh this is a second line
 	// of defence; without it, the only comparison of the PowerShell half.
 	lint := lintMessages(opt.source)
+	// The table of the local address, run through both halves (T-450).
+	lint = append(lint, s.endpointTable(ctx)...)
 	for _, l := range lint {
 		counts[l.status]++
 		fmt.Printf("%-14s %s  %s\n", l.status, l.id, l.title)

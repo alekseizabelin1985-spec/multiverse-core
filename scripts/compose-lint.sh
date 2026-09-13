@@ -29,9 +29,13 @@
 #   5. NEO4J_PLUGINS is absent (T-17, SEC-32); OLLAMA_ORIGINS is not a wildcard
 #      and OLLAMA_HOST is not 0.0.0.0 (SEC-15);
 #   6. there is no `llama-server` service — it is a native process outside
-#      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
-#      host.docker.internal, a service of this file or an RFC1918 address, but
-#      never at a public host (SEC-15, ADR-005 add. 2 p. 3);
+#      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL and MV_OLLAMA_URL of a
+#      service are LOCAL addresses: the rule is not this file's, it is
+#      llm_endpoint_classify of scripts/lib/llm-endpoint.sh, held to the table
+#      testdata/llm/local-endpoints.tsv (T-450). A cloud address is refused
+#      (SEC-15, ADR-005 add. 2 p. 3), and so is an invalid one — 0.0.0.0, a
+#      local host without a port — which is a configuration error the platform
+#      would refuse at start;
 #   7. the always-loaded compose file starts on a clean machine (T-397), and
 #      every variable it requires with `${VAR:?}` or `${VAR?}` — other than an
 #      image pin of build/versions.env — is marked `[required]` in
@@ -174,6 +178,30 @@ export PYTHONIOENCODING=utf-8
 # them would make the result depend on whose terminal it ran in.
 unset COMPOSE_ENV_FILES COMPOSE_FILE COMPOSE_PROFILES
 
+# The names the given env files declare — `KEY=...`, `export KEY=...` and the
+# YAML form `KEY: value`, the lines compose's dotenv parser reads as variables —
+# into the array `names`. A comment never matches: `#` does not start a name.
+# Builtins only, for the same reason as above. A missing file declares nothing:
+# compose refuses a missing --env-file by itself.
+declared_names() {
+  local file line re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*[=:]'
+  names=()
+  for file in "$@"; do
+    [ -f "$file" ] || continue
+    while IFS= read -r line || [ -n "$line" ]; do
+      if [[ $line =~ $re ]]; then
+        names+=("${BASH_REMATCH[2]}")
+      fi
+    done <"$file"
+  done
+  return 0
+}
+
+# The env files the model of rules 1-6 is resolved with unless
+# COMPOSE_LINT_ENV_FILES says otherwise. One place: the hostile environment of
+# --fixtures must be made of exactly the files the linter reads.
+default_env_files='build/versions.env .github/ci.env'
+
 # --------------------------------------------------------------------------
 # --fixtures — the linter's own fixtures, each held to the rule it plants.
 # --------------------------------------------------------------------------
@@ -243,6 +271,22 @@ run_fixtures() {
   # shellcheck disable=SC2064 # the directory is known now and must go whatever happens
   trap "rm -rf '$work'" EXIT
   limit=${COMPOSE_LINT_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)}
+  # Every run below starts in a hostile environment: each name the env files of
+  # the linter, build/versions.env and .env.example declare is exported EMPTY —
+  # what the CI job did to CHROMA_IMAGE by exporting build/versions.env through
+  # $GITHUB_ENV (T-455). The linter takes its values from the files alone, so no
+  # verdict changes; a linter that lets the caller's environment shadow its
+  # --env-file fails the fixtures that take a value from those files, the good
+  # ones included, on the owner's machine and not only in CI. The names of
+  # .env.example are exported too, but nothing here can catch a linter that
+  # keeps them: see the note where the linter drops them.
+  local name
+  local -a lint_env_files
+  read -r -a lint_env_files <<<"${COMPOSE_LINT_ENV_FILES:-$default_env_files}"
+  declared_names "${lint_env_files[@]}" build/versions.env .env.example
+  for name in "${names[@]}"; do
+    export "$name=" 2>/dev/null || true
+  done
   i=0
   running=0
   for bad in "${bads[@]}" "${goods[@]}"; do
@@ -424,7 +468,7 @@ if [ ${#compose_files[@]} -eq 0 ]; then
   compose_files=(docker-compose.yml docker-compose.bot.yml docker-compose.legacy.yml)
 fi
 
-read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-build/versions.env .github/ci.env}"
+read -r -a env_files <<<"${COMPOSE_LINT_ENV_FILES:-$default_env_files}"
 read -r -a profiles <<<"${COMPOSE_LINT_PROFILES:-gpu memory dev legacy bot}"
 
 if command -v python3 >/dev/null 2>&1; then
@@ -443,6 +487,31 @@ done
 env_args=()
 for f in "${env_files[@]}"; do
   [ -n "$f" ] && env_args+=(--env-file "$f")
+done
+
+primary=${compose_files[0]}
+# A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
+# paired with bad-x.env when that file exists. That is how the half of rule 7
+# that reads .env.example gets a negative fixture of its own without teaching
+# the fixture loop a second file pattern.
+env_example=${primary%.yml}.env
+[ -f "$env_example" ] || env_example=.env.example
+
+# The values come from the files, never from the caller (T-455). Compose takes a
+# variable from the environment of its own process before any --env-file, so a
+# name the caller exports shadows the file — empty included. The CI job exports
+# build/versions.env through $GITHUB_ENV, its CHROMA_IMAGE is empty by decision
+# D-3, and that empty value hid the placeholder of .github/ci.env: the model
+# refused docker-compose.legacy.yml in CI and resolved on every machine that had
+# not exported the pins. Rule 7's clean machine is made of files as well. Every
+# name the files of this run declare is therefore dropped before the first
+# `docker compose`. `--fixtures` holds the linter to it for the names of its
+# --env-file. Dropping the names of the example file is a precaution no fixture
+# can check: a fixture's `${VAR:?}` must resolve in the model of rules 1-6
+# first, and that model reads the --env-file alone.
+declared_names "${env_files[@]}" build/versions.env "$env_example"
+for name in "${names[@]}"; do
+  unset -v "$name" 2>/dev/null || true
 done
 
 work=$(mktemp -d)
@@ -498,14 +567,6 @@ done
 # Judged first and on its own: if this fails, nothing else about the file
 # matters to an operator who cannot get past `docker compose config`.
 # --------------------------------------------------------------------------
-
-primary=${compose_files[0]}
-# A fixture may bring its own example file: testdata/compose-lint/bad-x.yml is
-# paired with bad-x.env when that file exists. That is how the half of rule 7
-# that reads .env.example gets a negative fixture of its own without teaching
-# the fixture loop a second file pattern.
-env_example=${primary%.yml}.env
-[ -f "$env_example" ] || env_example=.env.example
 
 if ! clean_out=$(CLEAN_ENV_PATH="$clean_env" MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
   "$python_bin" - <<'PY' 2>&1
@@ -619,6 +680,38 @@ for i in "${!raw_pids[@]}"; do
   fi
 done
 
+# Rule 6 needs the ONE rule of a local address, and that rule is a bash function
+# of scripts/lib/llm-endpoint.sh — the same one llm-server and llm-bench call,
+# held to testdata/llm/local-endpoints.tsv (T-450). This file used to carry its
+# own copy in Python (a service of this file, loopback or whatever `ipaddress`
+# calls private), and the copies disagreed: http://ollama:11434 passed here and
+# stopped the platform. So the addresses are taken out of the model by Python,
+# judged here by the function, and the verdicts handed back to rule 6.
+# NUL-separated both ways: a value of compose may hold any character but NUL.
+WORK_DIR="$work" "$python_bin" - <<'PY'
+import json
+import os
+
+work = os.environ["WORK_DIR"]
+with open(os.path.join(work, "model.json"), encoding="utf-8") as fh:
+    services = json.load(fh).get("services") or {}
+with open(os.path.join(work, "llm-urls.bin"), "wb") as out:
+    for name in sorted(services):
+        env = services[name].get("environment") or {}
+        for key in ("MV_LLM_URL", "MV_OLLAMA_URL"):
+            url = env.get(key)
+            if url:
+                out.write(f"{name}\0{key}\0{url}\0".encode("utf-8"))
+PY
+# shellcheck source=scripts/lib/llm-endpoint.sh
+. "$repo_root/scripts/lib/llm-endpoint.sh"
+: >"$work/llm-verdicts.bin"
+while IFS= read -r -d '' llm_service && IFS= read -r -d '' llm_key && IFS= read -r -d '' llm_url; do
+  llm_endpoint_classify "$llm_url" "$llm_key"
+  printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
+    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" >>"$work/llm-verdicts.bin"
+done <"$work/llm-urls.bin"
+
 # Rule 3's second half needs the work tree, not the model. The scope is what
 # the target platform is built from — compose, build/, scripts/, the single Go
 # module and the environment files. Out of scope, and out of this linter's
@@ -636,7 +729,6 @@ minioadmin_hits=$(git grep -i -n -- minioadmin -- \
 WORK_DIR="$work" MINIOADMIN_HITS="$minioadmin_hits" \
   MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
   "$python_bin" - <<'PY'
-import ipaddress
 import json
 import os
 import re
@@ -1028,35 +1120,40 @@ for name, svc in sorted(services.items()):
             "(ADR-005 add. 2 p. 7)",
         )
 
-ALLOWED_HOSTS = {"host.docker.internal", "localhost"} | service_names
-
-
-def local_llm_host(url):
-    host = urlsplit(url).hostname
-    if not host:
-        return False, "no host"
-    if host in ALLOWED_HOSTS:
-        return True, host
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return False, host
-    return (addr.is_loopback or addr.is_private), host
-
-
-for name, svc in sorted(services.items()):
-    for key in ("MV_LLM_URL", "MV_OLLAMA_URL"):
-        url = (svc.get("environment") or {}).get(key)
-        if not url:
-            continue
-        ok, host = local_llm_host(url)
-        if not ok:
-            fail(
-                6,
-                f"{name}: {key} points at the public host {host!r}; a cloud endpoint "
-                "needs MV_LLM_CLOUD_ENABLED=true and never a compose default "
-                "(SEC-15, ADR-005 add. 2 p. 3)",
-            )
+# The verdicts of llm_endpoint_classify (scripts/lib/llm-endpoint.sh), taken
+# in bash before this program started: service, key, class, kind, host, error.
+# No second copy of the rule lives here (T-450). The error is printed as the
+# function wrote it: llm_parse_url cuts the query and the fragment off the value
+# it echoes, and the user information in front of the last @ as well — before
+# the first refusal, the one about the query included (T-450 review #1 N-2,
+# review #2 Mi-R2-1). A key lives there when it is put into the address, so a
+# COMPOSE_LINT_ENV_FILES pointed at a real env file does not carry one into the
+# log; the fixture bad-llm-url-userinfo holds that with a fake password.
+with open(os.path.join(work, "llm-verdicts.bin"), "rb") as fh:
+    fields = [f.decode("utf-8", errors="replace") for f in fh.read().split(b"\0")[:-1]]
+if len(fields) % 6:
+    print("compose-lint: the verdicts of llm_endpoint_classify are malformed "
+          f"({len(fields)} fields, want groups of 6)", file=sys.stderr)
+    sys.exit(2)
+for i in range(0, len(fields), 6):
+    name, key, verdict, kind, llm_host, reason = fields[i:i + 6]
+    if verdict == "local":
+        continue
+    if verdict == "cloud":
+        fail(
+            6,
+            f"{name}: {key} points at {llm_host!r}, which is not a local address "
+            f"(testdata/llm/local-endpoints.tsv); a cloud endpoint needs "
+            "MV_LLM_CLOUD_ENABLED=true and never a compose default "
+            "(SEC-15, ADR-005 add. 2 p. 3)",
+        )
+    else:
+        fail(
+            6,
+            f"{name}: {key} is not an address the platform can use — a "
+            f"configuration error, not the cloud: {reason} "
+            "(testdata/llm/local-endpoints.tsv)",
+        )
 
 # --------------------------------------------------------------------------
 # Rule 7, the marker half — every `${VAR:?}` of the always-loaded file is a

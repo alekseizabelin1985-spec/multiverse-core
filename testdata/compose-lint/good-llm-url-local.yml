@@ -1,0 +1,25 @@
+# Rule 6, the addresses the rule of a local address accepts (T-450,
+# testdata/llm/local-endpoints.tsv). The first is the case the task exists
+# for: the linter and the platform now give the same answer to
+# http://ollama:11434. A one-word name is local whether or not it is a service
+# of this file — the rule is one function, not a guess from the file (the old
+# copy in Python only knew the services it saw). The others are a written
+# :80, an IPv4-mapped RFC 1918 address and an IPv6 ULA.
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: http://host.docker.internal:80/v1
+      MV_OLLAMA_URL: http://ollama:11434
+  gateway:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: http://[::ffff:192.168.1.10]:8080
+      MV_OLLAMA_URL: http://llm-box:11434
+  memory:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: http://[fd12:3456::1]:11434

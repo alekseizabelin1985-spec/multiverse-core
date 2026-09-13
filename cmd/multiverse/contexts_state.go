@@ -8,7 +8,10 @@ import (
 // stateContext is the name the context of internal/state answers to.
 const stateContext = state.Name
 
-// newStateContext is the factory of the context state: the worlds it serves
-// come from MV_STATE_WORLDS when the process starts it, not when the binary is
-// linked.
-func newStateContext() runtime.Context { return state.New(state.Config{}) }
+// Factories of the contexts of EPIC-002. The owner changes the value on the
+// right and nothing else; the name and the start order stay in contexts.go.
+var (
+	// The worlds of state come from MV_STATE_WORLDS when the process starts it.
+	newStateContext     = func() runtime.Context { return state.New(state.Config{}) }
+	newMechanicsContext = newStub("mechanics")
+)

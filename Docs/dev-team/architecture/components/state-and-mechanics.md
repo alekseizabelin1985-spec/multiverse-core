@@ -167,10 +167,10 @@ func Clone(e *Entity) *Entity
 |---|---|---|
 | `set` | записать `value` по `path` (создаёт промежуточные map); в `changed` `old` есть, только если путь существовал (T-448) | путь зарезервирован; `value` — не JSON-совместимое значение, в том числе число по модулю **не меньше 2^53** где угодно внутри `value` (допустимо `\|x\| ≤ 2^53−1`, C-02 v1.6) |
 | `inc` | целочисленный `value` прибавить к текущему (отсутствующее = 0); для путей `hp` — clamp в `[0, hp_max]` (§6.4) | текущее значение не число; `value` не целое; `value`, текущее значение или результат по модулю не меньше 2^53 (C-02 v1.6; у текущего значения своя причина в тексте ошибки — виноват атрибут, а не операция) |
-| `append` | добавить `value` в список по `path` (создаёт список); элементы-объекты с полем `item_id`/`player_id`/`npc_id` не дублируются по этому ключу (повтор = no-op, `changed` пуст) | по пути не список |
-| `remove` | с `value`: удалить из списка элементы, равные `value` (по `item_id`/`player_id`/`npc_id` для объектов, по равенству для скаляров); без `value`: удалить ключ | по пути нет ключа/списка |
+| `append` | добавить `value` в список по `path` (создаёт список); элементы-объекты с полем `item_id`/`player_id`/`npc_id` не дублируются по этому ключу (повтор = no-op, `changed` пуст); объект без такого поля — повтор, только если равен элементу целиком; равенство — в канонической JSON-форме (§3.3; изм. T-449, T-050) | по пути не список |
+| `remove` | с `value`: удалить из списка элементы, равные `value` (по `item_id`/`player_id`/`npc_id` для объектов, по равенству для скаляров; равенство — в канонической JSON-форме, §3.3; изм. T-449, T-050); без `value`: удалить ключ | по пути нет ключа/списка |
 
-Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` (равенство `old == new` по `reflect.DeepEqual`) исключается; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется. **Форма элемента (C-02 v1.6, T-448):** `old` есть ⇔ путь существовал до изменения, `new` есть ⇔ путь существует после; `set` существующего — оба, `set` отсутствовавшего (в т. ч. в `null`) и `inc` отсутствовавшего — только `new`, `append` — путь элемента `a[n]` и только `new`, `remove` без `value` (ключ) — только `old`, `remove` с `value` и `remove` элемента по индексу — путь списка, оба (список до и после). Если путь, затронутый операцией, в конце отсутствует, а его предок предложением создан (не было или был скаляр — есть контейнер: `inc fresh.deep` + `remove fresh.deep` оставляет `fresh = {}`), в `changed[]` добавляется элемент предка — иначе догон §4.8 не восстановил бы его. Элемент предка идёт **после** элементов путей; порядок — часть формы, потому что догон применяет элементы по порядку (элемент предка переписывает записанное под ним согласованно).
+Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` исключается: путь был и до, и после (или не был ни до, ни после), и значение в канонической форме (§3.3) не изменилось *(итерация 2 T-449, ревью #1 Mi-2; T-050 — сравнение каноническое и учитывает наличие пути; прежде «равенство `old == new` по `reflect.DeepEqual`»)*; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется. **Форма элемента (C-02 v1.6, T-448):** `old` есть ⇔ путь существовал до изменения, `new` есть ⇔ путь существует после; `set` существующего — оба, `set` отсутствовавшего (в т. ч. в `null`) и `inc` отсутствовавшего — только `new`, `append` — путь элемента `a[n]` и только `new`, `remove` без `value` (ключ) — только `old`, `remove` с `value` и `remove` элемента по индексу — путь списка, оба (список до и после). Если путь, затронутый операцией, в конце отсутствует, а его предок предложением создан (не было или был скаляр — есть контейнер: `inc fresh.deep` + `remove fresh.deep` оставляет `fresh = {}`), в `changed[]` добавляется элемент предка — иначе догон §4.8 не восстановил бы его. Элемент предка идёт **после** элементов путей; порядок — часть формы, потому что догон применяет элементы по порядку (элемент предка переписывает записанное под ним согласованно).
 
 ### 3.3. Хэш
 
@@ -182,6 +182,8 @@ func StateHash(es []*Entity) string
 ```
 
 Хэш исключает `updated_at`, `history`, `last_change`, `last_event_id` — они не влияют на игровое состояние и позволяют `mvctl report --audit` (EPIC-005) пересчитать хэш из снапшота + `entity.updated.changed[]`. Метрика `recovery_state_identical` (metrics.md) сравнивает именно этот хэш.
+
+**Каноническая форма значения (изм. T-449; T-050, подтверждено system-architect).** Значение пишется в форме после `json.Marshal` → `Unmarshal`: типизированный `nil` — `null`; `float32` — десятичная запись кодировщика, а не ближайший `float64`; `[]byte` — строка base64; `json.RawMessage`, `time.Time` и тип со своим `MarshalJSON`/`MarshalText` — тем, что пишет метод; `map` с целыми ключами — объектом со строковыми ключами; структура — объектом с отсортированными ключами. Исключение — три `nil`-контейнера `jsonpath`: `nil` у `[]any`, `map[string]any` и `[]map[string]any` пишется `[]`/`{}`, потому что `jsonpath.Clone` пересобирает их пустыми и после `Commit` сущность держит пустые. *Почему:* значение, пришедшее с шины, этими ветками не проходит, поэтому хэши данных с шины не изменились; а сущность, собранная в Go (bootstrap, `append` структуры `Item`), хэшируется так же, как после снапшота. Доказательство — `TestStateHashOfAGoBuiltWorldMatchesItsWireForm` и дифференциальный тест приёмки T-050 на 60 120 значениях. Числа по модулю от 2^53 JSON без потерь не переносит — с T-448 их отвергает `ApplyOps`, допустимый диапазон ±(2^53−1) (C-02 v1.6, вступает в силу со слиянием T-448; итерация 2 T-449, N-5).
 
 ---
 
@@ -310,7 +312,7 @@ type Store interface {
 2. **Дедуп** (`dedup.go`): `proposal_id ∈ applied LRU` **или** у всех целевых сущностей `last_change.proposal_id == proposal_id` → предложение уже применено. Если факты для него ещё не подтверждены (`last_change.fact_event_id == ""`) — повторно опубликовать факты (§4.8) и выйти; иначе выйти молча (лог `debug`, `handled=true`).
 3. **Существование**: каждая `changes[i].entity` найдена в `WorldSet` → иначе `unknown_entity`.
 4. **Версия**: `expected_version` задан и `≠ entity.Version` → `version_conflict {expected_version, actual_version}`.
-5. **Мёртвые**: `status ∈ {dead, ascended_final}` у сущности **до** применения → `dead_entity`, кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id` и кроме `type=encounter/group` (у них нет `dead`). Переход `status: dead → alive` запрещён всегда (`law_violation inv-09`).
+5. **Мёртвые**: `status ∈ {dead, abandoned, ascended_final}` *(изм. T-457: `abandoned` — по C-02 v1.2)* у сущности **до** применения → `dead_entity`, кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id` и кроме `type=encounter/group` (у них нет `dead`). Переход терминальной сущности в нетерминальный статус (`dead → alive` и любой другой) — тоже `dead_entity` на этом шаге, в том числе когда пакет заодно стирает `died_at`/`killed_by` *(изм. T-457, C-02 v1.5b; прежде «запрещён всегда (`law_violation inv-09`)»: проверка шага 8 перехода не видит, мира «до» у неё нет)*.
 6. **Владение** (`ownership.go`): для каждой (сущность, op) проверка по `contracts.OwnershipRules` (§4.6) → `level_violation`.
 7. **Применение на копиях**: `entity.ApplyOps` на `Clone(e)` → `attrs, changed` или `invalid_op`.
 8. **Инварианты** (`invariants.go`): `overlayView` (WorldSet + копии) → `mechanics.Invariants()` с `touched = ids изменённых` → первое нарушение → `law_violation {invariant_id}`.
@@ -346,7 +348,7 @@ type OwnershipRule struct {
 | `task` | `npc` | `hp`, `status`, `died_at`, `killed_by`, `loot_claimed_by` | `combat, death` | — |
 | `task` | `encounter` | `*` | `combat, flee, group, death, resolve` | — |
 | `domain` (GM региона) | `region` | `*` кроме `description` | `tick, spawn` | `npc`, `encounter` |
-| `domain` | `npc` | `*` кроме `hp` вниз при живом игроке в встрече; `status: dead→alive` запрещён всегда (inv-09) | `tick, spawn` | `npc` |
+| `domain` | `npc` | `*` кроме `hp` вниз при живом игроке в встрече; `status: dead→alive` запрещён всегда (`dead_entity`, §4.5 п. 5; изм. T-457) | `tick, spawn` | `npc` |
 | `domain` | `encounter` | `state`, `participants`, `npcs` (создание) | `spawn` | `encounter` |
 | `global` | `world` | `weather`, `time_of_day`, `day`, `season`, `epoch` (не `laws_version`) | `tick` | — |
 | `author` (`mvctl`) / `system` (bootstrap) | `*` | `*` | `init, author` | все |
@@ -457,6 +459,8 @@ func LoadBytes(b []byte) (*Rules, error)
 
 type Actor struct {
     ID, Type string          // player | npc
+    Kind string              // C-03 v1.3: вид NPC ("wolf") — ключ таблицы трофеев; у NPC обязателен, у персонажа пусто (изм. итерация 2 T-449)
+    Version int64            // C-03 v1.3: версия сущности, из которой прочитан актор; ≤ 0 — не прочитан, ChangesFor такого актора не меняет (изм. итерация 2 T-449)
     HP, HPMax, Atk, Def int
     Dmg, Flee string         // dice-выражения ("d6"); Flee "" — не бежит
     Status string            // alive | dead | abandoned | ascended_final (три терминальных — одинаково, C-02 v1.2)
@@ -465,7 +469,8 @@ type Actor struct {
 }
 func (a Actor) Alive() bool  // Status == alive
 func (a Actor) Attr(name string) (int, bool)   // atk|def|hp|hp_max|flee — то, что читают формулы §5.3
-type Action struct { Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int }
+type Action struct { Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int
+                     At time.Time /* C-03 v1.3: timestamp события-причины; читает только ChangesFor (изм. итерация 2 T-449) */ }
 type Outcome struct {
     Hit, Critical, Fumble, TargetDead bool
     Natural, Damage, Threshold int
@@ -486,7 +491,8 @@ func (r *Rules) RollCheck(causeEventID string, rollIndex int, c CheckExpr, purpo
 func Seed(eventID string, rollIndex int) uint64
 func NewRNG(seed uint64) *rand.Rand
 func (r *Rules) Invariants() []Invariant
-func (r *Rules) Stats(kind string) (Actor, bool)                 // базовые статы из entities{} (для создания сущностей)
+func (r *Rules) Stats(kind string) (Actor, bool)                 // базовые статы из entities{} (для создания сущностей); C-03 v1.3: ставит Kind (только NPC), Version не ставит — 0
+func (r *Rules) FleePosition(worldID, regionID string) string    // C-03 v1.3: куда успешный побег ставит персонажа; зовёт вызывающий (изм. итерация 2 T-449)
 func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error)   // enc — сущность встречи; nil = вне боя
 func ChangesFor(a Action, o Outcome, attacker, target *Actor, factEventID string) ([]ProposedChange, error)   // ops для entity.update.proposed
 func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any                                  // payload dice.rolled (схема EPIC-002)
@@ -494,7 +500,7 @@ func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any             
 
 Гарантии: без I/O, без часов, без глобального состояния; `Resolve` — чистая функция от `(rules, causeEventID, rollIndexStart, action, actors)`; `actors` не мутируются (результат — в `Outcome`).
 
-**Этот раздел и C-03 v1.2 совпадают дословно (сведение волны 0).** Четыре сигнатуры, по которым документы расходились, приведены к формам **этого** раздела — их и реализовал T-015: `Roll` и `ActorFromEntity` возвращают ошибку, `ActorFromEntity` принимает сущность встречи, `DiceRolledPayload` принимает `entity.Ref`. Две правки внесены **в оба** документа: `ChangesFor` возвращает `([]ProposedChange, error)` (канал ошибки нужен и после T-053: функция может получить исход, несовместимый с действием), а `NPCTarget` получает канал ошибки, потому что иначе `nil` неотличим от «целей нет» (UC-008 A2). Обоснование каждой формы — C-03 v1.2 и ADR-024; **`NPCTarget` — единственная правка, требующая изменения кода (T-053)**, остальные уже реализованы.
+**Формы, общие с C-03, совпадают с C-03 v1.3; `Attr`, `RollCheck` и `Item` — дополнения КД сверх контракта** *(итерация 2 T-449, ревью #1 Ma-1; прежде — «этот раздел и C-03 v1.2 совпадают дословно (сведение волны 0)»)*. При сведении волны 0 четыре сигнатуры, по которым документы расходились, приведены к формам **этого** раздела — их и реализовал T-015: `Roll` и `ActorFromEntity` возвращают ошибку, `ActorFromEntity` принимает сущность встречи, `DiceRolledPayload` принимает `entity.Ref`. Две правки внесены **в оба** документа: `ChangesFor` возвращает `([]ProposedChange, error)` (канал ошибки нужен и после T-053: функция может получить исход, несовместимый с действием), а `NPCTarget` получает канал ошибки, потому что иначе `nil` неотличим от «целей нет» (UC-008 A2). Обоснование каждой формы — C-03 v1.2 и ADR-024; **`NPCTarget` — единственная правка, требующая изменения кода (T-053)**, остальные уже реализованы.
 
 ### 5.2. Формат `rules/dark-forest.yaml` (RulesDocument, data-model §6.3)
 
@@ -565,7 +571,7 @@ term    := IDENT | INT
 |---|---|---|---|
 | `attack` (player → npc) | `hit` (d20) → idx; `damage` (dmg атакующего) → idx+1 только при попадании | `natural == fumble` → промах; иначе `hit := natural == crit ∨ natural + atk ≥ def`; `damage := dmg × (crit ? multiplier : 1)`; `hp_after := max(0, hp_before − damage)` | `Hit, Critical, Fumble, Natural, Damage, HPBefore/After, TargetDead = hp_after==0`, `Loot` при смерти npc |
 | `npc_attack` / `free_attack` (npc → player) | `npc_hit`, `npc_damage` | как `attack`; `FreeAttack=true` для free_attack; `actors[target].Status == dead` или `Participation ∈ exclude` → ошибка `ErrInvalidTarget` (вызывающий обязан выбрать цель через `NPCTarget`) | как выше |
-| `flee` | `flee` (d20) → idx | `success := natural + flee ≥ 10 + LivingEnemies`; `Threshold = 10 + LivingEnemies` | `Success`, `Natural`, `Threshold`; при провале вызывающий делает `free_attack` с `rollIndexStart = idx+1` |
+| `flee` | `flee` (d20) → idx | `success := natural + flee ≥ 10 + LivingEnemies`; `Threshold = 10 + LivingEnemies` | `Success`, `Natural`, `Threshold`; при провале вызывающий делает `free_attack` с `rollIndexStart = idx+1`; при успехе позицию побега предлагает агент встречи — `set position` из `Rules.FleePosition(world, region)` с `cause=flee`, `ChangesFor` её не выдаёт (C-03 v1.3; изм. T-449) |
 | `rest` | — | `allowed_in_encounter=false` — проверка на стороне gateway/State; `HPAfter = HPMax` | `HPBefore/After` |
 
 `NPCTarget`: фильтр `Status != dead ∧ Participation ∉ exclude` (терминальные `dead|abandoned|ascended_final` — одинаково, C-02 v1.2) → если `npc.LastDamager` среди кандидатов — он; иначе минимальный `HP`; при равенстве — `ID` по возрастанию; кандидатов не осталось → **`(nil, nil)`** — это законный ответ «некого кусать» (UC-008 A2), а не ошибка. Ошибка — это `npc == nil`, не-NPC в роли кусающего и прочие дефекты вызывающего; до реализации (T-053) заглушка возвращает `ErrNotImplemented`, и именно ради этого различия C-03 v1.2 добавил второй результат.
@@ -599,11 +605,11 @@ type Invariant struct {
 }
 ```
 
-**Состояние на 2026-09-11 (T-409).** Реестр `internal/mechanics/invariants.go` существует — идентификаторы и места проверки (`Where`) заполнены, — но **у всех десяти записей `Check == nil`**: проверки пишет EPIC-002 **T-054** (соло: inv-01, 02, 03, 09, 10) и последующие задачи. У `inv-07` и `inv-08` `Check` останется `nil` навсегда — они проверяются по журналу, а не по миру. Таблица ниже — целевое распределение, а не описание работающего кода; «мёртвый не действует» (inv-01) сегодня реализовано в одном месте — `Actor.Alive()` (C-03). Файла законов `laws/dark-forest-world.v1.yaml`, с которым сверяется реестр, в дереве тоже нет (EPIC-003).
+**Состояние на 2026-09-11 (T-409).** Реестр `internal/mechanics/invariants.go` существует — идентификаторы и места проверки (`Where`) заполнены, — но **у всех десяти записей `Check == nil`**: проверки пишет EPIC-002 **T-054** (соло: inv-01, 02, 03, 09, 10) и последующие задачи. У `inv-07` и `inv-08` `Check` останется `nil` навсегда — они проверяются по журналу, а не по миру. Таблица ниже — целевое распределение, а не описание работающего кода; «мёртвый не действует» (inv-01) сегодня реализовано в одном месте — `Actor.Alive()` (C-03). Файла законов `laws/dark-forest-world.v1.yaml`, с которым сверяется реестр, в дереве тоже нет (EPIC-003). *(изм. T-457: T-054 написал `Check` для inv-01, 02, 03, 09, 10; уточнения inv-01 по C-05 v1.8 п. 9 — T-056 и T-066.)*
 
 | ID | Инвариант (NFR-020) | `state` (Applier) | `mechanics` | другие |
 |---|---|---|---|---|
-| inv-01 | `dead` не действует и не цель | `dead_entity` на изменение мёртвого; `status` мёртвого не меняется | `NPCTarget` исключает; `Resolve` → `ErrInvalidTarget` | gateway валидирует действие |
+| inv-01 | `dead` не действует и не цель | `dead_entity` на изменение терминального (§4.5 п. 5); `Check` на затронутой незакрытой встрече: `npcs[]` не пуст и все NPC в нём терминальны; терминальный персонаж, затронутый тем же пакетом, ещё участвует (C-05 п. 9; изм. T-457) | `NPCTarget` исключает; `Resolve` → `ErrInvalidTarget` | gateway валидирует действие |
 | inv-02 | `0 ≤ hp ≤ hp_max` | `set hp` вне диапазона → `law_violation`; `inc hp` — clamp | `Resolve` даёт clamped `HPAfter` | — |
 | inv-03 | трофей за NPC ≤ 1 | `lootIndex[source.entity.id]` занят другим игроком → `law_violation`; заполняется при `append inventory` | — | `--audit` |
 | inv-04 | позиция участника = позиция группы | overlayView по затронутым группам/игрокам (`alive`) | — | тест |
@@ -611,8 +617,8 @@ type Invariant struct {
 | inv-06 | игрок ровно в одном scope | согласованность `scope ⇔ group_id ⇔ members` | — | — |
 | inv-07 | HP после факта = `hp_after` из `combat.decided` | — | — | `--audit`, тест |
 | inv-08 | нет `combat.decided` против игрока без его действия | — | — | страж (EPIC-003), тест |
-| inv-09 | NPC не возрождается раньше TTL; `dead → alive` запрещён | переход `status: dead→alive` → `law_violation` | — | GM региона (TTL, новый id) |
-| inv-10 | одна сущность — одна позиция | `position` — одно поле формата `outside:{world}` \| `{region_id}`, регион существует | — | — |
+| inv-09 | NPC не возрождается раньше TTL; `dead → alive` запрещён | переход из терминального статуса → `dead_entity` (§4.5 п. 5); `Check` — запись смерти у нетерминальной сущности → `law_violation` (изм. T-457, C-02 v1.5b) | — | GM региона (TTL, новый id) |
+| inv-10 | одна сущность — одна позиция | `position` — одно поле формата `outside:{world}` \| `{region_id}`, регион существует; проекция `players_present` региона инвариантом не проверяется (изм. T-457; `data-model.md` §3.2) | — | — |
 
 Файл законов `laws/dark-forest-world.v1.yaml` (EPIC-003) содержит `laws[] {id: inv-02, kind: invariant, text: "…"}`; тест контрактов (`mvctl laws check`, EPIC-003/005) сверяет: множество `kind: invariant` в законах == множество `Invariants()` в коде. Ни текст, ни логика не дублируются: текст — только в законах, код — только в `mechanics/invariants.go`. `rules.invariants[]` лишь включает/выключает id для набора правил.
 
@@ -756,7 +762,7 @@ sequenceDiagram
 | C-02 (выход) | `entity.created`, `entity.updated`, `entity.update.rejected` | `facts.go`; `entity.created` несёт `proposal_id` (обязателен с C-02 v1.6); `entity.updated.changed[]` = `entity.Change`: `old` есть ⇔ путь был, `new` есть ⇔ путь есть (C-02 v1.6, T-448); для `append` — `old` **отсутствует** (не `null`), `new: <элемент>` по пути `inventory[<n>]`; для `remove` ключа — `new` отсутствует; для `remove` элементов списка — путь списка, оба; `applied_at = timestamp предложения`; причины отказа: `version_conflict, unknown_entity, level_violation, law_violation, invalid_op, dead_entity, duplicate_entity` |
 | C-02 (read-model) | `snapshots-{world}/state/latest.json` (указатель) + объект | §4.4; чтение через `shared/objstore` только на старте потребителя |
 | C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops |
-| C-03 v1.2 | Go-API §5.1 (совпадает с C-03 дословно); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
+| C-03 v1.3 | Go-API §5.1 (формы, общие с C-03, совпадают с C-03 v1.3; итерация 2 T-449); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
 | C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `MV_SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу; Дополнение после G2: префикс `MV_`) |
 | C-14 | формат `snapshot.created`, объекты снапшота, `latest.json`, порядок старта | §4.4, §4.8, §4.9; `component ∈ state|swarm|gateway` (значения C-14; `api-contracts.md` §2.3.12 использует старые имена — правка system-analyst) |
 | C-01 (потребление) | `Bus`, `Journal`, `contracts.Validate` | State публикует через `Bus.Publish` (валидация схем), читает через `Journal.ReadRange/Tail` со своим курсором (§14 — запрос на `Journal` и позицию в ctx) |
