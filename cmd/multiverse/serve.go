@@ -16,9 +16,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"multiverse-core.io/internal/replay"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -33,8 +35,9 @@ type serveOptions struct {
 	// silently, and the second is what T-408 was opened for.
 	modeFrom string
 	busFrom  string
-	// recording is the journal read in replay mode; internal/replay (EPIC-002)
-	// consumes it once it exists.
+	// recording is the recorded session of replay mode. The process reads it
+	// at start: an unreadable one refuses the start, and the clock of the
+	// contexts starts at its earliest event (timeOf).
 	recording string
 	idSource  string
 }
@@ -273,17 +276,28 @@ func (p process) run(ctx context.Context, release func()) error {
 		Log:       log,
 		Contracts: contracts.Default(),
 	}
-	// In replay mode time comes from the journal; internal/replay (EPIC-002)
-	// injects EventClock and NullTimers. Until then replay uses a manual clock
-	// that nothing advances, which is enough for the empty contexts.
-	if opts.mode == runtime.ModeReplay {
-		manual := clock.NewManual(time.Time{})
-		deps.Clock, deps.Timers = manual, manual.Timers()
-	} else {
-		deps.Clock, deps.Timers = clock.Real{}, clock.RealTimers{}
+	times, err := timeOf(opts)
+	if err != nil {
+		return err
+	}
+	deps.Clock, deps.Timers = times.clock, times.timers
+	if times.events != nil {
+		// The constructors stamp root events with the clock of the contexts, so
+		// that a root event built in replay carries the time of the events read,
+		// not of the machine (C-01 v1.4 "Источники конструкторов"). Only the
+		// replay clock is installed here: the sources of live mode, and the id
+		// source and the registry of both modes, are T-055's. Deferred before
+		// the bus, so it is put back after the bus has closed — a dead letter
+		// written during the shutdown is still stamped with event time.
+		eventbus.SetClock(times.events)
+		defer eventbus.SetClock(nil)
 	}
 
-	bus, err := p.openBus(opts.bus, deps.Contracts, deps.Timers, log)
+	// The bus gets its own timers, real in every mode (C-01 v1.4 "Таймеры
+	// повторной доставки"): the pauses between redeliveries are not domain
+	// time, and a NullTimers pause would hang the first failing handler of a
+	// replay until the process is cancelled (review #1 of T-410).
+	bus, err := p.openBus(opts.bus, deps.Contracts, times.bus, log)
 	if err != nil {
 		return fmt.Errorf("bus %s (%s): %w", opts.bus, opts.busFrom, err)
 	}
@@ -291,6 +305,9 @@ func (p process) run(ctx context.Context, release func()) error {
 	// normal path, after StartAll has stopped the started ones on a failed
 	// start, and after shutdown on a failed listen.
 	defer closeBus(bus, log)
+	if times.events != nil {
+		bus = replay.WithMiddleware(bus, replay.Middleware(opts.mode, times.events))
+	}
 	deps.Bus, deps.Journal = bus, bus
 
 	contexts := p.contexts
@@ -312,14 +329,28 @@ func (p process) run(ctx context.Context, release func()) error {
 	// record, not a detail: the defect this shape closes was invisible exactly
 	// because a process that ignored MV_MODE looked the same as one that obeyed
 	// it (T-408).
-	log.Info("multiverse started",
+	attrs := []any{
 		slog.String("version", version),
 		slog.String("addr", srv.Addr),
 		slog.String("mode", string(opts.mode)),
 		slog.String("mode_from", opts.modeFrom),
 		slog.String("bus", opts.bus),
 		slog.String("bus_from", opts.busFrom),
-		slog.String("contexts", strings.Join(names, ",")))
+		slog.String("contexts", strings.Join(names, ",")),
+	}
+	if opts.recording != "" {
+		attrs = append(attrs, slog.String("recording", opts.recording), slog.Int("recorded_events", times.recorded))
+	}
+	log.Info("multiverse started", attrs...)
+	if times.events != nil && opts.recording == "" {
+		// Replay without a recording is allowed: a run on fakes needs none, and
+		// MV_MODE=replay has no variable for one. But its clock starts at year
+		// one and root events built before the first read carry that time, so
+		// the run says so rather than pass for a replay of a session (T-408).
+		log.Warn("replay without a recording",
+			slog.Time("clock_start", times.events.Now()),
+			slog.String("mode_from", opts.modeFrom))
+	}
 	_, _ = fmt.Fprintf(p.stdout, "multiverse %s listening on %s, contexts: %s, mode: %s (%s), bus: %s (%s)\n",
 		version, srv.Addr, strings.Join(names, ","),
 		opts.mode, opts.modeFrom, opts.bus, opts.busFrom)
@@ -343,6 +374,46 @@ func (p process) run(ctx context.Context, release func()) error {
 		log.Error("stop", slog.String("error", err.Error()))
 	}
 	return serveErr
+}
+
+// runTime is the time of one run: what the contexts get, what the bus gets, and
+// the replay clock the bus middleware moves (nil in live mode).
+type runTime struct {
+	clock    clock.Clock
+	timers   clock.Timers
+	bus      clock.Timers
+	events   *replay.EventClock
+	recorded int
+}
+
+// timeOf builds the time of a run. Live mode is the wall clock throughout.
+// Replay gives the contexts an EventClock and NullTimers (state-and-mechanics.md
+// §6.2), and the bus the same real timers as in live mode (C-01 v1.4). The
+// replay clock starts at the earliest event of the recording, so that a context
+// asking the time before it has read anything gets a time of the session
+// rather than year one; without a recording it starts at the zero time.
+func timeOf(opts serveOptions) (runTime, error) {
+	if opts.mode != runtime.ModeReplay {
+		return runTime{clock: clock.Real{}, timers: clock.RealTimers{}, bus: clock.RealTimers{}}, nil
+	}
+	var start time.Time
+	var recorded int
+	if opts.recording != "" {
+		rec, err := replay.OpenRecording(opts.recording)
+		if err != nil {
+			return runTime{}, fmt.Errorf("--recording: %w", err)
+		}
+		start, _ = rec.Start()
+		recorded = rec.Len()
+	}
+	events := replay.NewEventClock(start)
+	return runTime{
+		clock:    events,
+		timers:   replay.NullTimers{},
+		bus:      clock.RealTimers{},
+		events:   events,
+		recorded: recorded,
+	}, nil
 }
 
 func shutdown(contexts []runtime.Context, log *slog.Logger) {

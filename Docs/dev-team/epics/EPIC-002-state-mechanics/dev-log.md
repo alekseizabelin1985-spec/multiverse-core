@@ -40,3 +40,48 @@
 - **Nit 4** не трогался (решение оркестратора) — в бэклог: `schemaEnum` через `schemaNode`.
 - **Проверки**: ровно одна ошибка валидатора у каждой из 8 невалидных фикстур (диагностический тест в копии в scratch, копия удалена по точному пути); `mvctl contracts check` — 65 типов, 58 файлов; `go test -short -count=1 ./shared/contracts/... ./test/fixtures/...` — ok; `golangci-lint run ./test/... ./shared/contracts/...` — 0 issues; `mvctl privacy scan testdata/` — чисто; `gofmt -l test`, `git diff --check` — чисто.
 - Вопросы `proposal_id` и форма `changed[]` переданы оркестратором system-architect и tech-lead#1, в этой итерации не трогались. Docker, стенд `:8888`, `.env` не трогались.
+
+<!-- dev-log T-060 -->
+## developer#2 · T-060 · `internal/replay` — EventClock, NullTimers, Recording, сборка replay в `serve.go` · 2026-09-13
+
+Ветка `task/T-060-replay-eventclock` (от `2196b58`), TEAM-1, Opus. Подробности — карточка `tasks/T-060.md`, раздел «Выполнение».
+- **Пакет `internal/replay`**:
+  - `EventClock` — монотонен по времени событий, настенных часов не читает.
+  - `NullTimers` — таймеры не срабатывают.
+  - `Cursor` — `Advance`/`Merge`/`Min`/`Clone`, детерминированный JSON.
+  - `ReadToEnd`/`CatchUp` — конец журнала берётся один раз.
+  - `Recording` + `Writer` — JSONL, побайтовый round-trip; `Index` по `(correlation_id, agent.id, phase, attempt)`, у каждой части ключа — её длина.
+  - `Middleware` + `WithMiddleware` — в replay `Observe` до обработчика и `meta.replay=true`.
+- **`cmd/multiverse/serve.go`**:
+  - В replay контексты получают `EventClock` и `NullTimers`. Часы стоят на первом событии `--recording`, без записи — на нулевом времени.
+  - **Шина получает `clock.RealTimers` в любом режиме** (C-01 v1.4). Прежнее нарушение исправлено и закреплено тестом: повтор ×3 → `dead_letters` без зависания.
+  - На время replay-прогона стоит `eventbus.SetClock(EventClock)`, транспорт обёрнут middleware.
+  - Нечитаемая запись отказывает в старте; лог старта называет запись.
+- **Решения по ходу**:
+  - Обёртки `ReadRange`/`Tail` из §6.1 заменены на `ReadToEnd`/`CatchUp`: обёртка без поведения была бы вторым именем метода.
+  - Middleware ставится обёрткой транспорта; API `shared/eventbus` не менялся.
+  - `SetClock` ставится только в replay, чтобы в live не затирать ручные часы тестов процесса. Источники live, `SetIDSource` и `SetRegistry` — за T-055.
+- **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути): M0 контрольный — красный, M1–M19 — все красные. M11 и M17 покраснели после усиления тестов: шпион диапазонов и чтение «с ошибкой на полпути».
+- **Прогоны**:
+  - `go build ./... && go vet ./...` — 0;
+  - `go test -short -count=1 ./...` — ok;
+  - `go test -tags e2e ./test/e2e/...` — ok;
+  - `golangci-lint run ./...` — 0 issues;
+  - `make test` — exit 0, `internal/replay` 97,3 %, без `-race` (нет cgo).
+- **Для T-055**:
+  - `serve.go` правлен в `process.run`: `timeOf` → `SetClock` в replay → `openBus` с `times.bus`. `SetIDSource`/`SetRegistry` ставить рядом.
+  - Тесты сборки режима — в новом `cmd/multiverse/replay_test.go`; `serve_test.go` не менялся.
+- Docker, интеграционные тесты и стенд `:8888` не трогались, `.env` не открывался. Не коммитил.
+
+<!-- dev-log T-060 итерация 2 -->
+## developer#2 · T-060 · итерация 2 по ревью #1 (3 Minor, 4 Nit) · 2026-09-13
+
+Подробности и ответ по каждому пункту — карточка `tasks/T-060.md`, «Итерация 2». Не коммитил.
+- **Mi-1**: процессный тест replay читает и через `Deps.Bus.Subscribe`, и проверяет, что `Deps.Bus` и `Deps.Journal` — один объект. `WithMiddleware` возвращает указатель, иначе сравнение паниковало бы. Мутант ревьюера M3 — красный.
+- **Mi-2**: пакетный тест — событие, построенное `eventbus.Derive` в обработчике replay, лежит в журнале с `meta.replay=true` и временем причины. Мутант ревьюера M4 — красный; `shared/eventbus` не трогался.
+- **Mi-3**: комментарий `Middleware` исправлен. Правило «время события — `ev.Timestamp`, следствие — через `Derive`; `Clock.Now()` при нескольких читателях зависит от планировщика» записано в doc пакета.
+- **N-1**: `Recording.Start` — самое раннее ненулевое время, а не первая строка. **N-2**: `Writer.Close` делает `Sync`, комментарий честный. **N-3**: ошибка чтения посреди строки не маскируется ошибкой JSON. **N-4** — строка бэклога для T-055, не исправлялось.
+- **Принято**: записанные события в шину никто не публикует — запись служит таблицей ответов `RecordedProvider`. Три вопроса ревьюера к system-architect записаны в карточку.
+- **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути): M0 контрольный — красный; прежние M1–M19, мутанты ревьюера M3r и M4r, новые M20–M22 — красные. M21 сначала выжил, после перестановки строк в тесте — красный.
+- **Прогоны**: `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — ok; `go test -tags e2e ./test/e2e/...` — ok; `golangci-lint run ./...` — 0 issues; `make test` — exit 0, `internal/replay` 96,8 %.
+- Docker, интеграционные тесты и стенд `:8888` не трогались, `.env` не открывался.
