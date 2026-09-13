@@ -203,7 +203,7 @@ type Rejection struct { Reason Reason; Ref *entity.Ref; ExpectedVersion, ActualV
 type Reason string // version_conflict|unknown_entity|level_violation|law_violation|invalid_op|dead_entity|duplicate_entity
 ```
 
-`Proposer` выводится рантаймом: `meta.agent != nil` → `agent` с `Level = meta.agent.level`; иначе `source` события: `gateway` → `gateway`; `mvctl` → `author`; `core/state` (bootstrap) → `system`. Отдельно `actor_kind` не участвует в проверке владения (он про сессию, не про право писать).
+`Proposer` выводится рантаймом: `meta.agent != nil` → `agent` с `Level = meta.agent.level`; иначе `source` события: `gateway` → `gateway`; `mvctl` → `author` (включая bootstrap, §4.10); ~~`core/state` (bootstrap) → `system`~~ *(изм. T-444, C-02 v1.5: предложения bootstrap публикуются с `source=mvctl` — `core/state` нет в `Spec.Publishers` типов предложений, и при `--bus kafka` публикует процесс `mvctl`, а не `core`; строка `system` в `ownership.go` остаётся без издателя в MVP-1, решение о ней — за EPIC-002)*. Отдельно `actor_kind` не участвует в проверке владения (он про сессию, не про право писать).
 
 ### 4.2. Рабочий набор мира
 
@@ -421,8 +421,8 @@ sequenceDiagram
 
 ```go
 package state
-// Bootstrap читает fixtures и публикует entity.create.proposed (proposer system, cause=init, meta.actor_kind=system,
-// source="core/state", proposal_id = "bootstrap:{world}:{type}/{id}") в порядке world → region → npc → players;
+// Bootstrap читает fixtures и публикует entity.create.proposed (proposer author, cause=init, meta.actor_kind=system,
+// source="mvctl" — изм. T-444, C-02 v1.5; было proposer system, source="core/state"; proposal_id = "bootstrap:{world}:{type}/{id}") в порядке world → region → npc → players;
 // ждёт entity.created по каждому (таймаут 10 с) через Journal.Tail; повтор идемпотентен (duplicate_entity с тем же
 // proposal_id = дедуп → тихий пропуск). Возвращает число созданных/пропущенных.
 func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir string) (BootstrapResult, error)

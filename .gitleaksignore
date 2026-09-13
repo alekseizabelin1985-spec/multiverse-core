@@ -8,19 +8,27 @@
 # гасит любую находку generic-api-key в этой строке. Файл — владение architect#2.
 # Первый отпечаток — для скана диапазона ветки (строка 504 в коммите be33e93);
 # второй — для скана содержимого индекса, номер строки текущий: правки документа
-# выше таблицы сдвигают его (2026-09-11: 504 → 511, строка та же; T-431 — 511 → 514).
+# выше таблицы сдвигают его (2026-09-11: 504 → 511, строка та же; T-431 — 511 → 514; T-444 — 514 → 521).
+# С итерации 2 T-444 строка несёт inline `gitleaks:allow` (HTML-комментарий в ячейке): в той же правке
+# из КД убран байт NUL, git перестал считать файл двоичным и нормализует его (`text=auto`), и скан
+# диапазона ветки увидел бы строку в новом коммите под неизвестным заранее отпечатком. Отпечатки
+# ниже оставлены для старых коммитов и на случай, если комментарий уберут.
 be33e9373b8e4b5e15078e3707e77ffff10d81b2:Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:504
 # Та же строка таблицы провайдеров в коммите 744fb10 (F-0), где она стояла на 494-й:
 # скан всей истории (CI на ветке) находит её там; проверено 2026-09-11 — текст строки тот же.
 744fb100f355b243cb938278bd8cca325370804c:Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:494
-Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:514
+Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:521
 
 # Docs/dev-team/architecture/infrastructure.md §4.2, эталон .env.example (T-399): после пустого
 # `MV_LLM_API_KEY=` сразу идёт строка `MV_LLM_NUM_CTX=8192`, и generic-api-key склеивает их через
 # перевод строки в одно совпадение. Секрета нет; сам .env.example исключён путём в .gitleaks.toml,
 # а инлайн `gitleaks:allow` противоречил бы описанному формату (комментарий над переменной).
 # Отпечаток индекса привязан к строке 520: правка документа выше §4.2 его сдвигает.
-Docs/dev-team/architecture/infrastructure.md:generic-api-key:520
+# T-405 (§3.1.2) сдвинул строку 520 → 549; строка та же (MV_LLM_API_KEY= эталона §4.2).
+Docs/dev-team/architecture/infrastructure.md:generic-api-key:549
+# Скан истории (push, CI на ветке): в коммите T-399 эта же строка эталона стояла на 520-й. Отпечаток привязан к коммиту
+# и не сдвигается; при снятии построчного отпечатка индекса (T-453) эту строку сохранить.
+f8759b034eca21dbc4ebcabb0ee7d561fab00074:Docs/dev-team/architecture/infrastructure.md:generic-api-key:520
 
 # НАСТОЯЩИЕ КЛЮЧИ в истории публичного репозитория, коммит 9ffca2d («Initial commit», 2026-02-07):
 # .env строки 20 и 25 и Docs/LLM_Client_Spec.md строка 68 — ключ oracle (sk-4659…) и ключ OpenRouter (sk-or-v1-…).

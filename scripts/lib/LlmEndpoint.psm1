@@ -73,9 +73,22 @@ function Get-LlmEnv {
     here while bash substituted 8192 (review Mi-9, Mi-10, and the root of C-1).
   #>
   param([Parameter(Mandatory)][string] $Name, [string] $Default = '')
-  $value = [Environment]::GetEnvironmentVariable($Name)
-  if ([string]::IsNullOrWhiteSpace($value)) { return $Default }
-  return $value.Trim()
+  $value = ConvertTo-LlmTrimmed ([Environment]::GetEnvironmentVariable($Name))
+  if ($value.Length -eq 0) { return $Default }
+  return $value
+}
+
+# ASCII whitespace only: space, TAB, LF, VT, FF, CR — the [:space:] of the bash
+# twin under LC_ALL=C. String.Trim() without arguments strips every Unicode
+# space, so MV_LLM_URL ending in a no-break space U+00A0 was trimmed and probed
+# here while bash kept the character and refused the value (found by the parity
+# stand, T-405). Anything beyond ASCII stays for the printable-ASCII refusal.
+$script:LlmAsciiSpace = [char[]]@(32, 9, 10, 11, 12, 13)
+
+function ConvertTo-LlmTrimmed {
+  param([AllowNull()][string] $Value)
+  if ($null -eq $Value) { return '' }
+  return $Value.Trim($script:LlmAsciiSpace)
 }
 
 # The closed set of MV_LLM_PROVIDER, as declared in shared/env/vars.go.
@@ -188,8 +201,7 @@ function Convert-LlmUrl {
   #>
   param([Parameter(Mandatory)] $Endpoint, [string] $Value = '')
 
-  $raw = ''
-  if ($null -ne $Value) { $raw = $Value.Trim() }
+  $raw = ConvertTo-LlmTrimmed $Value
   $var = $Endpoint.Var
 
   # Checked before anything is compared, because every comparison below is what
