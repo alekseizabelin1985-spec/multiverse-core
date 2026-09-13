@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:22:33+03:00",
+  "updatedAt": "2026-09-13T14:23:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4021,7 +4021,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-439",
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
@@ -8318,7 +8318,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую ",
       "startedAt": "2026-09-13T14:03:36+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:23:44+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8398,6 +8398,16 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "Итерация 3: хеш дат и ключей, кириллица в плейсхолдерах",
       "startedAt": "2026-09-13T14:22:33+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Ревью #1: потолок длины нарратива, ярлыки eK/bK",
+      "startedAt": "2026-09-13T14:23:44+03:00",
       "finishedAt": null
     }
   ],
@@ -11041,6 +11051,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-201 · ревью #2 (TEAM-2/code-reviewer#1): вернуть — 0/1/2/2. Ma-1 закрыт, но хеш через reflect пишет time.Time как {} — разные даты YAML дают один content_hash (обход контроля подмены блупринта T-26). Mi-5 нестроковый ключ совпадает со строковым «int:1»; Mi-6 SuspiciousPlaceholders не видит кирилли"
+    },
+    {
+      "at": "2026-09-13T14:23:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 выполнена TEAM-2/architect#2: потолок нарратива E — max_tokens 160 (player-gm и group-narrator), text.maxLength 210, mentions ≤ 4, background_refs ≤ 2; Qwen3.6 предварительно 220→345 и 410→775 до T-438; формула КД §13.4.1 с проверкой 66 + ⌈maxLength/2,5⌉ ≤ N; temperature 0.7 (профиль всех поро"
     }
   ],
   "blockers": [],
