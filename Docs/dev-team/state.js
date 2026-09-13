@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:34:59+03:00",
+  "updatedAt": "2026-09-13T23:39:26+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4686,7 +4686,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#2",
           "startedAt": "2026-09-13T22:50:37+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -10446,7 +10446,7 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "Ревью #1 deliver и main",
       "startedAt": "2026-09-13T23:28:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:39:26+03:00"
     },
     {
       "instance": "developer#1",
@@ -10466,6 +10466,16 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "Ревью #1 contracts v0.15",
       "startedAt": "2026-09-13T23:34:59+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-312",
+      "action": "Приёмка deliver и main",
+      "startedAt": "2026-09-13T23:39:26+03:00",
       "finishedAt": null
     }
   ],
@@ -14453,6 +14463,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по итогам T-470: T-466 закрывается как покрытая T-470 (C-01 v1.11 и КД State §6.1/§6.2); объём T-468 сокращается — значение с @ получает отказ (invalid), нужны отказ, три строки таблицы и стенд паритета; Go-часть «@ — invalid» в IsLocalEndpoint — XS-задача EPIC-003 (номер при ст"
+    },
+    {
+      "at": "2026-09-13T23:39:26+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-312 · ревью #1 (TEAM-3/code-reviewer#2): принять — 0/0/4/4. Доставка не теряется, бесконечного повтора нет, коды выхода и /health соответствуют ADR-018 и C-08, depguard ловит запрещённый импорт. Mi-1…Mi-3 тесты (сброс паузы, прерванная отправка без ack, ack до опроса); Mi-4 ответы flow через клиен"
     }
   ],
   "blockers": [],
