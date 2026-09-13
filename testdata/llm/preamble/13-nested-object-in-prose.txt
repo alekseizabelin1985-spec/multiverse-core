@@ -1,0 +1,13 @@
+Тик региона:
+{
+  "events": [
+    {
+      "type": "npc.moved",
+      "summary": "Стая уходит к броду: {следы} и \"вой\" стихают }",
+      "entity": {"id": "wolf-alpha"},
+      "affects": [{"id": "region:dark-forest"}],
+      "ops": [{"path": "position", "value": {"region": "region:dark-forest", "cell": {"x": 3, "y": 4}}}]
+    }
+  ]
+}
+Конец.

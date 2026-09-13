@@ -1,0 +1,1 @@
+{"text":"player-A бьёт wolf-alpha у кромки леса, стая region:dark-forest затихает.","mentions":["e1"],"background_refs":[]}

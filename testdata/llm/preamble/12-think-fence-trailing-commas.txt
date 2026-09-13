@@ -1,0 +1,6 @@
+<think>
+Ответ — нарратив.
+</think>
+```json
+{"text":"Ветер стих.","mentions":[],"background_refs":["b1",],}
+```

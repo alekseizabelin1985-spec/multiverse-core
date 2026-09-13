@@ -1,0 +1,6 @@
+<think>
+The player attacks the wolf.
+</think>
+```json
+{"text":"Альфа-волк отступает в чащу, прижимая уши.","mentions":["e1"],"background_refs":[],"tone":"tense"}
+```

@@ -1,0 +1,1 @@
+{"text":"Волк отступает.","mentions":["wolf-alpha"],"background_refs":[],"mood":"grim"}
