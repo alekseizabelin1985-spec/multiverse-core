@@ -121,6 +121,10 @@ var (
 		"how long POST /v1/characters waits for entity.created before it answers 202 creating", IsDuration())
 	GatewayCharacterDeadline = Declare("MV_GATEWAY_CHARACTER_DEADLINE", "60s",
 		"how long a character may stay creating before it is taken off its link", IsDuration())
+	GatewayDeliveryLease = Declare("MV_GATEWAY_DELIVERY_LEASE", "30s",
+		"how long a delivery given out by long-poll waits for its ack before it is given out again (ADR-006)", IsDuration())
+	GatewayDeliveryTTL = Declare("MV_GATEWAY_DELIVERY_TTL", "24h",
+		"how long a delivery stays pending before it is dropped (ADR-006)", IsDuration())
 
 	// --- core -------------------------------------------------------------
 

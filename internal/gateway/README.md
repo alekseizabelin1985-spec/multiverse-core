@@ -1,7 +1,8 @@
 # `internal/gateway` — контекст платформы «шлюз»
 
 Точка входа игрока в мир по HTTP (C-08): связки внешних аккаунтов (`links`),
-приём действий игрока, проекция мира, читаемая с шины. Реализует
+персонажи, приём действий игрока, сессии и ходы, проекция мира, читаемая с
+шины, и исходящие доставки игроку (outbox, long-poll). Реализует
 `runtime.Context` (`Name/DependsOn/Start/Stop/Health`) и `runtime.Routes`;
 своего HTTP-сервера у пакета нет — маршруты монтируются на общий mux процесса
 (`shared/runtime`, слушает `MV_CORE_ADDR`), а `GET /health` отдаёт сам процесс,
@@ -11,7 +12,7 @@
 решения — ADR-018 (бот), ADR-019 (SQLite, схемы, миграции). Здесь — только то,
 что уже есть в коде этого каталога.
 
-## Статус реализации (2026-09-13)
+## Статус реализации (2026-09-14)
 
 Из состава компонента в коде есть только часть — остальное числится за
 задачами EPIC-004, ещё не принятыми на момент этой страницы:
@@ -23,18 +24,17 @@
 | HTTP-слой: роутер, `errors.go`, middleware | `api/` | T-301, T-303 |
 | Проекция мира и диспетчер шины | `readmodel/`, `consumer/` | T-304 |
 | Приём действий игрока (`POST /v1/players/{id}/actions`) | `actions/`, `handlers/` | T-305 |
+| Персонажи, `GET /v1/worlds`, `GET /v1/players/{id}`, сессии, ходы, аналитика C-10 | `characters/`, `session/`, `turns/` | T-306 |
+| Исходящие доставки: outbox, long-poll и ack, тексты правил, эффекты consumer | `outbox/`, `consumer/`, `handlers/` | T-307 |
 
 | Ещё не реализовано (эти пакеты в дереве отсутствуют) | Что войдёт | Задача |
 |---|---|---|
-| Персонажи, `GET /v1/worlds`, `GET /v1/players/{id}`, сессии, ходы, аналитика | `characters`, `session`, `turns` | T-306 |
-| Исходящие доставки игроку (outbox, long-poll `deliveries`) | `outbox/` | T-307 |
+| `FakeGateway` и HTTP-обвязка рядом с `Harness` v0 (`shared/testkit/gateway` уже есть) | `gatewaytest/` | T-308 |
 | Снапшот шлюза, режим `--mode=replay` до конца, полный состав `/health` | `snapshot/` | T-309 |
-| `FakeGateway` и HTTP-обвязка рядом с `Harness` v0 (`shared/testkit/gateway` уже есть) | — | T-308 |
+| Группы, раунды, групповые доставки (`group.*`, `round.opened`, `player.said`), служебные и admin-маршруты | `groups/`, `rounds/` | T-352…T-356 |
 
-Поэтому: маршруты API — только четыре (см. ниже), `GET /v1/worlds` и выдача
-доставок ещё не отвечают, а `--mode=replay` уже не запускает лишние таймеры,
-но не дочитывает журнал до конца и не переключается в `live` (это делает
-T-309). Статус обновляется вместе с T-306…T-309.
+Поэтому `--mode=replay` уже не запускает таймеры шлюза, но не дочитывает
+журнал до конца и не переключается в `live` (это делает T-309).
 
 ## Пакеты
 
@@ -46,9 +46,13 @@ T-309). Статус обновляется вместе с T-306…T-309.
 | `migrations/links`, `migrations/gateway` | SQL-схемы обеих баз (goose, `0001_init.sql` — полная схема I1+I2) |
 | `api/` | `GatewayRouter` (реестр маршрутов по `operationId`), цепочка middleware (`Chain`), таблица кодов ошибок (`errors.go`), DTO |
 | `readmodel/` | Типизированная проекция мира (World/Region/NPC/CharacterState/Group/Encounter) поверх `shared/entity` v2; загрузка из снапшота State, `AwaitFact`, `Hash`/`Cursor` |
-| `consumer/` | Подписка на топики шины, дедуп по `event_id`, применение фактов к проекции |
+| `consumer/` | Подписка на топики шины, дедуп по `event_id`, применение фактов к проекции; эффекты в транзакции `gateway.db`: доставки (`Deliveries`), шаги ходов (`turns.OnMechanics`, `OnNarrative`), заявки персонажей |
 | `actions/` | Валидация и публикация действий игрока, идемпотентность по `action_key`, лимит темпа, `InputFilter` |
-| `handlers/` | HTTP-обработчики поверх `links`/`actions` |
+| `characters/` | Создание персонажа предложением State и ожидание факта (`201`/`200`/`202 creating`), статус персонажа, `GET /v1/players/{id}` |
+| `session/` | Сессии scope: открытие первым действием, простой `MV_GATEWAY_SESSION_IDLE`, `analytics.session.started/ended` |
+| `turns/` | Ходы: `accepted` → механика → нарратив → ack последнего адресата, `timeout`, `analytics.turn.completed` |
+| `outbox/` | Очередь доставок: `Enqueue` (идемпотентно), `Lease` (голова очереди на игрока, одна в лизинге), `Ack`, уборка (`Sweep`), long-poll (`Service.Serve`, `Notifier`), тексты правил (`Mechanics`, `EncounterOpened`, `Died`, `Refused`) |
+| `handlers/` | HTTP-обработчики поверх `links`/`actions`/`characters`/`outbox` |
 | `client/` | Go-клиент HTTP API шлюза (C-08); потребители — бот (с T-311) и `FakeGateway` (T-308) |
 
 ## Как поднять локально
@@ -89,10 +93,18 @@ curl http://127.0.0.1:8090/health
 сейчас реагирует на режим частично:
 
 - **`live`** — лимит темпа действий (`actions.Limiter`) активен, фоновая
-  уборка (`sweep`: удаление просроченных заявок и ключей, повторная попытка
-  отложенного сжатия `links.db`, компакция раз в час) запущена.
+  уборка (`sweep`) запущена. Раз в минуту: просроченные заявки персонажей и
+  ключи действий, метки `processed_events`, повтор отложенного сжатия
+  `links.db`, снятие со связки персонажей без факта к дедлайну, `timeout`
+  ходов, закрытие простаивающих сессий (`idle`); в outbox — снятие истёкших
+  лизингов с повторной выдачей, `dropped` для доставок старше
+  `MV_GATEWAY_DELIVERY_TTL`, удаление завершённых доставок старше 7 дней.
+  Раз в час — сжатие `links.db`.
 - **`replay`** — лимит темпа выключен (`actions.Limiter` не создаётся), фоновая
-  горутина уборки не запускается. Полный сценарий переигровки — дочитывание
+  горутина уборки не запускается, аналитика не публикуется. Long-poll и ack
+  доставок работают: ожидание long-poll идёт по настенным часам в любом
+  режиме, как дедлайны соединения (C-01 v1.8), а лизинг — по часам процесса.
+  Полный сценарий переигровки — дочитывание
   журнала до `Journal.End()` и переключение в `live` — ещё не реализован
   (T-309); на этом этапе `--mode=replay` для шлюза означает только
   «таймеры и лимит выключены», а не «шлюз восстановлен из записи».
@@ -111,6 +123,11 @@ curl http://127.0.0.1:8090/health
 | `MV_GATEWAY_RATE_ACTIONS_PER_MIN`, `MV_GATEWAY_RATE_ACTIONS_BURST` | лимит темпа действий игрока (в `replay` не действует) |
 | `MV_GATEWAY_INPUT_FILTER` | фильтр текста игрока; в MVP-1 допустимо только `noop`, другое значение — ошибка старта |
 | `MV_GATEWAY_ENCOUNTER_GRACE` | сколько встреча без агента ждёт до `encounter_unavailable` |
+| `MV_GATEWAY_SESSION_IDLE` | простой сессии scope до `end_reason=idle` (30m) |
+| `MV_GATEWAY_TURN_TIMEOUT` | ожидание доставки нарратива хода до `turn.completed status=timeout` (60s) |
+| `MV_GATEWAY_CHARACTER_WAIT`, `MV_GATEWAY_CHARACTER_DEADLINE` | ожидание факта персонажа до `202 creating` (2s) и срок, после которого персонаж без факта снимается со связки (60s); ожидание короче дедлайна, иначе отказ старта |
+| `MV_GATEWAY_DELIVERY_LEASE` | сколько выданная доставка ждёт ack до повторной выдачи (30s) |
+| `MV_GATEWAY_DELIVERY_TTL` | сколько доставка остаётся `pending` до `dropped` (24h) |
 | `MV_WORLD_ID` | мир, снапшот которого загружается при старте |
 | `MV_MINIO_ENDPOINT`, `MV_MINIO_ACCESS_KEY`, `MV_MINIO_SECRET_KEY`, `MV_MINIO_USE_SSL` | объектное хранилище снапшотов; без ключей клиент не создаётся, снапшот считается отсутствующим (не ошибка) |
 | `MV_GM_PATH` | `agent` или `legacy` — используется при публикации действий (`agent` — целевой путь) |
@@ -122,7 +139,7 @@ curl http://127.0.0.1:8090/health
 `runtime.Status` с деталями:
 
 - `links_store`, `gateway_store` — сейчас всегда `ok`, пока контекст запущен
-  (`context.go:460-461`); настоящая проверка обеих БД — ещё T-309 (component
+  (`Context.Health` в `context.go`); настоящая проверка обеих БД — ещё T-309 (component
   §11.4);
 - `projection` — `ok` / `missing` (у нового мира ещё нет снапшота — это не
   авария) / `stale`;
@@ -141,25 +158,65 @@ curl http://127.0.0.1:8090/health
 
 ## API (маршруты, смонтированные `GatewayRouter`)
 
-Сейчас — только четыре операции; полный список из `api/gateway.openapi.yaml`
-в корне репозитория шире, остальные операции появляются вместе с T-306/T-307
-(I1) и T-352/T-354/T-356 (I2):
+Полный список из `api/gateway.openapi.yaml` в корне репозитория шире:
+остальные операции появляются вместе с T-352/T-354/T-356 (I2).
 
 | Метод | Путь | operationId |
 |---|---|---|
 | `POST` | `/v1/links/resolve` | `resolveLink` |
 | `POST` | `/v1/links/consent` | `consentLink` |
 | `DELETE` | `/v1/links` | `forgetLink` |
+| `GET` | `/v1/worlds` | `listWorlds` |
+| `POST` | `/v1/characters` | `createCharacter` |
+| `GET` | `/v1/players/{player_id}` | `getPlayer` |
 | `POST` | `/v1/players/{player_id}/actions` | `postAction` |
+| `GET` | `/v1/clients/{client_id}/deliveries` | `pollDeliveries` |
+| `POST` | `/v1/clients/{client_id}/deliveries/ack` | `ackDeliveries` |
+| `GET` | `/v1/clients/{client_id}/stream` | `streamDeliveries` (`501`, резерв E-H) |
 
 Порядок middleware (`api.Chain`): `request_id` + журнал запроса → `recover` →
 допуск клиента (`X-Client-Id`/`X-Actor-Kind`) → лимит тела (64 КиБ,
 `Content-Type: application/json`) → лимит темпа действий → защита от
-параллельного long-poll на клиента → таймаут (5 с, кроме long-poll-операций).
-Для операций `resolveLink`, `consentLink`, `forgetLink` и (в будущем)
-`createCharacter` в журнал запроса пишутся только `request_id` и `code`, без
-тела и без прочих полей ошибки (SEC-01/02, внешний ID никогда не попадает в
-лог).
+параллельного long-poll на клиента → таймаут (5 с и дедлайны соединения по
+10 с на чтение и запись, кроме long-poll-операций). Для операций
+`resolveLink`, `consentLink`, `forgetLink` и `createCharacter` в журнал
+запроса пишутся только `request_id` и `code`, без тела и без прочих полей
+ошибки (SEC-01/02, внешний ID никогда не попадает в лог).
+
+## Доставки (outbox)
+
+- **Постановка.** Consumer ставит доставки в транзакции события
+  (component §8.1). `combat.decided` — текст правил живым игрокам scope.
+  `entity.updated` с `cause ∈ {move, rest, loot}` — игроку; перемещение
+  игрока в группе не доставляется, его доставляет факт группы всем живым
+  участникам. Смерть персонажа — `kind=system`. Открытие встречи
+  (`encounter.started` или `entity.created` встречи) — `world_event`
+  участникам, идемпотентно по встрече и переходу. Отказ State
+  (`entity.update.rejected`) на перемещение или отдых игрока — `kind=system`
+  без кода State. `narrative.output` — адресатам `recipients[]` в порядке
+  топика, без перестановок. Доставка без связки пишется сразу `dropped`.
+- **Выдача.** `GET …/deliveries?after&limit≤100&wait_ms≤25000`: один long-poll
+  на клиента (`409 poll_in_progress`), на игрока — одна доставка в лизинге,
+  по порядку `seq`. `route.external_id` подставляется из `links.db` в момент
+  ответа и только клиенту платформы связки: в MVP-1 платформа `telegram` есть у
+  `telegram-bot` и, условно до решения system-architect, у `ci-harness`
+  (`handlers.ClientPlatforms`); в prod `ci-harness` не входит в
+  `MV_GATEWAY_CLIENT_IDS` и получает `403 client_unknown`. При остановке процесса
+  long-poll сразу отвечает пустым списком.
+- **Харнесс и бот делят одну очередь `telegram`.** До решения system-architect
+  о платформе `ci-harness` не запускать харнесс (T-308, e2e) против шлюза, у
+  которого работает бот (профиль `bot`): харнесс заберёт и подтвердит сообщения
+  живых игроков и увидит их внешние ID, а бот попытается отправить сообщения
+  тестовых игроков. В dev-стеке `ci-harness` допущен в `MV_GATEWAY_CLIENT_IDS`
+  по умолчанию.
+- **Подтверждение.** `POST …/deliveries/ack`: подтверждаются доставки, которые
+  клиент взял в лизинг, в том числе после истечения лизинга, пока их не взял
+  другой клиент; остальные id — в `unknown`. Ack последнего адресата нарратива
+  завершает ход; если брокер не принял `analytics.turn.completed` за срок
+  публикации, весь ack откатывается, ответ — `503 bus_unavailable`.
+- **Пустой ответ раньше `wait_ms`** бывает, когда процесс останавливается.
+  Клиенту стоит выдержать паузу перед следующим long-poll (порядка секунды),
+  иначе он будет повторять запросы к останавливающемуся процессу.
 
 ## Ограничения
 

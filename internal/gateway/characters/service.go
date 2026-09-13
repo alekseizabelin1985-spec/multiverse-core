@@ -43,6 +43,10 @@ const (
 	DefaultDeadline = 60 * time.Second
 )
 
+// StatusReadTimeout bounds the reading of pending_characters in Status: the
+// deadline of an ordinary request (api.RequestTimeout).
+const StatusReadTimeout = api.RequestTimeout
+
 // TypeCreateProposed is the proposal a character is created by (C-02).
 const TypeCreateProposed = "entity.create.proposed"
 
@@ -114,6 +118,8 @@ type Answer struct {
 type Service struct {
 	cfg    Config
 	viewer Viewer
+	// statusTimeout is StatusReadTimeout unless a test shortened it.
+	statusTimeout time.Duration
 
 	mu    sync.Mutex
 	locks map[string]*linkLock
@@ -139,7 +145,8 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Log == nil {
 		cfg.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Service{cfg: cfg, viewer: Viewer{World: cfg.Model, Sessions: cfg.Sessions}, locks: make(map[string]*linkLock)}, nil
+	return &Service{cfg: cfg, viewer: Viewer{World: cfg.Model, Sessions: cfg.Sessions}, statusTimeout: StatusReadTimeout,
+		locks: make(map[string]*linkLock)}, nil
 }
 
 // Create serves POST /v1/characters (component §7.1). The checks, in order:
@@ -317,6 +324,11 @@ func (s *Service) name(ctx context.Context, raw string) (string, *api.Error) {
 // Status is the status of the character of a link for POST /v1/links/resolve:
 // alive or dead from the projection (abandoned reads as dead), creating while
 // its proposal waits before its deadline, none otherwise.
+//
+// The reading of pending_characters has a deadline of its own, StatusReadTimeout:
+// the only connection of gateway.db may be held by a transaction that waits,
+// and the answer to resolve does not wait with it (acceptance of T-306, Mi-2).
+// A reading that fails or runs out answers creating, as before.
 func (s *Service) Status(playerID string) string {
 	if ch, ok := s.cfg.Model.Character(playerID); ok {
 		if entity.IsTerminalStatus(ch.Status) {
@@ -324,9 +336,11 @@ func (s *Service) Status(playerID string) string {
 		}
 		return StatusAlive
 	}
-	p, found, err := pendingOf(context.Background(), s.cfg.DB, playerID)
+	ctx, cancel := context.WithTimeout(context.Background(), s.statusTimeout)
+	defer cancel()
+	p, found, err := pendingOf(ctx, s.cfg.DB, playerID)
 	if err != nil {
-		s.logFailure(context.Background(), "pending character not read", err)
+		s.logFailure(ctx, "pending character not read", err)
 		return StatusCreating
 	}
 	if found && p.DeadlineAt.After(s.cfg.Clock.Now()) {

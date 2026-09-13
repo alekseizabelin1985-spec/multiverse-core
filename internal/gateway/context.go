@@ -26,6 +26,7 @@ import (
 	"multiverse-core.io/internal/gateway/consumer"
 	"multiverse-core.io/internal/gateway/handlers"
 	"multiverse-core.io/internal/gateway/links"
+	"multiverse-core.io/internal/gateway/outbox"
 	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/internal/gateway/session"
 	"multiverse-core.io/internal/gateway/store"
@@ -71,6 +72,7 @@ type Context struct {
 	links      *handlers.Links
 	actions    *handlers.Actions
 	characters *handlers.Characters
+	deliveries *handlers.Deliveries
 
 	mu        sync.Mutex
 	started   bool
@@ -86,6 +88,7 @@ type Context struct {
 	sessions  *session.Manager
 	turns     *turns.Tracker
 	chars     *characters.Service
+	outbox    *outbox.Store
 	log       *slog.Logger
 	stopLoop  context.CancelFunc
 	loopDone  chan struct{}
@@ -96,7 +99,8 @@ type Context struct {
 // serve builds the contexts, and an error belongs to the start of the process.
 func New(src env.Source) *Context {
 	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{}, actions: &handlers.Actions{},
-		characters: &handlers.Characters{}, loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
+		characters: &handlers.Characters{}, deliveries: &handlers.Deliveries{},
+		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
 }
 
 var (
@@ -114,13 +118,16 @@ func (c *Context) DependsOn() []string { return nil }
 // process server serves it (api servedByProcess).
 func (c *Context) Routes(mux *http.ServeMux) {
 	router := api.GatewayRouter(api.Handlers{
-		ResolveLink:     http.HandlerFunc(c.links.Resolve),
-		ConsentLink:     http.HandlerFunc(c.links.Consent),
-		ForgetLink:      http.HandlerFunc(c.links.Forget),
-		ListWorlds:      http.HandlerFunc(c.characters.ListWorlds),
-		CreateCharacter: http.HandlerFunc(c.characters.Create),
-		GetPlayer:       http.HandlerFunc(c.characters.Player),
-		PostAction:      http.HandlerFunc(c.actions.Post),
+		ResolveLink:      http.HandlerFunc(c.links.Resolve),
+		ConsentLink:      http.HandlerFunc(c.links.Consent),
+		ForgetLink:       http.HandlerFunc(c.links.Forget),
+		ListWorlds:       http.HandlerFunc(c.characters.ListWorlds),
+		CreateCharacter:  http.HandlerFunc(c.characters.Create),
+		GetPlayer:        http.HandlerFunc(c.characters.Player),
+		PostAction:       http.HandlerFunc(c.actions.Post),
+		PollDeliveries:   http.HandlerFunc(c.deliveries.Poll),
+		AckDeliveries:    http.HandlerFunc(c.deliveries.Ack),
+		StreamDeliveries: http.HandlerFunc(c.deliveries.Stream),
 	})
 	router.Mount(mux, api.Chain(c.httpCfg)...)
 }
@@ -166,7 +173,16 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		return fmt.Errorf("gateway: data directory %s (%s): %w; outside compose set %s to a directory the process may create",
 			dir, env.GatewayDataDir.Name(), err, env.GatewayDataDir.Name())
 	}
-	linkStore, err := links.NewSQLite(linksDB, deps.IDs)
+	// The outbox is the first step of the cascade of /forget (C-04 v1.1): the
+	// pending deliveries of the player are dropped before the link goes.
+	queue, err := outbox.New(outbox.Config{DB: gatewayDB, Lease: settings.deliveryLease, TTL: settings.deliveryTTL})
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
+	}
+	linkStore, err := links.NewSQLite(linksDB, deps.IDs, links.ForgetFunc(func(ctx context.Context, playerID string) error {
+		_, err := queue.DropForPlayer(ctx, playerID)
+		return err
+	}))
 	if err != nil {
 		return errors.Join(err, gatewayDB.Close(), linksDB.Close())
 	}
@@ -188,13 +204,19 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
 	}
 	// The effects of the facts of a character proposal: its row goes with its
-	// fact, and a refusal of State expires it (component §7.1).
+	// fact, and a refusal of State expires it (component §7.1). Then the
+	// deliveries and the steps of the turns (component §8.1, §7.6).
+	feed := &consumer.Deliveries{Model: model, Outbox: queue, Links: linkStore, Turns: svc.turns, Clock: deps.Clock, Log: log}
+	fed, err := feed.Effects()
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
+	}
 	dispatcher, err := consumer.New(consumer.Config{
 		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock, Log: log,
-		Effects: map[string][]consumer.Effect{
+		Effects: consumer.MergeEffects(map[string][]consumer.Effect{
 			readmodel.TypeEntityCreated:  {svc.chars.OnCreated},
 			readmodel.TypeUpdateRejected: {svc.chars.OnRejected},
-		},
+		}, fed),
 	})
 	if err == nil {
 		catchUpCtx, cancelCatchUp := context.WithTimeout(context.WithoutCancel(ctx), c.catchUpBudget)
@@ -214,13 +236,23 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		// X-Request-Id is not domain data and does not draw on Deps.IDs: with
 		// --id-source=sequence a request would shift the link_id and player_id
 		// of everything after it.
-		RequestIDs: uuid.NewString,
-		Clock:      deps.Clock,
-		Log:        log,
+		RequestIDs:   uuid.NewString,
+		Clock:        deps.Clock,
+		Log:          log,
+		SetDeadlines: runtime.SetDeadlines,
+	}
+	// The wait of a long-poll is a property of the connection, like its
+	// deadlines, and runs on the wall clock in every mode (C-01 v1.8): the null
+	// timers of a replay would never end it.
+	polls, err := outbox.NewService(outbox.ServiceConfig{Store: queue, Routes: linkStore, Clock: deps.Clock,
+		Timers: clock.RealTimers{}, Log: log})
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), dispatcher.Stop(ctx), gatewayDB.Close(), linksDB.Close())
 	}
 	*c.links = handlers.Links{Store: linkStore, Clock: deps.Clock, CharacterStatus: svc.chars.Status}
 	*c.actions = handlers.Actions{Service: svc.actions}
 	*c.characters = handlers.Characters{Service: svc.chars, Worlds: model}
+	*c.deliveries = handlers.Deliveries{Service: polls, Turns: svc.turns, Platforms: handlers.ClientPlatforms, Log: log}
 	c.keys, c.service, c.sessions, c.turns, c.chars = svc.keys, svc.actions, svc.sessions, svc.turns, svc.chars
 	// The rate limit is a limit of live players; a replay feeds recorded
 	// actions as fast as the harness sends them (component §5.1 p. 6).
@@ -233,7 +265,7 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	}
 
 	c.linksDB, c.gatewayDB, c.store, c.log, c.mode = linksDB, gatewayDB, linkStore, log, deps.Mode
-	c.model, c.consumer = model, dispatcher
+	c.model, c.consumer, c.outbox = model, dispatcher, queue
 	c.started = true
 	// Replay drives no timers of its own (component §11.2).
 	if deps.Mode != runtime.ModeReplay {
@@ -255,6 +287,8 @@ type actionSettings struct {
 	// MV_GATEWAY_SESSION_IDLE, _TURN_TIMEOUT, _CHARACTER_WAIT and
 	// _CHARACTER_DEADLINE.
 	sessionIdle, turnTimeout, characterWait, characterDeadline time.Duration
+	// MV_GATEWAY_DELIVERY_LEASE and _DELIVERY_TTL.
+	deliveryLease, deliveryTTL time.Duration
 }
 
 // services are the services over the databases and the projection.
@@ -334,6 +368,7 @@ func (c *Context) actionSettings() (actionSettings, error) {
 	}{
 		{&s.sessionIdle, env.GatewaySessionIdle}, {&s.turnTimeout, env.GatewayTurnTimeout},
 		{&s.characterWait, env.GatewayCharacterWait}, {&s.characterDeadline, env.GatewayCharacterDeadline},
+		{&s.deliveryLease, env.GatewayDeliveryLease}, {&s.deliveryTTL, env.GatewayDeliveryTTL},
 	} {
 		switch *d.dst, err = d.variable.DurationFrom(c.src); {
 		case err != nil:
@@ -439,7 +474,8 @@ func openDatabases(ctx context.Context, dir string) (*sql.DB, *sql.DB, error) {
 // requests, the old marks of processed events, the expired answers to actions
 // and the half published actions whose key expired go, a pending compaction
 // is retried, the characters past their deadline leave their links, the turns
-// past theirs time out and the idle sessions end; every
+// past theirs time out, the idle sessions end, and the outbox releases its
+// expired leases, drops what outlived its TTL and purges old rows; every
 // actions.LimiterSweepInterval the rate limit forgets the players who stopped
 // acting; and every store.LinksCompactInterval links.db is compacted as the
 // safety net of /forget (ADR-019 addendum p. 1). Errors are logged; the next
@@ -475,6 +511,9 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 			}
 			if _, err := c.sessions.Sweep(ctx, now); err != nil && ctx.Err() == nil {
 				c.log.Error("sessions sweep", slog.String("error", err.Error()))
+			}
+			if err := c.outbox.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("outbox sweep", slog.String("error", err.Error()))
 			}
 		case <-limits.C():
 			c.limiter.Sweep(clk.Now())
