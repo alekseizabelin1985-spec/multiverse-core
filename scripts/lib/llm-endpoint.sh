@@ -156,28 +156,82 @@ LLM_EP_HAS=0
 LLM_EP_STARTABLE=0
 LLM_EP_TRUSTED=0
 LLM_EP_TRIMMED_V1=0
-LLM_EP_PORT_EXPLICIT=0
+LLM_EP_PORT_EXPLICIT=0 # the port is printed back (it differs from the scheme default)
+LLM_EP_PORT_WRITTEN=0  # the value carries a port at all, :80 included (T-450)
+LLM_EP_CLASS=''        # local | cloud | invalid — llm_endpoint_judge (T-450)
+LLM_EP_KIND=''         # why: loopback, localhost, docker-host, service, private, ...
 LLM_EP_ERROR=''
 
 llm_parse_url() {
-  local raw=$1 scheme rest hostport path host port explicit=0
+  local raw=$1 scheme rest hostport path host port explicit=0 written=0
   LLM_EP_SCHEME='' LLM_EP_HOST='' LLM_EP_PORT='' LLM_EP_PATH=''
   LLM_EP_URL='' LLM_EP_PROBE='' LLM_EP_RAW='' LLM_EP_TRIMMED_V1=0
-  LLM_EP_PORT_EXPLICIT=0 LLM_EP_ERROR=''
+  LLM_EP_PORT_EXPLICIT=0 LLM_EP_PORT_WRITTEN=0 LLM_EP_CLASS='' LLM_EP_KIND=''
+  LLM_EP_ERROR=''
 
   raw=$(llm_trim "$raw")
-  # Checked before anything is compared, because every comparison below is what
-  # an invisible character breaks (review M-1).
-  if llm_not_printable_ascii "$raw"; then
-    LLM_EP_ERROR="$LLM_EP_VAR=$raw carries a character outside printable ASCII; an address copied from documentation often brings an invisible one with it (a soft hyphen U+00AD, a zero width space U+200B) — retype the value by hand"
-    return 1
-  fi
+  # $shown is the value as every refusal of this function prints it. Four of
+  # them — the query, a character outside printable ASCII, no scheme, a scheme
+  # other than http/https — come BEFORE the check of the @ and used to print
+  # user:pass@ with the rest, into the console, the log of CI and the report of
+  # compose-lint (T-450 review #2 Mi-R2-1). The later ones print $shown too: a
+  # password with a bare / (u:x/y@h) leaves no @ in front of the first /, and
+  # the sentence about the port would print all of it. What such a sentence
+  # still names — the port 'x' or the host — is the host and the port of that
+  # value to every URL parser, Go's included, not user information.
+  # Deliberately wider than the parser: a sentence that hides too much costs
+  # nothing, one that shows a password is a leak. So:
+  #   - the value is cut at the first ? or #, as the query refusal prints it;
+  #   - the scheme is kept only when the part in front of the first :// holds
+  #     no @; everything else up to the LAST @ of what is left becomes …@,
+  #     whatever / or :// stands in front of that @;
+  #   - when the cut-off query or fragment holds an @, the password may have
+  #     had a bare ? or # in it: only the scheme is printed.
+  # Plain parameter expansion, no fork — the table runs this for every row.
+  # The .psm1 does the same, statement for statement.
+  local shown shown_scheme='' shown_rest unqueried=$raw
+  case "$raw" in
+  *'?'* | *'#'*) unqueried=${raw%%[?#]*} ;;
+  esac
+  shown_rest=$unqueried
+  case "$unqueried" in
+  *://*)
+    shown_scheme=${unqueried%%://*}
+    case "$shown_scheme" in
+    *@*) shown_scheme='' ;;
+    *)
+      shown_scheme="$shown_scheme://"
+      shown_rest=${unqueried#*://}
+      ;;
+    esac
+    ;;
+  esac
+  case "${raw#"$unqueried"}" in
+  *@*) shown=$shown_scheme ;;
+  *)
+    case "$shown_rest" in
+    *@*) shown="$shown_scheme…@${shown_rest##*@}" ;;
+    *) shown=$unqueried ;;
+    esac
+    ;;
+  esac
+  # A query or a fragment is refused FIRST, and nothing after the ? or the # is
+  # echoed back by this or any later sentence: `?api_key=…` is how some vendors
+  # document their address, and the sentence reaches the console, the log of CI
+  # and the report of compose-lint (T-450 review #1 N-2). Finding a ? or a # is
+  # a comparison of one ASCII character, which an invisible one cannot break.
   case "$raw" in
   *'?'* | *'#'*)
-    LLM_EP_ERROR="$LLM_EP_VAR=$raw carries a query or a fragment; the value must be scheme://host[:port][/path]"
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown… carries a query or a fragment (the rest of the value is not printed: it may hold a key); the value must be scheme://host[:port][/path]"
     return 1
     ;;
   esac
+  # Checked before anything else is compared, because every comparison below is
+  # what an invisible character breaks (review M-1).
+  if llm_not_printable_ascii "$raw"; then
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown carries a character outside printable ASCII; an address copied from documentation often brings an invisible one with it (a soft hyphen U+00AD, a zero width space U+200B) — retype the value by hand"
+    return 1
+  fi
 
   # A value without a scheme is REFUSED in both implementations. The .sh used to
   # accept 127.0.0.1:8888 and the .ps1 threw a raw error record at it (review
@@ -195,7 +249,7 @@ llm_parse_url() {
     return 1
     ;;
   *)
-    LLM_EP_ERROR="$LLM_EP_VAR=$raw has no scheme; write it as http://host:port (the platform's HTTP client refuses a value without one)"
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown has no scheme; write it as http://host:port (the platform's HTTP client refuses a value without one)"
     return 1
     ;;
   esac
@@ -204,7 +258,12 @@ llm_parse_url() {
   case "$scheme" in
   http | https) ;;
   *)
-    LLM_EP_ERROR="$LLM_EP_VAR=$raw uses scheme '$scheme'; only http and https are addresses of an OpenAI-compatible endpoint"
+    # The part in front of the first :// is printed too: an @ in it is
+    # user information as well (u:p@h://x), cut the same way as in $shown.
+    case "$scheme" in
+    *@*) scheme="…@${scheme##*@}" ;;
+    esac
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown uses scheme '$scheme'; only http and https are addresses of an OpenAI-compatible endpoint"
     return 1
     ;;
   esac
@@ -227,6 +286,19 @@ llm_parse_url() {
     ;;
   esac
 
+  # A percent sign in the host is an escaped character or the zone of an IPv6
+  # literal (fe80::1%25eth0). Go's url.Parse unescapes the first, so ol%61ma
+  # would be `ollama` to the platform and a name with a % to this parser; the
+  # zone names an interface of one machine. Neither is how an address of an
+  # endpoint is written, and both are refused rather than classified (T-450).
+  # Checked after the user information, which may hold a secret with a %.
+  case "$hostport" in
+  *%*)
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown carries a percent sign in the host (an escaped character or the zone of an IPv6 literal); write the host as it is"
+    return 1
+    ;;
+  esac
+
   # An IPv6 literal keeps its brackets in the URL and loses them in $host, so
   # that '::1' compares equal to the entry in the loopback list. [uri].Host in
   # .NET keeps the brackets, which is exactly why the .ps1 called [::1] a cloud
@@ -244,7 +316,7 @@ llm_parse_url() {
     case "$hostport" in
     *\]*) ;;
     *)
-      LLM_EP_ERROR="$LLM_EP_VAR=$raw has an unclosed IPv6 literal"
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown has an unclosed IPv6 literal"
       return 1
       ;;
     esac
@@ -252,10 +324,10 @@ llm_parse_url() {
     host=${host#\[}
     tail=${hostport#*\]}
     case "$tail" in
-    :*) port=${tail#:} ;;
+    :*) port=${tail#:} written=1 ;;
     '') port='' ;;
     *)
-      LLM_EP_ERROR="$LLM_EP_VAR=$raw has trailing characters after the IPv6 literal"
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown has trailing characters after the IPv6 literal"
       return 1
       ;;
     esac
@@ -263,6 +335,7 @@ llm_parse_url() {
   *:*)
     host=${hostport%:*}
     port=${hostport##*:}
+    written=1
     ;;
   *)
     host=$hostport
@@ -272,7 +345,20 @@ llm_parse_url() {
   if [ "$bracketed" = 0 ]; then
     case "$host" in
     *:*)
-      LLM_EP_ERROR="$LLM_EP_VAR=$raw looks like a bare IPv6 literal; bracket it: http://[::1]:8888"
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown looks like a bare IPv6 literal; bracket it: http://[::1]:8888"
+      return 1
+      ;;
+    esac
+    # The printable characters Go's url.Parse refuses in a host (`invalid
+    # character in host name`) and the checks above have not already taken: a
+    # space, a backslash, ^, `, {, | and }. Classified, http://localhost\evil.com
+    # was the cloud here and a refusal on the platform, and the operator read
+    # "not a local address" where the value was simply mistyped (T-450 review #1
+    # Mi-2). The set is Go's, not a stricter one: ~ ! $ & ' ( ) * + , ; = < > "
+    # pass url.Parse and stay names — of the cloud, having no service shape.
+    case "$host" in
+    *[' \^`{|}']*)
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown has a character in the host that an address cannot hold (a space, a backslash, a caret, a backtick, a brace or a vertical bar); the platform's URL parser refuses it"
       return 1
       ;;
     esac
@@ -280,21 +366,43 @@ llm_parse_url() {
   host=$(printf '%s' "$host" | tr '[:upper:]' '[:lower:]')
 
   if [ -z "$host" ]; then
-    LLM_EP_ERROR="$LLM_EP_VAR=$raw has no host"
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown has no host"
+    return 1
+  fi
+
+  # Brackets hold an IPv6 address and nothing else: [localhost] used to pass
+  # here as the name localhost, while Go's client refuses it (T-450).
+  if [ "$bracketed" = 1 ] && ! llm_ipv6_hex "$host"; then
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown has a malformed IPv6 literal [$host]"
+    return 1
+  fi
+
+  # `host:` with nothing after the colon is not "no port": Go refuses it, and
+  # a cloud address written that way used to pass here with the default of the
+  # scheme (T-450).
+  if [ "$written" = 1 ] && [ -z "$port" ]; then
+    LLM_EP_ERROR="$LLM_EP_VAR=$shown has an empty port after the colon"
     return 1
   fi
 
   if [ -n "$port" ]; then
     case "$port" in
     '' | *[!0-9]*)
-      LLM_EP_ERROR="$LLM_EP_VAR=$raw has a non-numeric port '$port'"
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown has a non-numeric port '$port'"
       return 1
       ;;
     esac
-    if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-      LLM_EP_ERROR="$LLM_EP_VAR=$raw has port $port, which is outside 1-65535"
+    # Leading zeros go first: Go reads :008888 as 8888, and a port of twenty
+    # digits used to overflow `[ -gt ]` here instead of being out of range.
+    local digits=$port
+    while [ "${#digits}" -gt 1 ] && [ "${digits#0}" != "$digits" ]; do
+      digits=${digits#0}
+    done
+    if [ "${#digits}" -gt 5 ] || [ "$digits" -lt 1 ] || [ "$digits" -gt 65535 ]; then
+      LLM_EP_ERROR="$LLM_EP_VAR=$shown has port $port, which is outside 1-65535"
       return 1
     fi
+    port=$digits
     explicit=1
   fi
   if [ -z "$port" ]; then
@@ -346,31 +454,264 @@ llm_parse_url() {
   LLM_EP_PROBE="$scheme://$probe_authority$path"
   LLM_EP_RAW=$raw
   LLM_EP_PORT_EXPLICIT=$explicit
+  LLM_EP_PORT_WRITTEN=$written
   return 0
 }
 
-# llm_host_is_local: an address this machine answers on. It is the question
-# "would llama-server started here own this address", so it is loopback, the
-# any-address and the container alias — and nothing else.
-llm_host_is_local() {
-  case "$1" in
-  localhost | 0.0.0.0 | '::' | '::1' | host.docker.internal) return 0 ;;
-  127.*) return 0 ;;
-  esac
-  return 1
+# --- the local address (T-450) ----------------------------------------------
+#
+# ONE answer to "is this address local", for the scripts, for compose-lint and
+# for the cloud gate of the platform (internal/llm, IsLocalEndpoint). It used to
+# be written three times, three ways: this file trusted RFC 1918 but not a
+# compose service, compose-lint trusted a service of its own file and whatever
+# Python calls private (documentation ranges included), and the platform
+# neither — so MV_OLLAMA_URL=http://ollama:11434 passed the linter and stopped
+# the platform. The rule is the decision of system-architect#1, and its cases
+# live in testdata/llm/local-endpoints.tsv: every implementation is tested
+# against that file, and a case is added there, not here.
+#
+#   local   — loopback 127.0.0.0/8 and ::1; localhost and *.localhost;
+#             host.docker.internal; a one-word name (a compose service:
+#             ollama, core); RFC 1918; link-local 169.254.0.0/16 and
+#             fe80::/10; IPv6 ULA fc00::/7; the IPv4-mapped form of each;
+#   invalid — the any-address 0.0.0.0 and :: (a server listens there, a client
+#             cannot call it); a local host without a port; a port outside
+#             1-65535; anything llm_parse_url refuses;
+#   cloud   — everything else: a public address, any name with a dot (.local
+#             included), CGNAT 100.64.0.0/10, the documentation ranges, the
+#             numeric spellings 2130706433 and 0x7f000001, and a dotted quad
+#             with the root dot (127.0.0.1.), which is a name to DNS. Names are
+#             never resolved: the CLASS must not depend on the DNS of the
+#             moment. Where a request to a one-word name or to *.localhost ends
+#             up still does — Docs/ops/runbook.md §3 names that risk.
+#
+# Every helper below runs under LC_ALL=C (byte ranges, not the locale) and
+# returns 0 whatever the answer, so that a caller under `set -e` —
+# compose-lint is one — cannot be stopped by a verdict.
+
+# The strict dotted quad: four decimal octets, no leading zero. 127.1, 0177.0.0.1
+# and 127.0.0.01 are not addresses to Go's netip, and here they are names with
+# dots — the cloud.
+LLM_IPV4_OCTET='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
+LLM_IPV4_RE="^$LLM_IPV4_OCTET\\.$LLM_IPV4_OCTET\\.$LLM_IPV4_OCTET\\.$LLM_IPV4_OCTET\$"
+
+# llm_ipv4_class A B C D sets LLM_HOST_CLASS and LLM_HOST_KIND for an address
+# given as four decimal octets.
+llm_ipv4_class() {
+  local a=$1 b=$2 c=$3 d=$4
+  LLM_HOST_CLASS=cloud LLM_HOST_KIND=public
+  if [ "$a" = 0 ] && [ "$b" = 0 ] && [ "$c" = 0 ] && [ "$d" = 0 ]; then
+    LLM_HOST_CLASS=invalid LLM_HOST_KIND=unspecified
+  elif [ "$a" = 127 ]; then
+    LLM_HOST_CLASS=local LLM_HOST_KIND=loopback
+  elif [ "$a" = 10 ] || { [ "$a" = 172 ] && [ "$b" -ge 16 ] && [ "$b" -le 31 ]; } ||
+    { [ "$a" = 192 ] && [ "$b" = 168 ]; }; then
+    LLM_HOST_CLASS=local LLM_HOST_KIND=private
+  elif [ "$a" = 169 ] && [ "$b" = 254 ]; then
+    LLM_HOST_CLASS=local LLM_HOST_KIND=link-local
+  fi
+  return 0
 }
 
-# llm_host_is_trusted answers a DIFFERENT question — "is this address outside
-# the trusted network", the one the cloud gate of ADR-005 add. 2 p. 3 asks — and
-# therefore also counts the private ranges: a server on the LAN is not a cloud
-# vendor, even though it is not startable from here.
-llm_host_is_trusted() {
-  llm_host_is_local "$1" && return 0
-  case "$1" in
-  10.* | 192.168.* | 172.1[6-9].* | 172.2[0-9].* | 172.3[01].*) return 0 ;;
-  fd??:* | fe80:*) return 0 ;;
+# llm_ipv6_groups appends the colon-separated groups of $1 to LLM_IP6_GROUPS;
+# returns 1 on a group that is not 1-4 hex digits. An empty $1 has no groups.
+LLM_IP6_GROUPS=()
+llm_ipv6_groups() {
+  local LC_ALL=C s=${1-} g
+  [ -z "$s" ] && return 0
+  while :; do
+    g=${s%%:*}
+    [[ $g =~ ^[0-9a-f]{1,4}$ ]] || return 1
+    LLM_IP6_GROUPS+=("$g")
+    [ "$s" = "$g" ] && return 0
+    s=${s#*:}
+  done
+}
+
+# llm_ipv6_hex sets LLM_IP6_HEX to the 32 hex digits of an IPv6 address written
+# in lower case without brackets, or returns 1 when $1 is not one. An IPv4 tail
+# (::ffff:127.0.0.1) is accepted in the last 32 bits, as netip accepts it.
+LLM_IP6_HEX=''
+llm_ipv6_hex() {
+  local LC_ALL=C s=${1-} head tail v4 n i zeros hex='' g
+  local -a all=()
+  LLM_IP6_HEX=''
+  case "$s" in
+  '' | *[!0-9a-f:.]*) return 1 ;;
+  *:*) ;;
+  *) return 1 ;;
   esac
-  return 1
+  case "$s" in
+  *.*)
+    v4=${s##*:}
+    [[ $v4 =~ $LLM_IPV4_RE ]] || return 1
+    printf -v g '%02x%02x:%02x%02x' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
+    s="${s%:*}:$g"
+    ;;
+  esac
+  case "$s" in
+  *:::*) return 1 ;;
+  esac
+  LLM_IP6_GROUPS=()
+  if [ "${s#*::}" != "$s" ]; then
+    head=${s%%::*}
+    tail=${s#*::}
+    case "$tail" in
+    *::*) return 1 ;;
+    esac
+    llm_ipv6_groups "$head" || return 1
+    n=${#LLM_IP6_GROUPS[@]}
+    all=("${LLM_IP6_GROUPS[@]}")
+    LLM_IP6_GROUPS=()
+    llm_ipv6_groups "$tail" || return 1
+    zeros=$((8 - n - ${#LLM_IP6_GROUPS[@]}))
+    [ "$zeros" -ge 1 ] || return 1
+    for ((i = 0; i < zeros; i++)); do all+=(0); done
+    all+=("${LLM_IP6_GROUPS[@]}")
+  else
+    llm_ipv6_groups "$s" || return 1
+    [ "${#LLM_IP6_GROUPS[@]}" = 8 ] || return 1
+    all=("${LLM_IP6_GROUPS[@]}")
+  fi
+  for g in "${all[@]}"; do
+    g="000$g"
+    hex+=${g: -4}
+  done
+  LLM_IP6_HEX=$hex
+  return 0
+}
+
+# llm_host_class sets LLM_HOST_CLASS (local | cloud | invalid) and LLM_HOST_KIND
+# for a host as llm_parse_url leaves it: lower case, no brackets, no port.
+#
+# A trailing dot is the root of DNS, and it is dropped for the reserved names
+# only: localhost. is localhost (RFC 6761), api.localhost. is *.localhost and
+# host.docker.internal. is the alias. It is NOT dropped
+#   - for a dotted quad: 127.0.0.1. is not an address to Go's netip.ParseAddr,
+#     so the platform's client, curl and Invoke-WebRequest all hand it to DNS as
+#     a name, and a resolver that answers for a name it does not know would take
+#     the request wherever it likes — the cloud, like 127.1 (decision of
+#     system-architect#1 on T-450 review #1 M-1);
+#   - for the rule of one word: `ollama.` is an absolute name that skips the
+#     search list of the container, a top-level domain and not a service.
+LLM_HOST_CLASS=''
+LLM_HOST_KIND=''
+llm_host_class() {
+  local LC_ALL=C host=${1-} bare hex
+  LLM_HOST_CLASS=cloud LLM_HOST_KIND=name
+  case "$host" in
+  *:*)
+    if ! llm_ipv6_hex "$host"; then
+      LLM_HOST_CLASS=invalid LLM_HOST_KIND=malformed
+      return 0
+    fi
+    hex=$LLM_IP6_HEX
+    LLM_HOST_KIND=public
+    case "$hex" in
+    00000000000000000000000000000000) LLM_HOST_CLASS=invalid LLM_HOST_KIND=unspecified ;;
+    00000000000000000000000000000001) LLM_HOST_CLASS=local LLM_HOST_KIND=loopback ;;
+    00000000000000000000ffff*)
+      llm_ipv4_class "$((16#${hex:24:2}))" "$((16#${hex:26:2}))" "$((16#${hex:28:2}))" "$((16#${hex:30:2}))"
+      ;;
+    fe[89ab]*) LLM_HOST_CLASS=local LLM_HOST_KIND=link-local ;;
+    f[cd]*) LLM_HOST_CLASS=local LLM_HOST_KIND=ula ;;
+    esac
+    return 0
+    ;;
+  esac
+  bare=${host%.}
+  if [[ $host =~ $LLM_IPV4_RE ]]; then
+    llm_ipv4_class "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
+    return 0
+  fi
+  case "$bare" in
+  localhost) LLM_HOST_CLASS=local LLM_HOST_KIND=localhost ;;
+  host.docker.internal) LLM_HOST_CLASS=local LLM_HOST_KIND=docker-host ;;
+  *)
+    if [[ $bare =~ ^([a-z0-9_-]+\.)+localhost$ ]]; then
+      LLM_HOST_CLASS=local LLM_HOST_KIND=localhost-sub
+    elif [ "$bare" = "$host" ] && [[ $host =~ ^[a-z][a-z0-9_-]*$ ]]; then
+      # One word, starting with a letter: 2130706433 and 0x7f000001 are the
+      # numeric spellings of an address, not names of a service.
+      LLM_HOST_CLASS=local LLM_HOST_KIND=service
+    fi
+    ;;
+  esac
+  return 0
+}
+
+# llm_endpoint_judge classifies the address llm_parse_url has just accepted:
+# LLM_EP_CLASS, LLM_EP_KIND and, for invalid, LLM_EP_ERROR. Returns 1 when the
+# address is invalid. The one place both llm_endpoint_finish and
+# llm_endpoint_classify take the answer from.
+llm_endpoint_judge() {
+  llm_host_class "$LLM_EP_HOST"
+  LLM_EP_CLASS=$LLM_HOST_CLASS
+  LLM_EP_KIND=$LLM_HOST_KIND
+  case "$LLM_EP_CLASS" in
+  invalid)
+    # The sentence follows the kind, not the class (T-450 review #1 N-5): today
+    # llm_parse_url refuses a malformed host before it gets here, and a change
+    # of that order must not turn its refusal into talk of the any-address.
+    case "$LLM_EP_KIND" in
+    unspecified)
+      LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+      ;;
+    *)
+      LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW names $LLM_EP_HOST, which is not an address a client can call ($LLM_EP_KIND)"
+      ;;
+    esac
+    return 1
+    ;;
+  local)
+    # A local endpoint without a port is not "the port is 80": it is a port
+    # nobody chose. The scheme default was passed to llama-server as --port 80
+    # and knocked on by the probe, and the operator who wrote the value meant
+    # something else (review Mi-12). Since T-450 this holds for every local
+    # address, not only for the startable ones; a cloud address keeps the
+    # default of the scheme — there 443 and 80 are what the vendor documents.
+    if [ "$LLM_EP_PORT_WRITTEN" != 1 ]; then
+      LLM_EP_CLASS=invalid
+      case "$LLM_EP_KIND" in
+      loopback | localhost | docker-host)
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; the local runtime would bind $LLM_EP_PORT, the default of the scheme, and the probe would knock there — write the port you mean"
+        ;;
+      *)
+        LLM_EP_ERROR="$LLM_EP_VAR=$LLM_EP_RAW has no port; a local address is written with the port its runtime listens on, and $LLM_EP_PORT, the default of the scheme, is a port nobody chose"
+        ;;
+      esac
+      return 1
+    fi
+    ;;
+  esac
+  return 0
+}
+
+# llm_endpoint_classify URL [VAR] is the rule as a function of one value: it
+# sets LLM_CLASS (local | cloud | invalid), LLM_CLASS_KIND, LLM_CLASS_HOST and,
+# for invalid, LLM_CLASS_ERROR (a sentence naming VAR, URL by default). No other
+# variable of this file changes. What testdata/llm/local-endpoints.tsv is
+# checked against, and what scripts/compose-lint.sh calls for rule 6.
+LLM_CLASS=''
+LLM_CLASS_KIND=''
+LLM_CLASS_HOST=''
+LLM_CLASS_ERROR=''
+llm_endpoint_classify() {
+  local LLM_EP_VAR=${2:-URL}
+  local LLM_EP_SCHEME='' LLM_EP_HOST='' LLM_EP_PORT='' LLM_EP_PATH='' LLM_EP_URL=''
+  local LLM_EP_PROBE='' LLM_EP_RAW='' LLM_EP_TRIMMED_V1=0 LLM_EP_PORT_EXPLICIT=0
+  local LLM_EP_PORT_WRITTEN=0 LLM_EP_CLASS='' LLM_EP_KIND='' LLM_EP_ERROR=''
+  LLM_CLASS=invalid LLM_CLASS_KIND=unparsed LLM_CLASS_HOST='' LLM_CLASS_ERROR=''
+  if ! llm_parse_url "${1-}"; then
+    LLM_CLASS_ERROR=$LLM_EP_ERROR
+    return 0
+  fi
+  llm_endpoint_judge || :
+  LLM_CLASS=$LLM_EP_CLASS
+  LLM_CLASS_KIND=$LLM_EP_KIND
+  LLM_CLASS_HOST=$LLM_EP_HOST
+  LLM_CLASS_ERROR=$LLM_EP_ERROR
+  return 0
 }
 
 # llm_provider_ok holds the same closed set as the manifest declares for
@@ -390,20 +731,39 @@ llm_provider_ok() {
 # differ between `make llm-health` and `make bench`.
 llm_endpoint_finish() {
   LLM_EP_HAS=1
-  llm_host_is_local "$LLM_EP_HOST" && [ "$LLM_EP_PROVIDER" = openai_compat ] && LLM_EP_STARTABLE=1
-  llm_host_is_trusted "$LLM_EP_HOST" && LLM_EP_TRUSTED=1
-
-  # A local endpoint without a port is not "the port is 80": it is a port
-  # nobody chose. The scheme default was passed to llama-server as --port 80
-  # and knocked on by the probe, and the operator who wrote the value meant
-  # something else (review Mi-12). A remote address without a port is left
-  # alone — there 443 and 80 are what the vendor documents.
-  if [ "$LLM_EP_STARTABLE" = 1 ] && [ "$LLM_EP_PORT_EXPLICIT" != 1 ]; then
+  if ! llm_endpoint_judge; then
     LLM_EP_HAS=0
-    LLM_EP_STARTABLE=0
-    LLM_EP_ERROR="llm: $LLM_EP_VAR=$LLM_EP_RAW has no port; the local runtime would bind $LLM_EP_PORT, the default of the scheme, and the probe would knock there — write the port you mean"
+    LLM_EP_ERROR="llm: $LLM_EP_ERROR"
     return 1
   fi
+
+  # Two questions, one answer each (T-450):
+  #   trusted   — "is this address outside the trusted network", the question
+  #               of the cloud gate (ADR-005 add. 2 p. 3): every local address;
+  #   startable — "would llama-server started here own this address": loopback,
+  #               localhost and the container alias only, written without the
+  #               root dot (the probe must reach them from this machine), and
+  #               only for the runtime this script starts. A LAN server or a
+  #               service of compose is trusted and not ours to start.
+  # The any-address 0.0.0.0 and :: used to be startable; they are invalid now.
+  # Every loopback spelling is startable, [::ffff:127.0.0.1] and
+  # [0:0:0:0:0:0:0:1] included: they were the cloud before T-450, and the
+  # change is listed in infrastructure.md §6.3.1 (review #1 N-1).
+  if [ "$LLM_EP_CLASS" = local ]; then
+    LLM_EP_TRUSTED=1
+  fi
+  case "$LLM_EP_HOST" in
+  *.) ;;
+  *)
+    case "$LLM_EP_KIND" in
+    loopback | localhost | docker-host)
+      if [ "$LLM_EP_PROVIDER" = openai_compat ]; then
+        LLM_EP_STARTABLE=1
+      fi
+      ;;
+    esac
+    ;;
+  esac
 
   # The key is checked here, once, for every script: it is part of how the
   # endpoint is reached, and the caller already knows what to do with an error.

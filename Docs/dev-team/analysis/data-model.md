@@ -113,7 +113,7 @@ erDiagram
 | `npc_ids[]` | list ref NPC | да | NPC региона | |
 | `respawn_ttl` | duration | да | Кулдаун возрождения убитого NPC (24 ч по умолчанию) | |
 | `perception_radius` | number | нет | Радиус обнаружения (абстрактные единицы; MVP-1 — «весь регион») | |
-| `players_present[]` | list ref Character | да | Игроки в регионе (проекция позиций) | производное; проверяется инвариантом |
+| `players_present[]` | list ref Character | да | Игроки в регионе (проекция позиций) | производное из `position` персонажей; инвариантом **не** проверяется и на пути предложений не пересчитывается, поэтому может отставать от позиций. Истина присутствия — `position` (инвариант 10), читатели выводят присутствие из позиций (изм. T-457; приёмка T-054, В4) |
 | `last_background_event_at` | timestamp | нет | Для сводки/метрик | |
 | `blueprint_ref` | string | да | `domain-dark-forest@1.0` | |
 
@@ -179,8 +179,8 @@ erDiagram
 |---|---|---|---|---|
 | `region_id` | ref Region | да | | |
 | `scope` | ScopeRef | да | Scope игрока/группы, для которого открыта встреча | один NPC — одна активная встреча |
-| `participants[]` | list {player_id, state: in_combat\|out_of_combat\|idle\|dead, damage_dealt: int, last_hit_at} | да | | |
-| `npcs[]` | list {npc_id, last_damager: ref Character} | да | | |
+| `participants[]` | list {player_id, state: in_combat\|out_of_combat\|idle\|dead, damage_dealt: int, last_hit_at} | да | | участник, ставший терминальным в идущем бою, — `dead` (тем же пакетом) или `out_of_combat` (после `/forget`), C-05 п. 9 (изм. T-457) |
+| `npcs[]` | list {npc_id, last_damager: ref Character} | да | | убитые NPC остаются как история; незакрытая встреча, где `npcs[]` не пуст и все NPC терминальны, — нарушение инварианта 1 (C-05 п. 9, изм. T-457) |
 | `state` | enum | да | `active, resolved` | |
 | `resolution` | enum | нет | `npc_dead, players_out, abandoned` | в событии `encounter.ended` то же значение лежит в поле **`reason`** — имена разные, значения совпадают (`schemas/events/encounter.ended.v1.json`, `shared/entity/types.go`; T-409) |
 | `round_seq` | int | да | Номер текущего раунда (координатор — gateway, проекция) | |

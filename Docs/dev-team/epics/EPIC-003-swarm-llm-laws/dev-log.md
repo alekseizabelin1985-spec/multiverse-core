@@ -2532,6 +2532,179 @@ fence (принят незакрытый, потеряна строка откр
 
 Мутанты — в копии дерева в scratch, без `-overlay`: контрольный первым убит, 26 из 26 убиты, копия удалена по точному пути.
 
+---
+
+<!-- dev-log T-202 -->
+## developer#1 · T-202 · A2 «Реестр уровней `levels.go` и валидатор блупринтов» · 2026-09-13
+
+Ветка `task/T-202-levels-validator` (родитель `epic/EPIC-003-swarm-llm-laws`, база `d5237b0`).
+Основание: `tasks.md` ревизия 4 (T-202, пометки T-416 и приёмки T-201), design §3.1 A2, КД `components/swarm-llm-laws.md`
+§13.2, `contracts.md` C-02 (v1.5 в дереве; T-448 — v1.6), C-11 v1.1, §16 п. 6, ADR-025, ADR-015 п. 3,
+`analysis/api-contracts.md` §2.4 и §3.1–3.2, `data-model.md` §4, US-015, US-037. Коммит не выполнялся, в индекс ничего
+не добавлено (запрет в промпте оркестратора).
+
+### Что сделано
+
+1. **`shared/agent/levels.go`** — реестр уровней и ролей роя:
+   - таблица `роль → {уровень, типы scope, публикуемые типы событий}`;
+   - `AllowedEventTypes(level, role)` отдаёт копию, отсортированную; для роли, которая не принадлежит уровню, — `nil`;
+   - `RoleLevel`, `IsKnownLevel`, `IsReservedLevel`, `ParseLevel`, `LevelNames`/`RoleNames`/`ScopeTypeNames`.
+
+   Таблицы владения сущностями в файле нет: единственная истина — `shared/contracts/ownership.go`, вид по уровню собирает
+   вызывающий (ADR-025).
+2. **`shared/agent/validator.go`** — `Validate(bp, env) []Issue`, правила 1–14 и 7а, в порядке КД. В отчёт входят
+   `bp.ParseIssues`. Находки сортируются: файл, поле, серьёзность (`error` → `warning` → `info`), причина.
+   - `ValidationEnv` из восьми частей; `Set` — множество имён.
+   - Отсутствующая часть окружения читается как пустая, проверка отказывает. Исключение — `Models`: `nil` значит
+     «провайдер недоступен или `--offline`».
+   - `EnvFromProject(root, eventTypes, ownedEntityTypes, invariants, models)` — блупринты `<root>/blueprints`, схемы
+     `<root>/schemas/agent`, файлы — только внутри `root`.
+   - `MatchEventType` — glob по сегментам через `path.Match`; некорректный шаблон — ошибка при любом типе.
+3. **Значения, которые State отвергнет только при применении** (C-02 v1.6, T-448): `warning` на `trigger.conditions[].value`
+   и `background_events[].ops[].value`, с обходом вложенных списков и отображений. Предупреждение получают:
+   - `int`/`int64`/`uint64`/`float64` вне ±(2^53−1);
+   - `NaN`/`Inf`;
+   - `time.Time` — незакавыченная дата YAML.
+4. **Корпус `testdata/blueprints/invalid/`** — 16 файлов: по одному на правила 1–14, у 7а два (модель не у провайдера;
+   поле `provider`). Каждый файл нарушает только своё правило. Таблица теста сравнивает **полный** список находок, так что
+   лишняя находка тоже красная.
+5. **`valid/domain-fair.md`** (из T-201) дополнен до полного `domain`: `tick`, `laws_ref`, `rules_ref`, `npc_table`,
+   `respawn_ttl`, `encounter`, `## system`. Теперь весь корпус `valid/` проходит валидатор без `error`, а три даты файла —
+   три `warning`. CRLF рабочей копии сохранён (Python, побайтовая замена).
+
+### Решения по ходу
+
+- **Белые списки событий** взяты из `api-contracts.md` §2.4 («Белые списки уровней (MVP-1)»). В `data-model.md` §4 —
+  владение сущностями, событий там нет. `global-gm` публикует `world.*` и `entity.update.proposed`. `region-gm` и
+  `city-gm` — `region.event_occurred`, `npc.*`, `encounter.started` и `entity.{create,update}.proposed`. `encounter` —
+  `dice.rolled`, `combat.decided`, `encounter.ended`, `entity.update.proposed`. Нарраторы публикуют только
+  `narrative.output`. Резервные роли не публикуют ничего. Тест сверяет каждый тип с реестром `contracts.All()`.
+- **Каскад отказов отключён.** Правило, которое требует чего-то от роли, срабатывает только для пары роль–уровень,
+  прошедшей правило 1. Таких правил пять групп: фаза, ссылки, `max_instances`, белые списки, тип scope. Иначе один
+  перепутанный `role` давал бы пять находок про чужую роль.
+- **7а.**
+  - `info: models not checked` — только при хотя бы одной названной модели.
+  - Модель из запрещённого списка NFR-071 у провайдера не переспрашивается: одна находка на ошибку.
+  - `warning` в рантайме (КД) не сделан: в перечне полей `ValidationEnv` признака рантайма нет. Передано в бэклог (T-222).
+- **`laws_ref`** `laws/<мир>@vN` → файл `laws/<мир>.vN.yaml` (T-205). КД называет только `env.FileExists`, а ссылка
+  с версией — не путь.
+- **Обязательность полей** — по столбцу «Обяз.» `api-contracts.md` §3.1: `llm.phase2` нарраторов, `llm.tick` GM мира и
+  региона, `invariants` мира, отсутствие `parent` у `global`. Длительности разбираются `time.ParseDuration` и должны быть
+  > 0 (запрета `forbidigo` здесь нет: это разбор строки, а не часы).
+- **Зависимость на `shared/contracts`** проверяется тестом `go list -deps ./...` из каталога пакета. Правило depguard
+  потребовало бы правки `.golangci.yml`, файла EPIC-001. Тестовые импорты в `-deps` не входят, поэтому
+  `validator_test.go` строит окружение из настоящих `contracts.OwnershipRules` и `contracts.All()`, как вызывающий.
+- `optionalDir`: файл на месте `blueprints`/`schemas/agent` — ошибка одинаково на Windows и Linux. `os.ReadDir` на файле
+  под Windows отвечал `ErrNotExist`, и первый вариант теста там молча проходил как «пустой проект».
+
+### Отклонения от дизайна
+
+Сигнатура `EnvFromProject` расширена параметром `ownedEntityTypes` (ревизия 4 это требует, но позицию не называет).
+Полный список решений, которых нет в КД, — карточка, «Отклонения от дизайна и решения по ходу», п. 1–9.
+
+### Как тестировал
+
+- `go build ./... && go vet ./...` — зелёные.
+- `go test -short -count=1 ./...` — все ok; `shared/agent` 95.5 %.
+- `golangci-lint run ./...` — 0 issues.
+- `go run ./cmd/mvctl contracts check` — зелёный.
+- `make test` — exit 0 (без race — нет cgo), порог покрытия `internal/*` зелёный.
+- Мутанты — в копии дерева в scratch с префиксом `t202-`, без `-overlay`:
+  - копия зелёная до мутаций, контрольный мутант (текст `reserved level, spawn disabled`) запущен первым и убит;
+  - 47 мутантов по ключевым правилам: роль↔уровень, glob, `max_instances`, 7а, белые списки, строка владения, файл законов,
+    серьёзности правила 13, граница 2^53−1, даты, сортировка, гейт роли, `IsLocal`;
+  - убиты все 47, и все — тестами, а не сборкой. Два мутанта, которые сначала «убивала» сборка, переписаны в
+    компилируемую форму;
+  - на первом прогоне выжили двое: M31 (порядок серьёзностей в пределах поля) — дописан тест; M44 эквивалентный —
+    проверка удалена из кода;
+  - копия удалена по сохранённому точному пути.
+
+<!-- dev-log T-207 -->
+### developer#2 · T-207 · провайдеры `fake` и `recorded` · 2026-09-13
+
+Ветка `task/T-207-fake-recorded-providers` (база `d5237b0`), папка `.worktrees/T-207`. Коммитов нет, файлы не в индексе. Стенд LLM, Docker, интеграционные тесты не трогались. Карточка — `tasks/T-207.md`.
+
+#### Что сделано
+- `internal/llm/providers/fake` (`fake.go`, `dirty.go`):
+  - таблица `Rule{Phase, Match, Replies}` — отвечает первое подходящее правило, последний ответ повторяется; промах — `ErrNoMatch`;
+  - `Calls()`/`CallsFor`/`EmbedCalls`/`Requests`;
+  - задержка на `clock.Timers` с хуком `WithOnDelay`, отмена контекста — `ctx.Err()`;
+  - `Models()` из `WithModels` или из ответов таблицы, `SetHealth`, детерминированный `Embed`;
+  - «грязные» ответы (`WithPreamble`, `WithThink`, `InFence`, `WithTrailingText`, `WithTrailingComma`);
+  - ярлыки ADR-029 (`EntityLabel`, `BackgroundLabel`, `Narrative.JSON`);
+  - `Factory`.
+- `internal/llm/providers/recorded` (`recorded.go`, `source.go`):
+  - ключ C-07; части ключа, которых нет в `llm.Request`, приходят через `WithCall(ctx, agent, attempt)`;
+  - промах — `ErrIncompleteRecord`, вызов без ключа — `ErrNoCallKey`, запись `error` — `*FailureError`, `quarantined`/`filter_error` — `ErrResponseWithheld`;
+  - `Lookup` для сверки `prompt_hash`; битая запись — `ErrMalformedRecord` на весь источник;
+  - источник — функция `Source`, адаптеры `Events`/`Slice`.
+- Тест «replay: `llm_calls=0`» — `TestReplayMakesNoLLMCalls`; записи тестов проходят схему `llm.output` (`contracts.Validate`).
+- `internal/llm/providers/README.md` — API и таблица импорта по `depguard`.
+
+#### Решения по ходу
+- **Ключ через контекст.** `llm.Request` (C-15) не несёт `agent.id` и `attempt`. Контекст не меняет контракт; альтернатива — поля `Request` в C-15 v1.3 — вопрос к system-architect (T-457).
+- **Регистрации в `init` нет:** только фабрики, имена регистрирует проводка.
+- **Чтение записей вне пакета.** Первая версия читала `*.jsonl` и журнал `llm_records` своими адаптерами. По сообщению оркестратора (T-457: формат, чтение и индекс записи — в `shared/recording`, парсер у провайдера отклонён) адаптеры `JSONL` и `Journal` удалены вместе с тестами. Декодирование JSON осталось только в тестовом помощнике. После появления `shared/recording` — адаптер `Source` над ним (T-212/задача EPIC-001).
+- **Урок удалённого `Journal`** (для `shared/recording`): разбор внутри обработчика `ReadRange` уводит ошибку в повторы и `dead_letters`, а короткое чтение `membus` при остановке приходит без ошибки.
+
+#### Отклонения от дизайна
+- Нет чтения `*.jsonl`/`llm_records` в пакете (выше).
+- Имена `fake.Provider`/`recorded.Provider` вместо `FakeProvider`/`RecordedProvider`.
+- `Response.Provider` у `recorded` — провайдер записи.
+
+#### Проверки
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./...` — ok; `fake` и `recorded` — 100 %.
+- `golangci-lint run ./...` — 0 issues.
+- `mvctl contracts check` — ok.
+- `make test` — exit 0, gate `internal/llm` 99.6 %.
+- `gitleaks dir` — no leaks.
+- Мутанты в копии в scratch без `-overlay`, контрольный первым. Итог по итоговому дереву — 65 мутантов, все убиты. В первом прогоне выжили 3 (F15b, F20, S8), по ним добавлены проверки. Копия удалена по точному пути.
+
+#### Итерация 2 · по ревью #1 · 2026-09-13 · developer#2
+
+Вердикт ревью #1 — «вернуть» (Critical 0, Major 1, Minor 3, Nit 5). Закрыты все пункты. Коммита нет, файлы не в индексе.
+
+| # | Ответ | Что сделано |
+|---|---|---|
+| Ma-1 | исправлено | `parseRecord` держит всю таблицу C-07 v1.3 «поле ↔ статус» (`tableOfC07`, строки `allOf` схемы): `response_raw` обязателен у `valid`/`partially_rejected`/`invalid` и запрещён у `quarantined`/`filter_error`/`error`; `filter.status` — `pass`/`block`/`error` по статусу, у `error` `filter` запрещён; `error.code` только у `error`. `Generate` удерживает ответ по статусу, а не по `HasRaw`. В `TestAMalformedRecordFailsTheSource` — 17 случаев таблицы, включая три из ревью; для каждого проверяется, что схема тоже отказывает. Внутренний тест `TestGenerateWithholdsByTheStatus` — запись `quarantined`/`filter_error` с текстом в обход разбора. |
+| Mi-1 | исправлено | Шпион таймеров запоминает длительность: после хука проверяется `[3s]`. Порядок «таймер, затем хук» проверяется тем, что видит шпион в момент хука, без блокировки. Каждое ожидание в тестах задержки ограничено (`receive`, 10 с по `clock.RealTimers`). Мутант «хук до взвода» падает за 0.00 с. |
+| Mi-2 | исправлено | `TestADoneContextFailsTheCall`: `Calls()==2`, по фазам 1 и 1. |
+| Mi-3 | исправлено | Doc `Source` — контракт: все события или ошибка; ошибка обработчика — как есть, без повторов и `dead_letters`; неполное чтение — ошибка. Про `Journal.ReadRange` сказано, почему он не `Source`, и как строить адаптер (собрать, проверить полноту, отдать через `Events`). То же в README. |
+| N-1 | исправлено | `providerFor` убран; комментарий теста говорит, что счётчик `fake` верен по построению, а выбор `recorded` в `mode=replay` без провала в живой вызов — T-212. |
+| N-2 | исправлено | Doc `Rule`, `Generate` и README: отменённый вызов (до вызова и во время задержки) расходует ответ. Тест `TestACancelledCallUsesUpItsReply`. |
+| N-3 | исправлено | Doc пакета `fake`: «…and into cmd/*». |
+| N-4 | исправлено кодом | `recorded.Factory` читает источник один раз (`sync.OnceValues`): те же провайдер или ошибка при следующих вызовах. На ошибке фабрика отдаёт `nil`-интерфейс, а не типизированный `nil`. Doc `Events`: последовательность перечитывается при каждом чтении. Тест `TestFactoryReadsTheSourceOnce`. |
+| N-5 | оставлено строгим, описано | Запись проверяется до поиска ключа, поэтому битый дубль хорошей записи валит источник (`internal/replay` оставил бы первую копию). Doc `New`, README, тест `TestAMalformedDuplicateFailsTheSource`. |
+
+Дополнительно: `TestAnInvalidRecordMayCarryAFilter`. У `invalid` `filter` зависит от стадии конвейера, поэтому разбор его не требует и не запрещает.
+
+##### Проверки (go1.26.8 windows/amd64)
+- `go build ./... && go vet ./...` — 0.
+- `gofmt -l internal/llm` — пусто.
+- `go test -short -count=1 ./...` — все ok; `fake` 100 %, `recorded` 100 %.
+- `go test -short -count=20 ./internal/llm/providers/...` — ok.
+- `golangci-lint run ./...` — 0 issues.
+- `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 файлов схем.
+- `make test` (Git Bash) — exit 0, без `-race` (нет cgo); coverage-gate `internal/llm` 99.6 %.
+- `gitleaks dir --redact internal/llm/providers` — no leaks.
+- Стенд LLM, Docker, интеграционные тесты не трогались.
+
+##### Мутанты
+Копия `go.mod`, `go.sum`, `internal/llm`, `shared`, `schemas` в scratch (`t207i2-copy`), без `-overlay`. Скрипт `t207i2-mutants.py`: точная замена (строка встречается ровно один раз), после каждого мутанта файл восстановлен. Базовый и итоговый прогоны копии зелёные. Копия удалена по точному пути.
+
+23 мутанта, контрольный C0 («промах — нулевой ответ без ошибки») первым. Убиты все 23:
+- R1–R13 — строки таблицы и проверка в разборе;
+- R14 — удержание только `quarantined`;
+- R15 — удержание по `HasRaw` (M7 ревью; убит внутренним тестом);
+- R16 — фабрика перечитывает источник;
+- R17 — типизированный `nil` на ошибке;
+- R18 — битый дубль пропускается;
+- F1 — `After(d / 2)` (M1 ревью);
+- F2 — хук до взвода: падение, не зависание;
+- F3 — `ctx.Err()` до `take` (M2 ревью);
+- F4 — задержка не ждёт таймер.
+
 <!-- dev-log T-205 -->
 ## developer#3 · T-205 · A7 «Законы: `internal/laws`, `laws/dark-forest-world.v1.yaml`, `mvctl laws bump|show`» · 2026-09-13
 

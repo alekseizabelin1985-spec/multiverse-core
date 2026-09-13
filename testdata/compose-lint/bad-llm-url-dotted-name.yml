@@ -1,0 +1,12 @@
+# Rule 6: a name with a dot is the cloud, `.local` included — mDNS is not
+# a guarantee of this machine, and names are never resolved: the answer must
+# not depend on the DNS of the moment (T-450, testdata/llm/local-endpoints.tsv).
+#
+# expect-rule: 6
+# expect-text: core: MV_OLLAMA_URL points at 'ollama.local', which is not a local address
+# expect-text: a cloud endpoint needs MV_LLM_CLOUD_ENABLED=true
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: http://ollama.local:11434

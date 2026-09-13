@@ -1,0 +1,165 @@
+# testdata/llm/local-endpoints.tsv — the cases of the rule "local address" (T-450).
+#
+# ONE table for every implementation of the rule. The platform (IsLocalEndpoint in
+# internal/llm, T-451), scripts/lib/llm-endpoint.sh and scripts/lib/LlmEndpoint.psm1
+# (both through the parity stand, testdata/script-parity) and scripts/compose-lint.sh
+# (rule 6 calls llm-endpoint.sh) must give the answer of the second column for the
+# URL of the first. The rule is the decision of system-architect#1:
+#
+#   local   — loopback 127.0.0.0/8 and ::1; localhost and *.localhost;
+#             host.docker.internal; a one-word name (a compose service); RFC 1918;
+#             link-local 169.254.0.0/16 and fe80::/10; IPv6 ULA fc00::/7;
+#             the IPv4-mapped form of each of them;
+#   invalid — a configuration error, not the cloud: the any-address 0.0.0.0 and ::;
+#             a local host without an explicit port; a port outside 1-65535; and
+#             every value normalizeURL of T-206 refuses (no http(s) scheme, user
+#             information, a query or a fragment, even an empty one);
+#   cloud   — everything else: public addresses, any name with a dot (.local too),
+#             CGNAT 100.64.0.0/10, documentation ranges, numeric spellings.
+#
+# Decisions of this table beyond the list above (T-450, recorded in tasks.md):
+#   - a trailing dot is dropped for the reserved names only: localhost.,
+#     api.localhost. and host.docker.internal. are local. A dotted quad with it
+#     (127.0.0.1., 0.0.0.0.) is not an address to Go's netip.ParseAddr and goes
+#     to DNS as a name: cloud, like 127.1. A one-word name with it (ollama.) is an
+#     absolute DNS name, not a service of compose: cloud (system-architect#1 on
+#     T-450 review #1 M-1);
+#   - a one-word name starts with a letter and holds [a-z0-9_-]; 2130706433,
+#     0x7f000001, 134744072 and 0x08080808 are numbers, not names: cloud;
+#   - a host with a character Go's url.Parse refuses (a space, \ ^ ` { | }) is
+#     invalid; the characters url.Parse lets through (~ ! $ & ' ( ) * + , ; =)
+#     make a name that is not of the one-word shape: cloud. A space cannot be
+#     written in this file; the parity stand holds that case (endpoints.go);
+#   - a port that is written counts as explicit, :80 included; leading zeros of a
+#     port are not significant (:008888 is 8888);
+#   - "host:" with an empty port, brackets around anything but an IPv6 address, and
+#     a percent sign in the host (an escape or an IPv6 zone) are invalid;
+#   - only 0.0.0.0 of 0.0.0.0/8 is the any-address; 0.0.0.1 is the cloud;
+#   - the IPv4-compatible ::127.0.0.1 and NAT64 64:ff9b::/96 are not mapped forms.
+#
+# Format: lines starting with # and empty lines are skipped; the first other line is
+# the header; then one case per line, three fields separated by one TAB: the URL
+# (printable ASCII, no spaces), the answer, and the reason in words (not compared).
+# Add a case here, never to one implementation only.
+url	answer	reason
+http://127.0.0.1:8888	local	loopback 127.0.0.0/8
+http://127.0.0.1:8888/v1	local	loopback, the base address with /v1
+HTTP://127.0.0.1:8888/V1	local	the scheme is case-insensitive, the path is kept
+http://127.10.20.30:1234	local	loopback is the whole 127.0.0.0/8
+http://127.255.255.255:1	local	upper end of 127.0.0.0/8, port 1 is in range
+http://[::1]:8080	local	IPv6 loopback
+http://[0:0:0:0:0:0:0:1]:8080	local	IPv6 loopback, uncompressed
+http://localhost:1234	local	localhost
+http://LOCALHOST:1234	local	a host is case-insensitive
+http://localhost.:1234	local	localhost with the root dot is still localhost (RFC 6761)
+http://api.localhost.:8080	local	*.localhost with the root dot is still *.localhost
+http://api.localhost:8080	local	*.localhost
+http://a.b.localhost:8080	local	*.localhost, several labels
+http://host.docker.internal:8888	local	the container alias of this machine
+http://Host.Docker.Internal:8888	local	the container alias, mixed case
+http://host.docker.internal.:8888	local	the container alias with the root dot is still the alias
+http://ollama:11434	local	a one-word name is a service of compose
+http://core:8090	local	a one-word name is a service of compose
+http://Ollama:11434	local	a one-word name, mixed case
+http://llm-box_2:8080	local	a one-word name with a hyphen, an underscore and a digit
+http://10.0.0.1:8080	local	RFC 1918 10.0.0.0/8
+http://172.16.0.1:8080	local	RFC 1918 172.16.0.0/12, lower end
+http://172.31.255.254:8080	local	RFC 1918 172.16.0.0/12, upper end
+http://192.168.1.10:8080	local	RFC 1918 192.168.0.0/16
+http://169.254.10.20:8080	local	link-local 169.254.0.0/16
+http://[fe80::1]:8080	local	link-local fe80::/10, lower end
+http://[febf:ffff::1]:8080	local	link-local fe80::/10, upper end
+http://[fc00::1]:8080	local	IPv6 ULA fc00::/7, lower end
+http://[FD12:3456:789a::1]:8080	local	IPv6 ULA fc00::/7, upper half, capitals
+http://[::ffff:127.0.0.1]:8888	local	IPv4-mapped loopback, dotted tail
+http://[::ffff:7f00:1]:8888	local	IPv4-mapped loopback, hex tail
+http://[0:0:0:0:0:ffff:192.168.1.10]:8080	local	IPv4-mapped RFC 1918, uncompressed
+http://[::ffff:10.1.2.3]:8080	local	IPv4-mapped RFC 1918 10.0.0.0/8
+http://[::ffff:169.254.1.1]:8080	local	IPv4-mapped link-local
+http://127.0.0.1:80	local	a written port counts, even the default of the scheme
+https://127.0.0.1:443	local	a written port counts, even the default of the scheme
+http://127.0.0.1:008888	local	leading zeros of a port are not significant
+http://127.0.0.1:65535	local	the upper end of the port range
+https://api.openai.com/v1	cloud	a public name
+https://api.openai.com	cloud	a cloud address keeps the default port of the scheme
+http://ollama.local:11434	cloud	any name with a dot, .local included
+http://nas.lan:8080	cloud	any name with a dot
+http://ollama.:11434	cloud	a one-word name with the root dot is an absolute DNS name
+http://127.0.0.1.:8888	cloud	a dotted quad with the root dot is not an address to netip: a DNS name
+http://192.168.1.10.:8080	cloud	RFC 1918 with the root dot is a DNS name, not an address
+http://0.0.0.0.:8888	cloud	the any-address with the root dot is a DNS name, not the any-address
+http://olla~ma:11434	cloud	a character url.Parse accepts in a host makes a name of no service shape
+http://gateway.docker.internal:8080	cloud	only host.docker.internal is the alias of this machine
+http://localhost.localdomain:8080	cloud	a name with a dot that is not *.localhost
+http://8.8.8.8:80	cloud	a public IPv4 address
+http://100.64.0.1:8080	cloud	CGNAT 100.64.0.0/10 is not RFC 1918
+http://100.127.255.254:8080	cloud	CGNAT 100.64.0.0/10, upper end
+http://172.15.255.254:8080	cloud	just below 172.16.0.0/12
+http://172.32.0.1:8080	cloud	just above 172.16.0.0/12
+http://192.169.0.1:8080	cloud	just above 192.168.0.0/16
+http://169.255.0.1:8080	cloud	just above 169.254.0.0/16
+http://192.0.2.10:8080	cloud	documentation TEST-NET-1
+http://198.51.100.7:8080	cloud	documentation TEST-NET-2
+http://0.0.0.1:8080	cloud	only 0.0.0.0 of 0.0.0.0/8 is the any-address
+http://2130706433:8080	cloud	127.0.0.1 as one decimal number is not an address here
+http://0x7f000001:8080	cloud	127.0.0.1 as a hex number is not an address here
+http://134744072:443	cloud	8.8.8.8 as one decimal number is not an address here
+http://0x08080808:443	cloud	8.8.8.8 as a hex number is not an address here
+http://0177.0.0.1:8080	cloud	an octal octet is not a strict dotted quad
+http://127.1:8080	cloud	the short form is not a strict dotted quad
+http://127.0.0.01:8080	cloud	a leading zero in an octet is not a strict dotted quad
+http://127.0.0.256:8080	cloud	an octet above 255 makes a name with dots
+http://[2001:db8::1]:8080	cloud	IPv6 documentation 2001:db8::/32
+http://[2606:4700::1111]:443	cloud	a public IPv6 address
+http://[fec0::1]:8080	cloud	deprecated site-local fec0::/10 is not fe80::/10
+http://[fe7f::1]:8080	cloud	just below fe80::/10
+http://[fbff::1]:8080	cloud	just below fc00::/7
+http://[::127.0.0.1]:8080	cloud	IPv4-compatible, not IPv4-mapped
+http://[64:ff9b::7f00:1]:8080	cloud	NAT64 64:ff9b::/96 is not a mapped form
+http://[::ffff:8.8.8.8]:443	cloud	IPv4-mapped public address
+http://[::ffff:100.64.0.1]:8080	cloud	IPv4-mapped CGNAT
+http://0.0.0.0:8888	invalid	the IPv4 any-address: a server listens there, a client cannot call it
+http://[::]:8888	invalid	the IPv6 any-address
+http://[0:0:0:0:0:0:0:0]:8888	invalid	the IPv6 any-address, uncompressed
+http://[::ffff:0.0.0.0]:8888	invalid	the IPv4-mapped any-address
+http://0.0.0.0	invalid	the any-address without a port is still the any-address
+http://127.0.0.1	invalid	a local host without a port
+http://localhost	invalid	a local host without a port
+http://host.docker.internal/v1	invalid	a local host without a port, with a path
+http://[::1]	invalid	a local host without a port, IPv6
+http://ollama	invalid	a one-word name without a port
+http://192.168.1.10	invalid	RFC 1918 without a port
+http://[fd00::1]	invalid	IPv6 ULA without a port
+http://[::ffff:10.0.0.1]	invalid	IPv4-mapped RFC 1918 without a port
+http://127.0.0.1:	invalid	an empty port after the colon
+https://api.openai.com:	invalid	an empty port after the colon, cloud host
+http://127.0.0.1:0	invalid	port 0 is outside 1-65535
+http://127.0.0.1:65536	invalid	port 65536 is outside 1-65535
+https://api.openai.com:0	invalid	the port range holds for a cloud address too
+http://127.0.0.1:99999999999999999999	invalid	a port of twenty digits is out of range, not an overflow
+http://127.0.0.1:88a8	invalid	a port that is not a number
+127.0.0.1:8888	invalid	no scheme
+localhost:8888	invalid	no scheme (the URL parser would read localhost as the scheme)
+ftp://127.0.0.1:21	invalid	a scheme other than http and https
+http://user:secret@127.0.0.1:8888	invalid	user information in front of the host
+http://@127.0.0.1:8888	invalid	empty user information
+http://127.0.0.1:8888/v1?model=x	invalid	a query
+http://127.0.0.1:8888?	invalid	an empty query
+http://127.0.0.1:8888/#top	invalid	a fragment
+http://127.0.0.1:8888#	invalid	an empty fragment
+http://:8888	invalid	no host
+http:///v1	invalid	no host before the path
+http://::1:8888	invalid	a bare IPv6 literal
+http://[::1:8888	invalid	an unclosed IPv6 literal
+http://[::1]x:8888	invalid	characters after the IPv6 literal
+http://[127.0.0.1]:8888	invalid	brackets around an IPv4 address
+http://[localhost]:8888	invalid	brackets around a name
+http://[1:2:3:4:5:6:7::8]:8888	invalid	nine groups with ::
+http://[fe80::1%25eth0]:8080	invalid	the zone of an IPv6 literal
+http://ol%61ma:11434	invalid	a percent escape in the host
+http://localhost\evil.com:8080	invalid	a backslash in the host, which url.Parse refuses
+http://127.0.0.1\.evil.com:80	invalid	a backslash after a loopback address, which url.Parse refuses
+http://local^host:8080	invalid	a caret in the host, which url.Parse refuses
+http://ol{la}ma:11434	invalid	braces in the host, which url.Parse refuses
+http://olla|ma:11434	invalid	a vertical bar in the host, which url.Parse refuses
+http://olla`ma:11434	invalid	a backtick in the host, which url.Parse refuses
