@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:36:55+03:00",
+  "updatedAt": "2026-09-13T19:38:53+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3206,7 +3206,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#1",
           "startedAt": "2026-09-13T18:40:06+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4476,11 +4476,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-305",
           "title": "actions: валидация, идемпотентность, лимит, InputFilter",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T18:25:18+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -4666,7 +4666,7 @@ window.DEVTEAM_STATE =
           "assignee": "business-analyst#1",
           "startedAt": "2026-09-13T18:33:01+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -9659,7 +9659,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Ревью #1 действий gateway",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:38:53+03:00"
     },
     {
       "instance": "developer#1",
@@ -9729,7 +9729,7 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Ревью #2 блупринтов MVP-1",
       "startedAt": "2026-09-13T19:26:15+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:38:53+03:00"
     },
     {
       "instance": "security-engineer#1",
@@ -9739,7 +9739,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Ревью безопасности #2 текста FR-009",
       "startedAt": "2026-09-13T19:26:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:38:53+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9779,6 +9779,36 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Просмотр contract-change T-458 и решение А5",
       "startedAt": "2026-09-13T19:36:55+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "Итерация 2: повтор action_key без дубликата",
+      "startedAt": "2026-09-13T19:38:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Приёмка текста FR-009",
+      "startedAt": "2026-09-13T19:38:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-203",
+      "action": "Приёмка T-203 и индекс EPIC-003 0.3.9",
+      "startedAt": "2026-09-13T19:38:53+03:00",
       "finishedAt": null
     }
   ],
@@ -13274,6 +13304,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-458 выполнена TEAM-1/developer#3 целиком (части А и Б): shared/recording переносом git mv (сходство 100 % в индексе), Open/Read, LLMOutputKeyOf отвергает дробный attempt, ReadJournal с тестами на membus; runtime.Deps.Recording, serve.go читает запись один раз; POST /v1/admin/replay/clock через Adm"
+    },
+    {
+      "at": "2026-09-13T19:38:53+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-305 · ревью #1 (TEAM-3/code-reviewer#2): вернуть — 0/1/5/5. Ma-1: повтор того же action_key после частичной публикации или отмены контекста запроса публикует второе действие с новым id (P1–P3 воспроизведены), а эталонный клиент сам повторяет 503 и сетевые ошибки; нарушены C-08 и КД §1.1. Mi-1…Mi-5"
+    },
+    {
+      "at": "2026-09-13T19:38:53+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 · ревью безопасности #2: принять — расширение Mi-1 подтверждено, M-1/Mi-2 верны по источникам, 21 подстрока уникальна (длина 2327). Правки при приёмке: N-1 точным текстом, три подстроки R2-Mi-2. R2-M-1 (Major условная): sessions.csv/sessions/*.json/incidents.csv хранят player_id в Git без срок"
+    },
+    {
+      "at": "2026-09-13T19:38:53+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/1/1. Ma-1 закрыт без лишних прав; N-1…N-3 закрыты. Mi-4: суженный owned_entity_types тест не ловит; N-4: равенство трёх наборов (блупринт, таблица, levels.go). Приёмка — tech-lead#2: Mi-4/N-4 с мутантами, индекс tasks.md 0.3.9 — строки T-456 N"
+    },
+    {
+      "at": "2026-09-13T19:38:53+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-463 — строки DoD из ревью безопасности #2 T-318 (R2-Mi-1): удаление архивов по возрасту строго старше 30 дней отдельной ежедневной задачей, не «последние N»; §5.6 infrastructure.md; тест; копии links.db/gateway.db не старше 30 дней — переданы tech-lead#1."
     }
   ],
   "blockers": [],
