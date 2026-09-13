@@ -170,7 +170,7 @@ func Clone(e *Entity) *Entity
 | `append` | добавить `value` в список по `path` (создаёт список); элементы-объекты с полем `item_id`/`player_id`/`npc_id` не дублируются по этому ключу (повтор = no-op, `changed` пуст); объект без такого поля — повтор, только если равен элементу целиком; равенство — в канонической JSON-форме (§3.3; изм. T-449, T-050) | по пути не список |
 | `remove` | с `value`: удалить из списка элементы, равные `value` (по `item_id`/`player_id`/`npc_id` для объектов, по равенству для скаляров; равенство — в канонической JSON-форме, §3.3; изм. T-449, T-050); без `value`: удалить ключ | по пути нет ключа/списка |
 
-Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` исключается: путь был и до, и после (или не был ни до, ни после), и значение в канонической форме (§3.3) не изменилось *(итерация 2 T-449, ревью #1 Mi-2; T-050 — сравнение каноническое и учитывает наличие пути; прежде «равенство `old == new` по `reflect.DeepEqual`»)*; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется. **Форма элемента (C-02 v1.6, T-448):** `old` есть ⇔ путь существовал до изменения, `new` есть ⇔ путь существует после; `set` существующего — оба, `set` отсутствовавшего (в т. ч. в `null`) и `inc` отсутствовавшего — только `new`, `append` — путь элемента `a[n]` и только `new`, `remove` без `value` (ключ) — только `old`, `remove` с `value` и `remove` элемента по индексу — путь списка, оба (список до и после). Если путь, затронутый операцией, в конце отсутствует, а его предок предложением создан (не было или был скаляр — есть контейнер: `inc fresh.deep` + `remove fresh.deep` оставляет `fresh = {}`), в `changed[]` добавляется элемент предка — иначе догон §4.8 не восстановил бы его. Элемент предка идёт **после** элементов путей; порядок — часть формы, потому что догон применяет элементы по порядку (элемент предка переписывает записанное под ним согласованно).
+Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). **Каноническая запись пути (C-02 v1.8 п. 2; изм. T-470, просмотр T-056, ответ 2).** Операция несёт путь только в канонической записи: ключи через одну точку; индекс только в скобках после ключа — `[0]` или до девяти цифр без ведущего нуля; ключ не пуст, без `.`, `[`, `]` и не читается как целое (`inventory.0`, `+1` недопустимы); путь ниже атрибута, который `data-model.md` §3 типизирует одним значением (`status.x`, `hp.x`, `name.x`), недопустим. Перечень скаляров — только таблицы сущностей `data-model.md` §3: общие атрибуты (с `name`; без `scope` — объект `{id, type}`), §3.1–§3.4, §3.6, §3.7; поля Item §3.5 (`item_id`, `acquired_at`, `source`) — значения внутри `inventory[]`, а не атрибуты, и в перечень не входят; контейнеры §3 (`canon[]`, `spawned_by`, `inventory[]`, `participants[]`) и атрибуты вне §3 скалярами не считаются, а список в коде сверяется с этими таблицами *(итерация 2 T-470, Ma-1, Mi-2 ревью #1; приёмка T-470, Mi-3 ревью #2: прежде «только таблицы `data-model.md` §3» без исключения §3.5)*. Разбор `jsonpath` терпимее: `status.`, `.status` и `inventory.0` он читает как второе написание того же пути. Целевое место правила — `ApplyOps`: `invalid_op` на путь не в канонической записи, на путь ниже типизированного скаляра и на значение чужого вида в корне типизированного атрибута после операций (`set hp {x: 999}`); виды — таблица «тип сущности → атрибут → вид значения» в `attrs.go` рядом с `Attr*` (текст, целое, число, время, длительность, ссылка, перечисление; `null` — у необязательных; атрибут вне таблицы не типизирован). Создание проверяет `attributes` по той же таблице; правило догона (§4.8) считает путь не в канонической записи повреждённым фактом. До T-472 (EPIC-002, перенос в `shared/entity`) правило держит шаг 1 State (§4.5 п. 1). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` исключается: путь был и до, и после (или не был ни до, ни после), и значение в канонической форме (§3.3) не изменилось *(итерация 2 T-449, ревью #1 Mi-2; T-050 — сравнение каноническое и учитывает наличие пути; прежде «равенство `old == new` по `reflect.DeepEqual`»)*; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется. **Форма элемента (C-02 v1.6, T-448):** `old` есть ⇔ путь существовал до изменения, `new` есть ⇔ путь существует после; `set` существующего — оба, `set` отсутствовавшего (в т. ч. в `null`) и `inc` отсутствовавшего — только `new`, `append` — путь элемента `a[n]` и только `new`, `remove` без `value` (ключ) — только `old`, `remove` с `value` и `remove` элемента по индексу — путь списка, оба (список до и после). Если путь, затронутый операцией, в конце отсутствует, а его предок предложением создан (не было или был скаляр — есть контейнер: `inc fresh.deep` + `remove fresh.deep` оставляет `fresh = {}`), в `changed[]` добавляется элемент предка — иначе догон §4.8 не восстановил бы его. Элемент предка идёт **после** элементов путей; порядок — часть формы, потому что догон применяет элементы по порядку (элемент предка переписывает записанное под ним согласованно).
 
 ### 3.3. Хэш
 
@@ -214,6 +214,8 @@ type Reason string // version_conflict|unknown_entity|level_violation|law_violat
 ```
 
 `Proposer` выводится рантаймом: `meta.agent != nil` → `agent` с `Level = meta.agent.level`; иначе `source` события: `gateway` → `gateway`; `mvctl` → `author` (включая bootstrap, §4.10); ~~`core/state` (bootstrap) → `system`~~ *(изм. T-444, C-02 v1.5: предложения bootstrap публикуются с `source=mvctl` — `core/state` нет в `Spec.Publishers` типов предложений, и при `--bus kafka` публикует процесс `mvctl`, а не `core`; строка `system` в `ownership.go` остаётся без издателя в MVP-1, решение о ней — за EPIC-002)*. Отдельно `actor_kind` не участвует в проверке владения (он про сессию, не про право писать).
+
+Агент с `meta.agent.level` не из `global|domain|task|object|monitor` строки не получает, и источник при этом не решает (`level_violation`). `testkit/gateway` сопоставляется с `gateway`. Строка `system` пуста (C-02 v1.8 п. 6) *(изм. T-470; просмотр T-056, ответ 7; **Код расходится до T-471**: в `ownership.go` строка `system` пока с правами `*`, `proposerOf` её не выводит)*.
 
 ### 4.2. Рабочий набор мира
 
@@ -303,20 +305,20 @@ type Store interface {
 
 Пошагово (`apply.go`), всё внутри worker'а мира:
 
-1. **Разбор** (`proposal.go`): валидность уже проверена библиотекой шины по схеме; извлекаются `proposal_id`, `changes[]`, `atomic`, `cause`, `meta.agent`. Ошибка формата ops (неизвестный `op`, пустой `path`) → `rejected reason=invalid_op` на всё предложение.
+1. **Разбор** (`proposal.go`): валидность уже проверена библиотекой шины по схеме; извлекаются `proposal_id`, `changes[]`, `atomic`, `cause`, `meta.agent`. Ошибка формы операций — неизвестный `op`, пустой путь, путь не в канонической записи или ниже скаляра (C-02 v1.8 п. 2), служебный корень, число по модулю от 2^53 — даёт `invalid_op` на всё предложение до дедупликации (п. 2) и владения. Правило п. 1а проверяется раньше *(изм. T-470; прежде «Ошибка формата ops (неизвестный `op`, пустой `path`)»)*.
 
    **Предложение без `proposal_id` (C-02 v1.6, T-448).** Поле обязательно в обоих типах предложений, и шина с проверкой при чтении (`MV_BUS_VALIDATE_ON_READ`, по умолчанию включена) паркует такое событие в `dead_letters` раньше State. Дойти до State оно может только при выключенной проверке (явный выбор оператора) или при прямом вызове. Тогда State предложение **не применяет и не отвергает** — `entity.update.rejected` требует `proposal_id`, и валидного отказа без него нет, — пишет `Warn` с `event_id` и `type`, фиксирует офсет и идёт дальше. Подстановки идентификатора события нет; своего пути в `dead_letters` для этого случая State не заводит. Правило нормативно для всех реализаций State (двойник — `shared/testkit/state`, `refuseMalformed`).
 
    **п. 1а. Одна сущность — один набор изменений** (`apply.go`): если `changes[]` называет одну сущность (по `entity.id`) дважды — предложение отклоняется **целиком**, `rejected reason=invalid_op`, `entity` = повторённая сущность, независимо от `atomic`; в лог пишется, что делать вместо этого (слить операции сущности в один набор). *Почему отдельным шагом и почему до дедупа:* у такого пакета нет исхода, который разрешает C-02. Применённые по очереди, два набора дают два `entity.updated` на одну сущность под одной версией (зонд ревью #1 T-017: `inc hp -1` и `inc hp -2` по `player-A` → hp 8, версия 2, два факта, 10→9 и 10→8) — нарушены «версия строго +1 на сущность» (C-02) и «один факт на сущность» (п. 12). Применённые как один — молча теряют первый набор. Правило **не выражается схемой**: JSON Schema не умеет требовать уникальность по вложенному полю (`uniqueItems` сравнивает элементы целиком, а два набора по одной сущности различаются операциями), поэтому реестр такое предложение пропускает и отвергать его обязана каждая реализация State, а не только заглушка. Настоящая реализация (T-056) **не должна выводить это правило из журнала заглушки** — оно записано здесь и в C-02 v1.3.
 
-2. **Дедуп** (`dedup.go`): `proposal_id ∈ applied LRU` **или** у всех целевых сущностей `last_change.proposal_id == proposal_id` → предложение уже применено. Если факты для него ещё не подтверждены (`last_change.fact_event_id == ""`) — повторно опубликовать факты (§4.8) и выйти; иначе выйти молча (лог `debug`, `handled=true`).
-3. **Существование**: каждая `changes[i].entity` найдена в `WorldSet` → иначе `unknown_entity`.
+2. **Дедуп** (`dedup.go`): `proposal_id ∈ applied LRU` **или** у **хотя бы одной** целевой сущности `last_change.proposal_id == proposal_id` → предложение уже применено *(изм. T-470, C-02 v1.8 п. 5; прежде «у всех»)*. Если факты для него ещё не подтверждены (`last_change.fact_event_id == ""`) — повторно опубликовать факты (§4.8) и выйти; иначе выйти молча (лог `debug`, `handled=true`). *Почему не «у всех»:* частично применённый неатомарный пакет оставляет запись только на применённых сущностях, и правило «у всех» применило бы эту часть второй раз, как только окно забудет id (C-02 v1.8 п. 5). Повтор частично применённого пакета ничего не применяет и ответа не получает; отказ всего предложения в окно не входит, и его повтор решается заново.
+3. **Существование**: каждая `changes[i].entity` найдена в `WorldSet` → иначе `unknown_entity`. Тип набора, не совпадающий с типом сущности в мире, — `invalid_op`; владение и нормы читают тип мира *(изм. T-470)*.
 4. **Версия**: `expected_version` задан и `≠ entity.Version` → `version_conflict {expected_version, actual_version}`.
 5. **Мёртвые**: `status ∈ {dead, abandoned, ascended_final}` *(изм. T-457: `abandoned` — по C-02 v1.2)* у сущности **до** применения → `dead_entity`, кроме ops только по путям `died_at`, `killed_by`, `loot_claimed_by`, `encounter_id` и кроме `type=encounter/group` (у них нет `dead`). Переход терминальной сущности в нетерминальный статус (`dead → alive` и любой другой) — тоже `dead_entity` на этом шаге, в том числе когда пакет заодно стирает `died_at`/`killed_by` *(изм. T-457, C-02 v1.5b; прежде «запрещён всегда (`law_violation inv-09`)»: проверка шага 8 перехода не видит, мира «до» у неё нет)*.
 6. **Владение** (`ownership.go`): для каждой (сущность, op) проверка по `contracts.OwnershipRules` (§4.6) → `level_violation`.
-7. **Применение на копиях**: `entity.ApplyOps` на `Clone(e)` → `attrs, changed` или `invalid_op`.
-8. **Инварианты** (`invariants.go`): `overlayView` (WorldSet + копии) → `mechanics.Invariants()` с `touched = ids изменённых` → первое нарушение → `law_violation {invariant_id}`.
-9. **Решение по пакету**: `atomic=true` — любая ошибка на шагах 3–8 отклоняет **весь** пакет одним `entity.update.rejected` (в `entity` — первая проблемная сущность; **`details.batch_size` не публикуется**: схема `entity.update.rejected.v1.json` закрыта, `details` знает только `expected_version`, `actual_version`, `invariant_id`, и `api-contracts.md` §2.3.4 называет тот же набор. Размер пакета издателю и так известен — он его и составил, а применённый размер остаётся в `last_change.batch_size` сущности. Открывать закрытую схему ради поля, которое ничего не сообщает потребителю, — та же уступка, от которой отказались в §4.4). `atomic=false` — ошибки отклоняют только свои `changes[i]` (по одному `rejected` на сущность), остальные применяются; инварианты пересчитываются по оставшимся.
+7. **Применение на копиях**: `entity.ApplyOps` на `Clone(e)` → `attrs, changed` или `invalid_op`. Нормы, которые читают результат, решаются по копии после `ApplyOps`. Переход статуса сравнивает сущность до и после: статус после операций не строка или переход вне матрицы — `invalid_op`; остальное — нормы `abandoned` (C-02 v1.2, v1.5). Норма отдыха — §4.6 *(изм. T-470)*.
+8. **Инварианты** (`invariants.go`): `overlayView` (WorldSet + копии) → `mechanics.Invariants()` с `touched` — id всех сущностей применяемой части пакета, включая наборы с пустым `changed[]` *(изм. T-470; прежде «`touched = ids изменённых`»)* → первое нарушение → `law_violation {invariant_id}`.
+9. **Решение по пакету**: `atomic=true` — любая ошибка на шагах 3–8 отклоняет **весь** пакет одним `entity.update.rejected` (в `entity` — первая проблемная сущность; **`details.batch_size` не публикуется**: схема `entity.update.rejected.v1.json` закрыта, `details` знает только `expected_version`, `actual_version`, `invariant_id`, и `api-contracts.md` §2.3.4 называет тот же набор. Размер пакета издателю и так известен — он его и составил, а применённый размер остаётся в `last_change.batch_size` сущности. Открывать закрытую схему ради поля, которое ничего не сообщает потребителю, — та же уступка, от которой отказались в §4.4). `atomic=false` — ошибки отклоняют только свои `changes[i]` (по одному `rejected` на сущность), остальные применяются; инварианты пересчитываются по оставшимся. Закон, ответивший на сущность без оставшегося набора (её нет в пакете или её набор отвергнут раньше), — `law_violation` каждому оставшемуся набору под его сущностью, с `invariant_id` закона; сущность закона — только в логе (`entity_id`). Закон, ответивший на сущность оставшегося набора, отвергает этот набор, и законы спрашиваются снова по остальным (C-02 v1.8 п. 1) *(изм. T-470)*.
 10. **Фиксация**: для каждой применённой копии `Version++` (если `changed` не пуст), `UpdatedAt = proposal.Event.Timestamp`, `LastChange = {…, FactEventID: ""}`, `History` append (обрезка до 50).
 11. **Персист** (`Persist`): если применённых сущностей > 1 и `atomic=true` → `PutIntent` (ADR-013); затем `PutEntity` по каждой в порядке возрастания `id`; после всех PUT — `DeleteIntent`. Ошибка PUT → повтор ×3 (100/300/900 мс); неуспех → worker переводит мир в `state: persist_failed`, `/health fail`, обработка останавливается (§9).
 12. **Публикация** (`facts.go`): по одному `entity.updated` на сущность (`Derive(proposal.Event, …)`, `timestamp = proposal.Event.Timestamp`), общий `proposal_id`; порядок = порядок PUT; после `Publish` каждого факта — `LastChange.FactEventID = fact.ID`, `LastEventID = fact.ID` и **повторный PUT не делается** (поле `fact_event_id` дозаписывается при следующем изменении сущности или в снапшоте; при рестарте отсутствие `fact_event_id` при `version` ≥ восстановленной — сигнал сверки, §4.8). Затем `WorldSet` заменяет оригиналы копиями, `dedup.Add(proposal_id)`, счётчик снапшота `+len(applied)`.
@@ -351,12 +353,13 @@ type OwnershipRule struct {
 | `domain` | `npc` | `*` кроме `hp` вниз при живом игроке в встрече; `status: dead→alive` запрещён всегда (`dead_entity`, §4.5 п. 5; изм. T-457) | `tick, spawn` | `npc` |
 | `domain` | `encounter` | `state`, `participants`, `npcs` (создание) | `spawn` | `encounter` |
 | `global` | `world` | `weather`, `time_of_day`, `day`, `season`, `epoch` (не `laws_version`) | `tick` | — |
-| `author` (`mvctl`) / `system` (bootstrap) | `*` | `*` | `init, author` | все |
+| `author` (`mvctl`, в том числе bootstrap) | `*` | `*` | `init, author` | все |
+| `system` | — | — | — | — (резерв; C-02 v1.8 п. 6; изм. T-470; **Код расходится до T-471**: в `ownership.go` пока `*`, `*`, `init, author`, все) |
 | `object`, `monitor` | — | — | — | — (зарезервировано C-13; спавн выключен) |
 
 `scope` в строке gateway — это **право**, а не обязанность: таблица разрешает менять `scope`, но по C-04 v1.2 gateway предлагает его только вместе с изменением членства в группе; при движении в предложении есть один `position`. Иначе State получал бы набор без изменений и публиковал факт с пустым `changed[]` и той же версией.
 
-Отдых (`rest`): предложение публикует **gateway** после валидации «не во встрече» с `ops: [{set hp = hp_max}]`, `cause=rest`; State дополнительно проверяет `encounter_id == ""` и `new hp == hp_max` (иначе `level_violation`). Это уточнение `data-model.md` §4 («HP кроме rest через механику»): у `rest` нет агента встречи, а держать ради него Phase 1 в персональном GM противоречит его правилу «ничего не меняет». Запрос на подтверждение — §14.
+Отдых (`rest`): предложение публикует **gateway** после валидации «не во встрече» с `ops: [{set hp = hp_max}]`, `cause=rest`; State проверяет: набор с `cause=rest` пишет только `hp`, и `hp` после операций равен `hp_max`, иначе `level_violation`; `hp > hp_max` или нет целого `hp_max` — `law_violation {inv-02}`; `hp` не целое — `invalid_op`; непустой `encounter_id` у сущности до операций — `law_violation` без `invariant_id`. Порядок: норма пути (шаг 6) → встреча → вид `hp` → значение (C-02 v1.8 п. 3; **Код расходится до T-471**: State T-056 проверяет `hp` в `[0, hp_max]` (`inv-02`) без нормы пути и без `level_violation` при `hp < hp_max`) *(изм. T-470; прежде «State дополнительно проверяет `encounter_id == ""` и `new hp == hp_max` (иначе `level_violation`)»)*. Это уточнение `data-model.md` §4 («HP кроме rest через механику»): у `rest` нет агента встречи, а держать ради него Phase 1 в персональном GM противоречит его правилу «ничего не меняет». Запрос на подтверждение — §14.
 
 ### 4.7. Atomic-пакет: алгоритм для позиции группы (BR-13, inv-04)
 
@@ -440,7 +443,7 @@ package state
 func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir string) (BootstrapResult, error)
 ```
 
-`mvctl world init --world dark-forest-world --fixtures testdata/fixtures/ [--bus kafka|memory]`: (1) `objstore.EnsureBucket` для `entities-{world}`, `snapshots-{world}` (versioning/ILM — §4.3); (2) если `latest.json` уже есть и `--force` не задан — отказ «мир инициализирован» (exit 2); (3) `Bootstrap`; (4) снапшот `seq 0, reason=bootstrap` через admin-маршрут State (`POST /v1/admin/state/{world}/snapshot`, `X-Actor-Kind: ci`) или — при `--bus memory` — in-process `state.Context`; (5) печатает `entities_count`, `state_hash`. Требует запущенного `core` с контекстом `state` (при `--bus kafka`); e2e-харнессы вызывают `Bootstrap` напрямую в процессе `--contexts=all --bus=memory`. Права: `system` proposer в `OwnershipRules` (§4.6) — `Create` любых типов, `cause=init`.
+`mvctl world init --world dark-forest-world --fixtures testdata/fixtures/ [--bus kafka|memory]`: (1) `objstore.EnsureBucket` для `entities-{world}`, `snapshots-{world}` (versioning/ILM — §4.3); (2) если `latest.json` уже есть и `--force` не задан — отказ «мир инициализирован» (exit 2); (3) `Bootstrap`; (4) снапшот `seq 0, reason=bootstrap` через admin-маршрут State (`POST /v1/admin/state/{world}/snapshot`, `X-Actor-Kind: ci`) или — при `--bus memory` — in-process `state.Context`; (5) печатает `entities_count`, `state_hash`. Требует запущенного `core` с контекстом `state` (при `--bus kafka`); e2e-харнессы вызывают `Bootstrap` напрямую в процессе `--contexts=all --bus=memory`. Права: предлагающий `author` (§4.6) — `Create` любых типов, `cause=init` *(изм. T-470; прежде «`system` proposer в `OwnershipRules`»)*.
 
 Что не делает `world init`: не создаёт агентов роя (их спавнит EPIC-003 при старте по блупринтам), не пишет `laws/` (файл в Git), не трогает `gateway.db`/`links.db`.
 
@@ -638,26 +641,49 @@ type Mode string // "live" | "replay"
 ```
 
 ```go
-package replay
+package replay // internal/replay: часы, таймеры, курсор, догон, middleware, маршрут часов (изм. T-470; C-01 v1.9, v1.11)
 
-type EventClock struct{ mu sync.Mutex; now time.Time }
+type EventClock struct{ … }
 func NewEventClock(start time.Time) *EventClock
-func (c *EventClock) Observe(t time.Time)   // now = max(now, t) — монотонно; вызывается middleware шины ДО handler
+func (c *EventClock) Observe(t time.Time)          // now = max(now, t) — монотонно; вызывается middleware шины ДО handler
 func (c *EventClock) Now() time.Time
+func (c *EventClock) Advance(at time.Time) error   // маршрут часов: at раньше now → ErrClockBehind, часы не меняются; сравнение и сдвиг под одной блокировкой
+var ErrClockBehind error
 
-type NullTimers struct{}                    // After/Every возвращают таймер с каналом, который никогда не отправляет
-type Cursor map[string]int64                // topic → офсет следующего непрочитанного
-func (c Cursor) Merge(o Cursor) Cursor; func (c Cursor) Clone() Cursor
+type NullTimers struct{}                           // After/Every возвращают таймер с каналом, который никогда не отправляет
+type Cursor map[string]int64                       // topic → офсет следующего непрочитанного
+func (c Cursor) Advance(pos eventbus.Position); func (c Cursor) Merge(o Cursor) Cursor; func (c Cursor) Min(o Cursor) Cursor
+func (c Cursor) Clone() Cursor; func (c Cursor) Topics() []string
 
-func ReadRange(ctx, j eventbus.Journal, topic string, from, to int64, h eventbus.Handler) (next int64, err error)
-func Tail(ctx, j eventbus.Journal, topic string, from int64, h eventbus.Handler) error   // до ctx.Done()
+func ReadToEnd(ctx context.Context, j eventbus.Journal, topic string, from int64, h eventbus.Handler) (int64, error) // End снимается один раз
+func CatchUp(ctx context.Context, j eventbus.Journal, c Cursor, h eventbus.Handler) (Cursor, error)                 // догон — доставка: в replay двигает часы
 
-type Recording struct{ … }                  // JSONL событий (одно событие на строку), порядок записи
-func OpenRecording(path string) (*Recording, error); func (r *Recording) Events(typeFilter ...string) iter.Seq[eventbus.Event]
-func (r *Recording) Index(typ string, key func(eventbus.Event) string) map[string]eventbus.Event   // ключ llm.output: cid+agent.id+phase+attempt
-type Writer struct{ … }; func NewWriter(path string) (*Writer, error); func (w *Writer) Append(ev eventbus.Event) error
-func Middleware(mode runtime.Mode, ec *EventClock) eventbus.Middleware   // replay: Observe + meta.replay=true при пробросе
+func Middleware(mode runtime.Mode, ec *EventClock) eventbus.Middleware // replay: Observe + meta.replay=true; обработчик с recording.InReadJournal(ctx) — как есть
+type Transport interface{ eventbus.Bus; eventbus.Journal }
+func WithMiddleware(t Transport, mws ...eventbus.Middleware) Transport // Subscribe, ReadRange, Tail — внутри Delivery
+
+const ClockPath = "/v1/admin/replay/clock"
+func ClockHandler(ec *EventClock) http.Handler // cmd/multiverse монтирует "POST "+ClockPath через runtime.AdminOnly, только в --mode=replay; 400/409 — форма Error
 ```
+
+```go
+package recording // shared/recording (EPIC-001; перенос из internal/replay — T-458)
+
+const TypeLLMOutput = "llm.output"
+type Recording struct{ … }                          // JSONL событий (одно событие на строку), порядок записи
+func Open(path string) (*Recording, error); func Read(r io.Reader) (*Recording, error)
+func (r *Recording) Len() int; func (r *Recording) Start() (time.Time, bool)
+func (r *Recording) Events(types ...string) iter.Seq[eventbus.Event]
+func (r *Recording) Index(typ string, key func(eventbus.Event) string) map[string]eventbus.Event // первая запись по ключу побеждает
+func LLMOutputKey(correlationID, agentID, phase string, attempt int) string
+func LLMOutputKeyOf(ev eventbus.Event) string        // "" — нет агента, фазы или целого attempt от 1 до 2^53
+type Writer struct{ … }; func NewWriter(path string) (*Writer, error)
+func (w *Writer) Append(ev eventbus.Event) error; func (w *Writer) Close() error
+func ReadJournal(ctx context.Context, j eventbus.Journal, topic string, from int64) (*Recording, error) // чтение истории: [from, End), часы replay не двигает, Meta.Replay не ставит
+func InReadJournal(ctx context.Context) bool
+```
+
+*Изм. T-470 (C-01 v1.9, v1.11; ревью system-architect T-458, п. 5).* Прежняя редакция держала `Recording`, `OpenRecording` и `Writer` в `internal/replay`, не знала `Advance` и называла обёртки `ReadRange`/`Tail`. Формат записи, её чтение и ключ `llm.output` живут в `shared/recording`: depguard пускает `internal/replay` только в `cmd/multiverse`, а читать запись нужно и `internal/llm`. В `internal/replay` остались часы, таймеры, курсор, догон (`ReadToEnd`, `CatchUp`), middleware с исключением `InReadJournal`, `Advance` и маршрут часов. Процесс читает запись один раз и кладёт её в `runtime.Deps.Recording`.
 
 ### 6.2. Кто как использует
 
@@ -666,9 +692,9 @@ func Middleware(mode runtime.Mode, ec *EventClock) eventbus.Middleware   // repl
 | State | `Clock` — только `taken_at` снапшота; факты без wall-clock | `EventClock`; снапшот по счётчику |
 | Swarm (EPIC-003) | `Timers.Every` — планировщик тиков; `Timers.After` — TTL | `NullTimers`: тики читаются из `tick.fired`, TTL — из `agent.stopped` |
 | Gateway (EPIC-004) | `Timers.After(round.timeout)` — таймаут раунда | `NullTimers`; `round.closed` читается из журнала/записи |
-| LLM (EPIC-003) | провайдер живой | `RecordedProvider` над `Recording.Index("llm.output", …)` |
+| LLM (EPIC-003) | провайдер живой | `providers/recorded` над `rec.Events(recording.TypeLLMOutput)`: `rec` — `Deps.Recording` (с `--recording`) или `recording.ReadJournal(llm_records)` (без записи); ключ вызова — `recording.LLMOutputKey` *(изм. T-470; прежде «`RecordedProvider` над `Recording.Index("llm.output", …)`»)* |
 
-Сборка в `cmd/multiverse`: `--mode=live` → `clock.Real{}`, `clock.RealTimers{}`; `--mode=replay` → `replay.NewEventClock(t0)`, `replay.NullTimers{}`, middleware шины `replay.Middleware`. Контексты видят только интерфейсы. Производные события всегда наследуют `Timestamp` причины (`eventbus.Derive`), поэтому wall-clock не попадает в доменные события ни в одном режиме (BR-04, NFR-061).
+Сборка в `cmd/multiverse`: `--mode=live` → `clock.Real{}`, `clock.RealTimers{}`; `--mode=replay` → `replay.NewEventClock(t0)`, `replay.NullTimers{}`, middleware шины `replay.Middleware`, маршрут часов `POST /v1/admin/replay/clock` *(изм. T-470)*. Справочное чтение журнала (записи LLM, окно бюджета при догоне) — только `recording.ReadJournal`: обработчик над `Deps.Journal.ReadRange`/`Tail` в replay — доставка, он двигает часы процесса и ставит `Meta.Replay` (C-01 v1.11). Контексты видят только интерфейсы. Производные события всегда наследуют `Timestamp` причины (`eventbus.Derive`), поэтому wall-clock не попадает в доменные события ни в одном режиме (BR-04, NFR-061).
 
 ---
 
@@ -761,7 +787,7 @@ sequenceDiagram
 | C-02 (вход) | обработка `entity.create.proposed`, `entity.update.proposed` | §4.5; схемы `schemas/events/entity.*.v1.json` — payload по `api-contracts.md` §2.3.4; `proposal_id` обязателен и для update, и для create (C-02 v1.6, T-448; подстановки id события нет; без него — `Warn` и пропуск, §4.5 п. 1); число по модулю не меньше 2^53 в `value` операции или в `attributes` создания → `invalid_op` (допустимо `\|x\| ≤ 2^53−1`) |
 | C-02 (выход) | `entity.created`, `entity.updated`, `entity.update.rejected` | `facts.go`; `entity.created` несёт `proposal_id` (обязателен с C-02 v1.6); `entity.updated.changed[]` = `entity.Change`: `old` есть ⇔ путь был, `new` есть ⇔ путь есть (C-02 v1.6, T-448); для `append` — `old` **отсутствует** (не `null`), `new: <элемент>` по пути `inventory[<n>]`; для `remove` ключа — `new` отсутствует; для `remove` элементов списка — путь списка, оба; `applied_at = timestamp предложения`; причины отказа: `version_conflict, unknown_entity, level_violation, law_violation, invalid_op, dead_entity, duplicate_entity` |
 | C-02 (read-model) | `snapshots-{world}/state/latest.json` (указатель) + объект | §4.4; чтение через `shared/objstore` только на старте потребителя |
-| C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops |
+| C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `internal/state.Applier` над `memstore` без таблицы владения (`WithoutOwnership`); нормы статуса действуют; `WithInvariants()` — законы `rules/dark-forest.yaml`; предложение без мира пропускается (C-02 v1.8; в EPIC-002 — со слиянием T-056, в develop и прочих эпиках до контрольного слияния EPIC-002 — двойник v0) *(изм. T-470; прежде «`memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops»)* |
 | C-03 v1.3 | Go-API §5.1 (формы, общие с C-03, совпадают с C-03 v1.3; итерация 2 T-449); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
 | C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `MV_SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу; Дополнение после G2: префикс `MV_`) |
 | C-14 | формат `snapshot.created`, объекты снапшота, `latest.json`, порядок старта | §4.4, §4.8, §4.9; `component ∈ state|swarm|gateway` (значения C-14; `api-contracts.md` §2.3.12 использует старые имена — правка system-analyst) |
@@ -801,7 +827,7 @@ sequenceDiagram
 
 - Логи `slog` JSON (поля `service=core, context=state|mechanics, world, correlation_id, event_id, proposal_id, handled`): `applied {entities, versions, cause, duration_ms}`, `rejected {reason, entity, invariant_id}`, `snapshot {seq, reason, size_bytes, duration_ms}`, `recovery {snapshot_id, events_replayed, duration_ms, identical}`.
 - `/health` секция `state`: `{status, worlds: {<id>: {entities, cursor, lag: End-cursor, snapshot: {seq, taken_at, age_s}, pending_intents, unpublished_facts, applied_total, rejected_total_by_reason}}}`; `mechanics: {rules_version, rules_path, invariants: 10}`; `mode`.
-- Метрики MVP-1 — из событий через `mvctl report`: `state_divergence_count`, `invariant_violations` (по `rejected reason=law_violation`), `replay_*` из `analytics.replay.completed`, латентность применения — из разницы `entity.updated.timestamp`? — **нет**: timestamp наследуется от причины; латентность State считает gateway (`mechanics_at − received_at`) и, для стенда, лог `applied.duration_ms` (Prometheus — E-G).
+- Метрики MVP-1 — из событий через `mvctl report`: `state_divergence_count`, `invariant_violations` (по `rejected reason=law_violation` **с** `details.invariant_id`; отказ без него — условие мира без закона, C-02 v1.8 п. 3; изм. T-470), `replay_*` из `analytics.replay.completed`, латентность применения — из разницы `entity.updated.timestamp`? — **нет**: timestamp наследуется от причины; латентность State считает gateway (`mechanics_at − received_at`) и, для стенда, лог `applied.duration_ms` (Prometheus — E-G).
 
 ---
 
