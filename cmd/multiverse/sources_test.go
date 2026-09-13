@@ -189,4 +189,9 @@ func TestTheHelpOfRecordingSaysWhatItDoes(t *testing.T) {
 		t.Errorf("the help of --recording reads %q: it must say the recording sets the clock and not "+
 			"promise a journal read in replay", line)
 	}
+	// C-01 v1.9: the recording also reaches the recorded provider through
+	// Deps.Recording (T-458, Н-2 of the acceptance of T-060 by tech-lead#1).
+	if !strings.Contains(line, "providers/recorded") {
+		t.Errorf("the help of --recording reads %q: it must say the recording feeds providers/recorded", line)
+	}
 }

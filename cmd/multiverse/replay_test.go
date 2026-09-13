@@ -17,6 +17,7 @@ import (
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
+	"multiverse-core.io/shared/recording"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -25,10 +26,10 @@ import (
 // pass for it.
 var recordedAt = time.Date(2031, 5, 17, 8, 30, 0, 0, time.UTC)
 
-func replayOptions(recording string) serveOptions {
+func replayOptions(path string) serveOptions {
 	opts := memoryOptions()
 	opts.mode = runtime.ModeReplay
-	opts.recording = recording
+	opts.recording = path
 	return opts
 }
 
@@ -36,7 +37,7 @@ func replayOptions(recording string) serveOptions {
 func writeSession(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "session.jsonl")
-	w, err := replay.NewWriter(path)
+	w, err := recording.NewWriter(path)
 	if err != nil {
 		t.Fatal(err)
 	}

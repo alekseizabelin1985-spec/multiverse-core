@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os/signal"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/recording"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -36,8 +38,9 @@ type serveOptions struct {
 	modeFrom string
 	busFrom  string
 	// recording is the recorded session of replay mode. The process reads it
-	// at start: an unreadable one refuses the start, and the clock of the
-	// contexts starts at its earliest event (timeOf).
+	// once at start: an unreadable one refuses the start, the clock of the
+	// contexts starts at its earliest event, and the contexts get it in
+	// Deps.Recording (timeOf, C-01 v1.9).
 	recording string
 	idSource  string
 }
@@ -100,8 +103,8 @@ func parseServe(args []string, stderr io.Writer) (*serveOptions, error) {
 		joinOr(env.Mode.Enum())+"; overrides "+env.Mode.Name())
 	bus := fs.String("bus", env.Bus.String(),
 		joinOr(env.Bus.Enum())+" (memory only with --contexts=all); overrides "+env.Bus.Name())
-	recording := fs.String("recording", "", "recorded session (JSONL) of replay mode: the clock of the contexts "+
-		"starts at its earliest event; its events are not fed to the bus")
+	recordingPath := fs.String("recording", "", "recording of a session: sets the start of the clock in replay mode "+
+		"and feeds providers/recorded")
 	idSource := fs.String("id-source", "uuid", "uuid|sequence (sequence gives deterministic event ids)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -124,7 +127,7 @@ func parseServe(args []string, stderr io.Writer) (*serveOptions, error) {
 		bus:       *bus,
 		modeFrom:  origin(passed, "mode", env.Mode),
 		busFrom:   origin(passed, "bus", env.Bus),
-		recording: *recording,
+		recording: *recordingPath,
 		idSource:  *idSource,
 	}
 	if *contexts == "" {
@@ -246,8 +249,12 @@ type process struct {
 	opts     serveOptions
 	contexts []runtime.Context
 	openBus  openBusFunc
-	stdout   io.Writer
-	log      *slog.Logger
+	// openRecording reads the file of --recording; nil is recording.Open. A
+	// test replaces it to count the reads: the recording is read once per run
+	// (C-01 v1.9).
+	openRecording func(path string) (*recording.Recording, error)
+	stdout        io.Writer
+	log           *slog.Logger
 }
 
 // run starts the contexts, serves until ctx is done or the HTTP server fails,
@@ -277,11 +284,12 @@ func (p process) run(ctx context.Context, release func()) error {
 		Log:       log,
 		Contracts: contracts.Default(),
 	}
-	times, err := timeOf(opts)
+	times, err := timeOf(opts, p.openRecording)
 	if err != nil {
 		return err
 	}
 	deps.Clock, deps.Timers = times.clock, times.timers
+	deps.Recording = times.recording
 	// The sources of the event constructors are the objects of Deps: the id
 	// generator --id-source chose, the clock of the contexts — the wall clock
 	// in live mode, the EventClock in replay — and the registry the bus routes
@@ -321,6 +329,20 @@ func (p process) run(ctx context.Context, release func()) error {
 	contexts := p.contexts
 	srv := runtime.NewHTTP(env.CoreAddr.String(), runtime.Aggregate(contexts))
 	deps.Mux = srv.Mux
+	if times.events != nil {
+		// The harness sets the time of the next root event here (C-01 v1.9,
+		// "Время корневых событий в replay"). The route belongs to the process,
+		// not to a context, and exists in replay only: in live mode it answers
+		// 404 like any path nobody mounted.
+		//
+		// The pattern carries the method (C-01 v1.11). The mux is shared by every
+		// context, and http.ServeMux panics on two patterns that overlap with
+		// neither narrower than the other: a context mounting
+		// "POST /v1/admin/{path...}" next to a pattern without a method would
+		// fail the start of a replay, and of a replay only. Another method gets
+		// 405 with Allow: POST from the mux.
+		srv.Mux.Handle(http.MethodPost+" "+replay.ClockPath, runtime.AdminOnly(replay.ClockHandler(times.events)))
+	}
 
 	if err := runtime.StartAll(ctx, contexts, deps); err != nil {
 		return err
@@ -346,8 +368,8 @@ func (p process) run(ctx context.Context, release func()) error {
 		slog.String("bus_from", opts.busFrom),
 		slog.String("contexts", strings.Join(names, ",")),
 	}
-	if opts.recording != "" {
-		attrs = append(attrs, slog.String("recording", opts.recording), slog.Int("recorded_events", times.recorded))
+	if times.recording != nil {
+		attrs = append(attrs, slog.String("recording", opts.recording), slog.Int("recorded_events", times.recording.Len()))
 	}
 	log.Info("multiverse started", attrs...)
 	if times.events != nil && opts.recording == "" {
@@ -395,8 +417,9 @@ type runTime struct {
 	// record reports it rather than the clock itself: by then the contexts have
 	// started, and a context that catches up on the journal in its Start has
 	// already moved the clock (review of T-060 by tech-lead#1, Н-1).
-	start    time.Time
-	recorded int
+	start time.Time
+	// recording is the recording of --recording, read once; nil without one.
+	recording *recording.Recording
 }
 
 // timeOf builds the time of a run. Live mode is the wall clock throughout.
@@ -405,28 +428,34 @@ type runTime struct {
 // replay clock starts at the earliest event of the recording, so that a context
 // asking the time before it has read anything gets a time of the session
 // rather than year one; without a recording it starts at the zero time.
-func timeOf(opts serveOptions) (runTime, error) {
+//
+// The recording is read here and nowhere else, with open (recording.Open when
+// nil), so the clock and Deps.Recording come from one read of the file.
+func timeOf(opts serveOptions, open func(string) (*recording.Recording, error)) (runTime, error) {
 	if opts.mode != runtime.ModeReplay {
 		return runTime{clock: clock.Real{}, timers: clock.RealTimers{}, bus: clock.RealTimers{}}, nil
 	}
+	if open == nil {
+		open = recording.Open
+	}
 	var start time.Time
-	var recorded int
+	var rec *recording.Recording
 	if opts.recording != "" {
-		rec, err := replay.OpenRecording(opts.recording)
+		var err error
+		rec, err = open(opts.recording)
 		if err != nil {
 			return runTime{}, fmt.Errorf("--recording: %w", err)
 		}
 		start, _ = rec.Start()
-		recorded = rec.Len()
 	}
 	events := replay.NewEventClock(start)
 	return runTime{
-		clock:    events,
-		timers:   replay.NullTimers{},
-		bus:      clock.RealTimers{},
-		events:   events,
-		start:    start,
-		recorded: recorded,
+		clock:     events,
+		timers:    replay.NullTimers{},
+		bus:       clock.RealTimers{},
+		events:    events,
+		start:     start,
+		recording: rec,
 	}, nil
 }
 

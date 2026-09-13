@@ -1,6 +1,7 @@
 package replay_test
 
 import (
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -73,6 +74,74 @@ func TestEventClockKeepsTheLatestUnderConcurrentObservers(t *testing.T) {
 	wg.Wait()
 	if got, want := c.Now(), t0.Add(999*time.Second); !got.Equal(want) {
 		t.Errorf("Now = %v, want the latest observed %v", got, want)
+	}
+}
+
+// C-01 v1.9, the DoD of T-458 B1: Advance moves the clock forward, leaves it
+// on a time equal to its own, and refuses a time before it without moving it.
+func TestEventClockAdvance(t *testing.T) {
+	c := replay.NewEventClock(t0)
+
+	if err := c.Advance(t0.Add(time.Minute)); err != nil {
+		t.Fatalf("Advance(later) = %v, want nil", err)
+	}
+	if got := c.Now(); !got.Equal(t0.Add(time.Minute)) {
+		t.Fatalf("Now after Advance(later) = %v, want %v", got, t0.Add(time.Minute))
+	}
+
+	// The same instant in another location: equal, so the clock is untouched,
+	// down to the location it reports.
+	same := t0.Add(time.Minute).In(time.FixedZone("UTC+3", 3*3600))
+	if err := c.Advance(same); err != nil {
+		t.Fatalf("Advance(equal) = %v, want nil", err)
+	}
+	if got := c.Now(); got != t0.Add(time.Minute) {
+		t.Errorf("Now after Advance(equal) = %v, want the clock unchanged at %v", got, t0.Add(time.Minute))
+	}
+
+	err := c.Advance(t0)
+	if !errors.Is(err, replay.ErrClockBehind) {
+		t.Fatalf("Advance(earlier) = %v, want ErrClockBehind", err)
+	}
+	for _, part := range []string{"2026-09-13T10:00:00Z", "2026-09-13T10:01:00Z"} {
+		if !strings.Contains(err.Error(), part) {
+			t.Errorf("error %q does not name %s: it must name both times", err, part)
+		}
+	}
+	if got := c.Now(); !got.Equal(t0.Add(time.Minute)) {
+		t.Errorf("Now after a refused Advance = %v, want the clock unchanged at %v", got, t0.Add(time.Minute))
+	}
+}
+
+// Advance and the middleware move one clock from different goroutines. The
+// clock ends at the latest time anybody gave it; a refused Advance changes
+// nothing. The test does not prove the atomicity of compare-and-move: a
+// Now-then-Observe Advance has a logical race with the middleware, not a data
+// race, so -race does not see it, and since both calls only raise the clock
+// its interleavings end linearizable — nothing observable tells it apart. The
+// atomicity is held by the one lock in Advance.
+func TestEventClockAdvanceAndObserveConcurrently(t *testing.T) {
+	c := replay.NewEventClock(t0)
+	var wg sync.WaitGroup
+	for g := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range 1000 {
+				at := t0.Add(time.Duration((i*7+g*13)%2000) * time.Second)
+				if g%2 == 0 {
+					if err := c.Advance(at); err != nil && !errors.Is(err, replay.ErrClockBehind) {
+						t.Errorf("Advance: %v", err)
+					}
+				} else {
+					c.Observe(at)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	if got, want := c.Now(), t0.Add(1999*time.Second); !got.Equal(want) {
+		t.Errorf("Now = %v, want the latest time given %v", got, want)
 	}
 }
 
