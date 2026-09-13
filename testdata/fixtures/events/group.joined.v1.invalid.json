@@ -1,0 +1,9 @@
+{
+  "group": { "entity": { "id": "g-1", "type": "group" }, "name": "g-1" },
+  "leader": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "members": [
+    { "entity": { "id": "player-A", "type": "player" }, "name": "Вася", "participation": "active" },
+    { "entity": { "id": "player-B", "type": "player" }, "name": "Петя", "participation": "active" }
+  ],
+  "cause": "group_move"
+}
