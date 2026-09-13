@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T03:06:07+03:00",
+  "updatedAt": "2026-09-13T03:16:34+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5789,7 +5789,7 @@ window.DEVTEAM_STATE =
       "task": "T-437",
       "action": "--alias в llm-server, пин LLAMACPP_BUILD, ops/models.txt",
       "startedAt": "2026-09-13T02:48:21+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T03:16:34+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -5829,6 +5829,36 @@ window.DEVTEAM_STATE =
       "task": "T-440",
       "action": "overview.md §18.1 и владение infrastructure.md",
       "startedAt": "2026-09-13T03:06:07+03:00",
+      "finishedAt": "2026-09-13T03:10:11+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-440",
+      "action": "ревью редакционных правок U-2",
+      "startedAt": "2026-09-13T03:10:11+03:00",
+      "finishedAt": "2026-09-13T03:15:44+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-440",
+      "action": "итерация 2 по ревью #1 (M-1, Mi-1…Mi-4, Nit)",
+      "startedAt": "2026-09-13T03:15:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-437",
+      "action": "ревью --alias и пина llama.cpp",
+      "startedAt": "2026-09-13T03:16:34+03:00",
       "finishedAt": null
     }
   ],
