@@ -28,6 +28,10 @@ type Store interface {
 	// AttachPlayer binds playerID and worldID to the link, replacing a
 	// previous (dead) character; link_id does not change.
 	AttachPlayer(ctx context.Context, linkID, playerID, worldID string) error
+	// DetachPlayer unbinds playerID from its link, when the link still points
+	// at it: a character whose creation State refused, or whose fact did not
+	// come in time (component §7.1). It reports whether a link was changed.
+	DetachPlayer(ctx context.Context, playerID string) (bool, error)
 	ByExternal(ctx context.Context, platform, externalID string) (Link, bool, error)
 	ByPlayer(ctx context.Context, playerID string) (Link, bool, error)
 	// RouteFor is the external address of a player, taken at the moment of a
@@ -61,6 +65,14 @@ type SQLite struct {
 	// pending is set when a compaction failed after a deletion and cleared by
 	// the next successful one.
 	pending atomic.Bool
+	// deletions counts the links Forget deleted. A compaction clears pending
+	// only when no deletion happened since it began: a /forget that deleted
+	// its link while the checkpoint of the sweeper was already done, and
+	// failed its own compaction, keeps its mark (T-306, window of T-303).
+	deletions atomic.Uint64
+	// compacted runs between a successful store.CompactLinks and the clearing
+	// of pending; tests put a /forget there.
+	compacted func()
 }
 
 // NewSQLite returns the store over db with ids as the source of link_id, and
@@ -194,6 +206,21 @@ func (s *SQLite) AttachPlayer(ctx context.Context, linkID, playerID, worldID str
 	})
 }
 
+func (s *SQLite) DetachPlayer(ctx context.Context, playerID string) (bool, error) {
+	if playerID == "" {
+		return false, errors.New("links: detach player: empty player_id")
+	}
+	r, err := s.db.ExecContext(ctx, "UPDATE links SET player_id = NULL, world_id = NULL WHERE player_id = ?", playerID)
+	if err != nil {
+		return false, fmt.Errorf("links: detach player: %w", err)
+	}
+	n, err := r.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("links: detach player: %w", err)
+	}
+	return n > 0, nil
+}
+
 func (s *SQLite) ByExternal(ctx context.Context, platform, externalID string) (Link, bool, error) {
 	link, found, err := selectLink(ctx, s.db, "external_platform = ? AND external_id = ?", platform, externalID)
 	if err != nil {
@@ -249,14 +276,22 @@ func (s *SQLite) SaveCharacterRequest(ctx context.Context, linkID, actionKey str
 	return nil
 }
 
-// Compact runs store.CompactLinks. A failure marks the compaction pending, a
-// success clears the mark.
+// Compact runs store.CompactLinks. A failure marks the compaction pending. A
+// success clears the mark, unless a link was deleted after the compaction
+// began: that deletion may have missed the checkpoint, and its own compaction
+// may have failed, so the mark stays for the next one.
 func (s *SQLite) Compact(ctx context.Context) error {
+	began := s.deletions.Load()
 	if err := store.CompactLinks(ctx, s.db); err != nil {
 		s.pending.Store(true)
 		return err
 	}
-	s.pending.Store(false)
+	if s.compacted != nil {
+		s.compacted()
+	}
+	if s.deletions.Load() == began {
+		s.pending.Store(false)
+	}
 	return nil
 }
 

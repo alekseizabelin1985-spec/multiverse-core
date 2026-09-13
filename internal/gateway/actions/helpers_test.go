@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -234,9 +235,39 @@ func (r *recorder) setHooks(before func(context.Context, eventbus.Event) error, 
 	r.before, r.after = before, after
 }
 
+// memoryTurns numbers the turns of each scope in memory, the way the tracker
+// of internal/gateway/turns does in gateway.db: Begin reserves the next
+// number of the session of the scope, and a session opens with the first
+// action of its scope and never ends.
+type memoryTurns struct {
+	mu       sync.Mutex
+	sessions map[string]*memorySession
+}
+
+type memorySession struct {
+	id       string
+	reserved int
+}
+
+func newMemoryTurns() *memoryTurns { return &memoryTurns{sessions: make(map[string]*memorySession)} }
+
+func (m *memoryTurns) Begin(_ context.Context, t actions.Turn) (api.TurnRef, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.sessions[t.Scope.ID]
+	if s == nil {
+		s = &memorySession{id: t.Scope.ID + ":" + strconv.FormatInt(t.At.Unix(), 10)}
+		m.sessions[t.Scope.ID] = s
+	}
+	s.reserved++
+	return api.TurnRef{Seq: s.reserved, SessionID: s.id}, nil
+}
+
+func (m *memoryTurns) Accepted(context.Context, actions.Turn, api.TurnRef, string) error { return nil }
+
 // turns records the calls of the service.
 type turns struct {
-	inner    *actions.MemoryTurns
+	inner    *memoryTurns
 	mu       sync.Mutex
 	accepted []string
 	rejected []string
@@ -290,7 +321,7 @@ func newFixture(t *testing.T, o options) fixture {
 	t.Cleanup(func() { eventbus.SetIDSource(nil) })
 	raw := newBus(t)
 	f := fixture{bus: &recorder{Bus: raw}, raw: raw, model: newWorld(t), clock: clock.NewManual(t0),
-		keys: newKeys(t), turns: &turns{inner: actions.NewMemoryTurns()}, log: &syncBuffer{}}
+		keys: newKeys(t), turns: &turns{inner: newMemoryTurns()}, log: &syncBuffer{}}
 	f.svc = f.newService(t, o)
 	return f
 }
