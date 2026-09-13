@@ -24,7 +24,11 @@ Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:521
 # перевод строки в одно совпадение. Секрета нет; сам .env.example исключён путём в .gitleaks.toml,
 # а инлайн `gitleaks:allow` противоречил бы описанному формату (комментарий над переменной).
 # Отпечаток индекса привязан к строке 520: правка документа выше §4.2 его сдвигает.
-Docs/dev-team/architecture/infrastructure.md:generic-api-key:520
+# T-405 (§3.1.2) сдвинул строку 520 → 549; строка та же (MV_LLM_API_KEY= эталона §4.2).
+Docs/dev-team/architecture/infrastructure.md:generic-api-key:549
+# Скан истории (push, CI на ветке): в коммите T-399 эта же строка эталона стояла на 520-й. Отпечаток привязан к коммиту
+# и не сдвигается; при снятии построчного отпечатка индекса (T-453) эту строку сохранить.
+f8759b034eca21dbc4ebcabb0ee7d561fab00074:Docs/dev-team/architecture/infrastructure.md:generic-api-key:520
 
 # НАСТОЯЩИЕ КЛЮЧИ в истории публичного репозитория, коммит 9ffca2d («Initial commit», 2026-02-07):
 # .env строки 20 и 25 и Docs/LLM_Client_Spec.md строка 68 — ключ oracle (sk-4659…) и ключ OpenRouter (sk-or-v1-…).

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://multiverse-core.io/schemas/events/llm.output.v1.json",
   "title": "llm.output payload",
-  "description": "One call of the LLM gateway, recorded before the answer is used (data-model.md 7.2, contracts.md C-07 v1.2). The record key for a replay is (meta.correlation_id, meta.agent.id, phase, attempt), so correlation_id, agent, actor_kind, replay and gm_path live in meta and are not repeated here (ADR-007 p. 1). validation_status is the outcome of the pipeline; the reasons of a refusal belong to llm.output.rejected alone (ADR-017 addendum 1).",
+  "description": "One call of the LLM gateway, recorded before the answer is used (data-model.md 7.2, contracts.md C-07 v1.3). The record key for a replay is (meta.correlation_id, meta.agent.id, phase, attempt), so correlation_id, agent, actor_kind, replay and gm_path live in meta and are not repeated here (ADR-007 p. 1). validation_status is the outcome of the pipeline; the reasons of a refusal belong to llm.output.rejected alone (ADR-017 addendum 1).",
   "type": "object",
   "properties": {
     "phase": { "type": "string", "enum": ["decision", "narrative", "tick", "other"] },
@@ -26,11 +26,15 @@
     },
     "prompt_hash": {
       "type": "string",
-      "minLength": 1,
-      "description": "The prompt itself is kept in local storage behind a flag; the record carries the hash only (SEC-23)."
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "The prompt itself is kept in local storage behind a flag; the record carries the hash only (SEC-23). Form sha256:<64 lowercase hex> (C-07 v1.3), the form shared/entity.StateHash already writes."
     },
     "response_raw": { "type": "string" },
-    "response_hash": { "type": "string", "minLength": 1 },
+    "response_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Form sha256:<64 lowercase hex> (C-07 v1.3). Carried when the text itself is withheld, so an audit can still tell two answers apart."
+    },
     "response_len": { "type": "integer", "minimum": 0 },
     "validation_status": {
       "type": "string",
@@ -90,7 +94,7 @@
     },
     "error": {
       "type": "object",
-      "description": "Present when validation_status=error. code=yielded means a background call gave the queue up to a player turn (ADR-014 p. 2).",
+      "description": "Present when and only when validation_status=error. code=yielded means a background call gave the queue up to a player turn (ADR-014 p. 2).",
       "properties": {
         "code": { "type": "string", "minLength": 1 },
         "message": { "type": "string" }
@@ -102,12 +106,72 @@
   "required": ["phase", "attempt", "provider", "model", "params", "prompt_hash", "response_hash",
                "response_len", "validation_status", "laws_version", "latency_ms", "tokens", "cost_usd"],
   "additionalProperties": false,
-  "if": {
-    "properties": { "validation_status": { "enum": ["quarantined", "filter_error"] } },
-    "required": ["validation_status"]
-  },
-  "then": {
-    "not": { "required": ["response_raw"] },
-    "$comment": "A text the filter blocked, and a text the filter could not judge, are both left unstored: the record keeps the hash and the length, and content.incident.recorded carries the fact without the text (C-07, orchestrator decision on OV-33)."
-  }
+  "$comment": "What a field depends on is split in two (C-07 v1.3). A condition on validation_status alone is here, one if/then per row of the table of C-07. A condition on the stage the pipeline reached — filter at invalid, reasons[] against the related llm.output.rejected — is not a property of one record and is held by the property tests of the gateway (T-211, T-213).",
+  "allOf": [
+    {
+      "$comment": "A text that was parsed is kept: the answer was used, partly used or judged unusable, and a replay needs the text in every one of those cases.",
+      "if": {
+        "properties": { "validation_status": { "enum": ["valid", "partially_rejected", "invalid"] } },
+        "required": ["validation_status"]
+      },
+      "then": { "required": ["response_raw"] }
+    },
+    {
+      "$comment": "An answer that was used went through the category (a) filter and passed it (ADR-016 p. 3).",
+      "if": {
+        "properties": { "validation_status": { "enum": ["valid", "partially_rejected"] } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "required": ["filter"],
+        "properties": { "filter": { "properties": { "status": { "const": "pass" } } } }
+      }
+    },
+    {
+      "$comment": "A text the filter blocked is left unstored: the record keeps the hash and the length, and content.incident.recorded carries the fact without the text (C-07, orchestrator decision on OV-33).",
+      "if": {
+        "properties": { "validation_status": { "const": "quarantined" } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "required": ["filter"],
+        "properties": { "filter": { "properties": { "status": { "const": "block" } } } },
+        "not": { "required": ["response_raw"] }
+      }
+    },
+    {
+      "$comment": "The filter itself failed, so the text was never judged: it is withheld on the same grounds as a blocked one (fail-closed, orchestrator decision on OV-33).",
+      "if": {
+        "properties": { "validation_status": { "const": "filter_error" } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "required": ["filter"],
+        "properties": { "filter": { "properties": { "status": { "const": "error" } } } },
+        "not": { "required": ["response_raw"] }
+      }
+    },
+    {
+      "$comment": "There is no answer: the provider failed, timed out or the call yielded. What went wrong is error{code}; there is no text and nothing was filtered.",
+      "if": {
+        "properties": { "validation_status": { "const": "error" } },
+        "required": ["validation_status"]
+      },
+      "then": {
+        "required": ["error"],
+        "allOf": [
+          { "not": { "required": ["response_raw"] } },
+          { "not": { "required": ["filter"] } }
+        ]
+      }
+    },
+    {
+      "$comment": "error{} belongs to validation_status=error alone: a record with an answer and an error at once would leave a report guessing which one is true.",
+      "if": {
+        "properties": { "validation_status": { "not": { "const": "error" } } },
+        "required": ["validation_status"]
+      },
+      "then": { "not": { "required": ["error"] } }
+    }
+  ]
 }

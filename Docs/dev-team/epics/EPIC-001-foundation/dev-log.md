@@ -8410,6 +8410,132 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути): M0 контрольный — красный (сборка); M1 прежний `stopped`, M2 `err == ErrClosed`, M3 распознавание по тексту «bus is closed» (краснеет только новый сторож), M4 без `io.EOF` — красные. Первая версия M4 не собралась (неиспользуемый `io`) и не засчитана.
 - **Прогоны**: `go build ./... && go vet ./...` — 0, `go vet -tags integration` по `eventbus`/`contract` — 0; `gofmt -l shared cmd test` — пусто; `go test -short -count=1 ./...` — 27 пакетов ok; `golangci-lint run ./...` и `--build-tags integration` по `eventbus`/`contract` — 0 issues; `go test -tags integration -count=1 ./shared/testkit/contract/...` — ok (кейсы `CloseUnderAFailingHandlerIsAnOrderlyStop` и `CloseStopsTheSubscriptionsAndRefusesToPublish` на Redpanda пройдены; окно там недетерминированно, прогон подтверждает отсутствие регрессии). После прогона `docker ps -a --filter label=org.testcontainers=true` пуст. `-race` недоступен (нет cgo).
 - Не коммитил.
+<!-- dev-log T-405 -->
+## devops-engineer#1 · T-405 · стенд паритета `.sh`/`.ps1` в репозитории и в CI · 2026-09-13
+
+Ветка `task/T-405-script-parity-stand` (от эпика `c3bfcd5`), TEAM-1, Opus. Подробности — карточка `tasks/T-405.md`.
+
+- **Стенд.** `testdata/script-parity/` — программа на Go, только стандартная библиотека. Она же двойник `llama-server`.
+  - Место выбрано так, потому что `./...` пропускает `testdata`: стенд вне сборки, `vet`, линтера, `govulncheck` и покрытия, и `forbidigo` платформы его не касается.
+  - `scripts/lib/` — место кода, который подключают production-скрипты.
+  - Устройство — `infrastructure.md` §3.1.2.
+- **Вызов.** `make scripts-parity` (в `make ci`), `make parity-mutants`, задание `scripts-parity` в `go.yml`. Required check — после того как владелец внесёт его в правила ветки.
+- **Состав.** 95 сценариев: 59 `health`, 18 `up`/`down`, 6 `down`, 10 замера, 2 известных дефекта. Плюс 2 пары статической сверки текстов сообщений (режим без `pwsh`).
+  - Сравниваются: коды возврата, stdout/stderr построчно, argv запуска сервера побайтно, запросы к двойнику, `/v1/models`, CSV, таблица, поля и значения JSON.
+  - У каждого сценария есть и абсолютные ожидания.
+- **Результат (Windows, Git Bash + pwsh 7.6.6, `ru-RU`).** 93 PASS + 2 KNOWN-FAILING (K01 потоки `llm-bench`, K02 типы JSON), пары M01/M02 PASS, порты двойника освобождены 34/34, ~65 с. Без `pwsh` — 93 PASS, 2 SKIP.
+- **Скрипты эпика до правок** на том же стенде — 12 FAIL. Исправлено в задаче:
+  - доля кэша `0.43`/`0.44` и `tps` `66.7`/`66.6` в CSV — `Get-BenchRound` (`round` Python) в `llm-bench.ps1`, сверено на 190 425 значениях;
+  - пробелы в `-m`/`--models-dir`/`--slot-save-path` рвали аргумент — `ConvertTo-ArgumentLine` в `llm-server.ps1`, `-WindowStyle` только на Windows;
+  - `U+00A0`/`U+2003` на краю адреса: `.ps1` exit 0, `.sh` exit 1 — обе реализации обрезают только ASCII-пробелы;
+  - `.ps1` оставлял CSV из заголовка при несостоявшемся замере;
+  - `.ps1` печатал абсолютный путь отчёта и CSV;
+  - `.sh` печатал лишнюю строку на неизвестную конфигурацию.
+- **Мутанты.** Контроль (синтаксическая ошибка) убит, тождественный зелёный, M02–M12 убиты. M07 убит одной статической сверкой в режиме без `pwsh`.
+- **Прогоны.**
+  - `make ci` rc=0: lint 0 issues; `test` ok; `test-race` SKIPPED без cgo; contracts 65 типов; env 67 переменных; secrets-scan no leaks; privacy-scan ok; govulncheck 0 затрагивающих; compose-lint ok; `scripts-parity` 95/0/2; `test-e2e` ok.
+  - `bash -n` и `Parser::ParseFile` — чисто; `gofmt`/`go vet` стенда — чисто.
+  - `gitleaks dir` по 21 изменённому и новому файлу — no leaks.
+- **Не проверено.** Linux: здесь нет Linux с `pwsh`, и первый прогон задания в CI — первая проверка обеих половин на Linux.
+- **Бэклог** — раздел T-405 `tasks.md`: правило потоков (K01), типы JSON (K02), required check, `sum()` Python 3.12+ против сложения подряд, сценарии только для Linux/Windows.
+- Стенд владельца `:8888` не трогался, `.env` не открывался, процессы по номеру и имени не останавливались. Не коммитил.
+
+### devops-engineer#1 · T-405 · итерация 2 по ревью #1 (0/1/3/5) · 2026-09-13
+
+- **M-1: известный дефект помечается поимённо** (`testdata/script-parity/known.go`).
+  - `streams` и `json-types` идут в каждом сценарии замера и выдают каждое отличие отдельно; отличие вне пунктов дефекта — `FAIL`.
+  - Отчётные K01/K02 требуют ровно свои пункты: пропал пункт — `FIXED-BUT-MARKED`, лишняя находка — `FAIL`.
+  - K02 — 7 путей, включая `cells[].vram_used_mb`: число в `.sh`, строка в `.ps1`. K01 — 16 строк диагностики.
+  - Флаг `Only` удалён.
+- **`nvidia-smi` стенда** стоит первым в `PATH` (копия бинарника под этим именем), настоящая утилита не вызывается. VRAM сравнивается, а не маскируется.
+- **Mi-1.** H19/H21/H27/D04 — порт `{DEAD}` вместо 8888.
+- **Mi-2.** В CI `-pwsh=require`; проверка перенесена в начало (rc=2 без pwsh, проверено).
+- **Mi-3.**
+  - `signal.NotifyContext`: остановка раздачи, двойники гасятся по токену, каталог — по сохранённому пути с повторами и печатью точного пути при неудаче.
+  - `recover` превращает панику в `FAIL` сценария.
+  - Прогоном не проверено: сигнал консоли из этой среды не посылается.
+- **Nit.**
+  - N-1: поля удалены, `go vet` стоит в цели.
+  - N-2: `try/finally` + `Remove-HeaderOnlyCsv`; проверено прогоном с необработанным исключением.
+  - N-3: `Get-RepoRelativePath`.
+  - N-4: `fail()` → код 3.
+  - N-5: required checks дополнены, пары переименованы в `P01`/`P02`.
+- **Новое расхождение, исправлено.** Отказ `nvidia-smi` (код 9) под `pipefail` завершал `llm-bench.sh` молча, а `.ps1` записал бы жалобу как VRAM. Теперь обе оставляют VRAM пустым. Сценарии B11 и H60, мутант M16.
+- **Прогоны.**
+  - `make scripts-parity`: 97 сценариев, 95 PASS + 2 KNOWN-FAILING, P01/P02 PASS, порты 34/34.
+  - Без pwsh: 95 PASS, 2 SKIP.
+  - `make parity-mutants`: M00 убит, M01 зелёный, M02–M16 убиты. M13/M14 — новое расхождение рядом с известным, M15 — пропажа пункта.
+  - `make ci` rc=0.
+  - `bash -n`, `Parser::ParseFile`, `gofmt`/`go vet` — чисто.
+  - `gitleaks dir` по изменённым файлам — no leaks.
+  - Слушатели TCP до и после прогонов совпали.
+- Предложения ревьюера — в бэклоге T-405 `tasks.md`. K01 не менялся (решение на приёмке). Стенд `:8888` не трогался, `.env` не открывался. Не коммитил.
+
+### devops-engineer#1 · T-405 · итерация 3 по ревью #2 (принять, 0/0/2/3) · 2026-09-13
+
+- Mi-2: из B11 убран `Absent: "1234"` (сырой вывод с меткой времени и номером скретча); добавлен пустой `meta.vram_used_mb`. Остальные `Absent` по сырому выводу просмотрены — цифровых нет.
+- Mi-1: `knownSummary` сводит встреченные пункты известных дефектов по всему полному прогону. Не встреченный пункт — `FIXED-BUT-MARKED` в итоге и код 1; шесть пунктов K01 без сценария — `withoutScenario`, строка `UNCOVERED` без влияния на код, встретился — `FAIL`. Частичный прогон не судится.
+- Мутант M17 (X5 ревьюера, `Stop-Bench` в stderr) убит сводкой: три `FIXED-BUT-MARKED`, rc=1.
+- По ходу: гонка портов между параллельными сценариями (закрытый «мёртвый» порт B07 стал портом двойника B08) — `stand.freePort` с реестром портов прогона.
+- `make scripts-parity` ×2 rc=0 (95 PASS + 2 KNOWN, K01 10/16 + 6 UNCOVERED, K02 7/7, порты 34/34); `make parity-mutants` rc=0 (M00 убит, M01 зелёный, M02–M17 убиты); `go vet`/`gofmt` стенда чисто; слушатели до и после совпали.
+- Nit N-1…N-3 и предложения ревьюера — в бэклоге T-405 `tasks.md`. Скрипты не менялись. Стенд `:8888` не трогался, `.env` не открывался. Не коммитил.
+<!-- dev-log T-445 -->
+## developer#3 · T-445 · ревизия контрактов 4: линтер, реестр, схемы · 2026-09-13
+
+Ветка `task/T-445-depguard-registry-schemas`, TEAM-1, Opus. Подробности — карточка `tasks/T-445.md`, раздел «Выполнение». Метка `contract-change`. Закрывает Ma-1 ревью T-215.
+- **depguard** (`.golangci.yml`):
+  - 1c: `internal-swarm` плюс `llm/prompt$`, `llm/guardian$`; тесты роя — отдельное правило `internal-swarm-tests` с `llm/providers/fake$`. `internal-memory` сужено до `providers$`, `fake$` — в `internal-memory-tests`.
+  - 1d: `shared-testkit-swarm` плюс `swarm/template$`; листовое `internal-swarm-template`.
+  - 1e: `shared-testkit-gateway` (`client$`, `api$`) и исключение в `shared`; листовое `internal-gateway-client`; `gatewaytest` запрещён в `no-testkit-in-production`; исключение `_test.go` расширено.
+- **Схемы.**
+  - Хеши `^sha256:[0-9a-f]{64}$`.
+  - `llm.output` — `allOf` из шести `if/then` по таблице C-07 v1.3.
+  - `llm.output.rejected` — `budget_exceeded` / прочие (`then`/`else`) и `unknown_entity` (`element` + `oneOf[entity, background_ref]`).
+  - `$defs.EventRef` в `_common.json`, новое поле `background_ref` использует его.
+- **Реестр**: `gm.created` — издатели `legacy`, `core/gateway` (`legacyEvent(typ, topic, publishers...)`).
+- **Тесты.**
+  - Новый `llmrecord_test.go`: таблица статусов, таблица причин, форма хешей по 4 полям.
+  - `TestLegacyPublishers`.
+  - `blockv_test.go`: хеши, `filter` у примера, полные записи в отказах; `TestQuarantinedRecordKeepsNoText` перенесён в таблицу.
+  - Фикстуры `agent.*`, `llm.output*`, README.
+- **Решения по ходу и отклонения.**
+  - Шаблон `**/internal/swarm/**/*_test.go` из решения не покрывает тесты в корне `internal/swarm` (мутант D1). Записан `**/internal/swarm/**_test.go` — смысл тот же.
+  - Листовые правила разрешают сам пакет — для внешних тестов.
+  - «Одно из двух» реализовано как `oneOf`.
+  - Невалидная фикстура `llm.output.rejected` ломает теперь условие `budget_exceeded` + `llm_output`: прежняя нарушала бы два правила. Словарь держит случай «budget used as a reason».
+- **Открытый вопрос** к system-architect: расширенное исключение `_test.go` скрывает находки любого правила по `gatewaytest` в тестах. Тест роя с `gatewaytest` зелёный (L16), под HEAD был красным. Варианты (а/б/в) — в карточке.
+- **Мутанты** (копия в scratch, без `-overlay`, удалена по точному пути; контрольные первыми):
+  - depguard: M0 контрольный, L1–L15 красные, каждый своим правилом; законные импорты P1–P8 зелёные; сравнение с конфигом HEAD;
+  - схемы и реестр: S0 контрольный, S1–S27 красные.
+- **Прогоны.**
+  - `go build ./... && go vet ./...` — 0; `gofmt` — пусто.
+  - `mvctl contracts check` — 65 типов, 58 схем, код 0.
+  - `go test -short -count=1 ./...` — 27 ok.
+  - `golangci-lint run ./...` и `--build-tags integration` — 0 issues.
+  - `make contracts` — 0.
+  - `gitleaks dir` по 16 файлам — чисто.
+  - `mvctl privacy scan testdata/` — чисто.
+- Docker и стенд `:8888` не трогались, `.env` не открывался. Не коммитил, `git add` не делал.
+<!-- dev-log T-445 iteration 2 -->
+## developer#3 · T-445 · итерация 2 по ревью #1 · 2026-09-13
+
+Ветка `task/T-445-depguard-registry-schemas`, TEAM-1, Opus. Ревью #1 вернуло задачу (0/1/2/1); по открытому вопросу system-architect выбрал (б). Подробности — карточка `tasks/T-445.md`, «Итерация 2».
+- **Ma-1.** Новое исключение `_test.go`: `^import 'multiverse-core[.]io/(shared/testkit(/[^']*)?|internal/gateway/gatewaytest)' is not allowed from list 'no-testkit-in-production'`.
+  - Снимается только запрет `no-testkit-in-production`; правила контекстов и `shared` в тестах действуют.
+  - `gatewaytest` закрыт кавычкой: строка ревьюера пропускала `gatewaytestx` через исключение (H3).
+- **Mi-1.** Запрет `gatewaytest` добавлен в `cmd-multiverse-fake-contexts`.
+- **Mi-2.** Собственный пакет в десяти правилах `internal-*` записан как `<ctx>$` + `<ctx>/`. Добавлен комментарий: depguard сравнивает импорт с ближайшей записью списка.
+- **N-1.** Комментарии `const` и `blockVExamples` в `blockv_test.go` разделены; непроверяемый довод о копировании хеша убран.
+- **Мутанты** (новая копия в scratch, без `-overlay`, удалена по точному пути):
+  - M0 (контрольный) — красный;
+  - красные: A1 (L16), A2, A3, A4, A9, A10, A11, C1;
+  - зелёные: A5, A6, A7, A8;
+  - B1–B18: `<ctx>x` красные во всех изменённых правилах, законные подпакеты зелёные;
+  - H1–H3 показывают дыру прежнего текста и строки ревьюера;
+  - depguard по всей копии без мутантов — 0 issues.
+- **Прогоны:** `go build`/`go vet` — 0; `contracts check` — код 0; `go test -short -count=1 ./...` — 27 ok; `golangci-lint run ./...` и `--build-tags integration` — 0 issues; `make contracts` — 0; `gitleaks dir` — чисто.
+- В бэклог раздела T-445 записаны три пункта ревьюера и следствие варианта (б) для EPIC-004/T-308.
+- Не коммитил, `git add` не делал.
 <!-- dev-log T-444 -->
 ## system-architect#1 · T-444 · Ревизия контрактов 4 — документы · 2026-09-13
 
