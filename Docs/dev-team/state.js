@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:02:28+03:00",
+  "updatedAt": "2026-09-13T15:02:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2419,11 +2419,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-450",
           "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8492,7 +8492,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Ревью #1: таблица «локальный адрес» и скрипты",
       "startedAt": "2026-09-13T14:28:14+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:02:59+03:00"
     },
     {
       "instance": "developer#3",
@@ -11411,6 +11411,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Пауза по указанию пользователя: новые агенты не запускаются, слияния и push не выполняются. Незавершённые агенты на момент паузы: T-448 итерация 2, T-439 итерация 2 (ADR-029), T-303 итерация 2, T-454 (CI гонка/флак), ревью T-450, T-455, T-446 #2, приёмки T-201, T-054, T-449. Их правки остаются незак"
+    },
+    {
+      "at": "2026-09-13T15:02:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/5/5. Паритет bash/pwsh на 198 URL побайтно, облачный гейт устойчив к враждебным входам. Ma-1 точка снимается до проверки октетов: 127.0.0.1. и 10.0.0.1. — local вопреки решению архитектора (cloud). Mi-1 нет строк числовых записей хоста; Mi-2 \\"
     }
   ],
   "blockers": [],
