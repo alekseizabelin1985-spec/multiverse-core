@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:48:50+03:00",
+  "updatedAt": "2026-09-14T02:53:26+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4630,7 +4630,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -4644,7 +4644,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10838,7 +10838,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Ревью #1: снапшот шлюза, восстановление, /health",
       "startedAt": "2026-09-14T02:38:23+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:53:26+03:00"
     },
     {
       "instance": "developer#1",
@@ -10848,7 +10848,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Итерация 3: мутанты Acked/Withdrawn, 503 на истёкший бюджет",
       "startedAt": "2026-09-14T02:41:44+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:53:26+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10868,6 +10868,36 @@ window.DEVTEAM_STATE =
       "task": "T-474",
       "action": "Заведение T-474",
       "startedAt": "2026-09-14T02:48:50+03:00",
+      "finishedAt": "2026-09-14T02:53:26+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Приёмка T-308",
+      "startedAt": "2026-09-14T02:53:26+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Итерация 3 по ревью #1",
+      "startedAt": "2026-09-14T02:53:26+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#3",
+      "role": "architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Текст КД §7.6/§11.2/§11.4 под код",
+      "startedAt": "2026-09-14T02:53:26+03:00",
       "finishedAt": null
     }
   ],
@@ -15137,6 +15167,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-057 принята tech-lead#2: DoD закрыт тестами, итерация 2 проверена по коду, persist_failed при живом интенте принят; строки T-058 (3) и T-059 (8) внесены в индекс 0.1.6; пересечение с T-471 — код без общих файлов, КД 0 конфликтов, tasks.md — стандартный рецепт. До слияния — отметка tech-lead#1 по r"
+    },
+    {
+      "at": "2026-09-14T02:53:26+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 · итерация 3 (developer#1): Mi-1 — тесты, на которых краснеют мутанты Acked(ctx)/Withdrawn(ctx), устаревшая проверка порядка заменена; N-1 — сравнение моментов возврата; N-2 оставлен 500 internal по КД §5.5 (503 store_unavailable — к system-architect после T-392); N-3 — бэклог. Меняются только"
+    },
+    {
+      "at": "2026-09-14T02:53:26+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-474 заведена tech-lead#2: M (может сжаться до S, если T-059 сохранит чтение через группу core.state), подволна 1.7, зависит от T-057/T-059; вариант B (строка runbook §2) — в «Передать» карточки, внесение через tech-lead#1."
+    },
+    {
+      "at": "2026-09-14T02:53:26+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 · ревью #1 (code-reviewer#2, TEAM-3): принять — 0/0/4/4. Mi-1 синхронная починка stale в догоне съедает бюджет и может уронить Start; Mi-2 сжатие links.db в Stop зависит от хранилища; Mi-3 порядок «восстановление до догона» не закреплён тестом (мутант M1 зелёный); Mi-4 outbox_oldest_age_s в re"
     }
   ],
   "blockers": [],
