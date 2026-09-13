@@ -228,9 +228,11 @@ func TestParseServeReportsUnknownFlag(t *testing.T) {
 
 // Wave 0 registers every context of the platform so that --contexts=all and
 // the compose profiles work before internal/* exists: the seven contexts of
-// foundation.md §1, each once, in the documented start order. swarm is among
-// them although its factory lives in fake_contexts.go (T-255): moving its
-// registration there would have moved it to the end of the start order.
+// foundation.md §1, each once, in the documented start order. The factories
+// live in the files of their owners (contexts_<owner>.go, T-446) and swarm's in
+// fake_contexts.go (T-255), but the order is the one of contexts.go whatever
+// the files are called: a registration from the init of an owner file would
+// have put its context where the name of the file sorts.
 func TestPlatformContextsAreRegisteredOnceInTheStartOrder(t *testing.T) {
 	want := []string{"state", "laws", "mechanics", "llm", "swarm", "gateway", "memory"}
 	if got := runtime.Names(); strings.Join(got, ",") != strings.Join(want, ",") {

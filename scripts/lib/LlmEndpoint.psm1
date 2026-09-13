@@ -188,7 +188,10 @@ function New-LlmEndpoint {
     Startable    = $false
     Trusted      = $false
     TrimmedV1    = $false
-    PortExplicit = $false
+    PortExplicit = $false  # the port is printed back (it differs from the scheme default)
+    PortWritten  = $false  # the value carries a port at all, :80 included (T-450)
+    Class        = ''      # local | cloud | invalid — Set-LlmEndpointClass (T-450)
+    Kind         = ''      # why: loopback, localhost, docker-host, service, private, ...
     Error        = ''
   }
 }
@@ -204,14 +207,61 @@ function Convert-LlmUrl {
   $raw = ConvertTo-LlmTrimmed $Value
   $var = $Endpoint.Var
 
-  # Checked before anything is compared, because every comparison below is what
-  # an invisible character breaks (review M-1).
-  if ($raw -and -not (Test-LlmPrintableAscii $raw)) {
-    $Endpoint.Error = "$var=$raw carries a character outside printable ASCII; an address copied from documentation often brings an invisible one with it (a soft hyphen U+00AD, a zero width space U+200B) — retype the value by hand"
+  # $shown is the value as every refusal of this function prints it. Four of
+  # them — the query, a character outside printable ASCII, no scheme, a scheme
+  # other than http/https — come BEFORE the check of the @ and used to print
+  # user:pass@ with the rest, into the console, the log of CI and the report of
+  # compose-lint (T-450 review #2 Mi-R2-1). The later ones print $shown too: a
+  # password with a bare / (u:x/y@h) leaves no @ in front of the first /, and
+  # the sentence about the port would print all of it. What such a sentence
+  # still names — the port 'x' or the host — is the host and the port of that
+  # value to every URL parser, Go's included, not user information.
+  # Deliberately wider than the parser: a sentence that hides too much costs
+  # nothing, one that shows a password is a leak. So:
+  #   - the value is cut at the first ? or #, as the query refusal prints it;
+  #   - the scheme is kept only when the part in front of the first :// holds
+  #     no @; everything else up to the LAST @ of what is left becomes …@,
+  #     whatever / or :// stands in front of that @;
+  #   - when the cut-off query or fragment holds an @, the password may have
+  #     had a bare ? or # in it: only the scheme is printed.
+  # Every search is ordinal: an invisible character cannot hide an @ from
+  # it. The .sh does the same, statement for statement.
+  $cut = $raw.IndexOfAny([char[]]@('?', '#'))
+  $unqueried = $raw
+  if ($cut -ge 0) { $unqueried = $raw.Substring(0, $cut) }
+  $shownScheme = ''
+  $shownRest = $unqueried
+  $schemeEnd = $unqueried.IndexOf('://', [StringComparison]::Ordinal)
+  if ($schemeEnd -ge 0) {
+    $shownScheme = $unqueried.Substring(0, $schemeEnd)
+    if ($shownScheme.Contains('@', [StringComparison]::Ordinal)) {
+      $shownScheme = ''
+    } else {
+      $shownScheme = "${shownScheme}://"
+      $shownRest = $unqueried.Substring($schemeEnd + 3)
+    }
+  }
+  if ($raw.Substring($unqueried.Length).Contains('@', [StringComparison]::Ordinal)) {
+    $shown = $shownScheme
+  } elseif ($shownRest.Contains('@', [StringComparison]::Ordinal)) {
+    $shown = "${shownScheme}…@" + $shownRest.Substring($shownRest.LastIndexOf('@', [StringComparison]::Ordinal) + 1)
+  } else {
+    $shown = $unqueried
+  }
+
+  # A query or a fragment is refused FIRST, and nothing after the ? or the # is
+  # echoed back by this or any later sentence: `?api_key=…` is how some vendors
+  # document their address, and the sentence reaches the console, the log of CI
+  # and the report of compose-lint (T-450 review #1 N-2). IndexOfAny over chars
+  # is ordinal: an invisible character cannot hide a ? from it.
+  if ($cut -ge 0) {
+    $Endpoint.Error = "$var=${shown}… carries a query or a fragment (the rest of the value is not printed: it may hold a key); the value must be scheme://host[:port][/path]"
     return $Endpoint
   }
-  if ($raw.Contains('?', [StringComparison]::Ordinal) -or $raw.Contains('#', [StringComparison]::Ordinal)) {
-    $Endpoint.Error = "$var=$raw carries a query or a fragment; the value must be scheme://host[:port][/path]"
+  # Checked before anything else is compared, because every comparison below
+  # is what an invisible character breaks (review M-1).
+  if ($raw -and -not (Test-LlmPrintableAscii $raw)) {
+    $Endpoint.Error = "$var=$shown carries a character outside printable ASCII; an address copied from documentation often brings an invisible one with it (a soft hyphen U+00AD, a zero width space U+200B) — retype the value by hand"
     return $Endpoint
   }
   if (-not $raw) {
@@ -227,13 +277,18 @@ function Convert-LlmUrl {
   # nobody can call.
   $split = $raw.IndexOf('://', [StringComparison]::Ordinal)
   if ($split -lt 0) {
-    $Endpoint.Error = "$var=$raw has no scheme; write it as http://host:port (the platform's HTTP client refuses a value without one)"
+    $Endpoint.Error = "$var=$shown has no scheme; write it as http://host:port (the platform's HTTP client refuses a value without one)"
     return $Endpoint
   }
   $scheme = $raw.Substring(0, $split).ToLowerInvariant()
   $rest = $raw.Substring($split + 3)
   if ($scheme -ne 'http' -and $scheme -ne 'https') {
-    $Endpoint.Error = "$var=$raw uses scheme '$scheme'; only http and https are addresses of an OpenAI-compatible endpoint"
+    # The part in front of the first :// is printed too: an @ in it is
+    # user information as well (u:p@h://x), cut the same way as in $shown.
+    if ($scheme.Contains('@', [StringComparison]::Ordinal)) {
+      $scheme = '…@' + $scheme.Substring($scheme.LastIndexOf('@', [StringComparison]::Ordinal) + 1)
+    }
+    $Endpoint.Error = "$var=$shown uses scheme '$scheme'; only http and https are addresses of an OpenAI-compatible endpoint"
     return $Endpoint
   }
 
@@ -259,19 +314,33 @@ function Convert-LlmUrl {
     return $Endpoint
   }
 
+  # A percent sign in the host is an escaped character or the zone of an IPv6
+  # literal (fe80::1%25eth0). Go's url.Parse unescapes the first, so ol%61ma
+  # would be `ollama` to the platform and a name with a % to this parser; the
+  # zone names an interface of one machine. Neither is how an address of an
+  # endpoint is written, and both are refused rather than classified (T-450).
+  # Checked after the user information, which may hold a secret with a %.
+  if ($hostport.Contains('%', [StringComparison]::Ordinal)) {
+    $Endpoint.Error = "$var=$shown carries a percent sign in the host (an escaped character or the zone of an IPv6 literal); write the host as it is"
+    return $Endpoint
+  }
+
   $hostName = ''
   $port = ''
+  $written = $false
+  $bracketed = $false
   if ($hostport.StartsWith('[', [StringComparison]::Ordinal)) {
+    $bracketed = $true
     $close = $hostport.IndexOf(']', [StringComparison]::Ordinal)
     if ($close -lt 0) {
-      $Endpoint.Error = "$var=$raw has an unclosed IPv6 literal"
+      $Endpoint.Error = "$var=$shown has an unclosed IPv6 literal"
       return $Endpoint
     }
     $hostName = $hostport.Substring(1, $close - 1)
     $tail = $hostport.Substring($close + 1)
-    if ($tail.StartsWith(':', [StringComparison]::Ordinal)) { $port = $tail.Substring(1) }
+    if ($tail.StartsWith(':', [StringComparison]::Ordinal)) { $port = $tail.Substring(1); $written = $true }
     elseif ($tail) {
-      $Endpoint.Error = "$var=$raw has trailing characters after the IPv6 literal"
+      $Endpoint.Error = "$var=$shown has trailing characters after the IPv6 literal"
       return $Endpoint
     }
   } else {
@@ -279,6 +348,7 @@ function Convert-LlmUrl {
     if ($colon -ge 0) {
       $hostName = $hostport.Substring(0, $colon)
       $port = $hostport.Substring($colon + 1)
+      $written = $true
     } else {
       $hostName = $hostport
     }
@@ -288,26 +358,54 @@ function Convert-LlmUrl {
     # cloud address, refused to start a local server on it and printed a false
     # gateway warning (review M-3).
     if ($hostName.Contains(':')) {
-      $Endpoint.Error = "$var=$raw looks like a bare IPv6 literal; bracket it: http://[::1]:8888"
+      $Endpoint.Error = "$var=$shown looks like a bare IPv6 literal; bracket it: http://[::1]:8888"
+      return $Endpoint
+    }
+    # The printable characters Go's url.Parse refuses in a host and the checks
+    # above have not already taken: a space, a backslash, ^, `, {, | and }
+    # (T-450 review #1 Mi-2). The set is Go's, not a stricter one; see the bash
+    # twin.
+    if ($hostName -cmatch '[ \\^`{|}]') {
+      $Endpoint.Error = "$var=$shown has a character in the host that an address cannot hold (a space, a backslash, a caret, a backtick, a brace or a vertical bar); the platform's URL parser refuses it"
       return $Endpoint
     }
   }
   $hostName = $hostName.ToLowerInvariant()
   if (-not $hostName) {
-    $Endpoint.Error = "$var=$raw has no host"
+    $Endpoint.Error = "$var=$shown has no host"
+    return $Endpoint
+  }
+
+  # Brackets hold an IPv6 address and nothing else: [localhost] used to pass
+  # here as the name localhost, while Go's client refuses it (T-450).
+  if ($bracketed -and $null -eq (ConvertTo-LlmIPv6Hex $hostName)) {
+    $Endpoint.Error = "$var=$shown has a malformed IPv6 literal [$hostName]"
+    return $Endpoint
+  }
+
+  # `host:` with nothing after the colon is not "no port": Go refuses it, and
+  # a cloud address written that way used to pass here with the default of the
+  # scheme (T-450).
+  if ($written -and -not $port) {
+    $Endpoint.Error = "$var=$shown has an empty port after the colon"
     return $Endpoint
   }
 
   $explicit = $false
   if ($port) {
-    if ($port -notmatch '^\d+$') {
-      $Endpoint.Error = "$var=$raw has a non-numeric port '$port'"
+    if ($port -cnotmatch '^[0-9]+\z') {
+      $Endpoint.Error = "$var=$shown has a non-numeric port '$port'"
       return $Endpoint
     }
-    if ([int]$port -lt 1 -or [int]$port -gt 65535) {
-      $Endpoint.Error = "$var=$raw has port $port, which is outside 1-65535"
+    # Leading zeros go first: Go reads :008888 as 8888, and a port of twenty
+    # digits used to overflow [int] here instead of being out of range.
+    $digits = $port.TrimStart('0')
+    if (-not $digits) { $digits = '0' }
+    if ($digits.Length -gt 5 -or [int]$digits -lt 1 -or [int]$digits -gt 65535) {
+      $Endpoint.Error = "$var=$shown has port $port, which is outside 1-65535"
       return $Endpoint
     }
+    $port = $digits
     $explicit = $true
   } else {
     $port = if ($scheme -eq 'https') { '443' } else { '80' }
@@ -344,30 +442,206 @@ function Convert-LlmUrl {
   $Endpoint.Probe = "${scheme}://$probeAuthority$path"
   $Endpoint.Raw = $raw
   $Endpoint.PortExplicit = $explicit
+  $Endpoint.PortWritten = $written
   return $Endpoint
 }
 
-function Test-LlmHostLocal {
-  <#
-    An address this machine answers on. It is the question "would llama-server
-    started here own this address", so it is loopback, the any-address and the
-    container alias — and nothing else.
-  #>
-  param([string] $HostName = '')
-  if ($HostName -in 'localhost', '0.0.0.0', '::', '::1', 'host.docker.internal') { return $true }
-  return $HostName -match '^127\.'
+# --- the local address (T-450) ----------------------------------------------
+#
+# ONE answer to "is this address local", for the scripts, for compose-lint and
+# for the cloud gate of the platform (internal/llm, IsLocalEndpoint). It used to
+# be written three times, three ways, and MV_OLLAMA_URL=http://ollama:11434
+# passed the linter and stopped the platform. The rule is the decision of
+# system-architect#1; its cases live in testdata/llm/local-endpoints.tsv, every
+# implementation is tested against that file, and a case is added there. The
+# classes and their reasons are written out in the bash twin
+# (scripts/lib/llm-endpoint.sh, "the local address"); this block is the same
+# algorithm statement for statement — hand-written, not [ipaddress]::TryParse,
+# which accepts 127.1, 2130706433 and 0x7f000001 as addresses.
+#
+# Every regular expression here is case-sensitive and ends with \z: $ in .NET
+# also matches before a final newline.
+
+$script:LlmIPv4Octet = '(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
+$script:LlmIPv4Re = "^$($script:LlmIPv4Octet)\.$($script:LlmIPv4Octet)\.$($script:LlmIPv4Octet)\.$($script:LlmIPv4Octet)\z"
+
+function Get-LlmIPv4Class {
+  # Class and kind of an address given as four decimal octets.
+  param([int] $A, [int] $B, [int] $C, [int] $D)
+  $answer = [ordered]@{ Class = 'cloud'; Kind = 'public' }
+  if ($A -eq 0 -and $B -eq 0 -and $C -eq 0 -and $D -eq 0) {
+    $answer.Class = 'invalid'; $answer.Kind = 'unspecified'
+  } elseif ($A -eq 127) {
+    $answer.Class = 'local'; $answer.Kind = 'loopback'
+  } elseif ($A -eq 10 -or ($A -eq 172 -and $B -ge 16 -and $B -le 31) -or ($A -eq 192 -and $B -eq 168)) {
+    $answer.Class = 'local'; $answer.Kind = 'private'
+  } elseif ($A -eq 169 -and $B -eq 254) {
+    $answer.Class = 'local'; $answer.Kind = 'link-local'
+  }
+  return $answer
 }
 
-function Test-LlmHostTrusted {
+function Add-LlmIPv6Groups {
+  # Appends the colon-separated groups of $Text to $Into; false on a group that
+  # is not 1-4 hex digits. An empty $Text has no groups.
+  param([string] $Text = '', [Parameter(Mandatory)] [AllowEmptyCollection()] [System.Collections.Generic.List[string]] $Into)
+  if (-not $Text) { return $true }
+  foreach ($group in $Text.Split(':')) {
+    if ($group -cnotmatch '^[0-9a-f]{1,4}\z') { return $false }
+    $Into.Add($group)
+  }
+  return $true
+}
+
+function ConvertTo-LlmIPv6Hex {
   <#
-    A DIFFERENT question — "is this address outside the trusted network", the one
-    the cloud gate of ADR-005 add. 2 p. 3 asks — and therefore also counts the
-    private ranges: a server on the LAN is not a cloud vendor, even though it is
-    not startable from here.
+    The 32 hex digits of an IPv6 address written in lower case without brackets,
+    or $null when the text is not one. An IPv4 tail (::ffff:127.0.0.1) is
+    accepted in the last 32 bits, as netip accepts it.
+  #>
+  param([string] $Text = '')
+  $s = $Text
+  if (-not $s -or $s -cnotmatch '^[0-9a-f:.]+\z' -or -not $s.Contains(':', [StringComparison]::Ordinal)) { return $null }
+  if ($s.Contains('.', [StringComparison]::Ordinal)) {
+    $colon = $s.LastIndexOf(':', [StringComparison]::Ordinal)
+    $m = [regex]::Match($s.Substring($colon + 1), $script:LlmIPv4Re)
+    if (-not $m.Success) { return $null }
+    $g = '{0:x2}{1:x2}:{2:x2}{3:x2}' -f [int]$m.Groups[1].Value, [int]$m.Groups[2].Value, [int]$m.Groups[3].Value, [int]$m.Groups[4].Value
+    $s = $s.Substring(0, $colon) + ':' + $g
+  }
+  if ($s.Contains(':::', [StringComparison]::Ordinal)) { return $null }
+  $all = [System.Collections.Generic.List[string]]::new()
+  $double = $s.IndexOf('::', [StringComparison]::Ordinal)
+  if ($double -ge 0) {
+    $tail = $s.Substring($double + 2)
+    if ($tail.Contains('::', [StringComparison]::Ordinal)) { return $null }
+    $tailGroups = [System.Collections.Generic.List[string]]::new()
+    if (-not (Add-LlmIPv6Groups -Text $s.Substring(0, $double) -Into $all)) { return $null }
+    if (-not (Add-LlmIPv6Groups -Text $tail -Into $tailGroups)) { return $null }
+    $zeros = 8 - $all.Count - $tailGroups.Count
+    if ($zeros -lt 1) { return $null }
+    for ($i = 0; $i -lt $zeros; $i++) { $all.Add('0') }
+    $all.AddRange($tailGroups)
+  } else {
+    if (-not (Add-LlmIPv6Groups -Text $s -Into $all)) { return $null }
+    if ($all.Count -ne 8) { return $null }
+  }
+  return -join ($all | ForEach-Object { $_.PadLeft(4, '0') })
+}
+
+function Get-LlmHostClass {
+  <#
+    Class (local | cloud | invalid) and kind of a host as Convert-LlmUrl leaves
+    it: lower case, no brackets, no port.
+
+    A trailing dot is the root of DNS, and it is dropped for the reserved names
+    only: localhost., api.localhost., host.docker.internal. It is NOT dropped
+    for a dotted quad — 127.0.0.1. is not an address to Go's netip, the client
+    hands it to DNS as a name, and it is the cloud like 127.1 (decision of
+    system-architect#1 on T-450 review #1 M-1) — nor for the rule of one word:
+    `ollama.` is an absolute name that skips the search list of the container,
+    a top-level domain and not a service of compose.
   #>
   param([string] $HostName = '')
-  if (Test-LlmHostLocal $HostName) { return $true }
-  return $HostName -match '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.|fd..:|fe80:)'
+  $answer = [ordered]@{ Class = 'cloud'; Kind = 'name' }
+  if ($HostName.Contains(':', [StringComparison]::Ordinal)) {
+    $hex = ConvertTo-LlmIPv6Hex $HostName
+    if ($null -eq $hex) {
+      $answer.Class = 'invalid'; $answer.Kind = 'malformed'
+      return $answer
+    }
+    $answer.Kind = 'public'
+    if ($hex -ceq '00000000000000000000000000000000') {
+      $answer.Class = 'invalid'; $answer.Kind = 'unspecified'
+    } elseif ($hex -ceq '00000000000000000000000000000001') {
+      $answer.Class = 'local'; $answer.Kind = 'loopback'
+    } elseif ($hex.StartsWith('00000000000000000000ffff', [StringComparison]::Ordinal)) {
+      $answer = Get-LlmIPv4Class ([Convert]::ToInt32($hex.Substring(24, 2), 16)) ([Convert]::ToInt32($hex.Substring(26, 2), 16)) `
+        ([Convert]::ToInt32($hex.Substring(28, 2), 16)) ([Convert]::ToInt32($hex.Substring(30, 2), 16))
+    } elseif ($hex -cmatch '^fe[89ab]') {
+      $answer.Class = 'local'; $answer.Kind = 'link-local'
+    } elseif ($hex -cmatch '^f[cd]') {
+      $answer.Class = 'local'; $answer.Kind = 'ula'
+    }
+    return $answer
+  }
+  $bare = if ($HostName.EndsWith('.', [StringComparison]::Ordinal)) { $HostName.Substring(0, $HostName.Length - 1) } else { $HostName }
+  $m = [regex]::Match($HostName, $script:LlmIPv4Re)
+  if ($m.Success) {
+    return (Get-LlmIPv4Class ([int]$m.Groups[1].Value) ([int]$m.Groups[2].Value) ([int]$m.Groups[3].Value) ([int]$m.Groups[4].Value))
+  }
+  if ($bare -ceq 'localhost') {
+    $answer.Class = 'local'; $answer.Kind = 'localhost'
+  } elseif ($bare -ceq 'host.docker.internal') {
+    $answer.Class = 'local'; $answer.Kind = 'docker-host'
+  } elseif ($bare -cmatch '^([a-z0-9_-]+\.)+localhost\z') {
+    $answer.Class = 'local'; $answer.Kind = 'localhost-sub'
+  } elseif ($bare -ceq $HostName -and $HostName -cmatch '^[a-z][a-z0-9_-]*\z') {
+    # One word, starting with a letter: 2130706433 and 0x7f000001 are the
+    # numeric spellings of an address, not names of a service.
+    $answer.Class = 'local'; $answer.Kind = 'service'
+  }
+  return $answer
+}
+
+function Set-LlmEndpointClass {
+  <#
+    Classifies the address Convert-LlmUrl has just accepted: .Class, .Kind and,
+    for invalid, .Error. The one place both Complete-LlmEndpoint and
+    Get-LlmEndpointClass take the answer from; the bash twin is
+    llm_endpoint_judge.
+  #>
+  param([Parameter(Mandatory)] $Endpoint)
+  $answer = Get-LlmHostClass $Endpoint.Host
+  $Endpoint.Class = $answer.Class
+  $Endpoint.Kind = $answer.Kind
+  if ($Endpoint.Class -eq 'invalid') {
+    # The sentence follows the kind, not the class (T-450 review #1 N-5).
+    if ($Endpoint.Kind -eq 'unspecified') {
+      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port"
+    } else {
+      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) names $($Endpoint.Host), which is not an address a client can call ($($Endpoint.Kind))"
+    }
+    return
+  }
+  # A local endpoint without a port is not "the port is 80": it is a port
+  # nobody chose. The scheme default was passed to llama-server as --port 80
+  # and knocked on by the probe, and the operator who wrote the value meant
+  # something else (review Mi-12). Since T-450 this holds for every local
+  # address, not only for the startable ones; a cloud address keeps the
+  # default of the scheme — there 443 and 80 are what the vendor documents.
+  if ($Endpoint.Class -eq 'local' -and -not $Endpoint.PortWritten) {
+    $Endpoint.Class = 'invalid'
+    if ($Endpoint.Kind -in 'loopback', 'localhost', 'docker-host') {
+      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; the local runtime would bind $($Endpoint.Port), the default of the scheme, and the probe would knock there — write the port you mean"
+    } else {
+      $Endpoint.Error = "$($Endpoint.Var)=$($Endpoint.Raw) has no port; a local address is written with the port its runtime listens on, and $($Endpoint.Port), the default of the scheme, is a port nobody chose"
+    }
+  }
+}
+
+function Get-LlmEndpointClass {
+  <#
+    The rule as a function of one value: Class (local | cloud | invalid), Kind,
+    Host and, for invalid, Error (a sentence naming -Var, URL by default). What
+    testdata/llm/local-endpoints.tsv is checked against; the bash twin is
+    llm_endpoint_classify.
+  #>
+  param([string] $Url = '', [string] $Var = 'URL')
+  $ep = New-LlmEndpoint
+  $ep.Var = $Var
+  $ep = Convert-LlmUrl $ep $Url
+  $answer = [ordered]@{ Class = 'invalid'; Kind = 'unparsed'; Host = ''; Error = '' }
+  if ($ep.Error) {
+    $answer.Error = $ep.Error
+    return $answer
+  }
+  Set-LlmEndpointClass $ep
+  $answer.Class = $ep.Class
+  $answer.Kind = $ep.Kind
+  $answer.Host = $ep.Host
+  $answer.Error = $ep.Error
+  return $answer
 }
 
 function Resolve-LlmEndpoint {
@@ -448,20 +722,28 @@ function Complete-LlmEndpoint {
   param([Parameter(Mandatory)] $Endpoint)
 
   $Endpoint.Has = $true
-  $Endpoint.Startable = (Test-LlmHostLocal $Endpoint.Host) -and ($Endpoint.Provider -eq 'openai_compat')
-  $Endpoint.Trusted = Test-LlmHostTrusted $Endpoint.Host
-
-  # A local endpoint without a port is not "the port is 80": it is a port
-  # nobody chose. The scheme default was passed to llama-server as --port 80
-  # and knocked on by the probe, and the operator who wrote the value meant
-  # something else (review Mi-12). A remote address without a port is left
-  # alone — there 443 and 80 are what the vendor documents.
-  if ($Endpoint.Startable -and -not $Endpoint.PortExplicit) {
+  Set-LlmEndpointClass $Endpoint
+  if ($Endpoint.Class -eq 'invalid') {
     $Endpoint.Has = $false
-    $Endpoint.Startable = $false
-    $Endpoint.Error = "llm: $($Endpoint.Var)=$($Endpoint.Raw) has no port; the local runtime would bind $($Endpoint.Port), the default of the scheme, and the probe would knock there — write the port you mean"
+    $Endpoint.Error = "llm: $($Endpoint.Error)"
     return $Endpoint
   }
+
+  # Two questions, one answer each (T-450):
+  #   Trusted   — "is this address outside the trusted network", the question
+  #               of the cloud gate (ADR-005 add. 2 p. 3): every local address;
+  #   Startable — "would llama-server started here own this address": loopback,
+  #               localhost and the container alias only, written without the
+  #               root dot (the probe must reach them from this machine), and
+  #               only for the runtime this script starts. A LAN server or a
+  #               service of compose is trusted and not ours to start.
+  # The any-address 0.0.0.0 and :: used to be startable; they are invalid now.
+  # Every loopback spelling is startable, [::ffff:127.0.0.1] and
+  # [0:0:0:0:0:0:0:1] included: they were the cloud before T-450, and the
+  # change is listed in infrastructure.md §6.3.1 (review #1 N-1).
+  $Endpoint.Trusted = $Endpoint.Class -eq 'local'
+  $Endpoint.Startable = (-not $Endpoint.Host.EndsWith('.', [StringComparison]::Ordinal)) -and
+    ($Endpoint.Kind -in 'loopback', 'localhost', 'docker-host') -and ($Endpoint.Provider -eq 'openai_compat')
 
   # The key is checked here, once, for every script: it is part of how the
   # endpoint is reached, and the caller already knows what to do with an error.
@@ -595,6 +877,6 @@ function Get-LlmModels {
 
 Export-ModuleMember -Function Get-LlmEnv, Protect-LlmSecret, Write-LlmLine,
 Write-LlmFail, Write-LlmRetiredPortNote, Resolve-LlmEndpoint, Convert-LlmUrl, New-LlmEndpoint,
-Complete-LlmEndpoint, Test-LlmHostLocal, Test-LlmHostTrusted, Test-LlmPrintableAscii,
+Complete-LlmEndpoint, Get-LlmHostClass, Get-LlmEndpointClass, Test-LlmPrintableAscii,
 Test-LlmControlChars, Get-LlmHeaders, Invoke-LlmProbeCode, Invoke-LlmHealthProbe,
 Get-LlmModels, Get-LlmProbeFault

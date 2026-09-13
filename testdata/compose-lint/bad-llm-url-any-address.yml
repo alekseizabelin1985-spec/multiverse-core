@@ -1,0 +1,13 @@
+# Rule 6: MV_OLLAMA_URL at the any-address. 0.0.0.0 is where a server listens,
+# not an address a client can call; the linter used to accept it as "private"
+# (Python's ipaddress) while the rule of the platform has no answer for it but
+# a configuration error (T-450, testdata/llm/local-endpoints.tsv).
+#
+# expect-rule: 6
+# expect-text: core: MV_OLLAMA_URL is not an address the platform can use
+# expect-text: names 0.0.0.0, the any-address
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_OLLAMA_URL: http://0.0.0.0:11434
