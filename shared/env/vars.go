@@ -265,6 +265,15 @@ var (
 		"long polling timeout of getUpdates, in seconds", IsInt())
 	TelegramHealthAddr = Declare("MV_TELEGRAM_HEALTH_ADDR", ":8089",
 		"listen address of /health of the bot")
+	// T-310. The names follow MV_TELEGRAM_* of this block; component §11.3
+	// still says MV_BOT_ACTION_KEY_SALT and MV_BOT_RATE_COMMANDS_PER_MIN, the
+	// final names are architect#3's to confirm there.
+	TelegramActionKeySalt = Declare("MV_TELEGRAM_ACTION_KEY_SALT", "",
+		"HMAC key of action_key (ADR-018), at least 16 characters; empty derives it from the bot token by SHA-256",
+		Secret())
+	TelegramCommandsPerMin = Declare("MV_TELEGRAM_COMMANDS_PER_MIN", "20",
+		"commands one Telegram user may send within any 60 seconds before the bot answers \"too often\" (SEC-11, NFR-049)",
+		IsInt())
 )
 
 func init() {

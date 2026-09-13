@@ -239,7 +239,7 @@
 - [ ] **(приёмка T-303, 2026-09-13; ревью #1 T-303, N-3)** `links_store` и `gateway_store` в `Health` gateway — настоящая проверка БД вместо констант `ok`. Проверка не занимает единственное соединение `links.db` (`SetMaxOpenConns(1)`) дольше короткого дедлайна: результат кэшируется не чаще раза в 10 с, при занятом соединении отдаётся последнее известное значение. Unit: закрытая БД → `fail`; `Health` при удерживающем читателе отвечает без ожидания `busy_timeout`.
 - [ ] **(приёмка T-303, 2026-09-13; ревью #2 T-303, R2-N-3)** `Stop` gateway не держит `c.mu` на ожидании sweeper'а и сжатия: `started` снимается и ссылки копируются под мьютексом, ожидание и `Compact` идут вне его. Unit: пока `Stop` ждёт заблокированное сжатие, `Health` отвечает `fail` не дольше 100 мс.
 
-### T-310: Бот — `config`, `access.Gate`, `updates`, `sender`, `commands`, `privacy` · I1 · подволна 1.4 · developer#2 · M
+### T-310: Бот — `config`, `access.Gate`, `updates`, `sender`, `commands`, `privacy` · I1 · подволна 1.4 · developer#2 · M · **Статус: done**
 
 **Ветка:** `task/T-310-bot-core` (`.worktrees/T-310`).
 **Зависит от:** T-301 (DTO/клиент), T-303 (коды ошибок и контракт `links/*`). Работает на `httptest`-моке клиента, `FakeGateway` не нужен.
@@ -251,7 +251,7 @@
 **DoD** (+ DoD-common):
 - [ ] Unit SEC-06: `from.id` вне allowlist → один отказ «доступ по приглашению», `links/resolve` **не вызван** (мок клиента фиксирует ноль вызовов), id не в логе, счётчик `bot_denied_total` увеличен.
 - [ ] Unit SEC-06 fail-closed: пустой allowlist → отказ всем.
-- [ ] Unit SEC-07: `message.chat.type != "private"` → одно сообщение «пишите в личные», gateway не вызван; связка строится по `from.id`, `chat.id` отдельно не хранится.
+- [ ] Unit SEC-07: `message.chat.type != "private"` → **ответа нет** (ни участнику allowlist, ни постороннему), gateway не вызван, в лог — одна строка `reason=not_private` без id на серию; связка строится по `from.id`, `chat.id` отдельно не хранится. *(Приёмка T-310, 2026-09-13: заменено «одно сообщение „пишите в личные“» — решение оркестратора по ревью #1 T-310, приоритет US-008 (негативный критерий), FR-131, NFR-044 перед ADR-018 п. 3; правка ADR-018 и component §10.2/§11.1 — architect#3.)*
 - [ ] Unit SEC-11/NFR-049: 21-я команда за минуту → «слишком часто, подождите N с» без вызова gateway; на 61-й секунде принимается.
 - [ ] Unit SEC-08: строка ошибки HTTP-клиента Telegram с `bot123456:ABC…` после `Redact` не содержит токен; `409 Conflict` редактируется; `WithDebug` не используется (тест на конфигурацию); выход с кодом 3 при `409 getUpdates`.
 - [ ] Unit SEC-10: `Sender.Send` доставляет `[x](http://…)`, `<a href=…>`, `*текст*` **буквально**; сигнатура `Send` не содержит параметра разметки.
@@ -261,6 +261,8 @@
 - [ ] Все переменные бота — `MV_TELEGRAM_*` манифеста; новые объявлены вместе с кодом и есть в `.env.example`. *(Сверка 2026-09-13: заменено «Все `MV_BOT_*`/`MV_TELEGRAM_*` объявлены через манифест».)*
 - [ ] **(сверка 2026-09-13)** Граница импортов бота: тест (`go list -deps ./cmd/telegram-bot/...`) — из `multiverse-core.io/internal/` только `internal/gateway/client` и `internal/gateway/api`; правило depguard — по решению system-architect (если оно принято до приёмки — добавлено и `golangci-lint run` чист).
 - [ ] **(сверка 2026-09-13)** `github.com/go-telegram/bot` добавлен в `go.mod`/`go.sum` и отмечен в отчёте.
+
+**Приёмка (tech-lead#3, 2026-09-13): принято, статус `done`** — карточка [`tasks/T-310.md`](tasks/T-310.md), раздел «Приёмка (tech-lead)». Ревью: 2 итерации, итог 0/0/1/2. Mi-4, N-7 и N-8 ревью #2 закрыты при приёмке (код и тесты в `access`/`sender`, мутанты в копии дерева): отказы шлюза — отдельным отправителем `sender.NewBestEffortTelegram` (одна попытка, таймаут клиента ≤ `BestEffortHTTPTimeout` = 5 с), общий бюджет ответов «Доступ по приглашению.» — `access.MaxInviteRepliesPerWindow` = 10 за окно на весь бот (сверх — молча, счётчик и строка лога `answered=false`; ответы «Слишком часто» игрокам allowlist бюджетом не ограничены); id отклонённых чатов вычищаются первым же обновлением после окна. Уточнения DoD по факту: SEC-07 — молчание (строка выше); SEC-06 «один отказ» — один ответ на чат за 60 с и не больше 10 ответов на весь бот за 60 с, `bot_denied_total` считает каждое обновление; лимит SEC-11 — скользящее окно вместо token bucket. Граница импортов — только тестом `go list -deps`: правило depguard `cmd-telegram-bot` не принято (предусловие старта T-311). С кончиком эпика abfc04b по `shared/env`, `.env.example`, `go.mod`, `go.sum`, `cmd/` не пересекается; пробная сборка и тесты на копии кончика зелёные. Слияние — после отметки tech-lead#1 по `shared/env/vars.go`, `.env.example` и новой зависимости `go-telegram/bot` v1.25.0 в `go.mod`/`go.sum`.
 
 ### T-311: Бот — `flow` (онбординг, `/forget`) и `render` (тексты, клавиатуры, ошибки) · I1 · подволна 1.5 · developer#2 · M
 
@@ -280,6 +282,12 @@
 - [ ] Пометка `generated_by` присутствует у 100 % нарративных доставок (NFR-045).
 - [ ] Клавиатуры не содержат разметки; все сообщения уходят через `Sender` без `parse_mode` (SEC-10).
 - [ ] **(приёмка T-303, 2026-09-13; решение system-architect#1 по `503 forget_incomplete`)** `/forget confirm` при `503 forget_incomplete`: клиент повторяет сам (`DefaultBackoff`); после исчерпания повторов бот **не** говорит «связка удалена», а просит повторить `/forget confirm` позже. `200 {deleted:false}` с `ForgetResult.Repeated = true` (ответ после 503 в том же вызове) — конец того же забвения, не «нечего удалять». Golden-тест `render` для кода `forget_incomplete`; unit `flow` на обе ветки. Чтение `Retry-After` клиентом — по решению T-456.
+- [ ] **(ревью #1 T-310, 2026-09-13)** Тест SEC-06 (`access.Gate` до gateway) переведён с сырого HTTP на `client.New` против того же `httptest`-мока со счётчиком — после решения по правилу depguard для `cmd/telegram-bot`.
+- [ ] **(ревью #1 T-310, M-1)** `flow` не вызывает gateway с уже отменённым `ctx`: обработчик получает контекст, который отменяется при остановке, `409` и `401` опроса. Unit: отменённый `ctx` → ноль запросов к моку gateway, ответа игроку нет.
+- [ ] **(ревью #1 T-310, M-2)** Ответы `flow` уходят через `Sender` с короткой политикой повторов, а не `sender.DefaultPolicy` (до 5 ожиданий `429` по ≤ 60 с): пауза в единственном обработчике держит команды всех игроков. Unit: `429 retry_after=30` на ответ `flow` не задерживает обработку следующего обновления дольше выбранной политики (на `clock.Timers`, без реального ожидания).
+- [ ] **(ревью #1 T-310, N-6)** `flow` и `render` пишут в лог только заранее заданные ключи; внешние id, имена и тексты не попадают в лог ни под какими ключами, включая группы `from`/`chat`/`message`/`update` (unit поверх `privacy.Handler`).
+- [ ] **(приёмка T-310, 2026-09-13) Предусловие старта.** В `.golangci.yml` принято правило depguard `cmd-telegram-bot` (решение system-architect/tech-lead#1, в очереди): `files: **/cmd/telegram-bot/**`, allow `multiverse-core.io/internal/gateway/client$` и `…/internal/gateway/api$`, deny `multiverse-core.io/internal` и `multiverse-core.io/shared/eventbus`, исключение `!**/cmd/telegram-bot/**` в `internal-unlisted`; правило для `_test.go` — если тест бота импортирует `internal/gateway` напрямую. Без правила `flow` не может импортировать клиента: `internal-unlisted` запрещает боту любые `internal/*`. Задачу не начинать до слияния правила в ветку эпика; тест `go list -deps` остаётся второй линией.
+- [ ] **(приёмка T-310, 2026-09-13; ревью T-456, бэклог п. 1)** После `client.ForgetResult{Repeated: true, Deleted: false}` бот **не** сверяет итог через `Resolve`: `links.Store.Resolve` при отсутствии строки вставляет `pending_consent` с внешним ID, и такая проверка после забвения снова пишет его в `links.db` (SEC-04/05, US-009). `200 {deleted:false}` — итог «связки нет», игроку — «Связка удалена», не «нечего удалять»; повторного обращения к gateway нет. Исправить doc `client.ForgetResult`, который советует `Resolve` (EPIC-004, `internal/gateway/client`). Unit `flow` на фейковом клиенте: после `/forget confirm` с потерянным ответом (`Repeated=true`) вызовов `links/resolve` 0; тест стора или e2e T-314: строк в `links` для аккаунта 0.
 
 ### T-312: Бот — `deliver` (long-poll → send → ack) и `main` wiring · I1 · подволна 1.6 · developer#2 · M
 
@@ -297,6 +305,11 @@
 - [ ] Курсор доставок между рестартами не хранится (component §16 п. 5) — поведение подтверждено тестом (после рестарта неподтверждённые выдаются снова).
 - [ ] `main` стартует с пустым `MV_TELEGRAM_BOT_TOKEN` → понятная ошибка и выход, токена в сообщении нет (SEC-08).
 - [ ] **(сверка 2026-09-13)** Бинарник совместим с `docker-compose.bot.yml` без правки файла (владелец — devops, EPIC-001): `entrypoint /telegram-bot`; подкоманда `telegram-bot health --url <url>` для healthcheck (образ без оболочки и curl) — код 0 при `ok`, иначе ненулевой; умолчание `--url` строится из `MV_TELEGRAM_HEALTH_ADDR` (`:8089`: пустой хост → `127.0.0.1`, как `defaultHealthURL` в `cmd/multiverse/health.go`); `/health` бота слушает `MV_TELEGRAM_HEALTH_ADDR`; адрес gateway — `MV_TELEGRAM_GATEWAY_URL` (умолчание манифеста `http://127.0.0.1:8088`, в compose — `http://gateway:8088`). Unit на подкоманду и на умолчание URL. Новые переменные для compose — devops через отчёт. *(Заменено: «`docker-compose` профиль `bot` не правится (владелец — devops); необходимые переменные переданы devops через отчёт».)*
+- [ ] **(ревью #1 T-310, Mi-1)** `main` завершается `os.Exit(updates.ExitCode(err))`: `updates.ErrConflict` → 3; `updates.ErrUnauthorized` — и при старте (`getMe`), и во время опроса (`401 getUpdates`, отозванный токен) → понятная ошибка без токена и код 1, опрос не крутится. Unit на оба случая.
+- [ ] **(ревью #1 T-310, Mi-1)** `deliver` решает про ack по типу ошибки `Sender`: `ErrBlocked`, `ErrChatNotFound`, `ErrRejected` → ack; `ErrUnavailable` и `ErrUnauthorized` (`401` при `sendMessage`) → **без** ack, доставка остаётся у gateway. Unit на `401`.
+- [ ] **(ревью #1 T-310, M-2; уточнено приёмкой T-310, Mi-4 ревью #2)** `access.Gate` собирается с **отдельным** отправителем `sender.NewBestEffortTelegram` (одна попытка, свой HTTP-клиент с таймаутом ≤ `sender.BestEffortHTTPTimeout` = 5 с), а не `WithPolicy(BestEffortPolicy)` отправителя `flow`/`deliver`: тот делит клиент с таймаутом 30 с. Ответы `deliver` — с политикой по умолчанию в своей горутине, не в обработчике обновлений. Unit `main`: сборка зависимостей — шлюзу best effort, `deliver` — `DefaultPolicy`; мок Bot API не отвечает на отказ → следующая команда игрока доходит до мока gateway не позже таймаута клиента шлюза. *(Заменено: «`sender.Telegram.WithPolicy(sender.BestEffortPolicy)`».)*
+- [ ] **(ревью #1 T-310, M-1)** `/health` бота выводит `access.Counters` (`bot_denied_total`). В риски и в отчёт devops для runbook: при `SIGTERM` может потеряться одно обновление, взятое в обработку (опрос с `WithUpdatesChannelCap(0)`; остаток пачки Telegram отдаёт повторно, повтор гасится `action_key`).
+- [ ] **(ревью #1 T-310, N-3)** Тест границы импортов `go list -deps` (`config/imports_test.go`) перенесён в пакет `cmd/telegram-bot`.
 
 ### T-313: e2e соло — `solo-30`, `death`, `flee-fail` · I1 · подволна 1.9 · developer#1 · M
 
@@ -341,7 +354,7 @@
 
 **DoD** (+ DoD-common):
 - [ ] Проверены: тексты (golden), клавиатуры, порядок сообщений, ack каждой доставки, стабильность `action_key` при повторной подаче того же `update_id`.
-- [ ] Отдельные ветки: сообщение из группового чата → бот не вызвал gateway (SEC-07); `from.id` вне allowlist → один отказ, gateway не вызван (SEC-06).
+- [ ] Отдельные ветки: сообщение из группового чата → бот не вызвал gateway и не ответил (SEC-07; решение оркестратора по ревью #1 T-310: US-008, FR-131, NFR-044); `from.id` вне allowlist → один отказ на серию сообщений, gateway не вызван (SEC-06).
 - [ ] Ветка `parse_mode`: доставка нарратива с `[x](http://…)` и `<a>` приходит буквально (SEC-10).
 - [ ] Ветка ошибок: `429 rate_limited` и `503 bus_unavailable` от gateway → корректная подсказка игроку, команда не теряется (повтор с тем же `action_key`).
 - [ ] Сценарий стабилен: 3 прогона подряд дают одинаковую запись `FakeSender`.
@@ -375,6 +388,7 @@
 - [ ] Раздел runbook (`Docs/ops/runbook.md` §6) проверен «сухим прогоном» (шаги выполнимы без доступа к прод-токену), содержит явный пункт «токен нигде не логируется», ссылку на SEC-08 и правило D-10 (токен — только `environment:` сервиса `telegram-bot`).
 - [ ] Документы согласованы с tech-writer; правки в `CLAUDE.md`/`AGENTS.md` — **не** в этой задаче (владелец — tech-writer, EPIC-001 F-9), запрос передан в отчёте.
 - [ ] Публикация портов только на `127.0.0.1` описана и помечена как проверка `compose-lint` (SEC-13).
+- [ ] **(приёмка T-310, 2026-09-13; ревью #1 T-310, п. 6 бэклога)** `cmd/telegram-bot/README.md` и раздел бота в `Docs/ops/runbook.md` (правка согласуется с devops): в @BotFather `/setjoingroups` → **Disable** — бота нельзя добавить в группы (бот в группе молчит, SEC-07, но и сообщений групп не получает); при `SIGTERM` может потеряться одно обновление, взятое в обработку (T-312); отказ посторонним — не больше одного ответа на чат и 10 на весь бот за 60 с, счётчик `bot_denied_total` в `/health`.
 
 ### T-318: Текст уведомления FR-009 (`/start`) и его размещение в `render/notice.go` · I1 · подволна 1.5 (не занимает слот разработчика) · business-analyst + tech-writer, приёмка security-engineer и tech-lead#3 · S
 
@@ -576,6 +590,7 @@
 - [ ] Том `MV_GATEWAY_DATA_DIR` создан именованным, права `0700`; бэкап `links.db` настроен devops (шифрование, срок ≤ 30 дней).
 - [ ] Все порты публикуются только на `127.0.0.1` (`compose-lint` зелёный, SEC-13).
 - [ ] Бот не публикуется в каталогах Telegram (риск design §8).
+- [ ] **(приёмка T-310, 2026-09-13)** В @BotFather для бота стенда выполнено `/setjoingroups` → Disable (по runbook T-317).
 
 ### T-391: Живой прогон I1-α «соло на шаблонах через Telegram» · I1-α · после подволны 1.9 · пользователь + tester#3 · M
 
