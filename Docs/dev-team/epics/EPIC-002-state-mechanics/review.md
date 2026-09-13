@@ -1448,3 +1448,75 @@ Ma-3, Mi-6 и N-3 из ревью #2 закрыты. Новых Critical и Majo
 
 1. **system-architect / EPIC-002 (T-050, C-03):** проверять тип значения скалярных атрибутов модели данных при `set` в корень и под корень, одним правилом для всех читателей, со списком рядом с `entity.Attr*` (Mi-7, V1–V3).
 2. **EPIC-002 / T-057–T-059:** перенести страж `oneStateOverTheWorld` в общий помощник (повтор предложения 2 ревью #2).
+
+## T-471 · ревью #1 · 2026-09-14 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Папка `.worktrees/T-471`, ветка `task/T-471-state-laws-in-process`, база `7fcd02b`, коммитов нет, изменения не закоммичены. Смотрел весь `git diff` против базы (15 файлов): `cmd/multiverse/{contexts_state,contexts_state_test,serve_test}.go`, `test/e2e/empty_world_test.go`, `build/Dockerfile`, `shared/env/vars.go`, `.env.example`, `shared/contracts/ownership{,_test}.go`, `internal/state/{ownership,matrix_test,plan_test}.go`, карточки T-056 и T-471, `dev-log.md`. Сверял с разделом «### T-471» в `tasks.md`; C-02 v1.8 п. 3 и п. 6, «Связка "путь ↔ причина"», «Причина отказа по связке» и «Издатель предложений bootstrap» в `contracts.md`; ответом 7 system-architect в `tasks/T-056.md`; блоком «Передать» T-470 (`develop`); `design.md` §4.3 и §7; КД State §4.5 и §4.6 (строка 362). Для п. 3 проверки смотрел `docker-compose.yml` и правило 9 `scripts/compose-lint.sh` в `.worktrees/T-469`, только чтение.
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 0.
+
+Норма rest совпадает с C-02 v1.8 п. 3 дословно: причины и порядок «путь → встреча → вид `hp` → значение». Строка `system` пуста, пять тестов ответа 7 на месте. Законы в процессе включены, без книги правил `Start` отказывает. Оба Minor касаются передачи и описания `MV_RULES_PATH` и `rules/` в композиции и тексте для оператора, а не кода State. Их можно закрыть приёмкой или отдельной строкой.
+
+### Проверено
+
+1. **Порядок проверок rest против C-02 п. 3.**
+   - Путь проверяет `normAllows`, первая ветка: `gateway` + `player` + `cause=rest` → только корень `hp`. Проверка стоит на шаге 6, до `ApplyOps`.
+   - Встреча читается по `before`, вид `hp` и значение — по `after` (`restRefusal`, `ownership.go:261-281`).
+   - `hp < hp_max` → `level_violation`; `hp > hp_max` или нет целого `hp_max` → `law_violation {inv-02}`; `hp` не целое (текст, дробь, `remove`) → `invalid_op`; во встрече → `law_violation` без `invariant_id`.
+   - Другие предлагающие с `cause=rest` отвергаются самой таблицей. Причины `rest` нет ни в строке `gateway`/`group`, ни у `task`, `domain`, `global`, `author`. Сужать норму только до персонажа шлюза контракт позволяет: ничего не теряется.
+2. **Смена ожиданий в строках T-056 следует из контракта, а не из решения разработчика.**
+   - «rest, стирающий `encounter_id`» → `level_violation`. `encounter_id` — путь не `hp`, а по п. 3 норма пути (шаг 6) идёт раньше встречи.
+   - «rest ниже нуля» → `level_violation`. По п. 3 «`hp < hp_max` — `level_violation`», и строка прямо названа в «Передать» T-470 («строка итерации 3 T-056 "rest below zero → inv-02" меняет ожидание»).
+   - Свойство Mi-1 ревью #1 T-056 (встреча читается до операций) через `Applier` больше не наблюдается. Его держит прямой тест `TestRestReadsTheEncounterBeforeTheOperations`, это честно записано в карточке.
+3. **Строка `system` (п. 6, ответ 7).** `{Proposer: ProposerSystem}` пуста, константа осталась. Тесты (1)–(4) в `TestNobodyProposesUnderTheRowSystem`, тест (5) — в `TestOwnershipRulesCoverEveryProposer` вместе с `object` и `monitor`. В (2)–(4) `proposerOf` не выводит строку `system` вовсе. Пустоту самой строки держит только (5), как и требует ответ 7.
+4. **Dockerfile.**
+   - `WORKDIR /home/nonroot` совпадает с рабочей папкой образов distroless `:nonroot`: там домашняя папка пользователя 65532 и `WorkingDir`. Без Docker это не проверено, но и не важно: папка задана явно.
+   - Относительных путей в образе, кроме нового, нет. `ENTRYPOINT ["/multiverse"]`, `/data` (`COPY --chown … /data`, том `gateway-data:/data`) и проба compose `["CMD", "/multiverse", "health", …]` абсолютные. `working_dir` в `docker-compose.yml` нет ни у одного сервиса платформы.
+   - Из умолчаний манифеста относительное только `MV_RULES_PATH`, у `MV_GATEWAY_DATA_DIR` путь `/data`.
+   - `COPY rules/ ./rules/` кладёт файлы `root` 0644, `nonroot` может их читать. `.dockerignore` каталог `rules/` не исключает.
+5. **Манифест.** `MV_RULES_PATH` объявлена без `Secret`/`Tooling`/`Required`, и это верно: переменную читает процесс в контейнере, это не секрет, а умолчание рабочее. Стоит в группе State рядом с `MV_STATE_WORLDS`. Описание по форме соседей. Строка `.env.example` совпадает с умолчанием. `mvctl env check` — exit 0.
+6. **Тесты процесса и e2e.**
+   - `onLoopback` задаёт абсолютный путь к книге дерева (`withTheRuleBook`), `emptyWorldEnv` передаёт тот же путь дочернему процессу.
+   - На диск пишут только `t.TempDir()`: битый YAML и папка без `rules/`. `sqlitedir.Temp` был и до задачи.
+   - Тесты, которые ждут отказа другого контекста (`TestAMalformedFlagRefusesToStart`, `TestAFakeWithoutRulesNamesTheFlag`), проверяют префикс `start context swarm: `. Отказ `state` без книги сделал бы их красными, а не ложно-зелёными.
+7. **Мутанты** (копия `scratchpad/t471r-mutants`: `go.mod`, `go.sum`, `cmd`, `internal`, `shared`, `rules`, `schemas`, `testdata`, `test`; без `-overlay`). `go list -m` указал на копию, базовый прогон зелёный.
+   - **Контрольный** — `restRefusal` ничего не отвергает: **красный** (`TestTheMatrixOfRefusals`, `TestTheStatusAndTheHitPointsAreReadOnTheEntity`, `TestRestReadsTheEncounterBeforeTheOperations`, `TestTheNormsOfRestHoldWithoutTheLaws`).
+   - **R-A** — rest пишет ещё и `encounter_id` (`root == hp || root == encounter_id`): **красный** (строка «rest inside an encounter that erases encounter_id in the same set»).
+   - **R-B** — отказ `loadTheRules` теряет причину (`%w` снят): **красный** (`TestTheStateOfTheProcessDoesNotStartWithoutItsLaws`, случаи «not there» и «does not parse»).
+   - После отката файл зелёный. Копия удалена по точному пути.
+8. **Прогоны** (go1.26.8 windows/amd64):
+   - `go build ./... && go vet ./...` — 0; `gofmt -l cmd internal shared test` — пусто;
+   - `go test -short -count=1 ./internal/state/... ./cmd/multiverse/... ./shared/contracts/... ./shared/env/...` — ok (`cmd/multiverse` 32 с);
+   - `go test -tags e2e -count=1 ./test/e2e/...` — ok;
+   - `golangci-lint run ./...` — 0 issues;
+   - `go run ./cmd/mvctl env check` — 0 (75 переменных).
+
+### Замечания
+
+| # | Уровень | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `docker-compose.yml:289-317` (`core.environment`); `.env.example:163`; `shared/env/vars.go:158` | `MV_RULES_PATH` объявлена и стоит в `.env.example`, но сервису `core` (`--contexts=state,…`) не передаётся. Оператор, который задал путь в `.env`, молча получит умолчание образа, а `.env.example` не говорит, что композиция значение не пробрасывает. Это тот класс «забыли передать в compose», который T-469 закрывает правилом 9 (T-055, T-310, T-305). Сегодня умолчание рабочее, и на MVP-1 с одной книгой поведение не ломается — поэтому Minor | Добавить в `core.environment` строку `MV_RULES_PATH: ${MV_RULES_PATH:-rules/dark-forest.yaml}` (форма передачи T-469, просмотр tech-lead#1: `docker-compose.yml` — файл EPIC-001, в «Файлах» T-471 его нет). Другой вариант — явно отдать эту строку T-469 или слиянию эпиков, см. «Риски» п. 1 |
+| Mi-2 | Minor | `.env.example:171-173`; `cmd/multiverse/fake_contexts.go:52`, `:64`; `cmd/multiverse/fake_contexts_test.go:124-126` | Правка образа сделала неверными три текста об `rules/`. `.env.example` над `MV_SWARM_FAKE`: «в образе его нет — в контейнере с флагом процесс не стартует». Текст отказа фейка: «and the image of the platform has none». Комментарий теста: «which is where the process stands inside the image». Теперь `rules/dark-forest.yaml` лежит в рабочей папке образа, фейк в контейнере стартует, а отказ при повреждённом файле направит оператора искать отсутствующий каталог. Разработчик это видел (открытый вопрос 4), но `.env.example` — файл, который задача и так правит | В этой задаче поправить комментарий `.env.example:171-173`, например: «Заглушка читает rules/dark-forest.yaml рабочего каталога процесса; в образе он есть (T-471), но compose флаг в контейнеры не передаёт». Текст отказа и комментарий теста хука T-255 (EPIC-003) — строкой бэклога T-256/T-447 или правкой через tech-lead#1, если tech-lead#2 EPIC-003 не возражает |
+
+### Открытые вопросы (к оркестратору)
+
+1. Mi-1: передавать `MV_RULES_PATH` в `core` в этой задаче (через tech-lead#1) или отдать строку T-469 / контрольному слиянию эпиков? От ответа зависит, кто добавит строку в `READERS` правила 9 (Риски п. 1).
+2. Выбор `MV_RULES_PATH` вместо «`rules/` рабочей папки» требует отметки tech-lead#1 по строке индекса («выбор с tech-lead#1»; открытый вопрос 1 карточки). Ревью выбор поддерживает: имя и умолчание дословно из `design.md` §4.3 и §7.
+
+### Риски и допущения
+
+1. **Риск слияния с T-469 (правило 9 `compose-lint`).** В `.worktrees/T-469` правило 9 требует, чтобы каждая объявленная переменная, кроме `Tooling()`, стояла в `READERS` или `NOT_IN_CONTAINERS` (`compose-lint.sh`, около строк 1795-1800). `MV_RULES_PATH` там нет. Какая из задач придёт в `develop` второй, у той `make compose-lint` упадёт с «MV_RULES_PATH is declared … but rule 9 does not know who reads it». Если добавить строку `READERS`, правило потребует и `MV_RULES_PATH` в `core.environment` (это Mi-1). Строка по `design.md` §4.3 — `("state", "swarm")`. Причину `NOT_IN_CONTAINERS` у `MV_SWARM_FAKE` («the image does not carry rules/») тоже придётся поправить. Это не блокер T-471. Нужна отметка для того, кто разрешает слияние.
+2. **Риск для T-472.** `TestTheStateOfTheProcessHoldsTheLaws` ждёт `law_violation {inv-02}` на `set hp {x: 999}` от `task` (DoD T-471). После T-472 `ApplyOps` отвергает значение чужого вида в корне раньше законов, и ожидание станет `invalid_op`. Правка этой строки входит в T-472, в её DoD («`cmd/multiverse` … зелёные»).
+3. **Допущение о порядке.** Между нормой пути (шаг 6) и встречей стоит `ApplyOps` (шаг 7, `apply.go` не менялся). Операция, которая не применяется к `hp` вовсе (например, `append hp` у персонажа во встрече), получит `invalid_op` раньше проверки встречи. Я читаю это как форму пакета («`invalid_op` остаётся за формой пакета», «Причина отказа по связке»), а не как «вид `hp`» п. 3. В издателях такого предложения нет. Если system-architect читает иначе, нужна одна строка матрицы.
+4. `WORKDIR` distroless `:nonroot` и сборку образа без Docker не проверял, `make compose-lint` не запускал: он вызывает `docker compose config`. Итоговая проверка — `make image` и `make compose-lint` у владельца.
+5. `-race` недоступен (нет cgo). Docker, `.env` и стенд `:8888` не трогал. В рабочей папке, кроме этой записи и строки ревью в карточке T-471, ничего не менял.
+
+### Предложения в бэклог
+
+1. **EPIC-003 (T-256 или T-447):** фейк и настоящий рой читают книгу из того же `MV_RULES_PATH` (`design.md` §4.3). Тексты об `rules/` в `fake_contexts.go` и `.env.example` исправляются заодно (Mi-2).
+2. **EPIC-002:** `rules_version` в `/health` у `state`, сверка со `swarm` (`design.md` §4.3) — после подключения роя.
+3. **system-architect:** строка `MV_RULES_PATH` в эталоне `infrastructure.md` §4.2, вместе с недостающей `MV_STATE_WORLDS` (открытый вопрос 2 карточки), и снятие пометок «Код расходится до T-471» в C-02 и КД §4.1, §4.6 после слияния.
