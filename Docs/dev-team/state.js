@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T13:34:03+03:00",
+  "updatedAt": "2026-09-13T13:53:41+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2297,14 +2297,51 @@ window.DEVTEAM_STATE =
         {
           "id": "T-444",
           "title": "Ревизия контрактов 4 — документы (contract-change)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T12:34:45+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:47:28+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 72,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:39",
+              "duration": "5m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:39",
+              "to": "13.09 12:55",
+              "duration": "16m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:55",
+              "to": "13.09 13:12",
+              "duration": "16m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 13:12",
+              "to": "13.09 13:30",
+              "duration": "18m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "13.09 13:30",
+              "to": "13.09 13:34",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:34",
+              "to": "13.09 13:47",
+              "duration": "13m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-444.md",
           "branch": "task/T-444-contracts-revision-4",
           "worktree": ".worktrees/T-444"
@@ -2312,14 +2349,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-445",
           "title": "Ревизия контрактов 4 — линтер, реестр, схемы (contract-change)",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T12:34:45+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:42:09+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 67,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:45",
+              "duration": "10m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:45",
+              "to": "13.09 13:15",
+              "duration": "30m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:15",
+              "to": "13.09 13:30",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:30",
+              "to": "13.09 13:42",
+              "duration": "11m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-445.md",
           "branch": "task/T-445-depguard-registry-schemas",
           "worktree": ".worktrees/T-445"
@@ -2327,30 +2389,32 @@ window.DEVTEAM_STATE =
         {
           "id": "T-446",
           "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T13:46:40+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-446.md",
-          "branch": null,
-          "worktree": null
+          "branch": "task/T-446-runtime-cmd-layout",
+          "worktree": ".worktrees/T-446"
         },
         {
           "id": "T-449",
           "title": "Документы по решениям system-architect: C-03 v1.3 (T-053), тексты T-050, правило «локальный адрес» (ADR-005/C-15), направление зависимостей internal/llm (ADR-001), limit_money (C-07)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T13:49:33+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks/T-449.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-449.md",
+          "branch": "task/T-449-docs-architect-decisions",
+          "worktree": ".worktrees/T-449"
         },
         {
           "id": "T-450",
@@ -7957,7 +8021,7 @@ window.DEVTEAM_STATE =
       "task": "T-060",
       "action": "T-060 internal/replay: EventClock, NullTimers, Recording",
       "startedAt": "2026-09-13T13:16:34+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:38:43+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -7977,7 +8041,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "ревью #1 T-201 (TEAM-2)",
       "startedAt": "2026-09-13T13:30:46+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:45:18+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -7987,7 +8051,7 @@ window.DEVTEAM_STATE =
       "task": "T-445",
       "action": "приёмка T-445",
       "startedAt": "2026-09-13T13:30:46+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:42:09+03:00"
     },
     {
       "instance": "developer#1",
@@ -7997,7 +8061,7 @@ window.DEVTEAM_STATE =
       "task": "T-053",
       "action": "итерация 2 T-053: C-03 v1.3",
       "startedAt": "2026-09-13T13:30:46+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:45:56+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -8007,7 +8071,7 @@ window.DEVTEAM_STATE =
       "task": "T-453",
       "action": "Ложное срабатывание gitleaks в эталоне .env.example без построчного от",
       "startedAt": "2026-09-13T13:31:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:48:51+03:00"
     },
     {
       "instance": "devops-engineer#2",
@@ -8027,7 +8091,7 @@ window.DEVTEAM_STATE =
       "task": "T-452",
       "action": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие к",
       "startedAt": "2026-09-13T13:31:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:45:18+03:00"
     },
     {
       "instance": "developer#3",
@@ -8057,6 +8121,96 @@ window.DEVTEAM_STATE =
       "task": "T-444",
       "action": "приёмка T-444 (TEAM-1)",
       "startedAt": "2026-09-13T13:34:03+03:00",
+      "finishedAt": "2026-09-13T13:47:28+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "ревью #1 T-060 (TEAM-1)",
+      "startedAt": "2026-09-13T13:38:43+03:00",
+      "finishedAt": "2026-09-13T13:52:03+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "итерация 2 T-201: ContentHash, fence, плейсхолдеры",
+      "startedAt": "2026-09-13T13:45:18+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "ревью #1 T-452 (TEAM-2)",
+      "startedAt": "2026-09-13T13:45:18+03:00",
+      "finishedAt": "2026-09-13T13:53:41+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "приёмка T-053 (TEAM-1)",
+      "startedAt": "2026-09-13T13:45:56+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "T-446 runtime (таймауты, SetDeadlines, ShuttingDown) и раскладка cmd",
+      "startedAt": "2026-09-13T13:46:40+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "ревью #1 T-453 (TEAM-1)",
+      "startedAt": "2026-09-13T13:48:51+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "PROJECT",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "T-449 документы по решениям: C-03 v1.3, T-050, локальный адрес, llm, limit_money",
+      "startedAt": "2026-09-13T13:49:33+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "итерация 2 T-060: проводка Bus, Derive replay",
+      "startedAt": "2026-09-13T13:52:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "приёмка T-452 (TEAM-2)",
+      "startedAt": "2026-09-13T13:53:41+03:00",
       "finishedAt": null
     }
   ],
