@@ -129,10 +129,9 @@ const (
 // happened when somebody swung.
 //
 // The interface is declared here, on the side of the consumer, so that both
-// halves of C-03 satisfy it — *mechanics.Rules once EPIC-002 implements Resolve
-// (T-053) and testkit/mechanics.FixedMechanics until then — and swapping one
-// for the other is a change of one field of EncounterConfig (design.md §11,
-// contracts.md §17).
+// halves of C-03 satisfy it — *mechanics.Rules, the mechanics of EPIC-002, and
+// testkit/mechanics.FixedMechanics — and swapping one for the other is a change
+// of one field of EncounterConfig (design.md §11, contracts.md §17).
 type Mechanics interface {
 	Resolve(causeEventID string, rollIndexStart int, a mech.Action,
 		actors map[string]*mech.Actor) (mech.Outcome, []mech.Roll, error)
@@ -152,8 +151,8 @@ type EncounterConfig struct {
 	// and rules_version. Nothing here is faked: it is rules/dark-forest.yaml as
 	// internal/mechanics loaded it.
 	Rules *mech.Rules
-	// Mechanics decides one action. FixedMechanics answers from a table until
-	// EPIC-002 writes Resolve (T-053).
+	// Mechanics decides one action: FixedMechanics answers from a table, the
+	// mechanics of EPIC-002 (Resolve) by the rules.
 	Mechanics Mechanics
 	// Log receives what the stub decided; it defaults to a logger that
 	// discards everything, so that a test says nothing unless it asks to.
@@ -1160,29 +1159,38 @@ func (e *FakeEncounter) report(ctx context.Context, cause eventbus.Event, enc *e
 }
 
 // wound records what a landed strike changes: the hit points of whoever was
-// struck, the death record of whoever fell, and the trophy of whoever landed
-// the last hit.
+// struck, the status of whoever fell, the death record of an NPC that fell, and
+// the trophy of whoever landed the last hit.
 //
 // hpAfter is what pack computed from the hit points the target has now, and
 // death follows from it rather than from what the decision said: inv-02 keeps
 // hit points in [0, hp_max], so a fighter at zero is a fighter who fell.
+//
+// A fallen character gets hp and status and nothing else. died_at and
+// killed_by are attributes of an NPC — the respawn cooldown and the trophy —
+// and a character has neither (data-model.md §3.3). The ownership row of the
+// task level over a player does not list them either, so the real State would
+// refuse the whole package with level_violation (T-452).
 //
 // It writes into the change set rather than publishing, because everything one
 // exchange changed travels as a single atomic proposal (C-03: one package per
 // round; C-02 v1.3: one entity, one change set).
 func (e *FakeEncounter) wound(pending *changes, target *entity.Entity, b blow, hpAfter int) {
 	dead := hpAfter == 0
+	npcFell := dead && target.Type == entity.TypeNPC
 	ops := []entity.Op{{Op: entity.OpSet, Path: entity.AttrHP, Value: hpAfter}}
 	if dead {
+		ops = append(ops, entity.Op{Op: entity.OpSet, Path: entity.AttrStatus, Value: entity.StatusDead})
+	}
+	if npcFell {
 		ops = append(ops,
-			entity.Op{Op: entity.OpSet, Path: entity.AttrStatus, Value: entity.StatusDead},
 			entity.Op{Op: entity.OpSet, Path: entity.AttrDiedAt, Value: b.at.UTC().Format(time.RFC3339)},
 			entity.Op{Op: entity.OpSet, Path: entity.AttrKilledBy, Value: b.attackerID},
 		)
 	}
 	pending.add(target, ops...)
 
-	if !dead || target.Type != entity.TypeNPC {
+	if !npcFell {
 		return
 	}
 	// The trophy: to the character who landed the last hit, and exactly once

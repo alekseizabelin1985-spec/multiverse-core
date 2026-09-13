@@ -42,6 +42,7 @@ linters:
           files:
             - "**/shared/**"
             - "!**/shared/testkit/mechanics/**"
+            - "!**/shared/testkit/state/**"
             - "!**/shared/testkit/swarm/**"
             - "!**/shared/testkit/gateway/**"
           deny:
@@ -67,6 +68,28 @@ linters:
           deny:
             - pkg: multiverse-core.io/internal
               desc: "the mechanics double may see internal/mechanics and no other context (ADR-001 p. 3, exception recorded in journal.md 2026-09-10)"
+
+        # The double of State is State itself: FakeState is state.Applier over
+        # memstore without the object store (state-and-mechanics.md §8, C-02
+        # "Заглушка"; T-056), so that a consumer tested against the double is
+        # tested against the decisions of the real pipeline. It may see the
+        # Applier, its working set and the laws WithInvariants turns on, and no
+        # other context. Each entry is one package, with the trailing $ for the
+        # reason given at shared-testkit-mechanics. It is the fourth exception
+        # of shared/testkit: ADR-001 (addendum 2026-09-13, conditions of review)
+        # suggests moving the doubles into internal/<ctx>/<ctx>test past three,
+        # which is the question T-056 leaves to system-architect.
+        shared-testkit-state:
+          list-mode: lax
+          files:
+            - "**/shared/testkit/state/**"
+          allow:
+            - multiverse-core.io/internal/state$
+            - multiverse-core.io/internal/state/memstore$
+            - multiverse-core.io/internal/mechanics$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "the double of State may see internal/state, internal/state/memstore and internal/mechanics and no other context (state-and-mechanics.md §8, T-056)"
 
         # Test doubles stay in tests. ownership.md §1 already treats one file as
         # "the only import of shared/testkit in the production binary", but the

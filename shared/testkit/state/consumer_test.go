@@ -165,15 +165,16 @@ func TestTheStubIsARegisteredPublisher(t *testing.T) {
 	}
 }
 
-// TestTheRefusalMatrixIsASubsetOfTheContract keeps the five reasons of the
-// stub inside the seven of C-02. A reason the schema does not know would be
-// refused on publish; a reason spelled differently would reach a consumer that
-// has no branch for it.
-func TestTheRefusalMatrixIsASubsetOfTheContract(t *testing.T) {
+// TestTheRefusalMatrixIsTheContract keeps the reasons of the double the seven
+// of C-02: the double is State (T-056), and its matrix is State's. A reason the
+// schema does not know would be refused on publish; a reason spelled
+// differently would reach a consumer that has no branch for it.
+func TestTheRefusalMatrixIsTheContract(t *testing.T) {
 	contractReasons := reasonsOfTheContract(t)
 	stub := []string{
 		state.ReasonUnknownEntity, state.ReasonVersionConflict, state.ReasonInvalidOp,
-		state.ReasonDuplicateEntity, state.ReasonDeadEntity,
+		state.ReasonDuplicateEntity, state.ReasonDeadEntity, state.ReasonLevelViolation,
+		state.ReasonLawViolation,
 	}
 	for _, reason := range stub {
 		if !slices.Contains(contractReasons, reason) {
@@ -186,17 +187,9 @@ func TestTheRefusalMatrixIsASubsetOfTheContract(t *testing.T) {
 			t.Errorf("reason %q is not valid in %s: %v", reason, state.TypeRejected, err)
 		}
 	}
-	if len(stub) != 5 {
-		t.Errorf("the stub has %d reasons, the design gives it five", len(stub))
-	}
-	// The two the stub deliberately lacks, named so that the gap of design.md
-	// §5 stays a decision rather than an omission.
-	for _, missing := range []string{"level_violation", "law_violation"} {
-		if !slices.Contains(contractReasons, missing) {
-			t.Errorf("C-02 no longer defines %q: the gap of the stub is stated against it", missing)
-		}
-		if slices.Contains(stub, missing) {
-			t.Errorf("the stub answers %q, which needs what v0 does not have", missing)
+	for _, reason := range contractReasons {
+		if !slices.Contains(stub, reason) {
+			t.Errorf("C-02 defines %q, which the double does not name", reason)
 		}
 	}
 }
