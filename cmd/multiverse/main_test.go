@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"multiverse-core.io/internal/gateway"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/runtime"
 )
@@ -244,8 +245,9 @@ func TestPlatformContextsAreRegisteredOnceInTheStartOrder(t *testing.T) {
 	}
 }
 
-// Without MV_SWARM_FAKE every context of the binary is still the empty stub of
-// wave 0, swarm included: the hook changes nothing unless it is asked to.
+// Without MV_SWARM_FAKE every context of the binary but gateway is still the
+// empty stub of wave 0, swarm included: the hook changes nothing unless it is
+// asked to. gateway is real since T-303 (TestGatewayIsTheRealContext).
 func TestStubIsHealthyAndDoesNothing(t *testing.T) {
 	clearVar(t, env.SwarmFake.Name())
 	contexts, err := runtime.New([]string{runtime.All})
@@ -256,6 +258,9 @@ func TestStubIsHealthyAndDoesNothing(t *testing.T) {
 		t.Fatalf("New(all) built %d contexts, want %d", len(contexts), len(platformContexts))
 	}
 	for _, c := range contexts {
+		if c.Name() == gateway.Name {
+			continue
+		}
 		if _, ok := c.(stub); !ok {
 			t.Errorf("%s is %T without %s, want the stub of wave 0", c.Name(), c, env.SwarmFake.Name())
 		}

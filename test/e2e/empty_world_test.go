@@ -27,6 +27,7 @@ import (
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/testkit"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
 
 // startupBudget is how long the process gets to bind its port and answer. It
@@ -124,11 +125,15 @@ type health struct {
 // exported MV_SWARM_FAKE=true in their shell must not change what a test
 // proves — the child inherits the environment, runs from test/e2e without
 // rules/ and would refuse to start (review #1 of T-255, Mi-2).
+//
+// The gateway of --contexts=all is real since T-303 and opens its SQLite files
+// at start: the child gets a data directory of the test, not the default /data.
 func emptyWorldEnv(t *testing.T) string {
 	t.Helper()
 	addr := freeAddress(t)
 	t.Setenv(env.CoreAddr.Name(), addr)
 	t.Setenv(env.SwarmFake.Name(), "false")
+	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t))
 	return addr
 }
 

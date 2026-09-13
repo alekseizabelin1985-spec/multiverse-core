@@ -47,6 +47,7 @@ const (
 	CodeNotImplemented       = "not_implemented"
 	CodeBusUnavailable       = "bus_unavailable"
 	CodeStateUnavailable     = "state_unavailable"
+	CodeForgetIncomplete     = "forget_incomplete"
 )
 
 // ErrorSpec is one row of the error table: the code, the HTTP status it always
@@ -102,6 +103,9 @@ var errorTable = []ErrorSpec{
 	{CodeNotImplemented, http.StatusNotImplemented, "Не реализовано."},
 	{CodeBusUnavailable, http.StatusServiceUnavailable, "Сервис временно недоступен, повторите."},
 	{CodeStateUnavailable, http.StatusServiceUnavailable, "Сервис временно недоступен, повторите."},
+	// T-303: /forget deleted the link, but links.db is not compacted yet, so the
+	// data cannot be reported as gone (SEC-04); a repeat finishes the wipe.
+	{CodeForgetIncomplete, http.StatusServiceUnavailable, "Удаление не завершено, повторите /forget."},
 }
 
 var errorIndex = indexErrors(errorTable)
@@ -155,11 +159,25 @@ func (e *Error) Body() ErrorResponse {
 
 // WriteError writes e as the JSON error body. Headers that belong to a code,
 // such as Retry-After of rate_limited, are set by the caller before the call.
+// The code reaches the access log of the middleware, never the body.
 func WriteError(w http.ResponseWriter, e *Error) error {
+	if rec, ok := w.(codeSetter); ok {
+		rec.setCode(e.Code)
+	}
 	w.Header().Set("Content-Type", ContentTypeJSON)
 	w.WriteHeader(e.Status)
 	if err := json.NewEncoder(w).Encode(e.Body()); err != nil {
 		return fmt.Errorf("api: write error %s: %w", e.Code, err)
+	}
+	return nil
+}
+
+// WriteJSON writes v as the JSON body of a successful answer with status.
+func WriteJSON(w http.ResponseWriter, status int, v any) error {
+	w.Header().Set("Content-Type", ContentTypeJSON)
+	w.WriteHeader(status)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		return fmt.Errorf("api: write %T: %w", v, err)
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"multiverse-core.io/internal/gateway/store"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
 
 // These tests are unit tests although the tasks card of T-302 calls some of
@@ -28,7 +29,7 @@ func TestMigrationsRunFromScratchAndRepeatAsNoOp(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			path := tc.path(tempDir(t))
+			path := tc.path(sqlitedir.Temp(t))
 			db, err := tc.open(ctx, path)
 			if err != nil {
 				t.Fatal(err)
@@ -91,7 +92,7 @@ var (
 )
 
 func TestSchemaColumnsMatchTheAllowList(t *testing.T) {
-	dir := tempDir(t)
+	dir := sqlitedir.Temp(t)
 	links := columns(t, openLinks(t, dir))
 	gateway := columns(t, openGateway(t, dir))
 
@@ -163,7 +164,7 @@ func compareColumns(t *testing.T, file string, got, want map[string][]string) {
 // C-10 v1.1: analytics.session.ended carries end_reason in leave, idle, death,
 // error or forget, and the CHECK of sessions.end_reason is the same list.
 func TestSessionEndReasonCheck(t *testing.T) {
-	db := openGateway(t, tempDir(t))
+	db := openGateway(t, sqlitedir.Temp(t))
 	insert := func(id, reason string) error {
 		_, err := db.ExecContext(context.Background(), `INSERT INTO sessions
 			(id, world_id, scope_id, scope_type, kind, actor_kind, participants,
@@ -186,7 +187,7 @@ func TestSessionEndReasonCheck(t *testing.T) {
 
 func TestLinksSchemaInvariants(t *testing.T) {
 	ctx := context.Background()
-	db := openLinks(t, tempDir(t))
+	db := openLinks(t, sqlitedir.Temp(t))
 	insertLink(t, db, "telegram", "100200300", "link-1", "player-1")
 	exec(t, db, `INSERT INTO character_requests
 		(link_id, action_key, player_id, status_code, response_json, expires_at)
@@ -229,7 +230,7 @@ func TestLinksSchemaInvariants(t *testing.T) {
 
 func TestGatewaySchemaInvariants(t *testing.T) {
 	ctx := context.Background()
-	db := openGateway(t, tempDir(t))
+	db := openGateway(t, sqlitedir.Temp(t))
 	session := func(id, scope, state string) string {
 		return fmt.Sprintf(`INSERT INTO sessions (id, world_id, scope_id, scope_type, kind, actor_kind, participants, started_at, last_action_at, state)
 			VALUES ('%s', 'w', '%s', 'group', 'group', 'ci', '[]', 'x', 'x', '%s')`, id, scope, state)

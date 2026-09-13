@@ -359,3 +359,265 @@ Mi-1, Mi-2 и Mi-5 дешевле закрыть до поставки в `devel
 2. DoD T-310 и T-311: клиент создаётся через `New` (Mi-3); `deleted: false` после транспортной ошибки у `/forget` проверяется через `Resolve` (Mi-7).
 3. DoD T-303: ответы шлюза не отдают `null` в обязательных массивах (Mi-1), если тест не заведён в T-301.
 4. Makefile `test` из PowerShell (п. 2 автора) — поддерживаю, владелец EPIC-001.
+
+<!-- review T-303 #1 -->
+## T-303 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-3)
+
+### Границы ревью
+
+Рабочая папка `.worktrees/T-303`, ветка `task/T-303-links-http-layer`, база `fdc7e05` (`epic/EPIC-004-gateway-bot`). Коммита задачи нет, поэтому ревьюировались **незакоммиченные изменения** (`git status --untracked-files=all`). Изменены: `api/gateway.openapi.yaml`, `cmd/multiverse/{contexts.go,main_test.go,serve_test.go}`, `internal/gateway/api/{errors.go,openapi_test.go,router.go}`, `test/e2e/empty_world_test.go`, карточка и `dev-log.md`. Новые: `cmd/multiverse/gateway_context_test.go`, `internal/gateway/{context.go,context_test.go}`, `internal/gateway/api/{middleware.go,middleware_test.go}`, `internal/gateway/handlers/{links.go,links_test.go}`, `internal/gateway/links/{link.go,pseudonym.go,store.go,forget.go,*_test.go}`. Посторонних путей нет. `go.mod`, `shared/env/vars.go` и `.env.example` не менялись.
+
+Основание: `tasks.md` §T-303 (сверка 2026-09-13), карточка T-303 («Выполнение»), запись `dev-log T-303`, `components/gateway-and-bot.md` §3, §4.1, §5.1, §5.2, §6, §7.5, §11.1, §11.4, ADR-019 с доп. п. 1, `analysis/api-contracts.md` §1.1, §1.2, §1.6, `api/gateway.openapi.yaml`. Решение по C-08 (`503 forget_incomplete`) принимает system-architect#1 параллельно; здесь оценены реализация и риски.
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 1 · Minor: 6 · Nit: 7.
+
+Ядро задачи сделано хорошо. `/forget` идёт в порядке «хуки → DELETE → сжатие» до ответа. Стирание доказано сканом `links.db`, `-wal` и `-shm` с контролями. Отказ сжатия не выдаётся за успех. Middleware закрывает SEC-11/12, nolog-политика проверена тестом и мутантами. Отклонения от дизайна обоснованы. Возвращаю из-за M-1: с этой задачей контекст `gateway` в compose впервые открывает SQLite на томе `/data`, а образ к этому не готов, и `make up` перестаёт подниматься. Minor: гонка `/forget` с привязкой персонажа; потеря отметки «сжатие отложено» при рестарте; `/health degraded` и сжатие в `Stop` не проверены тестами; неполное согласие создаёт связку; умолчание `/data` на хосте; `Link` внутри структур не редактируется в JSON-логе.
+
+### Проверено ревьюером (только чтение; go1.26.8 windows/amd64, cgo выключен — без `-race`)
+
+| Проверка | Как | Результат |
+|---|---|---|
+| сборка и vet | `go build ./...`; `go vet ./internal/gateway/... ./cmd/multiverse/`; `go vet -tags e2e ./test/e2e/` | 0 / 0 / 0 |
+| unit | `go test -short -count=1 ./internal/gateway/... ./cmd/multiverse/` | 8 пакетов ok |
+| линтер | `golangci-lint run ./internal/gateway/... ./cmd/multiverse/... ./test/...` | 0 issues |
+| порядок старта | `cmd/multiverse/serve.go:297-303`, `shared/runtime/lifecycle.go:64-67` | `Routes` → `Start` → `srv.Start()`: сервер начинает обслуживать после `StartAll`, и поля `api.Config`/`handlers.Links` к этому моменту заполнены. Гонки в процессе нет |
+| `/health` при `degraded` | `shared/runtime/http.go:59-63`, `lifecycle.go:137-156` | `degraded` → HTTP 200, `fail` → 503: отложенное сжатие не валит healthcheck compose |
+| редакция `Link` | зонд вне модуля в scratch (копия типа с теми же `LogValue/String/GoString`) | верхний атрибут slog, `%v/%+v/%#v` и обёрнутая ошибка дают `redacted`. **Вложенный** `Link` (`Resolution`, `[]Link`) в `slog.NewJSONHandler` печатает `LinkID` и `ExternalID` (Mi-6). Зонд удалён по точному пути |
+| образ и том | `build/Dockerfile:28-35`, `docker-compose.yml:243-273`, `internal/gateway/store/open.go:177-220` | каталога `/data` в образе нет, `USER nonroot`; том `gateway-data:/data` — root `0755` → gateway отказывается стартовать (M-1). Docker не запускался, вывод по чтению |
+| мутанты | копия дерева в scratch (tar без `.git`, `services/`, `Docs/`), без `-overlay`; замена только единственного вхождения, побайтный откат, `diff -r` копии с папкой задачи; копия удалена по точному пути | таблица ниже |
+
+| # | Мутант | Результат |
+|---|---|---|
+| M0 | контрольный: `BodyLimit = 1 << 30` | **красный**: `TestBodyLimitAndContentType/65_KiB`, `65_KiB_chunked` |
+| K1 | `Health` не смотрит `CompactionPending` | **зелёный**: `degraded` не проверяется (Mi-3) |
+| K2 | `Stop` не пытается сжать | **зелёный**: не проверяется (Mi-3; исполнитель это отметил) |
+| K3 | `limitBody` раньше `admitClient` в `Chain` | **зелёный**: порядок шагов 3/4 не закреплён (N-1) |
+| K4 | `ContentLength >= BodyLimit` | **зелёный**: граница ровно 64 КиБ не проверяется (N-1) |
+| K6 | значение паники пишется и на nolog-операции | **красный**: `TestNoLogOperationsLogOnlyTheRequestIDAndTheCode` (первая форма не собралась и не засчитана) |
+| K7 | `Sweep`: `expires_at < ?` вместо `<=` | **красный**: `TestCharacterRequestsKeepTheFirstAnswerForTheirTTL` |
+| K9 | `client_mismatch` только для путей на `/deliveries` | зелёный: других смонтированных маршрутов с `{client_id}` пока нет, для T-303 не дефект |
+| K11 | открытие БД без `context.WithoutCancel` | **красный**: `TestServeSubcommandAndTheBareFormAreOneCommand` (4 случая) |
+
+### Разбор по пунктам поручения
+
+**1. Приватность `/forget`.** Порядок верный (`links/forget.go:78-92`). Хуки вызываются только при наличии персонажа; если хук упал, связка остаётся. `DELETE` каскадом удаляет `character_requests`. `Compact` выполняется до ответа; его ошибка превращается в `ErrCompactionPending` и `503`. Тест `TestForgetWipesTheExternalIDFromTheFileAndTheWAL` доказательный. Сначала ID переносится в сам файл (контроль > 0). После `Forget` в `links.db`, `-wal` и `-shm` его 0, а ID, который должен остаться, скан видит. `CompactLinks` (T-302) считает `busy != 0` ошибкой, и ветка 503 опирается именно на это. `Link` редактирует себя на верхнем уровне slog и во всех формах fmt. Вложенный в структуру или срез `Link` в JSON-логе платформы не редактируется (Mi-6): так сейчас никто не логирует, но обещанной component §11.1 гарантии «по построению» нет. Nolog: в строке access-лога только `request_id` и `code` (у паники ещё `handled=false`). Значение паники и стек на nolog-маршрутах не пишутся (мутант K6 красный). `403` шага 3 тоже логируется без маршрута и тела. Цена этого — причина `500` на этих маршрутах теряется; исполнитель вынес вопрос в бэклог (п. 8), согласен.
+
+**2. `503 forget_incomplete`.** Реализация согласована в четырёх местах: `errors.go:106-108`, `Unavailable.x-error-codes`, ответ 503 у `forgetLink`, эталонный список `openapi_test.go`. Отметка «сжатие отложено» ставится при любой неудаче `Compact` и снимается при успехе. Сжатие доделывают: `/forget` без связки (`forget.go:70-76`), `Sweep` раз в минуту, полное сжатие раз в час и попытка в `Stop`. Пока отметка стоит, `/health` отвечает `degraded` (HTTP 200, compose контейнер не перезапускает). Отвергнутые варианты (200 с доделкой sweeper'ом, 500) отвергнуты правильно.
+
+Риски:
+- (а) отметка живёт только в памяти (Mi-2);
+- (б) повтор после 503 отвечает `{deleted:false, player_id_detached:null}`, и клиент теряет `player_id_detached`. По документации клиента T-301 (`client/client.go:141-146`) неоднозначность разрешается через `Resolve`. Но `Resolve` по дизайну **создаёт** связку и снова пишет внешний ID в `links.db` сразу после `/forget` (бэклог 2, system-architect/T-311);
+- (в) пока сжатие отложено, `/forget` любого аккаунта без связки тоже получает 503 (N-2);
+- (г) узкое окно: успешный `Compact` sweeper'а может снять отметку, поставленную параллельным неуспешным `/forget`, если `DELETE` этого `/forget` попал между checkpoint sweeper'а и `pending.Store(false)` (`store.go:247-254`). Вероятность пренебрежимо мала; счётчик поколений закрыл бы и это. Оставлено в рисках.
+
+**3. Middleware.** Фактический порядок: request_id + access-лог → recover → client → body_limit → ratelimit → pollguard → timeout (`api/middleware.go:99-102`). Перестановка request_id/recover обоснована: 500 от паники получает `X-Request-Id` и попадает в лог. Паника внутри самого access-лога не перехватывается, но там вызываются только `Clock.Now` и логгер, заполненные в `Start`.
+
+Коды ошибок:
+- `client_unknown` — при пустом и неизвестном `X-Client-Id`;
+- `actor_kind_forbidden` — `ci|sim` от клиента вне списка;
+- `400 invalid_request` — прочие значения `X-Actor-Kind`;
+- `client_mismatch` — для любого пути с `{client_id}`.
+
+Лимит тела: при `Content-Length > 64 КиБ` сразу 413; chunked-тело ограничивают `MaxBytesReader` и `DecodeJSON`. Порядок шагов 3/4 и граница ровно 64 КиБ тестами не закреплены (N-1). Дедлайн 5 с ставится через `context.WithTimeout` на контексте запроса, а не через `Timers`: это не доменное время, для replay допустимо. Long-poll из дедлайна исключён.
+
+**4. Гонки.** Зависимости заполняются в `Start` без синхронизации, и при порядке `serve.go` это безопасно (см. таблицу). Будущему `shared/testkit/gateway.Harness` нужен тот же порядок. Запрос до `Start` упадёт на `nil` `Clock` в access-логе, вне recover, и `net/http` запишет панику в stderr мимо slog (бэклог 5). `/forget` против параллельной привязки персонажа — Mi-1.
+
+**5. Отклонения от дизайна.** Все обоснованы:
+- пакет `handlers`: `api` импортирует бот, а через `links` → `store` в бинарник бота попал бы драйвер SQLite;
+- сигнатуры стора: `Resolution.PreviousSeenAt` нужен для `notice_due`; `ConsentForm` держит инвариант неполного согласия в сторе; `now` передаётся аргументом ради детерминизма;
+- id берутся из `Deps.IDs` — по сверке задачи;
+- `X-Request-Id` генерирует `uuid.NewString`, чтобы запросы не сдвигали `sequence`; это закреплено тестом и мутантом C6.
+
+Отклонения перечислены в карточке, правки component §3/§5.1/§6 и C-08 — в бэклоге исполнителя (п. 3).
+
+**6. Правки EPIC-001.** Правки минимальны:
+- `contexts.go` — одна ветка `case gateway.Name` в `factoryOf`, фабрика в одну строку и комментарий; `gateway` остаётся на своём месте в `platformContexts`;
+- `main_test.go` — пропуск одного имени;
+- `serve_test.go` и `empty_world_test.go` — временный `MV_GATEWAY_DATA_DIR` с повторным удалением.
+
+Перенос в `contexts_gateway.go` (T-446) правка не усложняет: `newGateway` и `case` переезжают целиком. Если `platformContexts` останется в `contexts.go`, импорт `internal/gateway` ради константы `gateway.Name` можно заменить литералом `"gateway"` — на усмотрение T-446. Хук `swarm` (T-255) не тронут.
+
+**7. Умолчание `MV_GATEWAY_DATA_DIR=/data` на хосте.** См. Mi-5 и M-1.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| M-1 | Major | `internal/gateway/context.go:93-104`; `internal/gateway/store/open.go:177-188, 209-220`; `build/Dockerfile:28-35`; `docker-compose.yml:256, 273` | С T-303 сервис `gateway` (`--contexts=gateway`) при старте открывает `links.db` в `/data`. В образе каталога `/data` нет, процесс работает от `nonroot`, именованный том `gateway-data:/data` монтируется как root `0755`. `prepareDir` → `checkMode` отвергает `0755` при пределе `0700`; при подходящих правах `nonroot` всё равно не смог бы создать файл. Контекст не стартует, `make up` (`docker compose up --wait`) красный. Это регрессия стека по умолчанию: до задачи gateway отвечал `/health: ok`. CI её не ловит: compose там проверяется только `config -q`. Проблема известна с ревью T-302 (бэклог 3, devops), T-303 делает её действующей, но в карточке она не упомянута ни в рисках, ни в отклонениях. Docker ревьюер не запускал, вывод сделан по чтению Dockerfile, compose и `open.go`. | Выбор за оркестратором: (а) с согласия tech-lead#1 (так же, как правка `contexts.go`) добавить `/data` в образ с владельцем `nonroot` (65532) и правами `0700`, например `COPY --from=builder --chown=65532:65532 --chmod=0700 <пустой каталог> /data`; (б) отдельная задача devops, слитая в эпик **до** T-303. На стенде проверить `make minio-image && make up && make health` — gateway `ok`. Том `gateway-data`, уже созданный на машине владельца прежними `make up` (root `0755`), права каталога образа не унаследует: в runbook нужна строка о пересоздании пустого тома. В карточку T-303 добавить строку в «Риски» или «Отклонения» со ссылкой на выбранный путь. | открыто |
+| Mi-1 | Minor | `internal/gateway/links/forget.go:54, 78-88` | Связка читается вне транзакции, затем идут хуки, затем `DELETE … WHERE link_id = ?` без условия на `player_id` и без проверки `RowsAffected`. Если между чтением и `DELETE` успеет `AttachPlayer` (T-306), новый персонаж останется без каскада: outbox не сброшен, `abandoned` не предложен, сессия не закрыта (связка при этом удалена, внешний ID стёрт). Два параллельных `/forget` одного аккаунта оба прогоняют хуки и оба отвечают `deleted:true`. Контракт стора задаётся здесь, а в T-306 эта ветка станет достижимой. | `DELETE FROM links WHERE link_id = ? AND player_id IS ?` со значением, прочитанным до хуков. При `RowsAffected = 0` перечитать связку: исчезла — `{deleted:false}`; сменился персонаж — повторить каскад, ограничив число попыток. Тест: хук вызывает `AttachPlayer` с другим `player_id`, и второй персонаж тоже проходит хуки. | открыто |
+| Mi-2 | Minor | `internal/gateway/links/store.go:60-62, 245-257`; `internal/gateway/context.go:126-130, 158` | Отметка «сжатие отложено» хранится только в `atomic.Bool`. После рестарта или аварии между `DELETE` и checkpoint её нет: `/health` отвечает `ok`, `Sweep` не сжимает. Первое полное сжатие наступит только через `LinksCompactInterval` = 1 ч аптайма (`Timers.Every` сразу не тикает). Если процесс перезапускается чаще, сжатие не наступит вовсе, и байты внешнего ID остаются в `-wal` или в файле (SEC-04; ADR-019 доп. п. 1 называет этот случай «страховкой после аварийного завершения»). | В `Start` (live) один раз вызвать `store.Compact`: неудача ставит отметку (`degraded`) и пишется в лог, старт не валится. Тест: в WAL остались кадры удалённой строки (или отметка стояла до `Start`) → после `Start` скан = 0. | открыто |
+| Mi-3 | Minor | `internal/gateway/context.go:197-201, 224-227`; `internal/gateway/context_test.go` | Новое поведение решения 6 не покрыто тестом контекста: `/health` `degraded` с `links_compaction: pending` и попытка сжатия в `Stop` (мутанты K1, K2 зелёные). Это наблюдаемая часть нового кода 503: по ней оператор видит, что `/forget` не довёл стирание. | Тест контекста с внешним читателем (как `forget_test.go:184-200`; `busy_timeout = 0` через отдельное соединение или короткий дедлайн запроса): `/forget` → `503 forget_incomplete` → `Health` `degraded`/`pending` → читатель уходит → `Stop` → скан `links.db` и `-wal` = 0. Второй вариант проверки: тик `SweepInterval` → `Health` `ok`. | открыто |
+| Mi-4 | Minor | `internal/gateway/links/store.go:132-140, 159-161` | Неполное согласие для аккаунта без связки вставляет строку с внешним ID (`pending_consent`) и отвечает `400 consent_incomplete`. `api-contracts.md` §1.2 требует: «`consent_incomplete` (…запись `pending_consent`, ничего не создаётся)». Если человек отказался от согласия и `resolve` до этого не вызывался, ПДн хранятся без необходимости (минимизация, SEC-03). Решение 8 карточки говорит о создании связки только при полном согласии. | Если связки нет и форма неполная — вернуть `ErrConsentIncomplete` без `INSERT`. Тест: неполное согласие без `resolve` → `SELECT COUNT(*) FROM links` = 0. | открыто |
+| Mi-5 | Minor | `shared/env/vars.go:98`; `internal/gateway/context.go:93`; `CLAUDE.md:136`; `Makefile:496` | Умолчание `/data` вне compose. Документированный запуск без Docker `go run ./cmd/multiverse serve --contexts=all --bus=memory` и `make replay` теперь открывают SQLite в `/data`. На Linux/macOS без root старт падает («mkdir /data: permission denied»). На Windows создаётся `C:\data` в корне текущего диска; проверка прав там пропускается (`open.go:213`), и файл с ПДн наследует ACL корня диска. Replay и ручной live-запуск делят один каталог. Для тестов это закрыто, для документации и `make replay` — нет. Исполнитель вынес пункт в бэклог (п. 7), но в «Риски» карточки не записал. | Манифест не менять: на него опирается compose. Оркестратору и tech-lead#1: в `make replay` задать `MV_GATEWAY_DATA_DIR` явно (временный каталог или `./.data/replay`); в `CLAUDE.md`/README рядом с `go run … --contexts=all` указать эту переменную. В карточку T-303 добавить строку в «Риски». | открыто |
+| Mi-6 | Minor | `internal/gateway/links/link.go:62-70` | `LogValue` срабатывает только для значения атрибута верхнего уровня. `slog.Any("res", links.Resolution{…})` или `slog.Any("links", []links.Link{…})` в `slog.NewJSONHandler` (формат логов платформы, `shared/logging/logging.go:115`) печатает `LinkID` и `ExternalID` через `encoding/json` — проверено зондом. Таких вызовов сейчас нет, но component §11.1 обещает редакцию «по построению», а экспортируемый `Resolution` легко окажется в логе. | Добавить `MarshalJSON` у `Link`, возвращающий JSON-строку `"redacted"`: JSON-сериализации `Link` в коде нет, ломать нечего. В `TestALinkNeverPrintsItsIdentifiers` добавить случаи `Resolution` и `[]Link` в JSON-хендлере. | открыто |
+| N-1 | Nit | `internal/gateway/api/middleware.go:99-102, 256`; `internal/gateway/api/middleware_test.go:192-232` | Порядок «client → body_limit» (§5.1 п. 3→4) и граница ровно 64 КиБ тестами не закреплены: мутанты K3 (перестановка) и K4 (`>=`) зелёные. Случай «under 64 KiB» — это 64 КиБ минус 1 байт. | Добавить: неизвестный клиент с телом 65 КиБ → `403 client_unknown` (а не 413); тело ровно 64 КиБ → 200. | открыто |
+| N-2 | Nit | `internal/gateway/links/forget.go:70-76`; `api/gateway.openapi.yaml:153-156` | Пока сжатие отложено, `/forget` любого аккаунта без связки отвечает `503 forget_incomplete` («Удаление не завершено»), хотя у этого аккаунта ничего не удалялось. Описание 503 называет причиной только внешнего читателя, а 503 дают и истёкший дедлайн запроса, и отмена. | Поведение безопасное, его можно оставить, но уточнить описание: пока links.db не сжат после любого /forget, 503 получают и повторы, и другие аккаунты; причины — внешний читатель и дедлайн запроса. | открыто |
+| N-3 | Nit | `internal/gateway/context.go:219-222` | `links_store` и `gateway_store` в `Health` — константы `ok`, а component §11.4 понимает под ними доступность БД (`fail`, если БД недоступна). Сейчас эти поля ничего не проверяют. | Убрать поля до появления реальной проверки или назвать их по смыслу (`opened`). Проверку, которая не блокирует единственное соединение, — в бэклог. | открыто |
+| N-4 | Nit | `internal/gateway/context.go:187-195` | Если sweeper не остановился до дедлайна `Stop`, метод возвращается, уже выставив `started=false`: БД не закрыты, и повторный `Stop` их не закроет (на Windows файлы останутся заблокированными). | Закрывать БД и при таймауте ожидания (`database/sql` дождётся освобождения соединения) или не снимать `started` до закрытия. | открыто |
+| N-5 | Nit | `internal/gateway/handlers/links.go:112-117` | `*link.ConsentAt`, `*link.AgeConfirmedAt` и `*link.NoticeShownAt` разыменовываются без проверки. Строка `consented` с NULL-отметкой (фикстура, ручная правка) вызовет панику, и вместо внятной ошибки клиент получит 500 от recover. | Проверить `nil` и явно ответить `500 internal` или возвращать ошибку инварианта из стора. | открыто |
+| N-6 | Nit | `internal/gateway/store/helpers_test.go:18`; `internal/gateway/links/helpers_test.go:41`; `internal/gateway/context_test.go:36`; `cmd/multiverse/serve_test.go:150`; `test/e2e/empty_world_test.go:143` | Помощник «временный каталог SQLite с повторным удалением» скопирован в пять мест. | Бэклог: один помощник в `shared/testkit` (например, `testkit.SQLiteDir(t)`); тестам `cmd/**` и `test/e2e` импортировать testkit можно. | открыто |
+| N-7 | Nit | `internal/gateway/links/forget_test.go:257-270` | `TestSweepFinishesAPendingCompaction` проверяет, что после `Sweep` скан = 0, но не проверяет, что ID был в файлах до `Sweep` (соседний тест такой контроль делает, `:212-214`). | После заблокированного `Forget` добавить контроль `occurrences(-wal)+occurrences(file) > 0`. | открыто |
+
+### Предложения в бэклог (вне границ T-303)
+
+1. **devops / tech-lead#1 (EPIC-001):**
+   - `/data` в `build/Dockerfile` с владельцем `nonroot` и правами `0700`;
+   - строка в runbook о пересоздании тома `gateway-data`;
+   - `MV_GATEWAY_DATA_DIR` в `make replay` и в описании запуска `go run … --contexts=all` (`CLAUDE.md`, README).
+
+   Это путь (б) из M-1, если выбран он.
+2. **system-architect#1 и T-311:** проверка неоднозначного `/forget` через `Resolve` (`internal/gateway/client/client.go:141-146`, Mi-7 ревью T-301) противоречит SEC-04. `Resolve` создаёт связку и снова пишет внешний ID в `links.db` сразу после забвения. Нужен способ проверки без записи: например, `/forget` отвечает `deleted:true`, если этот вызов доделал отложенное сжатие, или появляется отдельный read-only статус. Решать вместе с C-08 v1.4 (`forget_incomplete`).
+3. **system-architect#1 (C-08):** задать `maxLength` у `external_id` в запросах §1.2/§1.3. Сейчас в `links.db` можно записать строку до ~64 КиБ, а Telegram user id — не больше 20 цифр.
+4. **T-356 / T-354:** поддерживаю п. 5 исполнителя (`adminForgetLink` на `ForgetByPlayer`, проверка `ci` у служебных маршрутов). В ту же строку — nolog-политика для `adminForgetLink`, если architect отнесёт `player_id` в запросе оператора к чувствительным данным.
+5. **T-304 (`shared/testkit/gateway.Harness`):** соблюдать порядок `Routes → Start → serve`, иначе запрос до `Start` падает вне recover.
+
+### Риски и допущения
+
+- M-1 и часть Mi-5 выведены из чтения Dockerfile, compose и `open.go`, без запуска Docker (поручение его запрещает). Вывод о правах тома опирается на поведение Docker: пустой том получает права каталога образа, а если каталога в образе нет — root `0755`.
+- Прогонов под `-race` не было (cgo выключен). Конкурентные места (`pending`, `polls`, заполнение `Config` в `Start`) разобраны чтением.
+- Узкое окно, в котором параллельный успешный `Compact` снимает отметку `pending` (разбор п. 2, риск «г»), оставлено риском, а не замечанием.
+- Решение system-architect#1 по `503 forget_incomplete` может изменить код или статус ответа. Тогда затрагиваются `errors.go:106-108`, `handlers/links.go:131-133`, `openapi_test.go:493`, описания `Unavailable` и `forgetLink`.
+
+## T-303 · ревью #2 · 2026-09-13 · code-reviewer#1 (TEAM-3)
+
+### Границы ревью
+
+Итерация 2 developer#1 по ревью #1 (0/1/6/7), по решению system-architect#1 о `503 forget_incomplete` и по решению оркестратора о M-1. Рабочая папка `.worktrees/T-303`, база `fdc7e05`. Коммита нет, ревьюировались незакоммиченные изменения. По правилу повторной итерации проверены только исправления и регрессия от них.
+
+Новое или изменённое в итерации:
+- `build/Dockerfile`, `Docs/ops/runbook.md` (раздел 2), `README.md`, `.env.example` (только комментарий);
+- `api/gateway.openapi.yaml`;
+- `internal/gateway/{context.go,export_test.go,compaction_test.go,context_test.go}`;
+- `internal/gateway/links/{forget.go,store.go,link.go,*_test.go}`;
+- `internal/gateway/handlers/{links.go,links_test.go}`;
+- `internal/gateway/api/middleware_test.go`;
+- `internal/gateway/store/*_test.go`;
+- новый пакет `shared/testkit/gateway/sqlitedir`;
+- тесты EPIC-001 `cmd/multiverse/serve_test.go`, `test/e2e/empty_world_test.go`.
+
+`shared/env/vars.go`, `Makefile`, `CLAUDE.md`, `go.mod` и `contexts.go` в итерации не менялись. Посторонних путей нет.
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 1 · Nit: 3 (новые). N-3 из ревью #1 остаётся открытым как Nit и уходит в бэклог.
+
+M-1 закрыт по чтению, сборку образа и `make up` на стенде ещё нужно подтвердить (риски). Условия system-architect#1 по 503 выполнены все. Mi-1…Mi-6, N-1, N-2, N-4…N-7 закрыты. Мутанты K1–K4 ревью #1 теперь красные, ревьюер перепроверил их сам. Новый Minor касается только тестов: ветка повторного чтения связки по `link_id` из исправления Mi-1 не закреплена тестом (мутант R1 зелёный), код при этом верен.
+
+### Проверено ревьюером (go1.26.8 windows/amd64, cgo выключен — без `-race`)
+
+| Проверка | Как | Результат |
+|---|---|---|
+| сборка и vet | `go build ./... && go vet ./...`; `go vet -tags e2e ./test/e2e/` | 0 / 0 |
+| unit | `go test -short -count=1 ./internal/gateway/... ./shared/testkit/gateway/... ./cmd/multiverse/...` | 10 пакетов ok |
+| e2e | `go test -tags e2e -count=1 ./test/e2e/...` | ok (19 с) |
+| линтер | `golangci-lint run ./...` (первый запуск упал на «parallel golangci-lint is running»: подождал и повторил) | 0 issues |
+| манифест | `go run ./cmd/mvctl env check` | 67 переменных, exit 0 |
+| hadolint | не установлен | не запускался |
+| Docker | запрещён поручением | образ, том и `make up` не проверялись |
+| мутанты | копия дерева в scratch (`t303r2-*`, tar без `.git`, `services/`, `Docs/`, `bin/`), без `-overlay`, контрольный первым. Мутация — точная замена единственного вхождения, откат побайтно с проверкой. В конце `diff -rq` каталогов `internal cmd test api shared build` копии и папки задачи — совпадают. Копии удалены по точному сохранённому пути | таблица ниже |
+
+| # | Мутант | Результат |
+|---|---|---|
+| R0 | контрольный: `/forget` при `ErrCompactionPending` отвечает `bus_unavailable` | **красный**: `TestLinkHandlersMapStoreErrors/forget_not_yet_wiped`, `TestAPendingCompactionIsVisibleUntilItIsFinished` |
+| K1 | `Health` не смотрит `CompactionPending` | **красный**: `TestAPendingCompactionIsVisibleUntilItIsFinished`, `TestABlockedCompactionAtTheStartIsFinishedByTheSweeper` |
+| K2 (R12) | `Stop` не доделывает отложенное сжатие | **красный**: `TestAPendingCompactionIsVisibleUntilItIsFinished`, `TestStopFinishesAPendingCompaction` |
+| K3 | `limitBody` раньше `admitClient` | **красный**: `TestBodyLimitAndContentType/65_KiB_from_a_stranger` |
+| K4 | `ContentLength >= BodyLimit` | **красный**: `TestBodyLimitAndContentType/exactly_64_KiB` |
+| R10 | `player_id = ?` вместо `IS ?` в `DELETE` (связка без персонажа) | **красный**: `TestForgetOfAnAccountWithoutACharacter`, `TestTheContextServesTheLinksRoutes` и др. |
+| R13 | неудача сжатия при старте валит `Start` | **красный**: `TestABlockedCompactionAtTheStartIsFinishedByTheSweeper` |
+| R1 | повтор каскада ищет связку прежним `lookup`, а не по `link_id` | **зелёный** → R2-Mi-1 |
+| R2 | часовое полное сжатие sweeper'а не выполняется | **зелёный** → R2-N-1 |
+| R3 | сжатие при старте на контексте `Start`, без `WithoutCancel` | зелёный: не наблюдаемо (неудача ставит только отметку), не дефект |
+| R4 | `Stop` сжимает, даже если sweeper не остановился | зелёный: не наблюдаемо в тестах, исполнитель это оговорил; не дефект |
+
+### Разбор по пунктам поручения
+
+**M-1 (Dockerfile и runbook).** Закрыт по чтению.
+- В builder (`golang:*-bookworm`, root) выполняется `RUN mkdir -m 0700 /gateway-data` (`build/Dockerfile:24`).
+- В runtime до `USER nonroot` стоит `COPY --from=builder --chown=65532:65532 --chmod=0700 /gateway-data /data` (`:45-46`). Числовой UID не требует `/etc/passwd`. `--chmod` требует BuildKit, а заголовок `# syntax=docker/dockerfile:1.7` уже есть. В distroless `/data` нет, поэтому BuildKit создаёт каталог и применяет к нему `--chown` и `--chmod`.
+- Пустой именованный том `gateway-data:/data` без `nocopy` (`docker-compose.yml:273, 483`) при первом монтировании получает владельца и права каталога образа. Это открывает `prepareDir`/`checkMode` при пределе `0700`.
+- Runbook, раздел 2 (`Docs/ops/runbook.md:143-175`). Названы признаки в логе и команда пересоздания; указано, что она для оператора и агенты её не выполняют. Имя тома берётся из `docker volume ls`, стоит запрет удалять том, в котором уже есть `links.db`. Утверждение «в томе `root 0755` данных быть не может» верно: store отказывает до создания файла. Там же описан запуск вне compose.
+- Правка `build/Dockerfile` — файл EPIC-001; отметку даёт tech-lead#1 (решение оркестратора).
+
+**Условия system-architect#1 по 503.** Выполнены все.
+- 503 означает «связка удалена, стирание не подтверждено» и отличается от `bus_unavailable`. Это записано в `handlers/links.go:133-139`, в описании `forgetLink` и `Unavailable`, в сообщении кода (`errors.go`).
+- Пока сжатие отложено, 503 получает любой `/forget`. Без связки это ветка `forget.go:87-93`. Со связкой `Compact` после `DELETE` снова падает (`:117-120`). Вызов, который доделал сжатие, отвечает как обычно. Проверено `TestAPendingCompactionIsVisibleUntilItIsFinished`: аккаунт без связки получает 503.
+- `200 {deleted:false}` после 503 означает конец того же забвения: так в OpenAPI и в doc-комментарии `Forget`.
+- `Retry-After: 5` выставляется до `WriteError` (`handlers/links.go:148-151`), закреплено `TestForgetIncompleteCarriesRetryAfter` и тестом контекста.
+- В `Start` одно безусловное `linkStore.Compact(context.WithoutCancel(ctx))` (`context.go:121-123`). Оно идёт после миграций, но до заполнения `api.Config`/`handlers.Links` и до sweeper'а, то есть до обслуживания (сервер процесса стартует после `StartAll`). Неудача пишется в лог и ставит отметку, старт не падает (мутант R13 красный). `TestTheStartWipesWhatAStoppedProcessLeft` доказателен: контроль «ID в файле», replay без sweeper'а, после старта скан = 0, остающийся ID виден.
+
+**Mi-1.**
+- Реализовано по предложению: `DELETE … WHERE link_id = ? AND player_id IS ?` с `RowsAffected` (`forget.go:128-142`). `IS` верно сравнивает NULL (мутант R10 красный).
+- При 0 строк связка перечитывается по `link_id`: исчезла → `{deleted:false}`, сменился персонаж → каскад заново. Всего не больше `forgetAttempts = 3`, дальше ошибка → 500 (`:82-123`).
+- Тесты на смену персонажа, исчерпание попыток и параллельный `/forget` доказательны.
+- Пробел: ветка «перечитать именно по `link_id`» не закреплена (R2-Mi-1).
+
+**Mi-2.** Закрыт сжатием при старте (см. выше). Отметка по-прежнему живёт в памяти, и это теперь безопасно: любой рестарт начинается с полного сжатия.
+
+**Mi-3.** Закрыт. `TestAPendingCompactionIsVisibleUntilItIsFinished` проверяет цепочку:
+1. 503 и `Retry-After`;
+2. контроль «след есть»;
+3. `degraded` и `links_compaction: pending`;
+4. 503 для чужого аккаунта;
+5. уход читателя → `{deleted:false}`, скан 0, `ok`;
+6. `Stop` под читателем сообщает «uncompacted».
+
+`TestStopFinishesAPendingCompaction` работает в replay: sweeper'а нет, стирание может доделать только `Stop`, и контроль стоит до `Stop`. Мутанты K1/K2 красные.
+
+**Mi-4.** Закрыт: `store.go:133-139` при неполной форме без связки ничего не вставляет. Обработчик получает нулевой `Link` и `ErrConsentIncomplete` и отвечает 400 до разыменования отметок. Тест `TestIncompleteConsentWithoutResolveCreatesNothing` проверяет `COUNT(*)` = 0.
+
+**Mi-5.** Закрыт в границах задачи.
+- Ошибка старта называет каталог и `MV_GATEWAY_DATA_DIR` и подсказывает, что делать (`context.go:113-114`), тест есть.
+- README (`:195-202`) и комментарий в `.env.example` (`:126-130`) описывают запуск на хосте; `mvctl env check` — 0.
+- `make replay` и строка `CLAUDE.md` остаются за EPIC-001 (бэклог исполнителя, п. 1).
+
+**Mi-6.** Закрыт: `Link.MarshalJSON` → `"redacted"` (`link.go:78`), метод на значении, поэтому покрыт и `*Link`. Тест проверяет `Resolution` и `[]Link` в `slog.NewJSONHandler`, а также `json.Marshal` с `[]*Link`.
+
+**Nit ревью #1.**
+- N-1 закрыт: тесты «ровно 64 КиБ» (с `Content-Length` и chunked) и «65 КиБ от чужого → 403».
+- N-2 закрыт текстом OpenAPI (замечание к формулировке общего ответа — R2-N-2).
+- N-4 закрыт: `Stop` закрывает обе БД и при истёкшем дедлайне, `database/sql` дождётся занятого соединения.
+- N-5 закрыт: `consented` без отметки → 500 без паники.
+- N-6 закрыт: общий помощник вместо пяти копий.
+- N-7 закрыт: контроль до `Sweep`.
+- N-3 не менялся (вне поручения итерации), остаётся в бэклоге.
+
+**`shared/testkit/gateway/sqlitedir`.**
+- depguard. Правила с именем `shared-testkit-gateway` в `.golangci.yml` нет. К пакету применяется правило `shared` (запрет `internal/*`), а пакет импортирует только stdlib. Импортируют его только `_test.go`: поиск по не-тестовым файлам находит лишь сам пакет. На такие импорты действует исключение `_test\.go$` для `shared/testkit` из `no-testkit-in-production`. `golangci-lint run ./...` — 0.
+- Владение. По `plan/ownership.md` в `shared/testkit/**` фейки лежат в подпакете поставщика, а `…/gateway` принадлежит EPIC-004. Отдельный подпакет на stdlib не тянет харнесс и не создаёт цикла, когда `testkit/gateway` начнёт импортировать `internal/gateway` (T-304).
+- `os.MkdirTemp` создаёт каталог `0700`, это совместимо с `checkMode`.
+
+**Правки тестов EPIC-001.** Минимальны. В `serve_test.go` одна строка `t.Setenv(env.GatewayDataDir…, sqlitedir.Temp(t))`, импорт и комментарий. В `empty_world_test.go` то же в `emptyWorldEnv`. Итерация 2 лишь заменила локальный помощник на `sqlitedir.Temp`.
+
+**Остаточные риски исполнителя.**
+- *Окно снятия отметки sweeper'ом.* Отметку ошибочно снимет только такой порядок: успешный checkpoint sweeper'а завершился, затем `DELETE` и неудачное сжатие параллельного `/forget` (которое ставит `true`), и лишь после этого sweeper выполняет `pending.Store(false)`. Все операторы идут через одно соединение `links.db`. Неудача под читателем занимает `busy_timeout` 5 с, так что на практике окно открыто только для неудачи по уже истёкшему дедлайну запроса, и то в пределах одного вытеснения горутины. Последствие не ноль: повтор клиента получит `200 {deleted:false}`, хотя кадры ещё в `-wal`, до часового сжатия или рестарта. Вероятность пренебрежимо мала. Согласен оставить риском с мьютексом «DELETE + сжатие» в T-306/T-314 (предложение 3 исполнителя).
+- *`Retry-After` 5 с против паузы клиента ≈1,4 с.* Риск меньше, чем выглядит. Под удерживающим читателем каждая попытка сама ждёт на сервере `busy_timeout` (5 с, в пределах дедлайна запроса 5 с) и только потом отвечает 503. Четыре попытки `DefaultBackoff` растягиваются примерно до 20 с, а `DefaultHTTPTimeout` 35 с это покрывает. Быстрый 503 бывает только при исчерпанном хуками дедлайне. Бот после исчерпания повторов не говорит «удалено» (строка T-311). Решение, читать ли `Retry-After`, — T-456.
+- Добавлю наблюдение. Пока читатель держит файл, каждый `/forget` и каждый тик sweeper'а занимают единственное соединение `links.db` до 5 с, и `resolve`/`consent` в это время ждут соединение в пределах своего дедлайна. При коротком бэкапе небольшого `links.db` это приемлемо; в эксплуатационные заметки T-456.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| M-1 | Major (ревью #1) | `build/Dockerfile:24, 45-46`; `Docs/ops/runbook.md:143-175` | Исправлено путём (а). | Подтвердить на стенде: `make image && make up && make health` → gateway `ok`. Отметка tech-lead#1 о правке файла EPIC-001. | закрыто (по чтению) |
+| Mi-1…Mi-6 | Minor (ревью #1) | см. разбор | Исправлены. | — | закрыто |
+| N-1, N-2, N-4…N-7 | Nit (ревью #1) | см. разбор | Исправлены. | — | закрыто |
+| N-3 | Nit (ревью #1) | `internal/gateway/context.go:242-246` | `links_store`/`gateway_store` — константы `ok`. | Бэклог (п. 4 исполнителя). | открыто → бэклог |
+| R2-Mi-1 | Minor | `internal/gateway/links/forget.go:106-115`; `internal/gateway/links/forget_test.go:142-227` | Повтор каскада перечитывает связку по `link_id`, и именно это делает исправление Mi-1 верным в двух случаях, которые тесты не проверяют (мутант R1: повтор тем же `lookup` — зелёный). (1) `ForgetByPlayer`: если хук вызвал `AttachPlayer` с другим персонажем, поиск по старому `player_id` не найдёт связку. Ответ будет `{deleted:false}`, а связка с внешним ID останется. (2) `Forget`: параллельный `/forget` удалил связку, затем `Resolve` создал новую для того же аккаунта. Поиск по внешнему ID удалил бы связку нового игрока. Код сейчас верен, но это ветка приватности, и `adminForgetLink` (T-356) смонтирует (1). | Два теста: (1) `ForgetByPlayer("player-A")`, хук делает `AttachPlayer(linkID, "player-B")` → `deleted:true`, `player_id_detached = player-B`, `COUNT(*) FROM links` = 0; (2) хук внешнего `Forget` вызывает вложенный `Forget` и затем `Resolve` того же аккаунта → внешний отвечает `{deleted:false}`, новая связка на месте. Можно в T-303 или строкой DoD в T-356. | открыто (не блокирует) |
+| R2-N-1 | Nit | `internal/gateway/context.go:183-186` | Часовое полное сжатие sweeper'а (`LinksCompactInterval`, «страховка» ADR-019 доп. п. 1) не закреплено тестом: мутант R2 зелёный. После сжатия при старте последствие меньше, но при долгом аптайме и потерянной отметке (риск окна выше) это единственная страховка. | Тест live: оставить кадры удалённой строки в `-wal` без отметки (удаление через отдельное соединение, как в `TestTheStartWipesWhatAStoppedProcessLeft`), продвинуть `Manual` на `LinksCompactInterval` → скан 0. | открыто |
+| R2-N-2 | Nit | `api/gateway.openapi.yaml:662-672` | Общий ответ `Unavailable` начинается словами «the action is not accepted and action_key is not stored», а для `forget_incomplete` верно обратное (связка удалена). Так как ответ общий (`:261`, `:325`), `forget_incomplete` и `Retry-After` формально становятся возможными и у операций, где их не бывает. | Для T-456 (system-architect#1): отдельный ответ `ForgetIncomplete` только у `forgetLink` со своими `x-error-codes` и `Retry-After`, либо первая фраза «для bus_unavailable/state_unavailable». Эталонный тест кодов это допускает. | открыто |
+| R2-N-3 | Nit | `internal/gateway/context.go:197-232, 236-240` | `Stop` держит `c.mu` на всё ожидание sweeper'а и сжатие (до дедлайна `Stop` плюс `busy_timeout`), и `/health` процесса всё это время ждёт мьютекс. Это не регрессия итерации (ожидание было и раньше), но сжатие в `Stop` удлинило окно. | Снимать `started` и копировать ссылки под мьютексом, а ждать и сжимать вне него; либо принять и отметить в комментарии. | открыто |
+
+### Предложения в бэклог
+
+1. **T-356:** строкой DoD — тест R2-Mi-1 (1) для `adminForgetLink` на `ForgetByPlayer`, если в T-303 его не добавят.
+2. **T-456 (system-architect#1):** R2-N-2 (отдельный ответ `ForgetIncomplete`). Там же зафиксировать, что под удерживающим читателем каждая попытка `/forget` ждёт до `busy_timeout` и занимает единственное соединение `links.db`.
+3. **tech-lead#1 (EPIC-001):** отметка о правке `build/Dockerfile`; `MV_GATEWAY_DATA_DIR` в `make replay` и в `CLAUDE.md` (п. 1 исполнителя); строка `CLAUDE.md` «gateway — заглушка» устарела.
+4. **T-306/T-314:** мьютекс «DELETE + сжатие» или счётчик поколений отметки (п. 3 исполнителя) — поддерживаю.
+
+### Риски и допущения
+
+- M-1 закрыт чтением Dockerfile, compose и поведения BuildKit/Docker: `COPY --chown/--chmod` применяется к создаваемому каталогу назначения, пустой именованный том копирует владельца и права каталога образа. Образ не собирался, hadolint не установлен, `make up` не запускался (запрет поручения). До пересоздания старого тома `gateway-data` по runbook gateway в compose на машине владельца не стартует.
+- Прогонов под `-race` не было (cgo выключен). Конкурентность `pending`, `Stop` и sweeper'а разобрана чтением.
+- Мутанты R3 и R4 зелёные, но замечаниями не считаются: их поведение тестами не наблюдаемо и дефекта не образует.

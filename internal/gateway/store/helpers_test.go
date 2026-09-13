@@ -3,40 +3,14 @@ package store_test
 import (
 	"context"
 	"database/sql"
-	"os"
 	"testing"
-	"time"
 
 	"multiverse-core.io/internal/gateway/store"
 )
 
-// tempDir is t.TempDir for a directory that held an SQLite database. On
-// Windows the -wal and -shm files SQLite deletes on the last Close can stay
-// "delete pending" for a moment while another process (the indexer, an
-// antivirus) still has them open, and the removal by t.TempDir then fails the
-// test with "The directory is not empty". The removal is retried instead.
-func tempDir(t *testing.T) string {
-	t.Helper()
-	dir, err := os.MkdirTemp("", "gateway-store-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		var err error
-		for range 50 {
-			if err = os.RemoveAll(dir); err == nil {
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-		t.Errorf("remove %s: %v", dir, err)
-	})
-	return dir
-}
-
 // openLinks opens links.db in dir, applies the migrations and closes the
 // database when the test ends. t.Cleanup runs in reverse order, so the file is
-// closed before tempDir removes it (Windows refuses to remove an open file).
+// closed before sqlitedir.Temp removes it (Windows refuses to remove an open file).
 func openLinks(t *testing.T, dir string) *sql.DB {
 	t.Helper()
 	db, err := store.OpenLinks(context.Background(), store.LinksPath(dir))
