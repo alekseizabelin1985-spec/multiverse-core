@@ -1,0 +1,21 @@
+# The invariant laws of laws@v1 of dark-forest-world, identifiers only.
+#
+# laws/dark-forest-world.v1.yaml does not exist yet: it belongs to EPIC-003, and
+# mvctl laws check will compare its kind=invariant laws with
+# mechanics.InvariantIDs() (state-and-mechanics.md §5.7, ADR-012 p. 5). Until
+# then this list is the side of the laws the register is compared against
+# (TestInvariantIDsMatchTheLaws). The text of a law never lives here — only in
+# the laws file — and the logic never lives here — only in invariants.go.
+#
+# Change this list together with the laws file, never to make a test pass.
+laws:
+  - { id: inv-01, kind: invariant }
+  - { id: inv-02, kind: invariant }
+  - { id: inv-03, kind: invariant }
+  - { id: inv-04, kind: invariant }
+  - { id: inv-05, kind: invariant }
+  - { id: inv-06, kind: invariant }
+  - { id: inv-07, kind: invariant }
+  - { id: inv-08, kind: invariant }
+  - { id: inv-09, kind: invariant }
+  - { id: inv-10, kind: invariant }

@@ -1,0 +1,34 @@
+{
+  "proposal_id": "01JG0000000000000000000010",
+  "changes": [
+    {
+      "entity": { "entity": { "id": "wolf-alpha", "type": "npc" } },
+      "expected_version": 12,
+      "ops": [
+        { "op": "set", "path": "hp", "value": 7 },
+        { "op": "set", "path": "status", "value": "alive" }
+      ]
+    },
+    {
+      "entity": { "entity": { "id": "player-A", "type": "player" } },
+      "expected_version": 23,
+      "ops": [
+        {
+          "op": "append",
+          "path": "inventory",
+          "value": {
+            "item_id": "item-1",
+            "kind": "wolf-pelt",
+            "name": "волчья шкура",
+            "source": {
+              "entity": { "id": "wolf-alpha", "type": "npc" },
+              "event_id": "01JG0000000000000000000003"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "atomic": true,
+  "cause": "combat"
+}

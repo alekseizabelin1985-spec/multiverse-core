@@ -1,14 +1,17 @@
 // Package mechanics is the stand-in for the fight of MVP-1: everything C-03
-// promises, with the one decision EPIC-002 still owes answered from a table
-// (design.md §5, tasks.md T-017).
+// promises, with the decision of a swing answered from a table (design.md §5,
+// tasks.md T-017).
 //
-// It exists so that the epics downstream of the mechanics can be written, run
-// and reviewed before Resolve is implemented. The rules themselves are already
-// real — the numbers, the formulas and the dice all come from
-// rules/dark-forest.yaml through internal/mechanics — so Roll, Stats and
-// Invariants are not faked at all: they are forwarded to the loaded rule set.
-// What is faked is which of four things happened when somebody swung
-// (FixedMechanics.Resolve) and whom a wolf bit (NPCTarget).
+// It exists so that the epics downstream of the mechanics could be written, run
+// and reviewed before Resolve was implemented (T-053), and so that a scenario
+// can still pick the outcome it demonstrates by its cause event rather than by
+// the dice. The rules themselves are real — the numbers, the formulas and the
+// dice all come from rules/dark-forest.yaml through internal/mechanics — so
+// Roll, Stats and Invariants are not faked at all: they are forwarded to the
+// loaded rule set. What is faked is which of four things happened when somebody
+// swung (FixedMechanics.Resolve) and whom a wolf bit (NPCTarget). What is not
+// faked either is what counts as a defect of the caller: both answer an error
+// to the same inputs.
 //
 // The methods repeat the signatures of *mechanics.Rules rather than hiding
 // behind an interface of their own. That is the point of the stub: the
@@ -26,6 +29,7 @@ import (
 	"slices"
 
 	mech "multiverse-core.io/internal/mechanics"
+	"multiverse-core.io/shared/entity"
 )
 
 // FixedMechanics is a loaded rule set whose Resolve answers from a table.
@@ -128,10 +132,9 @@ func slot(causeEventID string, rollIndex int) verdict {
 // that does not. A consumer that renders "выпало 12, попадание" therefore
 // renders something a player can believe.
 //
-// Two things the real Resolve will do are deliberately absent, because the
-// contract gives the stub nothing to do them with: Outcome.Loot is always
-// empty (an Actor carries no kind to look the loot table up by — see the
-// dev-log of T-017), and a rest rolls nothing (rest.restore of v0.1 is hp_max).
+// A rest rolls nothing (rest.restore of v0.1 is hp_max), and a fallen NPC
+// leaves the loot of its kind (Actor.Kind, T-053) exactly as the real Resolve
+// reports it.
 func (m *FixedMechanics) Resolve(causeEventID string, rollIndexStart int, a mech.Action,
 	actors map[string]*mech.Actor) (mech.Outcome, []mech.Roll, error) {
 	if causeEventID == "" {
@@ -155,7 +158,7 @@ func (m *FixedMechanics) Resolve(causeEventID string, rollIndexStart int, a mech
 	case mech.ActionFlee:
 		return m.flee(causeEventID, rollIndexStart, a, actor)
 	case mech.ActionRest:
-		return m.rest(causeEventID, rollIndexStart, actor)
+		return m.rest(actor)
 	default:
 		return mech.Outcome{}, nil, fmt.Errorf("testkit/mechanics: unknown action kind %q", a.Kind)
 	}
@@ -219,6 +222,9 @@ func (m *FixedMechanics) attack(causeEventID string, idx int, a mech.Action,
 	out.Damage = m.rules.Damage(damage.Result, out.Critical)
 	out.HPAfter = m.rules.ClampHP(target.HP-out.Damage, target.HPMax)
 	out.TargetDead = out.HPAfter == 0
+	if out.TargetDead && target.Type == entity.TypeNPC {
+		out.Loot = m.rules.Loot(target.Kind)
+	}
 	return out, rolls, nil
 }
 
@@ -287,15 +293,15 @@ func (m *FixedMechanics) flee(causeEventID string, idx int, a mech.Action,
 	}, rolls, nil
 }
 
-// rest answers catching a breath. There is nothing for the table to decide: a
-// rest of the rules of v0.1 restores hit points to the maximum and cannot
-// fail, and whether it was allowed at all is a decision of the gateway and of
-// State, not of the mechanics (rest.allowed_in_encounter).
-func (m *FixedMechanics) rest(causeEventID string, idx int, actor *mech.Actor) (mech.Outcome, []mech.Roll, error) {
+// rest answers catching a breath. There is nothing for the table to decide: the
+// only rest the rules admit restores hit points to the maximum and cannot fail,
+// and whether it was allowed at all is a decision of the gateway and of State,
+// not of the mechanics (rest.allowed_in_encounter).
+func (m *FixedMechanics) rest(actor *mech.Actor) (mech.Outcome, []mech.Roll, error) {
 	return mech.Outcome{
 		Hit:      true,
 		HPBefore: actor.HP,
-		HPAfter:  m.rules.Restore(*actor, mech.NewRNG(mech.Seed(causeEventID, idx))),
+		HPAfter:  m.rules.Restore(*actor),
 	}, nil, nil
 }
 
@@ -307,19 +313,44 @@ func (m *FixedMechanics) rest(causeEventID string, idx int, actor *mech.Actor) (
 // would make a scripted scenario depend on the damage the table happened to
 // roll. Anyone the rules exclude is not a candidate at all: the dead, the
 // abandoned, the idle and those out of combat (inv-01, C-02 v1.2).
-func (m *FixedMechanics) NPCTarget(npc *mech.Actor, candidates []*mech.Actor) *mech.Actor {
+//
+// The two results are those of C-03 v1.2: nobody left to bite is (nil, nil)
+// (UC-008 A2), and an error is a defect of the caller. The defects are the ones
+// the real NPCTarget refuses — no NPC, a biter that is not an NPC or is not
+// alive, a nil candidate, a candidate that is not a character, one character
+// listed twice — so a consumer debugged against the stub meets no new error on
+// the real mechanics.
+func (m *FixedMechanics) NPCTarget(npc *mech.Actor, candidates []*mech.Actor) (*mech.Actor, error) {
+	switch {
+	case npc == nil:
+		return nil, fmt.Errorf("testkit/mechanics: npc target without an npc")
+	case npc.Type != entity.TypeNPC:
+		return nil, fmt.Errorf("testkit/mechanics: %s picks a target, and it is a %s, not an npc", npc.ID, npc.Type)
+	case !npc.Alive():
+		return nil, fmt.Errorf("testkit/mechanics: npc %s is %s and bites nobody", npc.ID, npc.Status)
+	}
 	living := make([]*mech.Actor, 0, len(candidates))
-	for _, c := range candidates {
-		if c == nil || m.rules.Excluded(*c) {
+	seen := make(map[string]bool, len(candidates))
+	for i, c := range candidates {
+		switch {
+		case c == nil:
+			return nil, fmt.Errorf("testkit/mechanics: candidate %d of %s is nil", i, npc.ID)
+		case c.Type != entity.TypePlayer:
+			return nil, fmt.Errorf("testkit/mechanics: candidate %s of %s is a %s: an npc bites characters", c.ID, npc.ID, c.Type)
+		case seen[c.ID]:
+			return nil, fmt.Errorf("testkit/mechanics: candidate %s of %s is listed twice", c.ID, npc.ID)
+		}
+		seen[c.ID] = true
+		if m.rules.Excluded(*c) {
 			continue
 		}
 		living = append(living, c)
 	}
 	if len(living) == 0 {
-		return nil
+		return nil, nil
 	}
 	slices.SortFunc(living, func(x, y *mech.Actor) int { return cmp.Compare(x.ID, y.ID) })
-	return living[0]
+	return living[0], nil
 }
 
 // Roll throws one formula for one purpose. It is not faked: the dice of the
@@ -332,8 +363,8 @@ func (m *FixedMechanics) Roll(causeEventID string, rollIndex int, formula, purpo
 // rules/dark-forest.yaml.
 func (m *FixedMechanics) Stats(kind string) (mech.Actor, bool) { return m.rules.Stats(kind) }
 
-// Invariants are the laws in force, straight out of the rule set — every Check
-// still nil until EPIC-002 writes them (T-054).
+// Invariants are the laws in force, straight out of the rule set, checks
+// included: a law is not a number a double may fix.
 func (m *FixedMechanics) Invariants() []mech.Invariant { return m.rules.Invariants() }
 
 func lookup(actors map[string]*mech.Actor, id, role string) (*mech.Actor, error) {

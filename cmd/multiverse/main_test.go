@@ -245,9 +245,10 @@ func TestPlatformContextsAreRegisteredOnceInTheStartOrder(t *testing.T) {
 	}
 }
 
-// Without MV_SWARM_FAKE every context of the binary but gateway is still the
-// empty stub of wave 0, swarm included: the hook changes nothing unless it is
-// asked to. gateway is real since T-303 (TestGatewayIsTheRealContext).
+// Without MV_SWARM_FAKE every context of the binary whose owner has not
+// implemented it is still the empty stub of wave 0, swarm included: the hook
+// changes nothing unless it is asked to. gateway is real since T-303
+// (TestGatewayIsTheRealContext), state since T-055 (contexts_state_test.go).
 func TestStubIsHealthyAndDoesNothing(t *testing.T) {
 	clearVar(t, env.SwarmFake.Name())
 	contexts, err := runtime.New([]string{runtime.All})
@@ -258,7 +259,7 @@ func TestStubIsHealthyAndDoesNothing(t *testing.T) {
 		t.Fatalf("New(all) built %d contexts, want %d", len(contexts), len(platformContexts))
 	}
 	for _, c := range contexts {
-		if c.Name() == gateway.Name {
+		if c.Name() == gateway.Name || c.Name() == stateContext {
 			continue
 		}
 		if _, ok := c.(stub); !ok {
