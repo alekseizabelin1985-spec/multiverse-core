@@ -167,3 +167,37 @@
     - `make test` (Git Bash) — exit 0.
   - Бэклог ревьюера (DoD T-303/T-305/T-306/T-307/T-310/T-311/T-352/T-354/T-356) и 8 пунктов для architect#3 перенесены в карточку.
   - Не коммитил.
+
+<!-- dev-log T-304 -->
+## developer#1 · T-304 · проекция State (readmodel) и consumer · 2026-09-13
+
+Ветка `task/T-304-readmodel-consumer` (родитель — `epic/EPIC-004-gateway-bot`, 83b9351), TEAM-3, Opus. Подробности, таблица DoD и мутантов — карточка `tasks/T-304.md`, раздел «Выполнение».
+
+- **Что сделано.**
+  - `internal/gateway/readmodel` — проекции `World`, `Region`, `NPC`, `CharacterState`, `Group`, `Encounter` на типизированных геттерах `shared/entity`; `Apply` для `entity.created|updated|update.rejected` и `encounter.started|ended` с порядком по версии и признаком `stale`; `LoadFromStateSnapshot` (указатель → объект → сверка `state_hash`); ожидания `Expect`/`Wait`/`AwaitFact` на `clock.Timers` без своих горутин; `Hash`, `Cursor`, `Status`.
+  - `internal/gateway/consumer` — `Dispatcher`: догон `Journal` от курсора снапшота, подписки на четыре топика группой `gateway.consumer`, проверка `processed_events` + эффекты + отметка + курсор эффектов одной транзакцией (эффект раньше отметки), `Sweep` окна `processed_events`.
+  - `internal/gateway/context.go` — проекция мира `MV_WORLD_ID` из MinIO (`MV_MINIO_*`) при старте, догон и подписки; `Stop` сначала отменяет подписки; `/health` — `projection: ok|missing|stale`, `projection_error`, `bus: fail`.
+- **Решения по ходу.**
+  - Обе формы `changed[]` (C-02 v1.5 в develop, v1.6 после T-448) читаются одним правилом «ключ `new` есть — записать, нет — удалить»; тест сверяет хеш проекции с `entity.ApplyOps` + `Commit` на каждом шаге для обеих форм. *(Итерация 2, Mi-1: для v1.5 неверно — после удаления ключа хеш расходится с State, см. запись итерации 2.)*
+  - Встреча вычисляется при чтении из сущности и `encounter.started`; закрытие необратимо, переход «захватывает» первое событие пары по своему id, повтор того же события сообщает его снова.
+  - `projection: missing` без снапшота не деградирует gateway (пустой мир e2e EPIC-001, compose нового мира); деградирует несостоявшаяся загрузка существующего снапшота, `stale` и упавшая подписка.
+  - Эффектов в production нет — точка `consumer.Config.Effects` для T-307/T-351.
+- **Отклонения.** `Apply` → `(Result, error)`; `Expect`/`Wait` рядом с `AwaitFact`; правило `degraded` для `missing` и определение `stale` отличаются от component §11.4 (вопрос architect#3); `handle_entity.go`/`handle_encounter.go` не выделены; `Sweep` окна — сверх DoD.
+- **Проверки.** См. карточку: build/vet, `go test -short ./...`, e2e, `golangci-lint`, `mvctl contracts check`, `mvctl env check`, `make test` — зелёные; мутанты в копии дерева — 29 засчитано, зелёных нет, контрольный первым, копия удалена по точному пути.
+- Файлы EPIC-001, `go.mod`, `shared/*`, схемы и файлы T-310 не менялись. Интеграционные тесты, Docker, стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
+
+## developer#1 · T-304 · итерация 2 по ревью #1 · 2026-09-13
+
+Ветка `task/T-304-readmodel-consumer`, TEAM-3, Opus. Ревью #1 — «принять», 0/0/7/4; по решению оркестратора Minor закрыты итерацией до приёмки. Подробности, таблица ответов и мутантов — карточка `tasks/T-304.md`, раздел «Итерация 2 (ревью #1)».
+
+- **Что сделано.**
+  - Mi-1: исправлено утверждение о форме v1.5. Удаление ключа и `set null` там неразличимы, проекция хранит `null`, и `Hash()` после удаления ключа расходится с State. Сверка хеша гарантирована только на фактах v1.6. Тест v1.5 утверждает само расхождение. Строка DoD T-309.
+  - Mi-2: выбран вариант 2 — документ `Result`/`Effect` («переход уникален в пределах процесса»), тест контракта после рестарта, строки DoD T-307 и T-351. Таблица переходов не сделана: она меняет схему `gateway.db` (component §4.2, `0001_init.sql` — полная схема I1/I2) и тесты T-302, а это решение architect#3 и чужие файлы.
+  - Mi-3…Mi-5: тесты `bus: fail` на уровне контекста, no-op удаления отсутствующего пути (v1.6), `Sweep` по возрасту и вызов из sweeper'а.
+  - Mi-6: неверная настройка MinIO (один ключ, пустой endpoint, не булев `MV_MINIO_USE_SSL`) → `degraded`, `projection_error: store_misconfigured`; без обоих ключей — по-прежнему `missing` без деградации.
+  - Mi-7: бюджеты старта — загрузка 30 с (превышение → `snapshot_timeout`, старт идёт дальше), догон 2 мин (превышение → ошибка старта).
+  - N-2: `Waiter` одноразовый, `ErrWaiterUsed`; `Cancel` при ошибке публикации обязателен. N-3: индекс «игрок → открытые встречи». N-4: `projection_error` — код, текст ошибки только в логе. N-1: строка DoD T-309.
+- **Решения по ходу.** Бюджет — `context.WithTimeout`, а не `clock.Timers`: kafka-адаптер ставит дедлайн соединения только из `ctx.Deadline()`. Неверная настройка хранилища — `degraded`, а не ошибка старта, как у нечитаемого снапшота.
+- **Отклонения.** Mi-2 — вариант 2 вместо предпочтительного первого (причины выше). Новые экспортируемые имена `readmodel`: `MarkLoadFailed`, `Reason*`, `ErrWaiterUsed`; `gateway`: `SnapshotLoadBudget`, `CatchUpBudget` — вопрос architect#3 по §6.
+- **Проверки.** См. карточку: build/vet, `go test -short ./...`, e2e, `golangci-lint`, `mvctl contracts check`, `mvctl env check`, `make test`; мутанты R1–R4 ревьюера и новые — в копии дерева, контрольный первым, копия удалена по точному пути.
+- Файлы EPIC-001, `shared/*`, миграции и тесты T-302 не менялись. Интеграционные тесты, Docker, стенд `:8888` не трогал, `.env` не открывал. Не коммитил.

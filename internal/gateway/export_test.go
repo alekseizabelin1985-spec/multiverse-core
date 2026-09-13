@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"time"
+
+	"multiverse-core.io/internal/gateway/readmodel"
+	"multiverse-core.io/shared/objstore"
 )
 
 // SetLinksBusyTimeout sets busy_timeout on the one connection of links.db of a
@@ -26,4 +30,21 @@ func DatabasesClosed(c *Context) bool {
 	defer c.mu.Unlock()
 	ctx := context.Background()
 	return c.linksDB.PingContext(ctx) != nil && c.gatewayDB.PingContext(ctx) != nil
+}
+
+// SetObjectStore gives a context that is not started yet the object store its
+// projection is loaded from, in place of a client over MV_MINIO_*.
+func SetObjectStore(c *Context, objects objstore.Client) { c.objects = objects }
+
+// ReadModel is the projection of a started context.
+func ReadModel(c *Context) *readmodel.Model {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.model
+}
+
+// SetStartBudgets shortens the budgets of the load of the snapshot and of the
+// catch-up of a context that is not started yet.
+func SetStartBudgets(c *Context, load, catchUp time.Duration) {
+	c.loadBudget, c.catchUpBudget = load, catchUp
 }

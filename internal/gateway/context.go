@@ -1,6 +1,7 @@
 // Package gateway is the context gateway of the platform: the player entry
-// point over HTTP (C-08), the links of external accounts and, in later tasks,
-// actions, sessions, rounds and the outbox (component gateway-and-bot.md).
+// point over HTTP (C-08), the links of external accounts, the projection of
+// the world read from the bus and, in later tasks, actions, sessions, rounds
+// and the outbox (component gateway-and-bot.md).
 //
 // The context owns no HTTP server: it mounts its routes on the mux of the
 // process server of shared/runtime, which listens on MV_CORE_ADDR and serves
@@ -15,24 +16,49 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
 	"multiverse-core.io/internal/gateway/api"
+	"multiverse-core.io/internal/gateway/consumer"
 	"multiverse-core.io/internal/gateway/handlers"
 	"multiverse-core.io/internal/gateway/links"
+	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/internal/gateway/store"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 )
 
 // Name is the name the context is registered and selected under.
 const Name = "gateway"
 
+// The budgets of the reads Start waits for. Both run under a context without
+// the cancellation of the process, and neither the kafka adapter nor MinIO
+// bounds a read by itself: the adapter takes the deadline of its connection
+// from the context only, so a broker that accepts the connection and stays
+// silent would hold the start forever.
+const (
+	// SnapshotLoadBudget bounds the load of the snapshot of State. A load
+	// past it leaves the projection missing with ReasonSnapshotTimeout, and
+	// the start goes on from the journal alone.
+	SnapshotLoadBudget = 30 * time.Second
+	// CatchUpBudget bounds the catch-up of the journal. A catch-up past it
+	// fails the start: a gateway that validates actions against a projection
+	// it could not bring up to date would answer from an old world.
+	CatchUpBudget = 2 * time.Minute
+)
+
 // Context is the gateway context. It is built by New and started once.
 type Context struct {
 	src env.Source
+	// objects replaces the object store built from MV_MINIO_* (tests).
+	objects objstore.Client
+	// loadBudget and catchUpBudget are SnapshotLoadBudget and CatchUpBudget
+	// unless a test shortened them.
+	loadBudget, catchUpBudget time.Duration
 
 	// Built in New and mounted in Routes; their dependencies are set in Start,
 	// before the process server serves (api.Config).
@@ -45,6 +71,8 @@ type Context struct {
 	linksDB   *sql.DB
 	gatewayDB *sql.DB
 	store     *links.SQLite
+	model     *readmodel.Model
+	consumer  *consumer.Dispatcher
 	log       *slog.Logger
 	stopLoop  context.CancelFunc
 	loopDone  chan struct{}
@@ -54,7 +82,8 @@ type Context struct {
 // environment. The variables are read in Start, not here: a factory runs when
 // serve builds the contexts, and an error belongs to the start of the process.
 func New(src env.Source) *Context {
-	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{}}
+	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{},
+		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
 }
 
 var (
@@ -80,8 +109,9 @@ func (c *Context) Routes(mux *http.ServeMux) {
 }
 
 // Start opens and migrates links.db and gateway.db in MV_GATEWAY_DATA_DIR,
-// builds the links store, compacts links.db once and, in live mode, starts the
-// sweeper of links.db.
+// builds the links store, compacts links.db once, loads the projection from
+// the snapshot of State of MV_WORLD_ID, catches it up from the journal and
+// subscribes to the bus, and, in live mode, starts the sweeper.
 //
 // The compaction at the start is unconditional. The mark "compaction pending"
 // lives in memory: a process that stopped between the DELETE of a /forget and
@@ -95,8 +125,8 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	if c.started {
 		return errors.New("gateway: started twice")
 	}
-	if deps.Clock == nil || deps.Timers == nil || deps.IDs == nil || deps.Log == nil {
-		return errors.New("gateway: Deps.Clock, Timers, IDs and Log are required")
+	if deps.Clock == nil || deps.Timers == nil || deps.IDs == nil || deps.Log == nil || deps.Bus == nil || deps.Journal == nil {
+		return errors.New("gateway: Deps.Clock, Timers, IDs, Log, Bus and Journal are required")
 	}
 	dir, err := store.DataDir(c.src)
 	if err != nil {
@@ -122,6 +152,29 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		log.Error("links compaction at start", slog.String("error", err.Error()))
 	}
 
+	// The load and the catch-up are reads the start of the process waits for,
+	// like the opening of the files above: the projection has to be current
+	// before the first request is validated against it. Unlike the files they
+	// cross the network, so each has a budget of its own.
+	model := readmodel.New(readmodel.Config{Timers: deps.Timers, Log: log})
+	loadCtx, cancelLoad := context.WithTimeout(context.WithoutCancel(ctx), c.loadBudget)
+	from := c.loadProjection(loadCtx, model, log)
+	cancelLoad()
+	dispatcher, err := consumer.New(consumer.Config{
+		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock, Log: log,
+	})
+	if err == nil {
+		catchUpCtx, cancelCatchUp := context.WithTimeout(context.WithoutCancel(ctx), c.catchUpBudget)
+		err = dispatcher.Start(catchUpCtx, from)
+		if err != nil && errors.Is(catchUpCtx.Err(), context.DeadlineExceeded) {
+			err = fmt.Errorf("catch-up of the journal did not finish within %s: %w", c.catchUpBudget, err)
+		}
+		cancelCatchUp()
+	}
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
+	}
+
 	*c.httpCfg = api.Config{
 		ClientIDs:        env.GatewayClientIDs.ListFrom(c.src),
 		ActorKindClients: env.GatewayActorKindClients.ListFrom(c.src),
@@ -135,6 +188,7 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	*c.links = handlers.Links{Store: linkStore, Clock: deps.Clock}
 
 	c.linksDB, c.gatewayDB, c.store, c.log, c.mode = linksDB, gatewayDB, linkStore, log, deps.Mode
+	c.model, c.consumer = model, dispatcher
 	c.started = true
 	// Replay drives no timers of its own (component §11.2).
 	if deps.Mode != runtime.ModeReplay {
@@ -143,6 +197,65 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		go c.sweep(loopCtx, deps.Clock, deps.Timers, c.loopDone)
 	}
 	return nil
+}
+
+// loadProjection loads the snapshot of State into model and returns its cursor;
+// nil when there is none, and the projection is caught up from the start of
+// the journal. A missing snapshot is the start of a new world and is logged as
+// a warning; an object store configured wrong, a store that cannot be read or
+// a snapshot that does not check is an error and leaves /health degraded
+// (US-011: the gateway does not come up empty in silence).
+func (c *Context) loadProjection(ctx context.Context, model *readmodel.Model, log *slog.Logger) map[string]int64 {
+	world := env.WorldID.StringFrom(c.src)
+	objects, err := c.objectStore()
+	if err != nil {
+		model.MarkLoadFailed(readmodel.ReasonStoreMisconfigured)
+		log.Error("projection: object store is configured wrong, built from the journal alone",
+			slog.String("world_id", world), slog.String("error", err.Error()))
+		return nil
+	}
+	from, err := model.LoadFromStateSnapshot(ctx, objects, world)
+	switch {
+	case err == nil:
+		log.Info("projection loaded from the snapshot of state", slog.String("world_id", world))
+	case errors.Is(err, readmodel.ErrNoSnapshot):
+		log.Warn("projection: no snapshot of state, built from the journal alone",
+			slog.String("world_id", world), slog.String("reason", err.Error()))
+	default:
+		log.Error("projection: snapshot of state not loaded, built from the journal alone",
+			slog.String("world_id", world), slog.String("error", err.Error()))
+	}
+	return from
+}
+
+// objectStore is the store the projection is loaded from: the one a test put
+// in, or a client over MV_MINIO_*. Without either key there is no store — a
+// process on the memory bus runs without MinIO — and the snapshot is reported
+// missing. One key without the other is an error, like every other setting
+// that does not make a client: a store half configured is not a new world.
+// The errors name the variables, never their values.
+func (c *Context) objectStore() (objstore.Client, error) {
+	if c.objects != nil {
+		return c.objects, nil
+	}
+	cfg := objstore.Config{
+		Endpoint:  env.MinIOEndpoint.StringFrom(c.src),
+		AccessKey: env.MinIOAccessKey.StringFrom(c.src),
+		SecretKey: env.MinIOSecretKey.StringFrom(c.src),
+	}
+	switch {
+	case cfg.AccessKey == "" && cfg.SecretKey == "":
+		return nil, nil
+	case cfg.AccessKey == "" || cfg.SecretKey == "":
+		return nil, fmt.Errorf("gateway: %s and %s are set together or not at all",
+			env.MinIOAccessKey.Name(), env.MinIOSecretKey.Name())
+	}
+	useSSL, err := env.MinIOUseSSL.BoolFrom(c.src)
+	if err != nil {
+		return nil, err
+	}
+	cfg.UseSSL = useSSL
+	return objstore.New(cfg)
 }
 
 func openDatabases(ctx context.Context, dir string) (*sql.DB, *sql.DB, error) {
@@ -163,8 +276,9 @@ func openDatabases(ctx context.Context, dir string) (*sql.DB, *sql.DB, error) {
 	return linksDB, gatewayDB, nil
 }
 
-// sweep runs the housekeeping of links.db: every store.SweepInterval the
-// expired character requests go and a pending compaction is retried, and
+// sweep runs the housekeeping: every store.SweepInterval the expired character
+// requests and the old marks of processed events go and a pending compaction
+// is retried, and
 // every store.LinksCompactInterval links.db is compacted as the safety net of
 // /forget (ADR-019 addendum p. 1). Errors are logged; the next tick repeats.
 func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timers, done chan<- struct{}) {
@@ -177,8 +291,12 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 		case <-ctx.Done():
 			return
 		case <-sweep.C():
-			if err := c.store.Sweep(ctx, clk.Now()); err != nil && ctx.Err() == nil {
+			now := clk.Now()
+			if err := c.store.Sweep(ctx, now); err != nil && ctx.Err() == nil {
 				c.log.Error("links sweep", slog.String("error", err.Error()))
+			}
+			if err := c.consumer.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("processed events sweep", slog.String("error", err.Error()))
 			}
 		case <-compact.C():
 			if err := c.store.Compact(ctx); err != nil && ctx.Err() == nil {
@@ -188,12 +306,13 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 	}
 }
 
-// Stop stops the sweeper and waits for it, finishes a pending compaction, then
-// closes gateway.db and links.db. The databases are closed even when the
-// sweeper does not stop before the deadline of ctx: a context that is not
-// started again must not keep its files open (Windows locks them). The context
-// holds no subscription yet; when the consumer arrives (T-304) it is cancelled
-// here first, before the process closes the bus (C-01 v1.7, ADR-023 p. 4).
+// Stop cancels the subscriptions and waits for their handlers, stops the
+// sweeper and waits for it, finishes a pending compaction, then closes
+// gateway.db and links.db. The subscriptions go first: the process closes the
+// bus after the last Stop, and Close does not cancel a handler (C-01 v1.7,
+// ADR-023 p. 4). The databases are closed even when a handler or the sweeper
+// does not stop before the deadline of ctx: a context that is not started
+// again must not keep its files open (Windows locks them).
 func (c *Context) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -202,6 +321,9 @@ func (c *Context) Stop(ctx context.Context) error {
 	}
 	c.started = false
 	var errs []error
+	if err := c.consumer.Stop(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("gateway: %w", err))
+	}
 	stopped := true
 	if c.stopLoop != nil {
 		c.stopLoop()
@@ -231,22 +353,43 @@ func (c *Context) Stop(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// Health is ok while the context runs, degraded while a /forget waits for its
-// compaction, fail before Start and after Stop.
+// Health is ok while the context runs; fail before Start and after Stop.
+// It is degraded while a /forget waits for its compaction, while a
+// subscription is down, while the projection is stale, and when the snapshot
+// of State could not be loaded — the store configured wrong, unreadable, the
+// snapshot not checking. A world without a snapshot yet is reported as
+// projection missing and does not degrade the gateway: it is how every new
+// world starts, the empty one of the memory bus included. projection_error is
+// a short code (readmodel.Reason*); the error itself is in the log, because it
+// names the bucket, the key and the address of the store.
 func (c *Context) Health() runtime.Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.started {
 		return runtime.Status{Status: runtime.StatusFail, Details: map[string]any{"started": false}}
 	}
+	projection, loadErr := c.model.Status()
 	details := map[string]any{
 		"links_store":   runtime.StatusOK,
 		"gateway_store": runtime.StatusOK,
+		"projection":    string(projection),
 		"mode":          string(c.mode),
 	}
+	status := runtime.StatusOK
 	if c.store.CompactionPending() {
 		details["links_compaction"] = "pending"
-		return runtime.Status{Status: runtime.StatusDegraded, Details: details}
+		status = runtime.StatusDegraded
 	}
-	return runtime.Status{Status: runtime.StatusOK, Details: details}
+	if loadErr != "" {
+		details["projection_error"] = loadErr
+		status = runtime.StatusDegraded
+	}
+	if projection == readmodel.ProjectionStale {
+		status = runtime.StatusDegraded
+	}
+	if err := c.consumer.Err(); err != nil {
+		details["bus"] = runtime.StatusFail
+		status = runtime.StatusDegraded
+	}
+	return runtime.Status{Status: status, Details: details}
 }
