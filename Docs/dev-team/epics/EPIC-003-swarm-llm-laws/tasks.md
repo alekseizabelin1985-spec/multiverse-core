@@ -1,6 +1,6 @@
 # EPIC-003 «Рой GM, LLM-шлюз, страж, законы» — задачи и волны
 
-Версия 0.3.1 · 2026-09-13 · tech-lead#2 (TEAM-2) · статус: в работе (перезапуск трёх команд; подволна A).
+Версия 0.3.2 · 2026-09-13 · tech-lead#2 (TEAM-2) · статус: в работе (перезапуск трёх команд; подволна A).
 
 **Действующее на 2026-09-13 (ревизия 4, tech-lead#2).** Этот абзац отменяет устаревшие места ниже; они не стёрты, а помечены «(ревизия 4)» там, где меняют смысл.
 - **Команда и ветки (gitflow).** Эпик ведёт TEAM-2: tech-lead#2, architect#2, developer#1…#3, code-reviewer (указание пользователя 2026-09-13 «три команды», `parallelism.maxTeams = 3`, `maxAgentsPerRole = 3`). Ветка эпика — `epic/EPIC-003-swarm-llm-laws` от `develop` (`1c2ee7e`), рабочая папка `.worktrees/EPIC-003`. Задача — ветка `task/T-NNN-<slug>` от ветки эпика в своей папке `.worktrees/T-NNN`. После «принято» tech-lead#2 оркестратор сливает ветку задачи в ветку эпика. `integration/mvp-1` не используется.
@@ -27,6 +27,7 @@
 | **0.2.5** | **2026-09-11** | **Ревизия контрактов 3 (T-431, EPIC-001), внесено system-architect#1 по решению оркестратора; строка журнала — tech-lead#1 при приёмке T-431** (основание — `contracts.md` v0.9: C-01 v1.6 «посредник доставки», C-05 v1.6; design v0.3a §14.5; ADR-027 «Уточнение исполнения 2», ADR-028 «Уточнение исполнения»). Добавлены строки DoD:<br>• T-224 — двухшаговое окно Router, идемпотентность проекций;<br>• T-227 — `budget.Observe` по id события, тик закрывается один раз;<br>• T-228 — ошибка роли возвращается шине; счётчик «3 ошибки» считает события, а не доставки;<br>• T-232 — открытие встречи собирается один раз, id из события открытия и scope;<br>• T-236 — «открытие в полёте», id окна бюджета, последний закрытый `tick_seq`.<br>У T-421 уточнён тест 2, у T-224 и T-228 — «Что». Все правки помечены «(T-431, 2026-09-11)». Число задач и подволны не менялись. |
 | **0.3** | **2026-09-13** | **Перезапуск трёх команд, ревизия 4 — tech-lead#2.** Основание: сверка плана с деревом `1c2ee7e` и `contracts.md` v0.10, решения system-architect#1 (1a–1f, 2, 3, 4, 7), gitflow. Шапка «Действующее на 2026-09-13»; §1 общий DoD (`forbidigo` — четыре семейства, `membus` — реализация C-01, статус `done`); `integration/mvp-1`, «ранний merge» и «PR через tech-lead#1» заменены контрольным слиянием и правилами владения трёх веток. Исправлены DoD: T-201, T-202, T-203, T-204, T-205, T-206, T-207, T-208, T-209, T-210, T-211, T-212, T-213, T-216, T-217, T-218, T-221, T-226, T-228, T-233, T-235, T-237, T-238, T-254, T-256. Статусы: T-214 и T-215 — `review`, T-206 — `in-progress`, T-219, T-220, T-255, T-419 — `done`, T-427 — `review`. T-439 заведена разделом (передана из EPIC-001). §6 подволны пересобраны: A…N вместо 1.1–1.16. Все правки помечены «(ревизия 4)». Объём задач не менялся: новая задача подключения контекстов предложена оркестратору, номера у неё нет. |
 | **0.3.1** | **2026-09-13** | **T-452, tech-lead#2.** Новый §12 «Задачи из ревью других эпиков»: в него вынесена T-452, которая стояла внутри §11 «Бэклог двойников». T-452 добавлена в перечень номеров эпика. Прежнее «Волна 1» заменено на «вне подволн §6.1, до T-062 EPIC-002». Статус — `done`. Подволны §6.1 не менялись. |
+| **0.3.2** | **2026-09-13** | **Приёмка T-214 и T-215, tech-lead#2** (по дереву `fd52e31`, после слияния T-445 и T-444 в эпик). Обе задачи — `done`. Замечания ревью #1, не закрытые T-444/T-445, разнесены так: Mi-4 — строка DoD T-230, N-1 — строка DoD T-217, п. 5 бэклога ревью — строка DoD T-211, остальное — новый §13 «Бэклог схем событий». Подволны §6.1 и объём задач не менялись. |
 
 **Правила нарезки.** Задача ≤ M, один пакет-владелец, выполнима одним разработчиком за одну сессию без уточнений. Unit-тесты — внутри задачи (ADR-010). Integration / e2e / golden / документация — отдельные задачи. Крупные единицы дизайна (A1 частично, B6, C4, R2, R4, R10, R13) разбиты. Задачи-поставки другим командам идут первыми. ~~и сливаются в `integration/mvp-1` до готовности эпика (пометка **ранний merge**)~~ **(ревизия 4)** Поставка уходит контрольным слиянием эпика в `develop` после приёмки (пометка **поставка**; прежняя пометка «ранний merge» читается так же).
 
@@ -245,6 +246,7 @@ DoD (специфика):
 - [ ] Один `llm.output` на попытку (`attempt=1..n`), `meta.agent` обязателен, ~~`meta.caused_by`~~ **`meta.causation_id`** *(ревизия 4)* = id события-причины.
 - [ ] `GET /v1/admin/llm/usage` отвечает на `httptest` и не публикуется наружу (монтаж на `runtime.Mux`, `MV_CORE_ADDR`).
 - [ ] Ключи облака и их фрагменты не попадают в события и логи (негативный тест по подстроке).
+- [ ] **(приёмка T-215, бэклог ревью #1 п. 5; журнал 2026-09-11)** `llm.output.error.message` строится через редактор секретов `shared/logging`, а не из `err.Error()` провайдера как есть. Тест: ошибка провайдера с URL и ключом в тексте даёт `error.message` без них.
 - [ ] **(ревизия 4, решение 4)** Свойство-тесты на генераторе исходов конвейера:
   - `filter{}` в `llm.output` при `validation_status=invalid` есть или отсутствует по стадии, на которой ответ отброшен: до фильтра (`schema_invalid`, `language`) — нет, после фильтра (страж, устаревшие законы) — есть;
   - `reasons[]` равно множеству `reason` связанных `llm.output.rejected`;
@@ -292,19 +294,21 @@ DoD (специфика):
 ### Поток C — схемы событий, фильтр, страж, промпт, testkit (developer#3)
 
 #### T-214 · A5 · Схемы событий EPIC-003, часть 1 (рой, тики, мир/регион/NPC, законы) — **ранний merge**
-Инкремент I1a · подволна 1.1 (выполнена до перезапуска) · developer#3 · Размер M · Статус **review** *(ревизия 4)*
+Инкремент I1a · подволна 1.1 (выполнена до перезапуска) · developer#3 · Размер M · Статус **done** *(принята tech-lead#2 2026-09-13 по дереву `fd52e31`, итераций ревью 1; подробности — `tasks/T-214.md`)*
 **(ревизия 4) Статус.** Работа в дереве `develop` с 2026-09-11. Ревью #1 (TEAM-2/code-reviewer#1, 2026-09-13, по дереву `acd653c`): **принять** — Critical 0, Major 0, Minor 3, Nit 3. Реестр 27 типов верен, невалидные фикстуры падают ровно на описанной причине. Осталось: приёмка tech-lead#2 и раздел ревью в `review.md` эпика — его вносит ревьюер в ветке эпика. Пункт DoD «слито в `integration/mvp-1`» читается как «в `develop`»: схемы там с контрольного слияния EPIC-001 (`1c2ee7e`).
 Что сделать: `schemas/events/*.v1.json` для `tick.fired` (`tick.lod_allowed` обязателен), `tick.aborted`, `agent.spawned` (+`content_hash`), `agent.child_resolved`, `agent.stopped`, `agent.spawn_rejected`, `agent.blueprint_reloaded`, `encounter.started` (+`round{timeout, idle_after_missed}`), `encounter.ended`, `combat.decided`, `world.weather_changed`, `world.time_advanced`, `world.event_occurred`, `region.event_occurred`, `npc.moved`, `npc.spawned`, `world.laws.changed`, `world.law_breach.{proposed,rejected,applied,review_decided,rolled_back}` (без издателя); регистрация типов и топиков — PR в `shared/contracts/registry.go` (ревью system-architect); фикстуры payload по `api-contracts.md` §2.3.6–2.3.9, 2.3.13.
 Файлы: `schemas/events/*.v1.json`, PR в `shared/contracts/registry.go`, `testdata/fixtures/events/*.json`.
 Зависит от: F-4a/F-4b (внешние).
 Ссылки: US-036, US-037, US-011, C-05 v1.1, C-06, C-12, ADR-007, ADR-008, design §3.1 A5, КД §14.
 DoD (специфика):
-- [ ] `mvctl contracts check` зелёный: схемы валидны, тип → топик по §0, `world.law_breach.*` в списке исключений «без издателя».
-- [ ] Для каждого типа — фикстура валидного и невалидного payload; `MV_BUS_VALIDATE_ON_READ` отклоняет невалидный.
-- [ ] Слито в `integration/mvp-1` до задач C4 (T-219/T-220) и до I1-α.
+- [x] `mvctl contracts check` зелёный: схемы валидны, тип → топик по §0, `world.law_breach.*` в списке исключений «без издателя».
+- [x] Для каждого типа — фикстура валидного и невалидного payload; `MV_BUS_VALIDATE_ON_READ` отклоняет невалидный.
+- [x] Слито в `integration/mvp-1` до задач C4 (T-219/T-220) и до I1-α. *(ревизия 4: в `develop` с `1c2ee7e`)*
+
+**Приёмка (tech-lead#2, 2026-09-13): принята.** `mvctl contracts check` (65 типов, 8 топиков, 58 схем), `go test -short -count=1 ./shared/contracts/... ./test/fixtures/...`, `golangci-lint run ./shared/contracts/... ./test/...` — зелёные в дереве эпика `fd52e31`. Minor ревью #1: Mi-5 закрыт T-444 (`scope` встречи) и T-445 (`$defs.EventRef`), кроме словаря `tick.aborted.reason`; Mi-3, Mi-4, N-2…N-4 не блокируют и разнесены: Mi-4 — DoD T-230, остальное — §13.
 
 #### T-215 · A6 · Схемы событий, часть 2 (LLM и нарратив) — **ранний merge**
-Инкремент I1a · подволна 1.2 (выполнена до перезапуска) · developer#3 · Размер S · Статус **review** *(ревизия 4)*
+Инкремент I1a · подволна 1.2 (выполнена до перезапуска) · developer#3 · Размер S · Статус **done** *(принята tech-lead#2 2026-09-13 по дереву `fd52e31`: Ma-1 и Mi-1 закрыты T-445; итераций ревью 1; подробности — `tasks/T-215.md`)*
 **(ревизия 4) Статус.** Ревью #1 (TEAM-2/code-reviewer#1, 2026-09-13): **вернуть** — Critical 0, Major 1, Minor 3, Nit 2.
 - **Ma-1.** Условная обязательность в `llm.output.v1.json` не выражена: `response_raw` при `valid|partially_rejected|invalid`, `filter` и `error{}` при `error`. Закрывается задачей **T-445** (EPIC-001, решение 4 system-architect#1: условия `llm.output` и `llm.output.rejected` — в схеме). Итерация T-215 в ветке EPIC-003 не нужна.
 - **После слияния T-445** в `develop` и `sync` эпика — приёмка tech-lead#2 по дереву. Minor и Nit ревью #1 разбираются там же: закрыты T-445 или уходят строками бэклога.
@@ -314,10 +318,12 @@ DoD (специфика):
 Ссылки: US-004, US-018, US-016, FR-032/034/045, C-05 (contracts v0.3+), **C-07 v1.2**, ADR-017 **+ «Дополнение 1»**, `consolidation.md` §14.1 (TL2-1, З-3), design §3.1 A6, КД §14.
 **(сведение 3, внесено tech-lead#1 от имени tech-lead#2)** Решение принято, замечание §10 п. 1 закрыто: `validation_status` — **единый enum из 6 значений** `valid | partially_rejected | invalid | error | quarantined | filter_error`. Причины — **только** в `llm.output.rejected.reason` (`unknown_entity | player_agency | level_violation | schema_invalid | language | filter_blocked | filter_error | budget_exceeded | law_violation | other`), одно событие на отброшенный элемент (`element{index,type}`), без `element` — на весь ответ; `budget_exceeded` — **не статус**, а `llm.output.rejected` без `llm.output`. Значения `rejected_*` из `data-model.md` §7.2 v0.2 удалены (никогда не издавались). Добавляется **опциональное** поле `llm.output.reasons[]` (сводка `reason` связанных `rejected`; заполняет шлюз — денормализация для `mvctl llm-usage` без join).
 DoD (специфика):
-- [ ] `reason` enum в схеме совпадает с `guardian/reasons.go` (тест равенства; при отсутствии пакета — TODO-тест, включается в T-217).
-- [ ] **`enum validation_status` — ровно 6 значений** `valid|partially_rejected|invalid|error|quarantined|filter_error` (C-07 v1.2, ADR-017 доп. 1); негативный тест: документ с `rejected_unknown_entity`/`budget_exceeded` в `validation_status` не валиден. `reasons[]` — опциональный массив значений enum `reason`.
-- [ ] `config.cloud_enabled` — схема без изменений; **семантика (C-06 v1.1)**: событие публикуется при **каждом** старте `core` (и `true`, и `false`) и при изменении — иначе проекция `worlds[].llm.cloud_enabled` у gateway (EPIC-004 T-320) после рестарта недетерминирована. Реализация публикации — T-212/T-213 (поток B, шлюз `llm`), см. пометку там.
-- [ ] Слито в `integration/mvp-1` (нужны EPIC-004 для доставки и EPIC-005 для отчётов).
+- [x] `reason` enum в схеме совпадает с `guardian/reasons.go` (тест равенства; при отсутствии пакета — TODO-тест, включается в T-217).
+- [x] **`enum validation_status` — ровно 6 значений** `valid|partially_rejected|invalid|error|quarantined|filter_error` (C-07 v1.2, ADR-017 доп. 1); негативный тест: документ с `rejected_unknown_entity`/`budget_exceeded` в `validation_status` не валиден. `reasons[]` — опциональный массив значений enum `reason`.
+- [x] `config.cloud_enabled` — схема без изменений; **семантика (C-06 v1.1)**: событие публикуется при **каждом** старте `core` (и `true`, и `false`) и при изменении — иначе проекция `worlds[].llm.cloud_enabled` у gateway (EPIC-004 T-320) после рестарта недетерминирована. Реализация публикации — T-212/T-213 (поток B, шлюз `llm`), см. пометку там.
+- [x] Слито в `integration/mvp-1` (нужны EPIC-004 для доставки и EPIC-005 для отчётов). *(ревизия 4: в `develop` с `1c2ee7e`)*
+
+**Приёмка (tech-lead#2, 2026-09-13): принята.** Ma-1 закрыт T-445: шесть `if/then` по статусу (`llm.output.v1.json:110–176`), таблица C-07 v1.3 построчно (`llmrecord_test.go:106–174`). Mi-1 закрыт T-445: `budget_exceeded`/`unknown_entity` (`llm.output.rejected.v1.json:59–89`, `llmrecord_test.go:201–240`). Шаблон `provider` закреплён в C-06 v1.2 (`contracts.md:518`) и работает (проба приёмки: пять имён приняты, адрес, адрес с ключом и `OpenAI` отвергнуты), но теста на него в дереве по-прежнему нет — Mi-2 открыт, §13 п. 1. Прогоны — как у T-214. «Схема без изменений» у `config.cloud_enabled` — нарушение снято текстом C-06 v1.2 (`contracts.md:526`).
 
 #### T-216 · C1 · Фильтр категории (a) и `config/absolute-limits.yaml`
 Инкремент I1a · подволна **A** *(ревизия 4; было 1.5)* · developer#3 · Размер M · Статус todo · ветка `task/T-216-category-a-filter`
@@ -348,6 +354,7 @@ DoD (специфика):
 - [ ] Страж не публикует событий и не обращается к шине (проверяется отсутствием зависимости пакета от `eventbus`).
 - [ ] **(ревизия 4, решение 1a)** `go list -deps ./internal/llm/guardian/...` не содержит `internal/laws`, `internal/mechanics` и `internal/swarm`. Правила 6а/6б проверены на фейках `View`, `InvariantFunc`, `LawsSource`.
 - [ ] **(ревизия 4)** Тест равенства enum причин `guardian/reasons.go` со схемой `llm.output.rejected` (прежний TODO-тест T-215) включён и зелёный.
+- [ ] **(приёмка T-215, ревью #1 N-1)** `TestRejectionReasonsMatchTheGuardianPackage` (`test/fixtures/events_test.go:405`) считает причиной **любой** строковый литерал `reasons.go`. Поэтому `reasons.go` содержит только словарь причин (сообщения и `String()` — в других файлах), либо тест переводится на константы именованного типа причины. Выбранный вариант записан в dev-log.
 
 #### T-218 · C3 · Промпт-билдер: секции, экранирование, рендер событий, `prompt_hash`
 Инкремент I1a · подволна **D** *(ревизия 4; было 1.6)* · developer#3 · Размер M · Статус todo · ветка `task/T-218-prompt-builder`
@@ -600,6 +607,7 @@ DoD: [ ] **(приёмка T-419, 2026-09-11)** тест по образцу з�
 - [ ] провал `flee` → свободная атака NPC. *(прежний флажок 2, первая половина)*
 - [ ] `expected_version` пакета берётся из `WorldView`. Тест: пакет несёт версию сущности из проекции на момент решения. *(прежний флажок 4, первая половина)*
 - [ ] `exchange.last`: каждое `combat.decided` несёт `exchange{index, last}`, `index` — с 0 (решение по действию игрока — 0, ответ существа — 1), `last=true` ровно на одном решении обмена. Тест на три формы: «удар + ответ NPC», смертельный удар без ответа, провал `flee` со свободной атакой. *(прежний флажок 13)*
+- [ ] **(приёмка T-214, ревью #1 Mi-4)** В валидную фикстуру `testdata/fixtures/events/combat.decided.v1.valid.json` добавлено `"exchange": {"index": 0, "last": false}` — образцовая форма издателя по C-05 v1.4 п. 7; тесты `./test/fixtures/...` зелёные.
 - [ ] действие без `id` не роняет агента паникой и не решается: `Error` в лог, публикаций 0. Тест — по образцу `TestAnActionWithoutAnIDIsRefusedOutLoud` двойника T-419. *(прежний флажок 8, первая половина)*
 - [ ] один пакет на действие, `atomic`; номер раунда в сущности встречи — через `set`; трофей выдаётся один раз; повторная доставка действия не даёт второго решения и второго пакета (окно `Dedup`). Тесты на каждое. *(«Что» прежней R7)*
 - [ ] покинутый (`abandoned`) игрок — не цель NPC и не входит в `expected[]`, `acted[]`, `participation=active`. Тест. *(дополнение сведения 3, первая часть)*
@@ -996,8 +1004,8 @@ DoD: [ ] README отражают фактическое поведение I2; [
 
 ### I1-α «соло на шаблонах через бота» — вклад EPIC-003 (подволна 1.4)
 **(ревизия 4)** Всё ниже уже в `develop` с контрольного слияния EPIC-001 (`1c2ee7e`); «слиты в `integration/mvp-1`» читать как «в `develop`». Отмечено по состоянию на 2026-09-13.
-- [x] T-214 A5 — схемы `combat.decided`, `encounter.*`, `agent.*`, `tick.*` зарегистрированы и в `develop` (задача в `review`, ревью #1 — «принять»).
-- [x] T-215 A6 — схема `narrative.output` в `develop` (задача в `review`; условия `llm.output` — T-445).
+- [x] T-214 A5 — схемы `combat.decided`, `encounter.*`, `agent.*`, `tick.*` зарегистрированы и в `develop` (done, принята tech-lead#2 2026-09-13).
+- [x] T-215 A6 — схема `narrative.output` в `develop` (done, принята tech-lead#2 2026-09-13; условия `llm.output` — T-445, в эпике).
 - [x] T-219 `FakeEncounter` + `FakeContext` в `develop` (done); бой с волком доходит до `combat.decided` и `entity.update.proposed`. `FakeEncounter` — **единственная** заглушка боя (C-05 (contracts v0.3+); `WithEncounterStub` в F-10 не делается).
 - [x] T-220 `FakeNarrator` + `template/ru.go` в `develop` (done); нарратив приходит отдельным сообщением с пометкой шаблона.
 - [x] Смерть, трофей, бегство работают в e2e `solo-30` без роя (T-219, T-419).
@@ -1160,3 +1168,19 @@ DoD: [ ] README отражают фактическое поведение I2; [
   - `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `golangci-lint run ./...`, `make test` зелёные; dev-log заполнен.
 - **Метка**: `contract-change` не нужна — контракт, схемы и таблица владения не меняются; двойник приводится к ним.
 - **Исполнитель**: TEAM-2/developer#2. Ветка `task/T-452-fake-encounter-fallen-character` (от эпика, `b18ecd6`). Подробности — `tasks/T-452.md`.
+
+## 13. Бэклог схем событий (из приёмки T-214 и T-215; без номера — номер выдаёт оркестратор при взятии в работу)
+
+Замечания ревью #1 T-214/T-215 (`review.md`, раздел «T-214 + T-215 · ревью #1»), которые не закрыли T-444 и T-445 и не ушли строкой в DoD другой задачи. Ни одно не блокирует задачи эпика.
+
+1. **(Mi-2, N-3) `shared/contracts`: тест шаблона `provider` и `SourceLLM` в потребителях записей.** Путь EPIC-001 (`shared/contracts` меняет только EPIC-001). Размер XS.
+   - В `TestBlockVPayloadRejects` (`blockv_test.go:253`) — два отрицательных случая: адрес в `llm.output.provider` и в `config.cloud_enabled.provider` (`http://127.0.0.1:8888`, `openai_compat?key=…`, `OpenAI`); положительный цикл по пяти именам `openai_compat|ollama|anthropic|recorded|fake`. Сейчас удаление шаблона оставит все тесты зелёными.
+   - `registry.go:131–136`: добавить `SourceLLM` в `Consumers` `llm.output` и `llm.output.rejected` — записи читает провайдер `recorded` в контексте `llm` (§2.2). Изменение реестра — метка `contract-change`, через system-architect#1.
+2. **(Mi-3а, N-2) `test/fixtures/events_test.go`: дубли словарей и уровень агента конверта.** Размер XS.
+   - Удалить `validationStatuses`, `TestValidationStatusIsTheSixValuesOfTheDecision`, `TestRejectionReasonsAreOneDictionary` (`:347–391`) — их держат `TestValidationStatusEnum`/`TestRejectionReasonEnum` в `shared/contracts/blockv_test.go`. В тексте пропуска `TestRejectionReasonsMatchTheGuardianPackage` печатать `schemaEnum(...)` вместо `rejectionReasons`.
+   - Конверт фикстур (`:274–281`): уровень и блупринт агента брать из `payload.agent`, если есть, иначе по таблице «топик/префикс → уровень» (`tick.*`, `world.*` — `global|domain`, §2.3.8). Сегодня политика уровень не читает, ложного прохода нет.
+3. **(Mi-5) Словари `tick.aborted.reason` и `narrative.output.fallback_reason` — сужение до enum** в задачах, которые закрепляют их в коде: T-227 (`tick.aborted`), T-229 (нарратив ролей). Совместимое изменение по §16 п. 1, уведомить system-architect#1.
+4. **(N-4, бэклог ревью п. 2) Правило «пара фикстур на каждый путь»** — отдельной задачей после фикстур EPIC-002 и EPIC-004; тогда же валидная фикстура `encounter.ended` без `killer` (C-05 v1.4 п. 6).
+5. **(бэклог ревью п. 4) `agent.id` в фикстурах — детерминированная форма** после R3 (T-225).
+
+Не переносятся: Mi-7 T-009 — общий `$defs.EventRef` добавлен T-445, встроенные копии формы в прежних схемах оставлены сознательно (`schemas/events/_common.json:57`). N-5 — расхождение «девять/восемь» только в тексте dev-log T-215 §2; записи dev-log — история исполнителя, не правятся.
