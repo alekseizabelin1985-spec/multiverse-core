@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T00:39:52+03:00",
+  "updatedAt": "2026-09-14T00:48:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4610,7 +4610,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-307",
           "title": "outbox, long-poll доставок, consumer боя и нарратива",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T23:34:13+03:00",
           "finishedAt": null,
@@ -10526,6 +10526,16 @@ window.DEVTEAM_STATE =
       "task": "T-307",
       "action": "Итерация 2: адресаты без связки, ci-harness",
       "startedAt": "2026-09-14T00:39:52+03:00",
+      "finishedAt": "2026-09-14T00:48:44+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "Ревью #2 outbox",
+      "startedAt": "2026-09-14T00:48:44+03:00",
       "finishedAt": null
     }
   ],
@@ -14567,6 +14577,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-307 · ревью #1 (TEAM-3/code-reviewer#2): вернуть — 0/1/2/3. Outbox верен: без потерь и дублей сверх at-least-once, long-poll без удержания соединения, совместим с клиентом и ботом. Ma-1 решение 3 не реализовано — адресат без связки (dropped) и повторённый адресат оставляют ход в timeout. Mi-1 ci-h"
+    },
+    {
+      "at": "2026-09-14T00:48:44+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 · итерация 2 (developer#1): Ma-1 — адресаты хода только уникальные игроки со связкой, при нуле ход завершается сразу (3 теста, turns_failed = 0); Mi-1 — ci-harness получает доставки telegram (403 без допуска); Mi-2 поля нарратива в доставке; N-2 тест Expire; N-3 новый лизинг не начинается посл"
     }
   ],
   "blockers": [],
