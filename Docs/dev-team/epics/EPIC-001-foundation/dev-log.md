@@ -8192,3 +8192,30 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Попутно найдено:** kafka-адаптер отменяет контекст обработчика при `Close` (контекст цикла от `closing`), а C-01 «Остановка» п. 3 / ADR-023 п. 4 говорят, что не отменяет. Для кейса исход тот же; вопрос к system-architect в карточке.
 - **Прогоны:** `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/ && go vet -tags e2e ./test/...` → 0; `gofmt` чисто; `go test -short -count=1 ./...` → 27 пакетов ok; e2e ok; `golangci-lint run ./...` и с `--build-tags integration` по `contract` → 0 issues. `-race` недоступен. Redpanda не прогонялась — прогон с T-394.
 - Не коммитил.
+
+<!-- dev-log T-436 -->
+## developer#1 · T-436 · kafka-адаптер: `Close` не отменяет контекст обработчика · 2026-09-13
+
+Ветка `task/T-436-kafka-close-handler-ctx` (от `e5e8d7c`), TEAM-1, Opus. Подробности — карточка `tasks/T-436.md`, раздел «Выполнение».
+
+- **Сделано.**
+  - `kafka.go`, `Subscribe`: `loopCtx` (от вызывающего плюс отмена по `k.closing`) — только `FetchMessage`, `CommitMessages` и `stopped`. Обработчику уходит `ctx` вызывающего.
+  - Комментарии объясняют, почему два контекста: коммит T-014 против C-02/PUT.
+  - README `shared/eventbus`: пункт «Граница `Close` — транспорт, а не обработчик».
+- **Якорь** — кейс T-395 `CloseUnderAFailingHandlerIsAnOrderlyStop`. Удержанный обработчик после возврата `Close` отдаёт `ctx.Err()`, кейс требует `nil`.
+- **До правки** — красный на Redpanda, только якорь: `failing` и `panicking` — `context canceled`. Прогон сделан дважды: в рабочей папке до правки `kafka.go` и в выгрузке `git archive HEAD` с одним якорем (удалена по точному пути). membus с якорем зелёный.
+- **После правки** — Redpanda `-count=8`: 8 из 8, кейс `Close` T-014 — 8 из 8, якорь — 8 из 8; контрольный `-count=1` — зелёный.
+- **Мутанты** (копии в scratch, без `-overlay`, удалены по точным путям):
+  - M0 — красный (сборка);
+  - M1 (`k.deliver(loopCtx, …)`) — красный на Redpanda, обе подписки;
+  - M4 (membus отменяет контекст обработчика по `Close`) — красный на membus 4 из 4, у подписки `failing`. Отмена асинхронная, у `panicking` исход — гонка (записано в карточке).
+  - Первая попытка M4 не собралась и не засчитана.
+- **Осознанное следствие** (замечание tech-lead#1): пауза повтора `d.wait` и проверка `ctx.Err()` после неудачной попытки идут на контексте обработчика, и `Close` их не прерывает. Как у membus, согласуется с C-01 v1.7. Не «чинил».
+- **Прогоны.**
+  - `go build ./... && go vet ./... && go vet -tags integration ./shared/testkit/contract/ && go vet -tags e2e ./test/...` → 0; `gofmt` чисто.
+  - `go test -short -count=1 ./...` → 27 пакетов ok; e2e ok.
+  - `golangci-lint run ./...` и `--build-tags integration` по `contract` → 0 issues.
+  - `-race` недоступен.
+  - `make test-integration`/`make ci` целиком не запускались (ограничение владельца).
+- Не коммитил.
+- **Итерация 2 по ревью #1 (вердикт «принять», 2026-09-13).** Только текст: N-1 — в `kafka.go` Close вызывает процесс, один раз и после остановки контекстов; N-2 — в `kafka.go` и README «не коммитится» только после возврата `Close`, во время `Close` kafka-go может закоммитить финальным сбросом (законно, C-01 п. 2); N-3 — строки T-436 и карточка в CRLF. Mi-1 не трогал (бэклог). `go build`/`go vet` — 0, `gofmt` пусто, `golangci-lint run ./shared/eventbus/...` — 0 issues. Не коммитил.

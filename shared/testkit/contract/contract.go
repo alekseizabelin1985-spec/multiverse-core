@@ -1057,6 +1057,12 @@ func checkPanicLetter(t *testing.T, dl eventbus.DeadLetter, panicValue string) {
 // microseconds wide, and a bus that turned the failed write into an error
 // there stayed green (review #2 of T-014, Minor-3).
 //
+// The hold carries a second assertion, and this one is exact: while it holds,
+// the handler reports the state of its own context once Close has returned.
+// The contract wants nil there — Close ends the wait on the transport, not the
+// work of the handler (C-01 v1.7 p. 3). It is the only anchor that
+// distinguishes the two, and the kafka adapter was red on it until T-436.
+//
 // The case closes a spare bus, not the target. The Close case runs last and
 // its anchor rests on the subscriptions it has; this one needs the target
 // open afterwards, to read through it what the closed bus left behind.
@@ -1081,6 +1087,7 @@ func closeUnderAFailingHandler(t *testing.T, target Target) {
 	for _, f := range failing {
 		f.group = r.group + "-" + f.name
 		f.held = make(chan struct{}, 1)
+		f.afterClose = make(chan error, 1)
 		f.sub = r.subscribeOnGroup(spare, eventbus.TopicPlayerEvents, f.group, f.handler(release))
 	}
 	defer func() {
@@ -1114,6 +1121,26 @@ func closeUnderAFailingHandler(t *testing.T, target Target) {
 		}
 	}
 
+	// Close ends the wait on the transport — the fetch of the next message and
+	// the commit — and nothing else (C-01 v1.7 p. 3, ADR-023 p. 4 and its
+	// execution note of 2026-09-12). The context a handler is given is the
+	// context of the caller of Subscribe, and a handler held across Close must
+	// find it alive: it may be halfway through a PUT into object storage, and
+	// C-02 publishes the fact only once that write is done. Whoever may
+	// interrupt the work is the one who cancels it — the process stops the
+	// context of the subscription before it closes the bus.
+	for _, f := range failing {
+		select {
+		case err := <-f.afterClose:
+			if err != nil {
+				t.Errorf("the context of the %s handler was %v once Close had returned, want nil: Close ends the wait on the transport, not the work of the handler",
+					f.name, err)
+			}
+		default:
+			t.Errorf("the %s handler never reported the state of its context after Close", f.name)
+		}
+	}
+
 	if !shared {
 		t.Logf("%s: the spare took its transport with it, so what became of the events cannot be read", target.Name)
 		return
@@ -1136,10 +1163,13 @@ type failingReader struct {
 	held   chan struct{}
 	sub    *subscription
 	calls  atomic.Int64
+	// afterClose carries ctx.Err() of the held handler, read once Close has
+	// returned. It is the anchor of C-01 v1.7 p. 3 (see the case).
+	afterClose chan error
 }
 
 func (f *failingReader) handler(release <-chan struct{}) eventbus.Handler {
-	return func(_ context.Context, ev eventbus.Event) error {
+	return func(ctx context.Context, ev eventbus.Event) error {
 		if ev.ID != f.ev.ID {
 			return nil
 		}
@@ -1154,6 +1184,13 @@ func (f *failingReader) handler(release <-chan struct{}) eventbus.Handler {
 		// the bus must not hold the subscription past its own budget.
 		select {
 		case <-release:
+			// The case closes the bus and only then closes release, so Close
+			// has returned by the time this line runs: whatever Close does to
+			// the context of a handler, it has done it already.
+			select {
+			case f.afterClose <- ctx.Err():
+			default:
+			}
 		case <-testkit.After(Timeout):
 		}
 		if f.panics {

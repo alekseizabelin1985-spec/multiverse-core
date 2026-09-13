@@ -72,9 +72,11 @@ type Kafka struct {
 	timers             clock.Timers
 	log                *slog.Logger
 
-	// closing is cancelled by Close. A read loop derives its context from it,
-	// so that a call already in flight when the bus closes ends instead of
-	// waiting for a reader that is no longer there.
+	// closing is cancelled by Close. The loop of a subscription derives from it
+	// the context of its fetch and of its commit, so that a call already in
+	// flight when the bus closes ends instead of waiting for a reader that is
+	// no longer there. The handler does not run on that context (C-01 v1.7
+	// p. 3): see Subscribe.
 	closing     context.Context
 	stopReaders context.CancelFunc
 
@@ -137,6 +139,10 @@ func (k *Kafka) Publish(ctx context.Context, ev Event) error {
 // failure (the same semantics membus gives in T-014). The offset is committed
 // only after the event is accounted for — handled, or parked in dead_letters —
 // which is what makes delivery at-least-once.
+//
+// Closing the bus is an orderly stop as well: Subscribe returns nil. It ends
+// the wait on the transport and not the work of the handler, which keeps ctx
+// (C-01 v1.7 p. 3; the two contexts of the loop are explained below).
 func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) error {
 	if group == "" {
 		return errors.New("eventbus: subscribe: empty consumer group")
@@ -159,18 +165,43 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) e
 	if err := k.track(reader); err != nil {
 		return errors.Join(err, reader.Close())
 	}
-	// The loop follows the lifetime of the bus as well as that of its caller.
-	// Closing the bus closes the reader, which ends a fetch — but a commit
-	// already on its way does not end with it: kafka-go takes the request into
-	// a buffered channel and answers it from a goroutine Close has just
-	// stopped, so CommitMessages waits for a reply that will never come
-	// (reader.go:894-912 of kafka-go v0.4.51). Every context of the platform
-	// calls Close on shutdown, so a subscription caught between its handler and
-	// its commit would hang the whole process. Cancelling the context of the
-	// loop makes both the fetch and the commit end the way C-01 asks a stopped
+	// Two contexts, because Close may end the wait on the transport but not the
+	// work of the handler (C-01 v1.7 p. 3, ADR-023 p. 4).
+	//
+	// loopCtx is the one Close cancels, and only the fetch and the commit run
+	// on it. The loop follows the lifetime of the bus as well as that of its
+	// caller: closing the bus closes the reader, which ends a fetch — but a
+	// commit already on its way does not end with it, because kafka-go takes
+	// the request into a buffered channel and answers it from a goroutine Close
+	// has just stopped, so CommitMessages waits for a reply that will never
+	// come (reader.go:894-912 of kafka-go v0.4.51). The process calls Close on
+	// shutdown — once, after it has stopped its contexts — so a subscription
+	// still caught between its handler and its commit at that moment would
+	// hang it. Cancelling loopCtx
+	// makes both the fetch and the commit end the way C-01 asks a stopped
 	// subscription to end: with nil. Found by the Close case of the contract
 	// test of T-014.
-	ctx, cancel := context.WithCancel(ctx)
+	//
+	// The handler keeps ctx, the context of the caller. It may be halfway
+	// through a PUT into object storage, and C-02 publishes the fact only once
+	// that write is done, so the bus is not the one to cut it short: whoever
+	// may stop the work is the one who cancels it, and the process does exactly
+	// that — it cancels the context of the subscription in the Stop of the
+	// context that owns it, before it closes the bus, with runtime.StopTimeout
+	// over the whole path. An event whose handler finished after Close returned
+	// is left uncommitted and delivered again: the goroutines of the reader are
+	// gone by then, and nobody serves the commit. One that finished while Close
+	// was still running may be committed or not — on cancellation kafka-go
+	// flushes the commits already queued (reader.go:199-219) — and either is
+	// allowed, because C-01 p. 2 does not promise the commit. That is the
+	// at-least-once the platform already stands on. Until T-436 loopCtx went to the handler as well: the
+	// cancellation was added for the commit and reached further than that.
+	//
+	// Whether the subscription stopped is therefore read from loopCtx and not
+	// from ctx: on a closed bus a retry or a dead letter fails with ErrClosed,
+	// and on a stopped subscription that is the shutdown, not a failure of
+	// Subscribe.
+	loopCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stopWatchingClose := context.AfterFunc(k.closing, cancel)
 	defer stopWatchingClose()
@@ -185,19 +216,19 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) e
 
 	delivery := k.delivery(group)
 	for {
-		msg, err := reader.FetchMessage(ctx)
+		msg, err := reader.FetchMessage(loopCtx)
 		if err != nil {
-			return k.readerError(ctx, topic, err)
+			return k.readerError(loopCtx, topic, err)
 		}
 		pos := Position{Topic: topic, Offset: msg.Offset}
 		if err := k.deliver(ctx, delivery, pos, msg.Value, h); err != nil {
-			if stopped(ctx, err) {
+			if stopped(loopCtx, err) {
 				return nil
 			}
 			return err
 		}
-		if err := reader.CommitMessages(ctx, msg); err != nil {
-			if stopped(ctx, err) {
+		if err := reader.CommitMessages(loopCtx, msg); err != nil {
+			if stopped(loopCtx, err) {
 				return nil
 			}
 			return fmt.Errorf("eventbus: commit %s@%d: %w", topic, msg.Offset, err)
