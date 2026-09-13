@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:25:14+03:00",
+  "updatedAt": "2026-09-14T02:35:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2990,7 +2990,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-057",
           "title": "state — objStore, интенты, снапшоты, latest.json",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -4624,11 +4624,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.8",
           "spentMinutes": 0,
@@ -10752,7 +10752,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Итерация 2: гонка записи хода, Close, тексты prod",
       "startedAt": "2026-09-14T02:10:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:35:01+03:00"
     },
     {
       "instance": "developer#3",
@@ -10772,7 +10772,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Итерация 2: решения архитектора и ревью #1",
       "startedAt": "2026-09-14T02:17:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:35:01+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -10792,6 +10792,36 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Просмотр T-471: ownership.go, пометки C-02, эталон §4.2",
       "startedAt": "2026-09-14T02:25:14+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Ревью #2: порядок записи хода, Withdrawn",
+      "startedAt": "2026-09-14T02:35:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#3",
+      "role": "architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Решения по received/accepted и остатку гонки",
+      "startedAt": "2026-09-14T02:35:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-057",
+      "action": "Приёмка T-057, строки T-058/T-059",
+      "startedAt": "2026-09-14T02:35:01+03:00",
       "finishedAt": null
     }
   ],
@@ -15001,6 +15031,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-471 принята tech-lead#2 (итерация 2 без ревью #2) и отметка владельца EPIC-003 по fake_contexts{,_test}.go; стенд I1-α 3 прогона подряд, make test — 0. До слияния: отметка tech-lead#1 (cmd/multiverse, Dockerfile, env, compose, e2e, имя MV_RULES_PATH) и просмотр system-architect#1 (ownership.go, по"
+    },
+    {
+      "at": "2026-09-14T02:35:01+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 · итерация 2 (developer#1): Mi-1 исправлен в коде шлюза (вне объёма, по решению оркестратора) — ход пишется до публикации player.* (КД §5.5), Turns.Withdrawn при неподтверждённом действии (503, ход не висит), Turns.Acked после партии, сбой записи хода — 500; turns/order_test.go; Mi-2…Mi-4, N-2"
+    },
+    {
+      "at": "2026-09-14T02:35:01+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 · итерация 2 (developer#2): snapshot.created без скоупа с единым конвертом, size_bytes/duration_ms, SnapshotTimeout 10 с (Stop укладывается в срок), досылка при живом интенте того же proposal_id не публикует и останавливает мир persist_failed, cause из записи коммита, тест 8 снапшотов на возра"
     }
   ],
   "blockers": [],
