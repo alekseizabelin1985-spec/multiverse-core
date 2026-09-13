@@ -28,6 +28,9 @@ const (
 	BodyLimit = 64 << 10
 	// RequestTimeout bounds a request that is not a long-poll.
 	RequestTimeout = 5 * time.Second
+	// DeadlineMargin is what the deadlines of the connection add to the
+	// deadline of the handler (component §5.1 p. 8, C-01 v1.8).
+	DeadlineMargin = 5 * time.Second
 )
 
 // noLogOperations carry external IDs in their bodies: their log line holds
@@ -36,10 +39,10 @@ const (
 var noLogOperations = []string{"resolveLink", "consentLink", "forgetLink", "createCharacter"}
 
 // longPollOperations hold the request open by design: one per client, and no
-// request timeout. The limit of their answer comes with T-307 and the
-// deadlines of the process server with T-446 (runtime.SetDeadlines,
-// runtime.ShuttingDown): until then the timeout middleware leaves them alone,
-// and this list is the one place T-307 connects the long-poll bound to.
+// request timeout. The handler bounds its own wait (wait_ms), sets the
+// deadlines of its connection and answers when the process server stops
+// (handlers.Deliveries.Poll, runtime.SetDeadlines, runtime.ShuttingDown), so
+// the timeout middleware leaves them alone.
 var longPollOperations = []string{"pollDeliveries"}
 
 // NoLogOperations returns the operations whose bodies and causes are never
@@ -75,6 +78,10 @@ type Config struct {
 	Limiter RateLimiter
 	// Timeout is RequestTimeout when zero.
 	Timeout time.Duration
+	// SetDeadlines sets the read and the write deadline of the connection of
+	// a request (runtime.SetDeadlines); nil sets none. The package does not
+	// import shared/runtime: the bot imports it for the wire types.
+	SetDeadlines func(w http.ResponseWriter, read, write time.Duration) error
 
 	polls sync.Map // client_id → struct{}: the long-polls in flight
 }
@@ -93,7 +100,9 @@ type Config struct {
 //     403 of step 3;
 //  6. ratelimit — the action rate limit (Config.Limiter);
 //  7. pollguard — one long-poll per client (409 poll_in_progress);
-//  8. timeout — RequestTimeout on the context of everything but a long-poll.
+//  8. timeout — RequestTimeout on the context of everything but a long-poll,
+//     and the deadlines of its connection: RequestTimeout plus DeadlineMargin
+//     for reading and for writing.
 //
 // The request id comes before recover, unlike the numbering of §5.1, so that
 // the 500 of a panic still carries X-Request-Id and still reaches the log.
@@ -307,6 +316,12 @@ func (c *Config) timeout(rt Route, next http.Handler) http.Handler {
 		d := c.Timeout
 		if d <= 0 {
 			d = RequestTimeout
+		}
+		if c.SetDeadlines != nil {
+			// The read deadline is not shorter than the write deadline: once the
+			// body is read, it would cancel the context of a handler still at
+			// work (runtime.SetDeadlines). A writer without deadlines keeps none.
+			_ = c.SetDeadlines(w, d+DeadlineMargin, d+DeadlineMargin)
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), d)
 		defer cancel()
