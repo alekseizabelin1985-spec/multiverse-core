@@ -1177,3 +1177,32 @@
   4. Правки помечены «(изм. T-456)». CRLF сохранён, байтов NUL нет, строка 521 КД роя не сдвинута; `gitleaks dir` по изменённым файлам — 0.
 - **Ссылки:** `journal.md` 2026-09-13 (решения system-architect#1, заведение T-456, ревью #2 T-449); `review.md`, «T-449 · ревью #2»; ревью T-303 и T-446; карточка T-448, «Текст C-02 v1.6 для T-449».
 - **Исполнитель:** system-architect#1, метка `contract-change`. Ветка `task/T-456-c08-forget-incomplete-gateway-kd` от эпика после слияния T-449. Параллельно с T-449 не вести: тот же `contracts.md`.
+
+### T-446: Ревизия контрактов 4 — runtime и раскладка cmd · Размер: M · Статус: done · Волна 1 · contract-change
+- **Причина.** Решения system-architect#1 от 2026-09-13 (ревизия контрактов 4, пункты 6 и 7; тексты — T-444, `contracts.md` v0.11: C-01 v1.8, §16 п. 8, ADR-001 доп. п. 7).
+  - (6) HTTP-сервер процесса один на все контексты, и контракт о его таймаутах молчал. КД шлюза §5.1 требовал таймаутов маршрутов, а процесс останавливает HTTP раньше контекстов (`serve.go:339`). `Shutdown` не отменяет контексты запросов, поэтому long-poll до 25 с переживает `ShutdownTimeout` 5 с (`http.go:15`), и `srv.Stop` падает по дедлайну.
+  - (7) Регистрация контекстов (`contexts.go`), подкоманды `mvctl` (`main.go`) и строки реестра (`registry.go`) лежали в общих файлах EPIC-001. Их правили бы три ветки эпиков одновременно.
+- **Состав.**
+  - `shared/runtime/http.go`: `ReadHeaderTimeout 5s` (было 10 с), `IdleTimeout 120s`; `ReadTimeout`/`WriteTimeout` сервера не ставятся. `runtime.SetDeadlines(w, read, write) error` — через `http.ResponseController`, время `clock.Real` в любом режиме. `runtime.ShuttingDown(ctx) <-chan struct{}` — через `http.Server.BaseContext`, канал закрывается в начале `HTTP.Stop`. `ShutdownTimeout` не меняется.
+  - `cmd/multiverse`: порядок и `init` — в `contexts.go`; фабрики — переменные пакета в `contexts_state.go` (`state`, `mechanics`), `contexts_swarm.go` (`llm`, `laws`, `swarm` = хук `newSwarm`), `contexts_gateway.go`, `contexts_memory.go`. В файлах те же заглушки.
+  - `cmd/mvctl`: `main.go` собирает `cli.NewRegistry(slices.Concat(foundation(), stateCmds(), swarmCmds(), opsCmds())...)`; `commands_state.go`, `commands_swarm.go`, `commands_ops.go` содержат `cli.Reserved`. `internal/cli` не менялся.
+  - `shared/contracts`: `registry.go` собирает `definitions` из `registry_gateway.go`, `registry_state.go`, `registry_swarm.go`, `registry_ops.go`; легаси-типы EPIC-001 остаются в `registry.go`.
+  - `test/e2e/main_test.go`: единственный `TestMain` пакета и `registerPackageSetup(owner, setup)` (бэклог итерации 3 T-444).
+- **DoD.**
+  1. Тест: long-poll, ждущий 25 с, завершается меньше чем за 1 с после `Stop`; «http shutdown» в логе процесса нет.
+  2. Тест: `SetDeadlines` обрывает медленную запись при ручных часах в `Deps` — время реальное.
+  3. Тест порядка: `runtime.Names()` = state, laws, mechanics, llm, swarm, gateway, memory при любом порядке файлов (мутант: переименовать файл владельца — зелёный; регистрация из `init` файла владельца — красный).
+  4. Вывод `mvctl help` побайтно совпадает с прежним.
+  5. `All()` реестра до и после разделения совпадает (типы, порядок, поля).
+  6. `MV_SWARM_FAKE` работает как раньше: тесты T-255 зелёные.
+  7. После раздела `golangci-lint run ./...` (depguard T-445) — 0 issues.
+  8. Регистратор `test/e2e`: порядок подготовок по имени владельца, завершения в обратном, при ошибке второй подготовки завершается первая и пакет падает; повторная регистрация — ошибка.
+  9. Мутанты — в копии дерева в scratch, без `-overlay`, контрольный первым; `go build ./... && go vet ./...`, `mvctl contracts check`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `make test`, `make ci BASE=develop`.
+- **Ссылки:** карточка `tasks/T-446.md`; `contracts.md` v0.11 (C-01 v1.8, §16 п. 8) и ADR-001 доп. 2026-09-13 п. 7 — в T-444; КД шлюза §5.1; `ownership.md` v0.6 §1, §3.
+- **Исполнитель:** developer#2 (TEAM-1, Opus). Ветка `task/T-446-runtime-cmd-layout` от эпика после слияния T-445, папка `.worktrees/T-446`. `contracts.md` не правится (текст — T-449).
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/2/1/4, вернуть), итерации 2 и ревью #2 (code-reviewer#3, 0/0/0/1, принять). Итераций ревью — 2; Nit ревью #2 (шапка карточки) исправлен при приёмке. DoD 1–9 сверен. На слитом с кончиком эпика `647c5d8` дереве: `go build`/`go vet` — 0, `go test -short` — 27 ok, e2e — ok, `golangci-lint` (и с тегом `e2e`) — 0 issues, `contracts check` — 65 типов, `mvctl help` побайтно как прежде. Go-код эпика после базы не менялся. Ссылки на §16 п. 8, ADR-001 доп. п. 7 и `ownership.md` v0.6 §1, §3 п. 6–7 после T-449 не сдвинулись. Слияние: `Makefile` — без конфликта (сдвиг 4 строки), `dev-log.md`/`review.md` — `appendtail`, `tasks.md` — конфликт хвостов, объединение (разделы эпика, затем T-446). Отметка владельца `cmd/multiverse` и `cmd/mvctl` (мягкий режим) — tech-lead#1, в карточке. Будущие слияния: T-303 — конфликт в `contexts.go`, фабрика `newGateway` переезжает в `contexts_gateway.go` (рецепт в карточке); T-060 — пересечений нет, пробное слияние с `epic/EPIC-002-state-mechanics` зелёное; T-454 — только хвосты документов. Строка DoD T-256 для tech-lead#2 — в карточке.
+- **Бэклог (из T-446, 2026-09-13)** — отдельные задачи, не блокируют:
+  - tech-writer, на develop (`ownership.md` §3 п. 3). В `CLAUDE.md` и `README.md` дописать файлы владельцев. Карта каталогов называет «`cmd/mvctl/main.go` — реестр» и «заглушки (`cmd/multiverse/contexts.go`)»; нужно добавить `contexts_<владелец>.go`, `commands_<владелец>.go`, `registry_<владелец>.go` и регистратор `registerPackageSetup` в `test/e2e/main_test.go`.
+  - При появлении `shared/runtime/README.md` описать `SetDeadlines`/`ShuttingDown` с примером long-poll из `shutdown_test.go`. Сейчас их описывают только doc-комментарии и C-01 v1.8.
+  - Дедлайн чтения для long-poll (КД шлюза §5.1 п. 8: `wait_ms + 5 с` или 0) уже передан в T-456, п. 4 состава. Отдельной задачи не нужно.
+  - Через оркестратора — tech-lead#2: в DoD T-256 уточнить, что хук снимается строкой `newSwarmContext` в `contexts_swarm.go`, а константа `swarmContext` лежит в `contexts.go` EPIC-001. Через оркестратора — tech-lead#3: в T-303 фабрику `newGateway` положить в `contexts_gateway.go`, `contexts.go` не править.
