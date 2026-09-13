@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:48:01+03:00",
+  "updatedAt": "2026-09-13T15:50:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4176,7 +4176,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T14:03:36+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8829,7 +8829,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Ревью #2: ADR-029 и потолок нарратива",
       "startedAt": "2026-09-13T15:37:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T15:50:50+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -8859,6 +8859,16 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Решения: ADR-029/C-07 ref, В1–В4 T-054, вопросы T-060",
       "startedAt": "2026-09-13T15:48:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Приёмка T-439 ADR-029 и потолок нарратива",
+      "startedAt": "2026-09-13T15:50:50+03:00",
       "finishedAt": null
     }
   ],
@@ -11700,6 +11710,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Начата T-457 (system-architect#1): очередь решений — ADR-029 (поправки ADR-016/017, C-07 поле ref), В1–В4 из T-054, три вопроса T-060 (replay), N Qwen3.6 в ADR-005."
+    },
+    {
+      "at": "2026-09-13T15:50:50+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · ревью #2 (TEAM-2/code-reviewer#2): принять — 0/0/3/6. ADR-029 девять пунктов, статичная схема и поэлементный отброс; арифметика E 160/185/140, Qwen3.6 210/285/220 и 400/665/530, тест T-203 краснеет на прежних 210. Mi-9 для background_refs пробел C-07 создали ярлыки (US-018 крит. 2, ADR-017 д"
     }
   ],
   "blockers": [],
