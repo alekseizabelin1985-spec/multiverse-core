@@ -265,7 +265,7 @@ func TestInvDeadDoesNotAct(t *testing.T) {
 		{
 			name:    "an empty participation reads as active",
 			world:   worldOf(player("player-A", entity.AttrStatus, entity.StatusDead), wolf("wolf-alpha"), encounterOf("enc-1", entity.EncounterStateActive, active(""), "wolf-alpha")),
-			touched: []string{"enc-1"},
+			touched: []string{"enc-1", "player-A"},
 			want:    []broken{{"player-A", `as "active"`}},
 		},
 		{
@@ -291,6 +291,20 @@ func TestInvDeadDoesNotAct(t *testing.T) {
 			touched: []string{"player-A"},
 		},
 		{
+			// C-05 v1.8 p. 9 (b): the package of the encounter was built before
+			// the fact of /forget and touches only the encounter. The
+			// participation is the agent's to rewrite in its next package.
+			name:    "a package of the encounter alone overtaken by a /forget",
+			world:   worldOf(player("player-A", entity.AttrStatus, entity.StatusAbandoned), wolf("wolf-alpha"), encounterOf("enc-1", entity.EncounterStateActive, active(entity.ParticipationActive), "wolf-alpha")),
+			touched: []string{"enc-1"},
+		},
+		{
+			name:    "a death in the package that caused it is held",
+			world:   worldOf(player("player-A", entity.AttrStatus, entity.StatusDead), wolf("wolf-alpha"), encounterOf("enc-1", entity.EncounterStateActive, active(entity.ParticipationActive), "wolf-alpha")),
+			touched: []string{"enc-1", "player-A", "wolf-alpha"},
+			want:    []broken{{"player-A", "still takes part"}},
+		},
+		{
 			name:    "a fighter the world does not hold",
 			world:   worldOf(wolf("wolf-alpha"), encounterOf("enc-1", entity.EncounterStateActive, []any{participantIn("player-Z", entity.ParticipationActive)}, "wolf-alpha", "wolf-ghost")),
 			touched: []string{"enc-1"},
@@ -305,7 +319,7 @@ func TestInvDeadDoesNotAct(t *testing.T) {
 			name: "both sides of a broken fight, in id order",
 			world: worldOf(player("player-A", entity.AttrStatus, entity.StatusDead), wolf("wolf-alpha", entity.AttrStatus, entity.StatusDead),
 				encounterOf("enc-1", entity.EncounterStateActive, active(entity.ParticipationActive), "wolf-alpha")),
-			touched: []string{"enc-1"},
+			touched: []string{"enc-1", "player-A"},
 			want:    []broken{{"player-A", "still takes part"}, {"wolf-alpha", "still a target"}},
 		},
 		{

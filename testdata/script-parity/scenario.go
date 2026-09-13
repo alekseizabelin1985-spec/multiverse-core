@@ -74,6 +74,9 @@ type Expect struct {
 	Contains []string // in stdout+stderr, after normalisation
 	Stderr   []string // in stderr, after normalisation
 	Absent   []string // in the raw output
+	// AbsentFold is Absent in any letter case: a host is printed lower-cased,
+	// so a fake password written FakePw must not come back as fakepw (T-463).
+	AbsentFold []string
 	// Argv is the exact argument vector of the one start of llama-server in
 	// this step, after normalisation; NoLaunch says there must be none.
 	Argv     []string

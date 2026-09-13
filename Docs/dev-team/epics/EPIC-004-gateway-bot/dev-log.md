@@ -359,6 +359,17 @@
 - **Проверки.** `go build`/`vet`, `go test -short ./...`, пакет `updates` через `go test -c`, e2e, `golangci-lint` (0), `mvctl env check` (78), `contracts check`, `privacy scan`, `make test` — см. карточку. Мутанты — в копиях дерева, контрольный первым, копии удалены по точным путям.
 - Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал.
 
+### developer#2 · T-312 · deliver и main бота · 2026-09-13
+
+Ветка `task/T-312-bot-deliver-main`, папка `.worktrees/T-312`, от кончика `epic/EPIC-004-gateway-bot` (aa83086). Статус — `review`. Подробности — карточка `tasks/T-312.md`, раздел «Выполнение (developer)».
+
+- **`internal/deliver`.** Цикл long-poll (`limit=100`, `wait=25s`) → отправка по одной в порядке шлюза → один ack на ответ. Ack по типу ошибки `Sender`: отправлено/`ErrBlocked`/`ErrChatNotFound`/`ErrRejected` — да; `ErrUnavailable`, неизвестная, отмена — нет; `ErrUnauthorized` — нет и остаток ответа не отправляется. Доставка без маршрута Telegram — ack без отправки (открытый вопрос). Курсор только в памяти; неудачный ack повторяется перед следующим опросом; при остановке — последний ack до 5 с; пауза после ошибки опроса 1…30 с.
+- **`main`.** `run` с подкомандой `health [--url]` (умолчание из `MV_TELEGRAM_HEALTH_ADDR`, пустой хост → `127.0.0.1`), `/health` со счётчиками `access.Counters`, логгер поверх `privacy.NewHandler` для всех пакетов, отдельные клиенты: отказ — `NewBestEffortTelegram` 5 с; `flow` → шлюз 6 с и один повтор; цикл доставки → шлюз 35 с; `flow` — `ReplyPolicy`, цикл — `DefaultPolicy`. Выход `updates.ExitCode`: `409` → 3, `401` при `getMe` и `getUpdates` → 1, сигнал → 0; ошибки конфигурации → 1, командная строка → 2. `docker-compose.bot.yml` не менялся.
+- **Перенос** теста импортов в `cmd/telegram-bot/imports_test.go`. **Документы:** README бота (статус, «Как устроен процесс», `/health`, коды выхода) и runbook §6 (врезка статуса, чек-лист `make health`, таймауты, состояние в памяти); шаги 4–5 ротации — за T-390.
+- **Не сделано:** замена `flow.ValidName` на `api.ValidCharacterName` — T-306 не слита в ветку эпика, пункт переходит в первую задачу бота после её слияния.
+- **Проверки.** Unit: `deliver` 15, `main` 13. Мутанты в копии дерева в scratch, без `-overlay`, контрольный зелёный первым: 20 красных, 1 эквивалентный. `go build ./... && go vet ./...`, сборка exe в scratch (удалён), `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/client/...` — 11 ok, `golangci-lint run ./...` — 0 issues, `mvctl env check` — 74, код 0, `make test` — код 0, 52 пакета ok, без FAIL; без детектора гонок (нет cgo, как предупреждает цель — гонки проверяет CI на Linux); пороги покрытия internal/state 93,9 %, internal/mechanics 96,5 %, internal/replay 100 %.
+- Docker, стенд LLM `:8888`, `.env` не трогал; запросов к Telegram и шлюзу нет (только httptest); не коммитил, `git add` не делал.
+
 ## developer#1 · T-307 · `outbox`, long-poll `deliveries`, `consumer` для `combat.decided`/`narrative.output` · 2026-09-14
 
 Ветка `task/T-307-outbox-deliveries`, папка `.worktrees/T-307`. Статус — `review`. Подробности, итог по DoD, мутанты и вопросы — карточка `tasks/T-307.md`, раздел «Выполнение (developer)». Не коммитил; фикстура перенесена `git mv`.

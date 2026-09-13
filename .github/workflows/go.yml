@@ -481,8 +481,8 @@ jobs:
     name: scripts-parity
     runs-on: ubuntu-latest
     # About a minute and a half of scenarios on four cores, plus setup-go and the
-    # compile of the stand.
-    timeout-minutes: 15
+    # compile of the stand, plus the test of backup-prune and its mutants (T-463).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -507,6 +507,25 @@ jobs:
         # instead of quietly running the bash half. `make ci` on the owner's
         # machine keeps the default, auto.
         run: make scripts-parity PARITY_ARGS='-pwsh=require'
+
+      - name: make backup-prune-test
+        # The retention of the backup directory (T-463): bash, date and touch of
+        # GNU coreutils, a temporary directory. Here, and not on Windows alone,
+        # the case of the symbolic links runs: a Windows without Developer Mode
+        # cannot make a link to a file and skips it. --require-links turns such
+        # a skip into a failure, since on Linux it can only mean the test broke.
+        # !cancelled(): a red parity above must not hide this result (T-463
+        # review #1 Mi-5).
+        if: ${{ !cancelled() }}
+        run: make backup-prune-test BACKUP_PRUNE_TEST_ARGS=--require-links
+
+      - name: make backup-prune-mutants
+        # The check of the test itself: every defect of backup-prune.sh turns it
+        # red, the control first. P08 and P10 need symbolic links, and this is
+        # where they run (on Linux about a minute; on Windows it takes minutes,
+        # so `make ci` does not include it).
+        if: ${{ !cancelled() }}
+        run: make backup-prune-mutants BACKUP_PRUNE_TEST_ARGS=--require-links
 
   # ---------------------------------------------------------------------------
   # image — the platform image builds. It does not push: the images of a

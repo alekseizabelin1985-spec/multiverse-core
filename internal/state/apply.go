@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state/memstore"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
@@ -52,6 +53,15 @@ type ApplierConfig struct {
 	// wall clock.
 	Timers clock.Timers
 	Log    *slog.Logger
+	// Invariants are the laws of the world checked at step 8 (§4.5), in the
+	// order of the register (mechanics.Rules.Invariants); nil checks none.
+	Invariants []mechanics.Invariant
+	// WithoutOwnership turns off step 6 — the ownership table and the norms of
+	// the gateway over it — for the double of shared/testkit/state, whose
+	// consumers propose the paths of a fight as whoever is at hand (C-02
+	// "Заглушка", state-and-mechanics.md §8). The zero value enforces it, as
+	// State does. The transition into abandoned is held either way (C-02 v1.2).
+	WithoutOwnership bool
 }
 
 // Applier turns the proposals of one world into facts (state-and-mechanics.md
@@ -69,6 +79,10 @@ type Applier struct {
 	// identifier goes in only after every event of its answer was published
 	// (§4.5 p. 12).
 	applied *eventbus.Dedup
+	// owners is the ownership table of step 6; checkOwnership says whether it
+	// is in force.
+	owners         ownership
+	checkOwnership bool
 
 	mu sync.Mutex
 	// failure is what stopped the world, or nil. It stays for the life of the
@@ -77,6 +91,8 @@ type Applier struct {
 	// retrying is the number of failed attempts to publish the event the
 	// Applier is publishing now; zero once it is out.
 	retrying int
+	// laws are the invariants of step 8; SetInvariants replaces them.
+	laws []mechanics.Invariant
 }
 
 // NewApplier builds the Applier of one world.
@@ -109,7 +125,26 @@ func NewApplier(cfg ApplierConfig) (*Applier, error) {
 		timers:  timers,
 		log:     log.With("world_id", cfg.WorldID),
 		applied: eventbus.NewDedup(cfg.DedupCapacity),
+
+		owners:         newOwnership(),
+		checkOwnership: !cfg.WithoutOwnership,
+		laws:           slices.Clone(cfg.Invariants),
 	}, nil
+}
+
+// SetInvariants replaces the laws checked at step 8. It is for a caller that
+// learns the rules after the Applier was built, as the double of
+// shared/testkit/state does in WithInvariants.
+func (a *Applier) SetInvariants(laws []mechanics.Invariant) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.laws = slices.Clone(laws)
+}
+
+func (a *Applier) lawsInForce() []mechanics.Invariant {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.laws
 }
 
 // Apply answers one event of system_events.
@@ -184,16 +219,25 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 	if !entity.JSONCompatible(spec.Attributes) {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
-	if a.applied.Has(p.ID) {
+	if a.alreadyApplied(p) {
 		a.log.Debug("proposal already applied", "proposal_id", p.ID, "event_id", p.Event.ID)
 		return nil
 	}
 	if _, exists := a.store.Get(a.worldID, ref.ID); exists {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonDuplicateEntity, Ref: &ref})
 	}
+	if a.checkOwnership && !a.owners.mayCreate(p.Proposer, ref.Type, p.Cause) {
+		a.logOwnership(p, ref)
+		return a.refuse(ctx, p, Rejection{Reason: ReasonLevelViolation, Ref: &ref})
+	}
 
 	created := entity.New(ref, a.worldID, spec.Name, spec.Attributes, p.Event.Timestamp)
 	created.Commit(created.Attributes, nil, a.lastChange(p, 1))
+	if len(a.lawsInForce()) > 0 {
+		if r, broken := a.violation(a.overlay(nil, created), []string{ref.ID}); broken {
+			return a.refuse(ctx, p, *r)
+		}
+	}
 	fact := createdFact(p.Event, a.source, created, p.ID)
 	created.SetFactEventID(fact.ID)
 	if err := a.publish(ctx, p.ID, fact); err != nil {
@@ -202,7 +246,7 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 	if err := a.store.Put(a.worldID, created); err != nil {
 		return a.keepFailed(p, err)
 	}
-	a.applied.Add(p.ID)
+	a.remember(p.ID)
 	a.log.Info("entity created", "entity_id", ref.ID, "entity_type", ref.Type,
 		"proposal_id", p.ID, "event_id", fact.ID)
 	return nil
@@ -216,8 +260,7 @@ type planned struct {
 	changed []entity.Change
 }
 
-// applyUpdate answers entity.update.proposed (§4.5 p. 1–12, without the checks
-// of T-056).
+// applyUpdate answers entity.update.proposed (§4.5 p. 1–12).
 //
 // Every change set is decided on a copy, and nothing is kept until every event
 // of the answer is out: then the copies replace the originals and the proposal
@@ -237,7 +280,10 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 			"remedy", "merge the operations of one entity into a single change set")
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
-	if a.applied.Has(p.ID) {
+	if ref, bad := malformedOp(p.Changes); bad {
+		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
+	}
+	if a.alreadyApplied(p) {
 		a.log.Debug("proposal already applied", "proposal_id", p.ID, "event_id", p.Event.ID)
 		return nil
 	}
@@ -245,7 +291,7 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 	var plans []planned
 	var refusals []Rejection
 	for _, set := range p.Changes {
-		plan, refusal := a.plan(set)
+		plan, refusal := a.plan(p, set)
 		if refusal != nil {
 			refusals = append(refusals, *refusal)
 			if p.Atomic {
@@ -255,6 +301,14 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 		}
 		plans = append(plans, plan)
 	}
+	plans, broken, whole := a.checkLaws(p, plans)
+	if whole != nil {
+		return a.refuse(ctx, p, *whole)
+	}
+	// Every refusal of step 8 names the entity of its own change set, and a
+	// package names each entity once (C-02 v1.3), so no two refusals share an
+	// entity and none is dropped.
+	refusals = append(refusals, broken...)
 
 	// The facts come out in ascending identifier order, the order of the writes
 	// they follow (§4.5 p. 11–12).
@@ -280,7 +334,7 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 	if err := a.store.Put(a.worldID, committed...); err != nil {
 		return a.keepFailed(p, err)
 	}
-	a.applied.Add(p.ID)
+	a.remember(p.ID)
 	for _, e := range committed {
 		a.log.Info("entity updated", "entity_id", e.ID, "version", e.Version,
 			"cause", p.Cause, "proposal_id", p.ID, "event_id", e.LastEventID)
@@ -289,12 +343,10 @@ func (a *Applier) applyUpdate(ctx context.Context, p *Proposal) error {
 }
 
 // plan decides one change set against the world: existence (§4.5 p. 3), the
-// version (p. 4) and the operations on a copy (p. 7).
-//
-// T-056 plugs in here: the terminal status (p. 5) and ownership (p. 6) before
-// the operations, the invariants over the copies of the whole package (p. 8)
-// after them.
-func (a *Applier) plan(set entity.ChangeSet) (planned, *Rejection) {
+// type it claims, the version (p. 4), the terminal status (p. 5), ownership
+// (p. 6), the operations on a copy (p. 7) and the norms that read their result.
+// The laws of step 8 are asked about the whole package afterwards (checkLaws).
+func (a *Applier) plan(p *Proposal, set entity.ChangeSet) (planned, *Rejection) {
 	ref := set.Ref()
 	if ref.ID == "" || len(set.Ops) == 0 {
 		return planned{}, &Rejection{Reason: ReasonInvalidOp, Ref: &ref}
@@ -312,6 +364,13 @@ func (a *Applier) plan(set entity.ChangeSet) (planned, *Rejection) {
 	if !ok {
 		return planned{}, &Rejection{Reason: ReasonUnknownEntity, Ref: &ref}
 	}
+	// The type a change set claims is checked against the world, and ownership
+	// reads the type of the world: a character proposed as an NPC would
+	// otherwise be changed under the rights of whoever may change an NPC
+	// (backlog of review #1 of T-055, p. 2).
+	if ref.Type != current.Type {
+		return planned{}, &Rejection{Reason: ReasonInvalidOp, Ref: &ref}
+	}
 	if err := current.CheckVersion(set.ExpectedVersion); err != nil {
 		var conflict entity.ErrVersionConflict
 		if !errors.As(err, &conflict) {
@@ -321,11 +380,40 @@ func (a *Applier) plan(set entity.ChangeSet) (planned, *Rejection) {
 		return planned{}, &Rejection{Reason: ReasonVersionConflict, Ref: &ref,
 			ExpectedVersion: &expected, ActualVersion: &actual}
 	}
+	// Step 5, against the entity as it was: a terminal entity takes nothing but
+	// the four paths of a corpse. That covers leaving the terminal status, even
+	// in a package that also erases died_at and killed_by — no law after the
+	// change could tell, the record of the death would be gone (C-02 v1.5b) —
+	// and a second abandoned over an abandoned character (C-02 v1.4).
+	if current.IsTerminal() && !onlyCorpsePaths(set.Ops) {
+		return planned{}, &Rejection{Reason: ReasonDeadEntity, Ref: &ref}
+	}
+	if a.checkOwnership && !a.owners.mayChange(p.Proposer, current.Type, p.Cause, set.Ops) {
+		a.logOwnership(p, ref)
+		return planned{}, &Rejection{Reason: ReasonLevelViolation, Ref: &ref}
+	}
 	attrs, changed, err := entity.ApplyOps(current, cloneOps(set.Ops))
 	if err != nil {
 		return planned{}, &Rejection{Reason: ReasonInvalidOp, Ref: &ref}
 	}
+	after := entity.Clone(current)
+	after.Attributes = attrs
+	if reason := statusRefusal(p.Proposer, p.Cause, set, current, after, a.checkOwnership); reason != "" {
+		return planned{}, &Rejection{Reason: reason, Ref: &ref}
+	}
+	if a.checkOwnership {
+		if reason, law := restRefusal(p.Proposer, set, current, after); reason != "" {
+			return planned{}, &Rejection{Reason: reason, Ref: &ref, InvariantID: law}
+		}
+	}
 	return planned{entity: current, attrs: attrs, changed: changed}, nil
+}
+
+// logOwnership says who was refused what, for the reader of level_violation.
+func (a *Applier) logOwnership(p *Proposal, ref entity.Ref) {
+	a.log.Info("proposal is not its proposer's to make", "proposal_id", p.ID, "entity_id", ref.ID,
+		"proposer", p.Proposer.Kind, "level", p.Proposer.Level, "agent_id", p.Proposer.AgentID,
+		"source", p.Proposer.Source, "cause", p.Cause)
 }
 
 // commit moves the copy of a plan to its next version (§4.5 p. 10). The copy
@@ -483,9 +571,9 @@ func worldOf(ev eventbus.Event) string {
 }
 
 // warnWorldless reports a proposal nobody answers: without a world in the
-// envelope there is no worker to hand it to. Whether such a proposal is to be
-// refused by the contract is the question of review #1 of T-055 to
-// system-architect; until it is settled it is passed over, loudly.
+// envelope there is no worker to hand it to. C-02 v1.7 settles it: the publisher
+// hears so from Publish (WorldRequired, C-01 v1.10), and State passes such a
+// proposal over, loudly, without a fact or a refusal.
 func warnWorldless(log *slog.Logger, ev eventbus.Event) {
 	proposalID, _ := ev.Path().GetString("proposal_id")
 	log.Warn("proposal without world in the envelope: no worker is addressed",
