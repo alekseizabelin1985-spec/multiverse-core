@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:37:52+03:00",
+  "updatedAt": "2026-09-13T16:39:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4387,16 +4387,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md",
+          "branch": "task/T-304-readmodel-consumer",
+          "worktree": ".worktrees/T-304"
         },
         {
           "id": "T-305",
@@ -4471,16 +4473,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#2",
+          "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md",
+          "branch": "task/T-310-bot-core",
+          "worktree": ".worktrees/T-310"
         },
         {
           "id": "T-311",
@@ -9038,6 +9042,26 @@ window.DEVTEAM_STATE =
       "action": "Ревью #1: levels и валидатор блупринтов",
       "startedAt": "2026-09-13T16:37:52+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "readmodel и consumer gateway",
+      "startedAt": "2026-09-13T16:39:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Ядро бота",
+      "startedAt": "2026-09-13T16:39:05+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -12028,6 +12052,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-202 выполнена TEAM-2/developer#1: shared/agent/levels.go (AllowedEventTypes по ролям, таблицы владения нет) и validator.go (правила 1–14 и 7а, стабильный порядок находок, warning на числа за 2^53−1/NaN/даты), корпус invalid из 16 файлов с полной таблицей находок; 47 мутантов убиты, shared/agent 95"
+    },
+    {
+      "at": "2026-09-13T16:39:05+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Начаты T-304 (TEAM-3/developer#1: readmodel и consumer gateway) и T-310 (TEAM-3/developer#2: ядро бота — config, access, updates, sender, commands, privacy) — зависимости T-301…T-303 слиты в эпик."
     }
   ],
   "blockers": [],
