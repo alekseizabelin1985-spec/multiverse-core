@@ -28,16 +28,10 @@ package mechanics
 
 import (
 	"errors"
+	"time"
 
 	"multiverse-core.io/shared/entity"
 )
-
-// ErrNotImplemented is what the parts of C-03 that EPIC-002 still owes answer
-// while this library is only its types, its rules and its dice: Resolve and the
-// change set it produces (tasks.md T-053, T-054). It is an error rather than a
-// zero value so that a caller wiring itself up against the contract today fails
-// loudly instead of quietly deciding that nothing happened.
-var ErrNotImplemented = errors.New("mechanics: not implemented yet, see EPIC-002 T-053/T-054")
 
 // ErrInvalidTarget reports an action aimed at something that cannot be hit: a
 // dead or abandoned actor, or one the rules exclude from the round. Picking a
@@ -52,6 +46,18 @@ var ErrInvalidTarget = errors.New("mechanics: target cannot be attacked")
 type Actor struct {
 	ID   string
 	Type string // player | npc
+
+	// Kind is the sort of NPC ("wolf") — the key of its loot table, which is
+	// how Resolve knows what a fallen NPC leaves behind. Every NPC has one and
+	// a character has none (data-model.md §3.4, C-03 v1.3).
+	Kind string
+
+	// Version is the version of the entity the actor was read from. It is the
+	// expected_version ChangesFor pins on every change of this actor: hp,
+	// status and inventory are changed only against a known version
+	// (ADR-013 p. 1, C-03 v1.3). Zero means the actor was not read from an
+	// entity (Rules.Stats), and ChangesFor refuses to change such an actor.
+	Version int64
 
 	HP    int
 	HPMax int
@@ -125,6 +131,13 @@ type Action struct {
 	// LivingEnemies raises the bar of a flight attempt: the more of them are
 	// still standing, the harder it is to walk away (domain-review §3.3).
 	LivingEnemies int
+
+	// At is when the action happened — the timestamp of the event that caused
+	// it, set by the caller (ADR-003 p. 6, C-03 v1.3). It is not the wall
+	// clock: a replay of the same cause writes the same moment. ChangesFor
+	// takes died_at of a fallen NPC and acquired_at of its trophy from it;
+	// Resolve does not read it.
+	At time.Time
 }
 
 // Outcome is what the rules decided. It is the whole answer: the caller writes

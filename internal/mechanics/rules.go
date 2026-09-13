@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math/rand/v2"
 	"os"
 	"regexp"
 	"slices"
@@ -128,8 +127,8 @@ type FleeDoc struct {
 
 // RestDoc is how catching a breath works.
 type RestDoc struct {
-	// Restore is hp_max — a full recovery — or a dice expression added to the
-	// current hit points.
+	// Restore is hp_max — a full recovery — and nothing else. A rest by dice
+	// would be a roll no purpose of dice.rolled can carry, so Load refuses it.
 	Restore            string `yaml:"restore"`
 	AllowedInEncounter bool   `yaml:"allowed_in_encounter"`
 }
@@ -194,7 +193,6 @@ type Rules struct {
 	doc        RulesDocument
 	checks     map[string]CheckExpr
 	damage     damageFormula
-	restore    restoreRule
 	stats      map[string]Actor
 	round      RoundRules
 	invariants []Invariant
@@ -203,11 +201,6 @@ type Rules struct {
 type damageFormula struct {
 	attr string   // an attribute of the attacker holding a dice expression
 	dice DiceExpr // used when attr is empty
-}
-
-type restoreRule struct {
-	toMax bool
-	dice  DiceExpr
 }
 
 // RoundRules are the round parameters of a group fight, parsed.
@@ -345,6 +338,11 @@ func (r *Rules) compileEntities() error {
 		if s.Flee != nil {
 			actor.Flee = fmt.Sprint(*s.Flee)
 		}
+		// Only an NPC has a kind in the world (data-model.md §3.4); a
+		// character created from these stats reads back without one.
+		if actor.Type == entity.TypeNPC {
+			actor.Kind = kind
+		}
 		r.stats[kind] = actor
 	}
 	return nil
@@ -434,20 +432,15 @@ func (r *Rules) compileFlee() error {
 	return nil
 }
 
+// compileRest accepts a full recovery and nothing else. Every roll of the
+// platform is published as dice.rolled before the decision that rests on it,
+// and the purposes of its schema have no rest to name: a rest by dice would be
+// the one chance nobody could audit. It is refused here, where every other
+// complaint about a rules file is raised, rather than in the middle of a game.
 func (r *Rules) compileRest() error {
-	rest := r.doc.Rest
-	if rest.Restore == RestoreToMax {
-		r.restore = restoreRule{toMax: true}
-		return nil
+	if restore := r.doc.Rest.Restore; restore != RestoreToMax {
+		return badRules("rest.restore", "want %s, have %q: a rest by dice would be a roll dice.rolled has no purpose for", RestoreToMax, restore)
 	}
-	dice, err := ParseDice(rest.Restore)
-	if err != nil {
-		return badRules("rest.restore", "want %s or a dice expression: %s", RestoreToMax, err)
-	}
-	if dice.Min() < 0 {
-		return badRules("rest.restore", "%s can roll %d: a rest never wounds", dice, dice.Min())
-	}
-	r.restore = restoreRule{dice: dice}
 	return nil
 }
 
@@ -728,20 +721,17 @@ func (r *Rules) FleePosition(worldID, regionID string) string {
 	).Replace(r.doc.Flee.SuccessPosition)
 }
 
-// Restore is the hit points a rest leaves an actor with: a full recovery, or
-// the current hit points plus a roll, never above the maximum. The generator is
-// only touched when the rules actually roll for it.
-func (r *Rules) Restore(a Actor, rng *rand.Rand) int {
-	if r.restore.toMax {
-		return a.HPMax
-	}
-	healed, _ := r.restore.dice.Roll(rng)
-	return r.ClampHP(a.HP+healed, a.HPMax)
-}
+// Restore is the hit points a rest leaves an actor with: a full recovery, the
+// only rest Load admits (rest.restore).
+func (r *Rules) Restore(a Actor) int { return a.HPMax }
 
 // ClampHP holds hit points inside [0, hp_max] — the one invariant the mechanics
 // enforce themselves rather than report (inv-02).
-func (r *Rules) ClampHP(hp, hpMax int) int { return min(max(hp, 0), hpMax) }
+func (r *Rules) ClampHP(hp, hpMax int) int { return clampHP(hp, hpMax) }
+
+// clampHP is the arithmetic of inv-02 in one place, for Rules.ClampHP and for
+// ChangesFor, which is a function of no rule set.
+func clampHP(hp, hpMax int) int { return min(max(hp, 0), hpMax) }
 
 // Excluded says whether the rules keep this actor out of a round: a terminal
 // status, or a participation the target rules exclude. A character who walked
