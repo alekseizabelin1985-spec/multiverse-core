@@ -16128,3 +16128,128 @@ Minor и Nit не блокируют. Их можно закрыть в этой
 - `-race` не запускался (нет cgo). Вывод об устойчивости окон под детектором опирается на разбор механизма (дедлайн срабатывает в netpoller) и на нагрузочный прогон без детектора. Первое подтверждение даст джоба `race` в CI (`RACE_PKGS` включает `./shared/runtime/...`, `-count=3`).
 - Прежний риск остаётся: база `a85d821` отстаёт от эпика на слияние T-444 и синхронизацию с develop. Перед слиянием задачи пересобрать и прогнать тесты на кончике эпика. Ссылки на тексты T-444 исполнитель сверил с `dcdb530`.
 - Вопрос ревью #1 Ma-2 п. 3 (КД шлюза §5.1 п. 8, «чтение тела — 10 с» для long-poll) у system-architect остаётся открытым. Код T-446 от ответа не зависит; doc-комментарий `SetDeadlines` уже задаёт правильное правило для потребителя.
+
+## T-454 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ветка `task/T-454-ci-race-testkit-state-fight05` от эпика `dcdb530`, коммитов в ветке нет, всё не закоммичено.
+`git diff --stat dcdb530`: код — только два `_test.go` (`cmd/multiverse/fake_contexts_test.go` +207/−17,
+`shared/testkit/state/consumer_test.go` +25/−3); документы — раздел T-454 в `tasks.md`, запись `<!-- dev-log T-454 -->`
+в `dev-log.md`, новая карточка `tasks/T-454.md`. Production-код, `shared/eventbus`, контракты и схемы не менялись —
+метка не нужна. Файлы T-446 (`cmd/multiverse/contexts*.go`, `main_test.go`, `shared/runtime`) не затронуты. Файлы
+владельца (`.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/`) в рабочей папке не изменены. `git diff --check`
+чисто. Лог CI (run 34754402826, только чтение): 12 отчётов `DATA RACE`, все стеки — `consumer_test.go:55/60/79/80/95/96/98`;
+второе падение — единственное `fake_contexts_test.go:448` fight-05 «nobody resolved the attack of player-A on
+wolf-alpha within 2s». Причины исполнителя с логом совпадают.
+
+### Что проверено
+
+1. **Гонка (1).** `projection` (`consumer_test.go:35-81`): все четыре доступа к `hp`/`refused` — под `p.mu`: запись в
+   `Handle` (`:51`, `:63`, `:68`), чтение — только `seen` (`:78`, копия `slices.Clone`). Прямых `view.hp`/`view.refused`
+   в тесте больше нет (grep). `refused[0]` читается из копии последнего успешного опроса — утверждение «ровно один
+   отказ, `version_conflict`» не ослаблено.
+   **Свои выборочные места** («обработчик пишет — тест читает»):
+   - `shared/testkit/gateway/combat_test.go:849-930` — тестовый `encounter`: `seq`/`plan`/`fight` под `e.mu`. Чисто.
+   - `shared/testkit/gateway/combat_test.go:737-749` — `blows++` в обработчике `answerEveryAction`: одна подписка membus —
+     один цикл `Subscribe`, повторы `Delivery` в той же горутине; тест `blows` не читает. Чисто.
+   - `test/e2e/empty_world_test.go:150-173` — `p.err` пишется до `close(p.exited)`, `strings.Builder` читается после
+     `<-p.exited`, а `cmd.Wait` дожидается копирующих горутин. Чисто.
+   - `cmd/multiverse/serve_test.go:25-40, 105-111` — `recorder` под `r.mu`. Чисто.
+   - Косвенно: задание `unit` гоняло `-race` по всем пакетам `./...`, и отчётов вне `consumer_test.go` в логе нет.
+2. **Передача полей `stand` из `process.run`.** `serve.go:286-303`: `p.openBus` вызывается раньше `runtime.StartAll` и
+   `srv.Start`, поэтому к первому ответу `/health` значение в канале `opened` (буфер 1) уже лежит — `select … default`
+   (`fake_contexts_test.go:462-467`) корректен. `open` вызывается один раз на процесс, повторной отправки нет. При
+   ошибке старта: `bootstrap`/`openBus` возвращают ошибку до отправки → `run` выходит → `health` получает `r.done` и
+   валит тест («the process ended while /health was awaited»); при ошибке `StartAll` значение остаётся в буфере
+   непрочитанным — буфер не блокирует. Дедлока нет. После приёма из канала `stand.bus`, `stand.world`, `stand.created`
+   читаются в горутине теста с явным отношением «произошло раньше»; порядок очистки (LIFO: сначала `r.stop` с приёмом
+   `r.done`, затем `stand.wait()`) тоже после завершения `run`. Объяснение, почему детектор молчал (`ioSync` на сокете),
+   без `-race` не проверял; на вывод не влияет — передача теперь явная.
+3. **Флак (2): `learning`.** Группа `swarm.EncounterGroup+"-"+system_events` совпадает с `FakeEncounter.subscribe`
+   (`fake_encounter.go:545`). `Observe` складывает сущность под `e.mu` до возврата, так что отметка после `h`
+   (`fake_contexts_test.go:915-923`) означает: сущность уже в `e.world`, из которого отвечает `entered`/`freeNPCOf`.
+   Контекст обработчика `Delivery.Deliver` наследует контекст подписки, поэтому удержанный факт отпускается при
+   остановке (`:908-913`), остановка не виснет. Отличие от T-433 реальное: T-433 чинила порядок `world_events` у
+   харнесса (`lateWorld` в `shared/testkit/gateway/stand_test.go`) и ждала старт боя не дольше `standTimeout`; здесь
+   стенд ждёт сигнала «обработчик двойника вернулся на `entity.created` каждой сущности bootstrap», 10 с — только
+   предохранитель.
+   **Если двойник не принял факт** — мои мутанты R5/R6 ниже: падение ровно через 10 с с понятным списком сущностей, без
+   зависания; ожидание процесса и очистка отрабатывают.
+4. **Конец боя по `closed_by_event_id`.** `FakeEncounter.finish` строит `encounter.ended` до пакета и пишет его id в
+   `closed_by_event_id` (`fake_encounter.go:955-1011`, id выводится из причины, ADR-027 п. 2), а публикует только в
+   `announce` по факту этого пакета (`:1324-1331`). Харнесс возвращает шаг только по факту (`harness.go:1086`), значит к
+   возврату `Run` State уже применил закрывающий пакет — чтение `closed_by_event_id` после `Run` корректно.
+   **Не маскирует потерю события:** мутант R8 (двойник не публикует `encounter.ended`) валит
+   `TestTheProcessTellsTheDeathOfACharacter` сообщением «timed out waiting for encounter.ended <id> announced after its
+   fact» — строже прежнего «ended ""». Пустой `closed_by_event_id` = State бой не закрывал, `""` правдив.
+5. **Доказательство исполнителя через `-overlay`.** Файлы в scratch `t454-mut`: ключи `Replace` относительные
+   (`cmd/multiverse/fake_contexts_test.go`), значения — через короткий путь `CD86~1` (ловушка касается ключей, не
+   значений). `m0.go` отличается от итогового файла только `{{{` (и прежней редакцией одного комментария) — контроль
+   `setup failed` означает, что overlay применялся. `m2.go`/`m3.go`/`m4.go` отличаются от итогового файла ровно
+   заявленными строками (плюс тот же комментарий); в M4 отметка добавлена до обработчика, отметка после осталась —
+   `fold` идемпотентен, это и есть «отметить до».
+6. **Мои мутанты** — копия дерева `t454rev-tree` в scratch, без `-overlay`, контрольный первым:
+
+   | # | Мутант | Прогон | Итог |
+   |---|---|---|---|
+   | C0 | `{{{` в заголовке регрессии | `go vet ./cmd/multiverse/` в копии | ошибка компиляции — собирается именно копия |
+   | R2 (= M2) | `watched.ready(t, p)` → `_ = watched` | регрессия, 1 раз | **красный** 2,1 с, текст CI «nobody resolved the attack of player-A on wolf-alpha within 2s» |
+   | R5 | обёртка смотрит не ту группу (двойник «не видит» факты) | регрессия | **красный** 10,1 с: «had not learnt [dark-forest-01 dark-forest-world wolf-alpha] from entity.created within 10s» |
+   | R6 | обработчик двойника отвергает каждый `entity.created` | регрессия | **красный** 10,1 с, тот же текст, что у R5; остановка без зависания |
+   | R8 | `FakeEncounter.announce` не публикует `encounter.ended` | death, 1 раз | **красный**: «timed out waiting for encounter.ended … announced after its fact» |
+   | R1 | `ready` открывает `gate` и сразу возвращается, не ожидая `learnt` | регрессия + IAlpha, `-count=20 -cpu 1,4` | **зелёный** 40/40 и 640 боёв (см. Mi-1) |
+   | R3 (= M4) | отметка до обработчика, после — нет | то же | **зелёный** (заявлен исполнителем) |
+
+7. **Прогоны в рабочей папке** (Windows, `CGO_ENABLED=0`, gcc в PATH нет — `-race` не запускался):
+   - `go build ./... && go vet ./...` — ok;
+   - `go test -short -count=3 ./shared/testkit/state/... ./cmd/multiverse/...` — ok;
+   - `go test -short -count=10 -cpu 1,4 -run 'TestTheProcessRunsTheFightsOfIAlpha|TestAConsumerBuildsItsProjectionFromTheStub' ./cmd/multiverse/ ./shared/testkit/state/` — ok (11,0 с / 0,9 с);
+   - `go test -short -count=100 -cpu 1,4 -run 'TestTheProcessTellsTheDeathOfACharacter$|TestTheStandWaitsUntilTheFakeHasLearntTheWorld$' ./cmd/multiverse/` — ok (400 прогонов);
+   - `go test -v` — регрессия действительно выполняется под `-short`;
+   - `golangci-lint run ./cmd/... ./shared/testkit/...` — 0 issues.
+8. **Пересечение с T-446** (`.worktrees/T-446`, HEAD `a85d821` — предок `dcdb530`, правки не закоммичены). T-446 меняет
+   `contexts.go`, `main_test.go`, `shared/runtime/http.go`, добавляет `contexts_{gateway,memory,state,swarm}.go`,
+   `contexts_test.go`, `shutdown_test.go`, `shared/runtime/*_test.go`, `test/e2e/main_test.go`. Файлов T-454 среди них
+   нет — **текстовых конфликтов не будет**. Новые имена T-454 в пакете `main` (`learning`, `newLearning`, `factsOrder`,
+   `factsAsTheyCome`, `factsHeldUntilAwaited`) в файлах T-446 не объявлены. Смысловые зависимости
+   `fake_contexts_test.go` от T-446: `swarmContext`, `platformContexts` (у T-446 остаются в `contexts.go:33-36`),
+   `clearVar` (`main_test.go:20`), `flagged`/`newSwarm` (`fake_contexts.go`), порядок `openBus` → `StartAll` →
+   `srv.Start` в `serve.go` (T-446 его не трогает). Перенос `swarmContext`/`stub` в `contexts_swarm.go` сборку не сломает
+   (тот же пакет). Риск — только если правка `runtime/http.go` в T-446 изменит момент ответа `/health` 200: на
+   `select … default` по `opened` и на `ready` это не влияет. После слияния второй из задач — прогнать
+   `go vet ./cmd/multiverse/` и тесты боёв.
+
+### Замечания
+
+| # | Уровень | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/multiverse/fake_contexts_test.go:390-392`, `:888-899` | Суть исправления — **ждать `learnt`**, а не только открыть `gate` — не закреплена ни одним тестом. Мутант R1 («`ready` открывает `gate` и возвращается») зелёный 40/40 на регрессии и 640/640 на IAlpha. Регрессия ловит только отсутствие вызова `ready` (R2), и то косвенно: факты тогда не отпускаются вовсе. Исполнитель это честно назвал в док-комментарии, но итог — сам механизм ожидания (`select` на `learnt`) охраняется только ревью; удаление его при будущей правке вернёт fight-05 на медленном раннере CI без локального красного теста. | Детерминированный unit-тест `learning` без процесса: `newLearning` над membus с `pending={a,b}`; `ready` в горутине не возвращается, пока не обработаны оба факта (проверка `select … default` после публикации и обработки одного); обработчик, вернувший ошибку, отметки не даёт; пока обработчик двойника заблокирован, `learnt` не закрыт (ловит и R3). Альтернатива — в `factsHeldUntilAwaited` после открытия `gate` держать факт ещё ~200 мс (только для заметности мутанта): исправный стенд детерминированно зелёный, R1 краснеет. В этой задаче без повторного ревью или в бэклог до T-256. |
+| N-1 | Nit | `cmd/multiverse/fake_contexts_test.go:497-498` | После `ready` множество `pending` всегда пусто, так что `watched.missing()` в сообщении «no encounter was opened» всегда печатает `[]`: «the fake had not learnt [] from entity.created when player-A entered» читается как ложная подсказка. | Сказать прямо: «the fake had learnt all of %v before %s entered: the cause is the entry or the fake», без `missing()`. |
+| N-2 | Nit | `cmd/multiverse/fake_contexts_test.go:896-897`, `:915-917` | Предохранитель не различает «двойник не получил факт» (R5) и «двойник отверг факт» (R6) — текст одинаковый. И «узнал» — это «обработчик вернул nil», а `Observe` возвращает nil и на факт, который не смог прочитать или который другого мира (`fake_encounter.go:1582-1597`). | Запоминать в `learning` последнюю ошибку обработчика по `entity.created` и выводить её в сообщении `ready`; семантику «вернул nil» назвать в комментарии к `fold`. |
+| N-3 | Nit | `cmd/multiverse/fake_contexts_test.go:566-568` | Комментарий переносится неровно после вставки «under -cpu 1» (строка 567 заметно длиннее соседних). | Переформатировать абзац. |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 1 · Nit: 3.
+
+Обе причины красного CI устранены по существу: гонка проекции закрыта мьютексом со всеми доступами; стенд ждёт сигнала
+готовности двойника, а не срока, и корректно завершает тест при смерти процесса или отсутствии сигнала; попутный флак
+конца боя исправлен по данным и не маскирует потерю `encounter.ended` (R8). Правки только в `_test.go`, с T-446 не
+конфликтуют. Mi-1 не блокирует — механизм ожидания верен, не хватает теста, который его охраняет; закрыть можно в этой
+же задаче без повторного ревью или бэклогом.
+
+### Предложения в бэклог
+
+1. Unit-тест `learning` (Mi-1), если не сделают в задаче; уходит вместе с хуком в T-256.
+2. Готовность `FakeContext` в `/health` только после догоняния журнала (предложение исполнителя; решение tech-lead#2) —
+   тогда `learning` не нужна.
+3. Проверка гонок только в CI, пока у разработчиков нет cgo — зафиксировать в runbook (предложение исполнителя).
+
+### Риски и допущения
+
+- `-race` локально не запускался (нет gcc): отсутствие гонок в новых `learning`/`opened`/`stand.created` — по разбору
+  доступов, не по детектору. Окончательно подтвердит только задание `unit`/`race` CI.
+- `loopbackAddr` (резерв-и-освобождение порта) по-прежнему даёт TOCTOU-окно: чужой процесс на порту даст падение «never
+  opened its bus» — не новое, сообщение понятнее прежнего.
+- Скретч-копия дерева и логи удалены по точному пути своего каталога.
