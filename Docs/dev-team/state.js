@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:48:52+03:00",
+  "updatedAt": "2026-09-13T17:49:43+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4507,11 +4507,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -9245,7 +9245,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Ревью #1: ядро бота",
       "startedAt": "2026-09-13T17:22:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:49:43+03:00"
     },
     {
       "instance": "developer#1",
@@ -9305,6 +9305,16 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Приёмка T-205 законы мира",
       "startedAt": "2026-09-13T17:48:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Итерация 2: потеря обновлений, флуд отказами, 401",
+      "startedAt": "2026-09-13T17:49:43+03:00",
       "finishedAt": null
     }
   ],
@@ -12464,6 +12474,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-205 · ревью #1 (TEAM-2/code-reviewer#2): принять — 0/0/4/5. Bump соответствует C-02 v1.5 и реестру; KnownChecks совпадает с invariants.go; гонок нет. Mi-1 Current может вернуть ErrUnknownVersion, если факт State опередит world.laws.changed; Mi-2 повтор bump публикует второе объявление (норма C-12 "
+    },
+    {
+      "at": "2026-09-13T17:49:43+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 · ревью #1 (TEAM-3/code-reviewer#2): вернуть — 0/2/3/6. M-1 потеря команд при остановке: go-telegram/bot подтверждает обновления (offset) до обработки, очередь 1024 пропадает при SIGTERM/409 — нужен WithUpdatesChannelCap(0) и отказ обработки при отменённом ctx; M-2 флуд отказами с чужого аккау"
     }
   ],
   "blockers": [],
