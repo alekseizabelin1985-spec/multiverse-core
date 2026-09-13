@@ -2,6 +2,8 @@
 
 > **Состояние дерева на 2026-09-11 (T-409).** Документ описывает **целевой** блок. В дереве нет ни `internal/gateway`, ни `cmd/telegram-bot`, ни миграций, ни `api/gateway.openapi.yaml`; `cmd/multiverse --contexts=gateway` поднимает пустой контекст, отвечающий `/health`. Существует только двойник `shared/testkit/gateway.Harness` v0 (издатель `player.*` прямо в шину, без HTTP, сессий, раундов и идемпотентности); `FakeGateway` — будущее (T-308). Адрес процесса — `MV_CORE_ADDR`, клиенты — `MV_GATEWAY_CLIENT_IDS` и `MV_GATEWAY_ACTOR_KIND_CLIENTS` (манифест `shared/env/vars.go`). Правило для владельца: вливая настоящий контекст, тем же изменением снять пометку «будущее» с `diagrams/c4-component-gateway-and-bot.md` (решение 2026-09-11).
 
+> **Состояние дерева на 2026-09-13 (изм. T-456).** В `epic/EPIC-004-gateway-bot` есть T-301…T-303: пакеты `internal/gateway/{api,client,handlers,links,store,migrations}`, настоящий контекст `gateway` (`context.go`) вместо заглушки в `cmd/multiverse`, маршруты `resolveLink`, `consentLink`, `forgetLink` и `api/gateway.openapi.yaml`. К этому коду приведены §3, §4.1, §5.1, §5.2 (строки связок и `/health`), §5.6, §6 (`links`), §7.5, §10.5, §11.1, §11.4; остальное описывает целевой блок.
+
 Статус: **утверждён на G2 (2026-09-09), правки сведения внесены** · Версия 0.2 · 2026-09-09 · architect#3 (TEAM-3) · изменения v0.2 — §17 (по `architecture/consolidation.md` §3, §6, §9; `contracts.md` v0.2; решениям пользователя U-5…U-7).
 Границы: `architecture/overview.md` §12–§18, ADR-001, ADR-003, ADR-004, ADR-006, ADR-007, ADR-009, ADR-010; контракты `contracts.md` C-04, C-08, C-10 (поставляем), C-01, C-02, C-05, C-06, C-14 (потребляем); `plan/epics.md` EPIC-004 (I1 «соло», I2 «группа»); `plan/ownership.md` (`internal/gateway/**`, `cmd/telegram-bot/**`, `api/gateway.openapi.yaml`, `internal/gateway/migrations/*.sql`, `links.db`, `gateway.db`).
 Источники требований: `analysis/api-contracts.md` §1, §2.3.1–2.3.3, 2.3.11, 2.3.14; `analysis/data-model.md` §5, §9.3–9.6, 9.10–9.11; `analysis/use-cases.md` UC-001…UC-005, UC-007, UC-009, UC-012, UC-014…UC-017, UC-020, UC-025, UC-027, UC-031; `analysis/integrations.md` §1, §7; `requirements/prd.md` FR-001…FR-009, FR-023, FR-025, FR-060, FR-061, FR-084…FR-088, BR-07, BR-09, BR-13, BR-17; `requirements/nfr.md` NFR-001, NFR-003, NFR-013, NFR-036, NFR-041, NFR-042, NFR-045, NFR-092; `requirements/domain-review.md` §3.2; `project/metrics.md` §4.2.
@@ -107,27 +109,22 @@ C4Component
 
 ```
 internal/gateway/
-  gateway.go                 # type Context: Start(ctx, Deps) error; Health() Status; Stop()
-  config.go                  # Config из env (shared/env), см. §11.3
-  deps.go                    # Deps{Bus, ObjStore, Clock, IDs, Logger}; интерфейсы внешних зависимостей
-  api/
-    server.go                # (изм. T-444) своего http.Server нет: маршруты на runtime.Mux процесса; дедлайны маршрутов — runtime.SetDeadlines, остановка long-poll — runtime.ShuttingDown (C-01 v1.8)
-    router.go                # регистрация маршрутов (ServeMux patterns 1.22)
-    middleware.go            # client allow-list, actor_kind, request_id, body limit 64 KiB (413), rate limit 30/мин (429), один long-poll на клиента (409), JSON error, recover, no-log для links/characters
-    errors.go                # apiError{code,status,msg}; таблица §1.6
-    dto.go                   # DTO запросов/ответов (общие с client)
-    handlers_links.go        # /v1/links/resolve|consent, DELETE /v1/links, DELETE /v1/admin/links/{player_id}
-    handlers_characters.go   # POST /v1/characters
-    handlers_players.go      # GET /v1/players/{id}, POST /v1/players/{id}/actions
-    handlers_groups.go       # GET /v1/groups/{id}
-    handlers_deliveries.go   # GET /v1/clients/{id}/deliveries, POST …/ack, GET …/stream (501)
-    handlers_admin.go        # /v1/scopes/{scope_id}/rounds/close, /v1/admin/sessions, proxy /v1/admin/agents*
-    handlers_health.go       # /health, GET /v1/worlds
-    openapi_test.go          # маршруты ↔ api/gateway.openapi.yaml
+  context.go                 # (изм. T-456) type Context: Name, DependsOn, Routes(mux), Start(ctx, runtime.Deps), Stop, Health; gateway.New(env.Source). Своих config.go и deps.go нет: переменные читаются в Start через shared/env, зависимости — runtime.Deps (C-01 v1.3)
+  api/                       # (изм. T-456) типы провода и HTTP-обвязка без доступа к данным: вне стандартной библиотеки импортирует только shared/clock; его импортируют бот и client
+    router.go                # Route{OperationID, Method, Path, Handler}; Router.Handle, Mount(mux, mw...); Handlers — поле на operationId; GatewayRouter(h) — единственный конструктор таблицы маршрутов
+    middleware.go            # Middleware func(Route, http.Handler); Config; Chain(cfg) — порядок §5.1; DecodeJSON; RequestIDFrom/ClientIDFrom/ActorKindFrom; NoLogOperations, LongPollOperations; RateLimiter (точка T-305)
+    errors.go                # таблица кодов §1.6 (+ forget_incomplete, C-08 v1.5); WriteError сообщает код access-логу; WriteJSON
+    dto.go, dto_json.go      # DTO запросов и ответов (общие с client)
+    openapi_test.go          # маршруты ↔ api/gateway.openapi.yaml; коды ↔ x-error-codes; nolog ↔ x-nolog; long-poll — операции спецификации
+                             # своего http.Server нет: маршруты на mux сервера процесса (runtime), дедлайны маршрутов — §5.1 п. 8 (C-01 v1.8)
+  handlers/                  # (изм. T-456; прежде api/handlers_*.go) обработчики над пакетами — владельцами данных; /health отдаёт сервер процесса, поля gateway — Context.Health()
+    links.go                 # Links{Store, Clock, CharacterStatus}: Resolve, Consent, Forget; ForgetRetryAfter (5 с), NoticeRepeatAfter (30 дней)
+                             # следующие файлы выбирают задачи: characters (T-306), actions и players (T-305), groups (T-352), deliveries (T-307), rounds и admin (T-354, T-356), worlds
   links/
-    store.go                 # интерфейс Store + реализация SQLite
-    pseudonym.go             # NewPlayerID(ids IDSource) "player-<ULID>"; NewLinkID(ids) "<ULID>" (суррогат связки, SEC-03)
-    forget.go                # Forget → каскад (outbox drop, session end, group leave) через хук ForgetHooks; затем checkpoint(TRUNCATE)+incremental_vacuum
+    link.go                  # Link (LogValue/String/GoString/MarshalJSON → "redacted"), Resolution, ConsentForm, StoredResponse; ErrNotFound, ErrConsentIncomplete, ErrPlayerIDTaken, ErrCompactionPending
+    store.go                 # интерфейс Store (§6) + SQLite над links.db: Compact, CompactionPending, Sweep
+    pseudonym.go             # IDSource; NewPlayerID(ids) "player-<id>"; NewLinkID(ids) — id из runtime.Deps.IDs (ULID или sequence, SEC-03)
+    forget.go                # ForgetHooks/ForgetFunc, ForgetResult; Forget/ForgetByPlayer: хуки → DELETE с условием на player_id → store.CompactLinks до ответа (§7.5)
   actions/
     validate.go              # Validate(cmd, state) → *apiError; таблица предусловий
     publish.go               # BuildPlayerEvent, BuildPositionProposal
@@ -167,8 +164,10 @@ internal/gateway/
   snapshot/
     writer.go                # по SIGTERM и по analytics.session.ended
   store/
-    open.go                  # OpenLinks(path), OpenGateway(path); PRAGMA; SetMaxOpenConns(1)
+    open.go                  # OpenLinks(ctx, path), OpenGateway(ctx, path); PRAGMA; SetMaxOpenConns(1); DataDir, LinksPath, GatewayPath
     migrate.go               # goose Provider с embed FS
+    compact.go               # (изм. T-456) CompactLinks: incremental_vacuum → wal_checkpoint(TRUNCATE); заблокированный checkpoint — ошибка
+    retention.go             # (изм. T-456) SweepInterval (1 мин), LinksCompactInterval (1 ч), KeyTTL (24 ч), интерфейс Sweeper
   migrations/
     links/0001_init.sql
     gateway/0001_init.sql
@@ -193,7 +192,7 @@ shared/testkit/gateway/      # владелец — EPIC-004 (ownership.md): Har
 api/gateway.openapi.yaml     # OpenAPI 3.1 (§5.6)
 ```
 
-Правила зависимостей: `internal/gateway/*` не импортирует другие `internal/*` (depguard, ADR-001); разрешены `shared/{eventbus,contracts,jsonpath,objstore,env,logging,entity,testkit}`. `cmd/telegram-bot` импортирует **только** `internal/gateway/client` и `internal/gateway/api` (типы DTO) из платформенного кода — не `eventbus`, не `links`. *(изм. T-444, ADR-001 доп. 2026-09-13 п. 5; прежде — «`shared/testkit/gateway` импортирует `internal/gateway` целиком (in-process сервер) — это тестовый код»)* `shared/testkit/gateway` импортирует из шлюза ровно `internal/gateway/client` и `internal/gateway/api` (узкое правило линтера; `client` — листовой пакет, импортирует только `api`). Общий слой `shared/*` не импортирует `internal/*`, и то, что пакет тестовый, этого не отменяет: `Harness` импортируют тесты EPIC-002/003, и через исключение на весь шлюз им открылись бы SQLite, outbox и шина. In-process сервер `FakeGateway` — `internal/gateway/gatewaytest`; production-код его не импортирует (запрет рядом с `no-testkit-in-production`). e2e, которому нужен `FakeGateway`, живёт вне `internal/<контекст>`: правила контекстов действуют и на тестовые файлы.
+Правила зависимостей: `internal/gateway/*` не импортирует другие `internal/*` (depguard, ADR-001); разрешены `shared/{eventbus,contracts,jsonpath,objstore,env,logging,entity,testkit}`. `cmd/telegram-bot` импортирует **только** `internal/gateway/client` и `internal/gateway/api` (типы DTO) из платформенного кода — не `eventbus`, не `links`. *(изм. T-444, ADR-001 доп. 2026-09-13 п. 5; прежде — «`shared/testkit/gateway` импортирует `internal/gateway` целиком (in-process сервер) — это тестовый код»)* `shared/testkit/gateway` импортирует из шлюза ровно `internal/gateway/client` и `internal/gateway/api` (узкое правило линтера; `client` — листовой пакет, импортирует только `api`). Общий слой `shared/*` не импортирует `internal/*`, и то, что пакет тестовый, этого не отменяет: `Harness` импортируют тесты EPIC-002/003, и через исключение на весь шлюз им открылись бы SQLite, outbox и шина. In-process сервер `FakeGateway` — `internal/gateway/gatewaytest`; production-код его не импортирует (запрет рядом с `no-testkit-in-production`). e2e, которому нужен `FakeGateway`, живёт вне `internal/<контекст>`: правила контекстов действуют и на тестовые файлы. *(изм. T-456, код T-303)* `internal/gateway/api` не импортирует `links`, `store` и драйвер SQLite: его импортирует бот ради DTO, и обработчик связок в `api` притянул бы базу данных в бинарник бота. Обработчики, которым нужны данные, живут в `internal/gateway/handlers`.
 
 ---
 
@@ -235,7 +234,7 @@ CREATE TABLE character_requests (
 CREATE INDEX ix_character_requests_exp ON character_requests(expires_at);
 ```
 
-Инварианты: `status='consented'` ⇒ три timestamp не NULL (проверяется кодом при `Consent`, CHECK не выражает условную обязательность без триггера — намеренно без триггеров); один `player_id` ↔ одна связка (уникальный индекс); `link_id` неизменен на всю жизнь строки (при `dead → новый персонаж` меняется только `player_id`); `username`, имя профиля, `chat_id` — **не хранятся** (в Telegram для личного чата `chat_id == user_id`, бот отправляет по `external_id`). Строка создаётся при первом `POST /v1/links/resolve` со статусом `pending_consent` (это и есть момент выдачи `link_id`; UC-001 допускает `pending_consent`); `Consent` переводит в `consented`. `link_id` нигде, кроме `links.db`, не хранится (в `gateway.db` достаточно `player_id`) и клиентам не отдаётся. После `/forget`: `DELETE FROM links` (каскад в `character_requests`) и **сразу в том же вызове** `PRAGMA wal_checkpoint(TRUNCATE)` + `PRAGMA incremental_vacuum` (ADR-019 дополнение п. 1, T-8) — чтобы байты внешнего ID не оставались ни в WAL, ни в свободных страницах; sweeper раз в час повторяет то же как страховка.
+Инварианты: `status='consented'` ⇒ три timestamp не NULL (проверяется кодом при `Consent`, CHECK не выражает условную обязательность без триггера — намеренно без триггеров); один `player_id` ↔ одна связка (уникальный индекс); `link_id` неизменен на всю жизнь строки (при `dead → новый персонаж` меняется только `player_id`); `username`, имя профиля, `chat_id` — **не хранятся** (в Telegram для личного чата `chat_id == user_id`, бот отправляет по `external_id`). Строка создаётся при первом `POST /v1/links/resolve` со статусом `pending_consent` (это и есть момент выдачи `link_id`; UC-001 допускает `pending_consent`); `Consent` переводит в `consented`. `link_id` нигде, кроме `links.db`, не хранится (в `gateway.db` достаточно `player_id`) и клиентам не отдаётся. После `/forget`: `DELETE FROM links` (каскад в `character_requests`) и **сразу в том же вызове** `PRAGMA incremental_vacuum`, затем `PRAGMA wal_checkpoint(TRUNCATE)` (`store.CompactLinks`; ADR-019 дополнение п. 1, T-8) — чтобы байты внешнего ID не оставались ни в WAL, ни в свободных страницах; sweeper раз в час повторяет то же как страховка. *(изм. T-456: порядок по коду T-303 — vacuum сам пишет в WAL, и checkpoint последним оставляет WAL пустым; заблокированный checkpoint — `503 forget_incomplete`, §7.5.)*
 
 ### 4.2. `gateway.db` — служебные данные
 
@@ -359,14 +358,18 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 
 ### 5.1. Middleware (порядок)
 
-1. `recover` → `500 internal` с `handled=false` в логе (NFR-012: паника = дефект).
-2. `request_id` (ULID) → заголовок `X-Request-Id` и поле лога.
-3. `client`: `X-Client-Id` обязателен и ∈ `MV_GATEWAY_CLIENT_IDS` (иначе `403 client_unknown`, C-08 v1.3); права на `X-Actor-Kind: ci|sim` — список `MV_GATEWAY_ACTOR_KIND_CLIENTS` (оба имени — по манифесту `shared/env/vars.go`, T-409; прежняя одна строка `MV_GATEWAY_CLIENTS="client:platform:kinds"` в манифест не принята). **Открыто для EPIC-004:** платформа клиента, по которой `route.external_id` выдаётся только клиенту платформы связки (SEC-12), в двух списках манифеста не выражена; рекомендация — в MVP-1 фиксированное соответствие в коде (`telegram-bot → telegram`, прочие клиенты платформы не имеют и внешнего маршрута не получают), переменная появится вместе со вторым ботом (E-H); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент; для маршрутов `/v1/clients/{client_id}/*` — `{client_id}` обязан совпадать с `X-Client-Id` (иначе `403 client_mismatch`, SEC-12).
-4. `body_limit` 64 КиБ через `http.MaxBytesReader` → `413 payload_too_large` (SEC-11); `Content-Type` проверка на `POST/DELETE` с телом.
-5. `nolog` для `POST /v1/links/*`, `DELETE /v1/links`, `POST /v1/characters`: тело и `external_id` не попадают в лог ни при какой ошибке (только `request_id`, `code`).
-6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` — **30 действий/мин, burst 5** (`MV_GATEWAY_RATE_ACTIONS_PER_MIN=30`, `MV_GATEWAY_RATE_ACTIONS_BURST=5`; стартовые значения по SEC-11, уточняются замером) → `429 rate_limited` с `Retry-After`. Бакеты — в памяти, `player_id` → bucket, уборка неактивных раз в 10 мин; в `replay` лимит выключен.
-7. `pollguard` на `GET /v1/clients/{client_id}/deliveries`: один активный long-poll на `client_id` (`sync.Map` client → in-flight); второй параллельный → `409 poll_in_progress` (C-08 v1.1) — защита от истощения соединений (T-13).
-8. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с). *(изм. T-444, C-01 v1.8)* Дедлайны ставятся на запрос через `runtime.SetDeadlines(w, read, write)` (чтение тела — 10 с, запись — по строке выше); время у функции реальное в любом режиме, контекст шлюза часы для этого не берёт. Long-poll дополнительно слушает `runtime.ShuttingDown(r.Context())` и при остановке процесса отвечает пустым списком доставок, не дожидаясь `wait_ms`.
+1. `request_id` и access-лог *(изм. T-456: порядок по коду T-303, прежде `recover` стоял первым)*. `X-Request-Id` — на каждом ответе, в том числе `403`, `413` и `500`. Значение — `uuid.NewString`, а не `Deps.IDs`: иначе каждый запрос, даже отказанный, сдвигал бы последовательность `link_id` и `player_id` при `--id-source=sequence`. Одна строка access-лога на запрос: `request_id` и `code` (у ответа-ошибки таблицы §1.6, его сообщает `api.WriteError`), у не-nolog операций ещё `operation`, `method`, `route`, `status`, `duration_ms`. Уровень — по статусу: `5xx` — `Error`, `4xx` — `Warn`, иначе `Debug`.
+2. `recover` → `500 internal`, в логе `handled=false` (NFR-012: паника = дефект). Значение паники и стек пишутся только у не-nolog операций; `http.ErrAbortHandler` пробрасывается дальше; если ответ уже начат, второй не пишется. *Почему `request_id` снаружи `recover`:* `500` паники тоже несёт `X-Request-Id` и попадает в access-лог.
+3. `client`: `X-Client-Id` обязателен и ∈ `MV_GATEWAY_CLIENT_IDS` (иначе `403 client_unknown`, C-08 v1.3); права на `X-Actor-Kind: ci|sim` — список `MV_GATEWAY_ACTOR_KIND_CLIENTS` (оба имени — по манифесту `shared/env/vars.go`, T-409; прежняя одна строка `MV_GATEWAY_CLIENTS="client:platform:kinds"` в манифест не принята). **Открыто для EPIC-004:** платформа клиента, по которой `route.external_id` выдаётся только клиенту платформы связки (SEC-12), в двух списках манифеста не выражена; рекомендация — в MVP-1 фиксированное соответствие в коде (`telegram-bot → telegram`, прочие клиенты платформы не имеют и внешнего маршрута не получают), переменная появится вместе со вторым ботом (E-H); `X-Actor-Kind` ∈ `human|ci|sim` (по умолчанию `human`), `ci`/`sim` разрешены только клиентам с этими правами (иначе `403 actor_kind_forbidden`); служебные §1.8 — только `ci`/операторский клиент; для маршрутов `/v1/clients/{client_id}/*` — `{client_id}` обязан совпадать с `X-Client-Id` (иначе `403 client_mismatch`, SEC-12). Прочее значение `X-Actor-Kind`, в том числе `system`, — `400 invalid_request` *(изм. T-456, код T-303)*.
+4. `body_limit` 64 КиБ → `413 payload_too_large` (SEC-11): `Content-Length` больше лимита — отказ сразу, тело без длины (chunked) — через `http.MaxBytesReader` и `api.DecodeJSON`. Тело с `Content-Type` не `application/json` → `400 invalid_request`; неизвестные поля JSON принимаются (совместимое расширение, `api-contracts.md` §1.1). Допуск клиента (п. 3) идёт раньше лимита тела: 65 КиБ от неизвестного клиента — `403 client_unknown` *(изм. T-456, код T-303)*.
+5. `nolog` *(изм. T-456: не отдельная обёртка, а политика операции, код T-303)*. Операции — `api.NoLogOperations()`, ровно операции с `x-nolog` в спецификации: `resolveLink`, `consentLink`, `forgetLink`, `createCharacter` (`POST /v1/links/*`, `DELETE /v1/links`, `POST /v1/characters`). Политику применяют access-лог (п. 1) и `recover` (п. 2): при любой ошибке, включая `403` шага 3, строка access-лога — только `request_id` и `code`, у паники — ещё строка `recover` с `request_id` и `handled=false`; тело, `external_id`, маршрут, значение паники и стек не пишутся. Обработчики этих операций сами не логируют. *Почему политика:* access-лог должен видеть каждый ответ, в том числе отказ допуска, который обёртка после п. 3 не увидела бы. Цена — причина `500` на этих маршрутах в лог не попадает; безопасный класс причины (`cause_class`) — бэклог T-303, п. 8.
+6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` — **30 действий/мин, burst 5** (`MV_GATEWAY_RATE_ACTIONS_PER_MIN=30`, `MV_GATEWAY_RATE_ACTIONS_BURST=5`; стартовые значения по SEC-11, уточняются замером) → `429 rate_limited` с `Retry-After`. Бакеты — в памяти, `player_id` → bucket, уборка неактивных раз в 10 мин; в `replay` лимит выключен. Точка подключения — `api.RateLimiter` (`Config.Limiter`; до T-305 — `nil`).
+7. `pollguard` на `api.LongPollOperations()` (`pollDeliveries`, `GET /v1/clients/{client_id}/deliveries`): один активный long-poll на `client_id` (`sync.Map` client → in-flight); второй параллельный → `409 poll_in_progress` (C-08 v1.1) — защита от истощения соединений (T-13).
+8. `timeout` *(изм. T-456: по коду T-303 и ревью #1 T-446, Ma-2; прежде «чтение тела — 10 с» было общим и для long-poll)*. Два механизма.
+   - **Дедлайн обработчика — контекст запроса.** `api.RequestTimeout` = 5 с всем операциям, кроме `api.LongPollOperations()` (код T-303); прокси admin — 30 с (T-356); long-poll ограничивает сам `outbox.Serve` по `wait_ms` (T-307).
+   - **Дедлайны соединения — `runtime.SetDeadlines(w, read, write)`** (C-01 v1.8; время реальное в любом режиме, часы контекста для этого не берутся). Запись — дедлайн обработчика плюс 5 с: обычные операции — 10 с, long-poll — `wait_ms + 5 с`, не больше 30 с, прокси — 35 с. Чтение — **`0` или не короче дедлайна записи**: обычные операции — 10 с (ограничивает медленное тело), long-poll — `0`, прокси admin — 35 с (тело до 64 КиБ, обработчик до 30 с; *итерация 2, Mi-2*). Те же значения — C-01 v1.8 «Уровень маршрута».
+   - *Почему так:* у запроса без тела (GET long-poll) и у запроса с дочитанным телом `net/http` ставит дедлайн чтения на фоновое чтение, которым следит за разрывом соединения клиентом, и истечение дедлайна отменяет `r.Context()`. Обработчик, слушающий контекст или передающий его в SQLite и outbox, закончил бы ожидание досрочно с `context canceled`, хотя ответ ещё мог уйти (тест `TestAReadDeadlineCancelsTheContextOfARequestWithoutABody`, T-446). Медленного клиента на заголовках ограничивает `ReadHeaderTimeout 5s` сервера процесса; `ReadTimeout` у него нет.
+   - Long-poll дополнительно слушает `runtime.ShuttingDown(r.Context())` и при остановке процесса отвечает пустым списком доставок, не дожидаясь `wait_ms`. `SetDeadlines` и `ShuttingDown` подключает T-307: функция `timeout` в `middleware.go` и обработчик доставок.
 
 Сервер: *(изм. T-444, C-01 v1.8; прежде — `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`)* сервер процесса общий для всех контекстов и настраивается в `shared/runtime`: `ReadHeaderTimeout 5s`, `IdleTimeout 120s`. `ReadTimeout` и `WriteTimeout` на уровне сервера не ставятся — они стали бы потолком для маршрутов всех контекстов процесса; таймауты шлюза — по п. 8 выше. Адрес — **`MV_CORE_ADDR`**, как у любого процесса `cmd/multiverse` (один процесс — один HTTP-сервер; `serve.go` отдаёт его mux всем контекстам `--contexts`, и в процессе с контекстом `gateway` API игрока живёт на том же адресе, что `/health`). В compose у сервиса `gateway` — `MV_CORE_ADDR: ":8088"` литералом, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3. Переменных `MV_GATEWAY_LISTEN` и `MV_GATEWAY_ADDR` нет (вторая выведена из манифеста в T-408, первая в манифест не попадала; T-409).
 
@@ -374,10 +377,10 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 
 | Метод и путь | Обработчик | Синхронность / ответ | Идемпотентность |
 |---|---|---|---|
-| `POST /v1/links/resolve` | `links.Resolve` + `readmodel` (character_status) | 200 `{link_status: none\|pending_consent\|consented, player_id, world_id, character_status: none\|creating\|alive\|dead, notice_due}`; при отсутствии строки создаёт `pending_consent` с новым `link_id` (`link_id` в ответ **не** входит); обновляет `last_seen_at` | по построению |
-| `POST /v1/links/consent` | `links.Consent` | 200 / `400 consent_incomplete` (запись `pending_consent`) | повтор обновляет `last_seen_at` |
-| `DELETE /v1/links` | `links.Forget` → хуки §7.6 | 200 `{deleted, player_id_detached}` | да |
-| `DELETE /v1/admin/links/{player_id}` | `links.ForgetByPlayer` | как выше; только операторский клиент | да |
+| `POST /v1/links/resolve` | `handlers.Links.Resolve` → `links.Store.Resolve` (`Resolution`) + `Links.CharacterStatus` (read model T-304/T-306; до подключения — `creating`) *(изм. T-456)* | 200 `{link_status: none\|pending_consent\|consented, player_id, world_id, character_status: none\|creating\|alive\|dead, notice_due}`; при отсутствии строки создаёт `pending_consent` с новым `link_id` (`link_id` в ответ **не** входит); обновляет `last_seen_at`; `notice_due` — новая связка, `pending_consent` или прошлый визит не меньше 30 дней назад (`handlers.NoticeRepeatAfter`); `external_platform` не `telegram` → `400 invalid_request` | по построению |
+| `POST /v1/links/consent` | `handlers.Links.Consent` → `links.Store.Consent` | 200 / `400 consent_incomplete`: существующая связка остаётся `pending_consent`, без связки ничего не создаётся; полная форма без `resolve` создаёт связку; полная форма без `shown_at` → `400 invalid_request` *(изм. T-456, код T-303)* | повтор обновляет `last_seen_at`, три отметки согласия не меняет |
+| `DELETE /v1/links` | `handlers.Links.Forget` → `links.Store.Forget` → хуки §7.5 | 200 `{deleted, player_id_detached}`; `503 forget_incomplete` с `Retry-After` — связка удалена, стирание не подтверждено (C-08 v1.5, §7.5) *(изм. T-456; прежде ссылка на хуки §7.6)* | да |
+| `DELETE /v1/admin/links/{player_id}` | `links.Store.ForgetByPlayer` (монтирует T-356) | как выше, включая `503 forget_incomplete`; только операторский клиент | да |
 | `GET /v1/worlds` | `readmodel.Worlds()` | 200 список миров с регионами и `laws_version` | — |
 | `POST /v1/characters` | §7.1 | 201 / 200 (уже есть) / 202 `{player_id, status:"creating"}`; ошибки `world_not_found`, `consent_required`, `name_required`, `name_invalid` | `character_requests` (links.db) по `(link_id, action_key)` — `link_id` находится по `(platform, external_id)` внутри одной транзакции `links.db`; TTL 24 ч (C-08 v1.1, SEC-03) |
 | `GET /v1/players/{player_id}` | `readmodel.Character(id)` + `session.Current(scope)` | 200 `CharacterState`; `404 player_not_found`; для `creating` — 200 с `status:"creating"` и минимальными полями | — |
@@ -389,7 +392,7 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 | `POST /v1/scopes/{scope_id}/rounds/close` | `rounds.Close(explicit)` | 200 `{round{seq, close_reason:"explicit"}}`; `409 no_open_round` (C-08 v1.1); только `ci` | да (повтор при закрытом → 409) |
 | `POST /v1/admin/agents/{agent_id}/tick`, `GET /v1/admin/agents`, `GET /v1/admin/llm/usage` | `httputil.ReverseProxy` → `MV_CORE_URL` (`http://core:8090`, C-06) | как отдаёт `core`; заголовки клиента пробрасываются; только `ci`/operator | — |
 | `GET /v1/admin/sessions` | `session.Active()` | 200 список активных сессий (без внешних ID) | — |
-| `GET /health` | §11.4 | 200/503 | — |
+| `GET /health` | маршрут сервера процесса, не `router.go`; поля gateway — `Context.Health()`, §11.4 *(изм. T-456)* | 200/503 | — |
 
 ### 5.3. DTO (Go, пакет `api`, переиспользуются `client`)
 
@@ -440,9 +443,9 @@ type ErrorBody struct{ Code, Message string; Details map[string]any }
 - `openapi: 3.1.0`; `info.version: 1.0.0`; `servers: [{url: http://127.0.0.1:8088}]`.
 - `components.securitySchemes`: `ClientId` (apiKey, header `X-Client-Id`) — единственная схема в MVP-1; `ActorKind` описан как параметр-заголовок `X-Actor-Kind` (enum) в `components.parameters`.
 - `components.schemas`: `Error`, `ResolveRequest/Response`, `ConsentRequest/Response`, `ForgetRequest/Response`, `WorldsResponse`, `CreateCharacterRequest`, `CreateCharacterResponse`, `CharacterState`, `PositionRef`, `ScopeRef`, `GroupView`, `GroupMember`, `EncounterView`, `NPCView`, `Item`, `WorldView`, `SessionRef`, `ActionRequest` (с `type` enum из словаря), `ActionAccepted`, `Delivery`, `DeliveryRoute`, `DeliveriesResponse`, `AckRequest`, `AckResponse`, `RoundCloseResponse`, `Health`, `AdminSessions`.
-- `components.responses`: `BadRequest`, `Forbidden`, `NotFound`, `Conflict`, `RateLimited`, `Unavailable` — каждая с перечнем `code` из §1.6 в `description` и `examples`.
+- `components.responses`: `BadRequest`, `Forbidden`, `NotFound`, `Conflict`, `RateLimited`, `Unavailable` — каждая с перечнем `code` из §1.6 в `description` и `examples`. *(изм. T-456, C-08 v1.5)* `ForgetIncomplete` — отдельный ответ `forgetLink` и `adminForgetLink` с заголовком `Retry-After`; `Unavailable` — `bus_unavailable` и `state_unavailable`, без `Retry-After`. В коде T-303 `forget_incomplete` пока входит в `Unavailable`; правка файла — EPIC-004.
 - `paths`: 14 маршрутов §5.2, для каждого — `operationId` = имя обработчика (`resolveLink`, `consentLink`, `forgetLink`, `adminForgetLink`, `listWorlds`, `createCharacter`, `getPlayer`, `postAction`, `getGroup`, `pollDeliveries`, `ackDeliveries`, `streamDeliveries`, `closeRound`, `adminTick`, `adminAgents`, `adminSessions`, `health`); `x-idempotency: action_key` у изменяющих операций; `x-actor-kind: [ci]` у служебных.
-- Тест `openapi_test.go`: парсит YAML (`gopkg.in/yaml.v3`, уже транзитивно есть), сравнивает множество `(method, path)` с зарегистрированными в `router.go` (шаблоны ServeMux нормализуются к `{param}`) и проверяет, что каждый `apiError.code` из `errors.go` упомянут в файле. Расхождение — красный `unit`.
+- Тест `openapi_test.go`: парсит YAML (`gopkg.in/yaml.v3`, уже транзитивно есть), сравнивает множество `(method, path)` с зарегистрированными в `router.go` (шаблоны ServeMux нормализуются к `{param}`) и проверяет, что каждый `apiError.code` из `errors.go` упомянут в файле. *(изм. T-456, код T-303)* Коды таблицы `errors.go` равны объединению `x-error-codes` ответов, `api.NoLogOperations()` — ровно операции с `x-nolog`, `api.LongPollOperations()` — операции спецификации. Расхождение — красный `unit`.
 
 ---
 
@@ -450,8 +453,10 @@ type ErrorBody struct{ Code, Message string; Details map[string]any }
 
 Только то, что нужно разработчику, чтобы не спрашивать «где это живёт». Все внешние зависимости инжектируются через `Deps`; в тестах — фейки из `shared/testkit`.
 
+*(изм. T-456)* Своего `deps.go` у контекста нет. Зависимости — `runtime.Deps{Bus, Journal, Contracts, Clock, Timers, Mode, IDs, Log, Mux, Recording}` (C-01 v1.3, v1.9); `Start` требует `Clock`, `Timers`, `IDs`, `Log`. Переменные читаются в `Start` через `shared/env`, клиент объектного хранилища контекст создаёт сам (T-304). Блок `Deps` ниже — прежняя целевая форма, оставлен как перечень того, что нужно блоку; `links` — по коду T-303.
+
 ```go
-// internal/gateway/deps.go
+// internal/gateway/deps.go (целевая форма до T-303; в коде — runtime.Deps)
 type Deps struct {
     Bus      eventbus.Bus          // C-01
     ObjStore objstore.Reader       // только чтение snapshots-{world}/state/latest.json + запись gateway/ через objstore.Writer
@@ -464,26 +469,37 @@ type Clock interface { Now() time.Time; AfterFunc(d time.Duration, f func()) Tim
 type Timer interface { Stop() bool }
 type IDSource interface { NewID() string }   // ULID, монотонный
 
-// internal/gateway/links
+// internal/gateway/links (изм. T-456: сигнатуры по коду T-303)
 type Link struct {
-    LinkID string                                    // суррогат (ULID); не логируется, клиентам не отдаётся
+    LinkID string                                    // суррогат; не логируется, клиентам не отдаётся
     Platform, ExternalID string; PlayerID, WorldID *string
     Status string; NoticeShownAt, ConsentAt, AgeConfirmedAt *time.Time; LastSeenAt, CreatedAt time.Time
 }
-func (Link) LogValue() slog.Value // "redacted" — внешний ID и link_id никогда не попадают в slog.Attr
+func (Link) LogValue() slog.Value // "redacted"; String, GoString и MarshalJSON — тоже "redacted" (вложенные значения JSON-лога, %v, %#v)
+type Resolution struct { Link Link; Created bool; PreviousSeenAt time.Time }  // PreviousSeenAt — last_seen_at до вызова, для notice_due
+type ConsentForm struct { NoticeShown, Consent, AgeConfirmed bool; ShownAt time.Time }
+func (ConsentForm) Complete() bool
+type StoredResponse struct { PlayerID string; StatusCode int; Body []byte }
+type ForgetResult struct { Deleted bool; PlayerIDDetached *string }
+var ErrNotFound, ErrConsentIncomplete, ErrPlayerIDTaken, ErrCompactionPending error // сравнивать errors.Is
 type Store interface {
-    Resolve(ctx context.Context, platform, externalID string, now time.Time) (Link, bool /*created*/, error) // нет строки → INSERT pending_consent + новый link_id; обновляет last_seen_at
-    Consent(ctx context.Context, platform, externalID string, shownAt, now time.Time) (Link, error)
-    AttachPlayer(ctx context.Context, linkID, playerID, worldID string) error                     // при создании персонажа (в т.ч. замена dead → новый)
+    Resolve(ctx context.Context, platform, externalID string, now time.Time) (Resolution, error)            // нет строки → INSERT pending_consent + новый link_id; last_seen_at = now
+    Consent(ctx context.Context, platform, externalID string, form ConsentForm, now time.Time) (Link, error) // неполная форма → ErrConsentIncomplete (связка остаётся pending_consent, без связки ничего не создаётся); повтор не меняет три отметки
+    AttachPlayer(ctx context.Context, linkID, playerID, worldID string) error                               // замена dead → новый; link_id не меняется; ErrPlayerIDTaken, ErrNotFound
+    ByExternal(ctx context.Context, platform, externalID string) (Link, bool, error)
     ByPlayer(ctx context.Context, playerID string) (Link, bool, error)
-    RouteFor(ctx context.Context, playerID string) (platform, externalID string, ok bool, err error) // outbox, в момент выдачи
-    Forget(ctx context.Context, platform, externalID string) (detached *string, deleted bool, err error) // DELETE + wal_checkpoint(TRUNCATE) + incremental_vacuum в том же вызове
-    ForgetByPlayer(ctx context.Context, playerID string) (deleted bool, err error)
-    CharacterRequest(ctx context.Context, linkID, actionKey string) (*StoredResponse, bool, error)   // ключ — link_id, не внешний ID (SEC-03)
-    SaveCharacterRequest(ctx context.Context, linkID, actionKey, playerID string, r StoredResponse, ttl time.Duration) error
-    Compact(ctx context.Context) error                                                            // sweeper раз в час: checkpoint + incremental_vacuum (страховка)
+    RouteFor(ctx context.Context, playerID string) (platform, externalID string, ok bool, err error)       // outbox, в момент выдачи
+    Forget(ctx context.Context, platform, externalID string) (ForgetResult, error)                         // §7.5; неудачное сжатие → результат + ErrCompactionPending
+    ForgetByPlayer(ctx context.Context, playerID string) (ForgetResult, error)
+    CharacterRequest(ctx context.Context, linkID, actionKey string, now time.Time) (StoredResponse, bool, error) // ответ, не истёкший к now; ключ — link_id, не внешний ID (SEC-03)
+    SaveCharacterRequest(ctx context.Context, linkID, actionKey string, r StoredResponse, now time.Time) error  // TTL store.KeyTTL; живой ответ под тем же ключом не перезаписывается
+    Compact(ctx context.Context) error                // store.CompactLinks; неудача ставит отметку «сжатие отложено», успех снимает
+    Sweep(ctx context.Context, now time.Time) error   // истёкшие character_requests + отложенное сжатие
 }
-type ForgetHooks interface { OnForget(ctx context.Context, playerID string) error } // outbox.DropForPlayer, session.End(leave), groups.LeaveAll
+func NewSQLite(db *sql.DB, ids IDSource, hooks ...ForgetHooks) (*SQLite, error) // хуки — в порядке каскада C-04
+func (s *SQLite) CompactionPending() bool                                       // не в Store: читает Context.Health
+type ForgetHooks interface { OnForget(ctx context.Context, playerID string) error } // до DELETE, по порядку; идемпотентны — повтор /forget вызывает все заново
+type ForgetFunc func(ctx context.Context, playerID string) error
 
 // internal/gateway/readmodel
 type Model interface {
@@ -561,7 +577,7 @@ func (c *Client) Ack(ctx, clientID string, ids []string) error
 func (c *Client) CloseRound(ctx, scopeID string) (api.RoundCloseResponse, error)
 ```
 
-`APIError{Status int; Code, Message string; Details map[string]any}` — типизированная ошибка клиента; бот сопоставляет `Code` с подсказкой (§10.5). Повторы клиента: сетевые ошибки и `503` — до 3 раз с экспоненциальной паузой 200 мс → 1,6 с **с тем же `action_key`**; `4xx` — без повтора.
+`APIError{Status int; Code, Message string; Details map[string]any}` — типизированная ошибка клиента; бот сопоставляет `Code` с подсказкой (§10.5). Повторы клиента: сетевые ошибки и `503` — до 3 раз с экспоненциальной паузой 200 мс → 1,6 с **с тем же `action_key`**; `4xx` — без повтора. *(изм. T-456, C-08 v1.5)* Исключение — `503 forget_incomplete`: клиент его сам не повторяет, `APIError` несёт `Retry-After` (поле появляется с T-311); сетевые ошибки и прочие `503` повторяются, как прежде (`ForgetResult.Repeated`).
 
 ---
 
@@ -703,19 +719,48 @@ sequenceDiagram
     participant P as Игрок
     participant B as telegram-bot
     participant G as gateway
+    participant DB as links.db
     participant BUS as Redpanda
     P->>B: /forget
     B-->>P: «Удалить связку? Игровая история по player_id останется. Подтвердите: /forget confirm»
     P->>B: /forget confirm
     B->>G: DELETE /v1/links {telegram, <user_id>}
-    G->>G: links.ByExternal → player_id
-    G->>G: ForgetHooks.OnForget(player_id): outbox.DropForPlayer (pending → dropped); session.End(scope игрока, leave); groups.Leave(player) если в группе (вне встречи — обычный выход; во встрече — как flee не исполняется: участник помечается out_of_combat через entity.update.proposed encounter? — нет: gateway не владеет encounter; публикуется group.left cause=leave и atomic-предложение по группе/игроку, встреча остаётся Task-агенту)
-    G->>BUS: GE group.left (если был в группе), AE analytics.session.ended end_reason=leave
-    G->>G: DELETE FROM links (каскад character_requests) → PRAGMA wal_checkpoint(TRUNCATE) → PRAGMA incremental_vacuum (сразу, ADR-019 доп. п. 1); pending_characters по player_id — удалить
-    G-->>B: 200 {deleted: true, player_id_detached: "player-A"}
-    B->>B: flow.Reset(chat); удалить состояние диалога
-    B-->>P: «Связка удалена. /start — начать заново как новый игрок»
+    G->>DB: ByExternal → связка, player_id
+    alt связки нет
+        G->>DB: при отметке «сжатие отложено» — CompactLinks
+        G-->>B: 200 {deleted: false, player_id_detached: null} или 503 forget_incomplete
+    else связка есть
+        G->>G: ForgetHooks по порядку C-04 (если есть персонаж): outbox.DropForPlayer
+        G->>BUS: entity.update.proposed {cause: forget, proposal_id: forget:player_id} (если alive)
+        G->>BUS: group.left и group.leader_changed {cause: forget} (если в группе)
+        G->>BUS: analytics.session.ended {end_reason: forget}
+        Note over G: ошибка хука — стоп до удаления, связка остаётся, 500 (с T-355 при сбое шины — 503 bus_unavailable)
+        G->>DB: DELETE FROM links WHERE link_id = ? AND player_id IS ? (каскад character_requests)
+        G->>DB: CompactLinks — PRAGMA incremental_vacuum, затем PRAGMA wal_checkpoint(TRUNCATE)
+        alt сжатие прошло
+            G-->>B: 200 {deleted: true, player_id_detached: "player-A"}
+            B->>B: flow.Reset(chat), удалить состояние диалога
+            B-->>P: «Связка удалена. /start — начать заново как новый игрок»
+        else checkpoint заблокирован или истёк дедлайн запроса
+            G->>G: отметка «сжатие отложено», /health degraded {links_compaction: pending}
+            G-->>B: 503 forget_incomplete, Retry-After: 5
+            B-->>P: «Удаление не завершено, повторите /forget confirm позже»
+        end
+    end
 ```
+
+**Порядок и почему хуки до удаления** — C-08 v1.5, «Порядок `/forget`» *(изм. T-456; прежняя диаграмма ставила `DELETE` после хуков с `cause=leave` и `end_reason=leave`, что расходилось и с C-04 v1.1, и с кодом T-303)*. Хуки подключают задачи — владельцы шагов через `links.NewSQLite(db, ids, hooks...)` в порядке C-04: outbox (T-307), предложение `abandoned` и группа (T-314, T-355), сессия (T-306). В T-303 хуков нет.
+
+**Незавершённое стирание** *(изм. T-456; C-08 v1.5, ADR-019 доп. 2)*:
+- `CompactLinks` не завершился: читатель вне процесса держит файл дольше `busy_timeout` 5 с, или истёк дедлайн запроса. `Forget` возвращает результат вместе с `links.ErrCompactionPending`, стор ставит отметку «сжатие отложено», обработчик отвечает `503 forget_incomplete` с `Retry-After: 5` (`handlers.ForgetRetryAfter`).
+- Пока стоит отметка, любой `/forget` отвечает так же, кроме вызова, который сам доделал сжатие. Отметку ставит любой неудачный `Compact`, в том числе часовой и при старте *(итерация 2, N-5)*. `200 {deleted:false}` после 503 — конец того же забвения.
+- Без клиента стирание доделывают:
+  - `Start` — безусловное `Compact` до маршрутов и sweeper'а, в любом режиме; неудача ставит отметку и старт не валит;
+  - sweeper в `live` — `Sweep` раз в `store.SweepInterval` (1 мин), `Compact` раз в `store.LinksCompactInterval` (1 ч);
+  - `Stop` — при отметке и остановленном sweeper'е.
+- `/health` — `degraded` с `links_compaction: pending` (§11.4).
+- Каждая попытка под удерживающим читателем занимает единственное соединение `links.db` до 5 с: на это время ждут `resolve`, `consent` и `RouteFor` при выдаче доставок.
+- **Известное окно.** Успешный `Compact` sweeper'а может снять отметку, поставленную параллельным `/forget` с неудачным сжатием, если `DELETE` этого `/forget` попал между checkpoint sweeper'а и снятием отметки. Страховка — часовое сжатие и сжатие при старте. Закрыть мьютексом «`DELETE` + сжатие» или счётчиком поколений отметки — строка DoD T-306, запасной путь — T-314.
 
 После удаления: доставки, поступившие позже для `player-A`, при постановке в очередь не находят маршрута (`links.ByPlayer` → нет) и сразу пишутся как `dropped` (не `pending`), чтобы не копить мусор; при выдаче (`Lease`) отсутствие маршрута тоже переводит строку в `dropped` (двойная защита, ADR-006 п. 3).
 
@@ -825,7 +870,7 @@ C4Component
 
 **Порядок обработки каждого `Update` (`access.Gate`, первый шаг, до FSM и до любого вызова gateway):**
 1. `message == nil` или `message.from == nil` → игнор.
-2. `message.chat.type != "private"` → одно сообщение «пишите боту в личные сообщения», обновление отброшено, gateway не вызывается (SEC-07, ADR-006 дополнение п. 2). Связка и действия — **только** по `from.id`; `chat.id` личного чата равен `from.id` и отдельно не хранится.
+2. `message.chat.type != "private"` → бот не отвечает никому, обновление отброшено, gateway не вызывается (SEC-07, ADR-006 дополнение п. 2) *(изм. при приёмке T-456, Mi-2 ревью #2: в групповом чате бот не отвечает никому — решение оркестратора по T-310, US-008/FR-131 выше ADR-018; прежде «одно сообщение «пишите боту в личные сообщения»»)*. Связка и действия — **только** по `from.id`; `chat.id` личного чата равен `from.id` и отдельно не хранится.
 3. `from.id ∉ MV_TELEGRAM_ALLOWED_USER_IDS` → одно сообщение «доступ по приглашению» без деталей, счётчик `bot_denied_total`, лог без ID; пустой allowlist = бот отвечает всем отказом и gateway не вызывает (SEC-06, решение пользователя U-7, ADR-006 дополнение п. 1). Инвайт-коды — E-H.
 4. Лимит 20 команд/мин на `from.id` (token bucket в памяти, `MV_BOT_RATE_COMMANDS_PER_MIN=20`) → «слишком часто, подождите», gateway не вызывается (SEC-11).
 5. Только после этого — `commands.Parse` и `flow`.
@@ -857,7 +902,7 @@ C4Component
 
 ### 10.5. Ошибки для игрока
 
-Сервер отдаёт `message` на русском; бот дополняет подсказкой по `code`: `in_encounter` → «сначала /flee», `not_in_encounter` → «вокруг никого; /look», `not_leader` → «регион меняет лидер группы», `already_acted` → «дождитесь конца раунда», `character_dead` → «/start — создать нового», `consent_required` → перезапуск онбординга, `rate_limited` → «слишком часто», `bus_unavailable`/сеть → «сервис недоступен, повторите позже» (команда не теряется: клиент повторил с тем же `action_key` до 3 раз). Неизвестный код → `message` сервера.
+Сервер отдаёт `message` на русском; бот дополняет подсказкой по `code`: `in_encounter` → «сначала /flee», `not_in_encounter` → «вокруг никого; /look», `not_leader` → «регион меняет лидер группы», `already_acted` → «дождитесь конца раунда», `character_dead` → «/start — создать нового», `consent_required` → перезапуск онбординга, `rate_limited` → «слишком часто», `bus_unavailable`/сеть → «сервис недоступен, повторите позже» (команда не теряется: клиент повторил с тем же `action_key` до 3 раз); `forget_incomplete` → «удаление не завершено, повторите /forget confirm через N с» по `Retry-After`, без слова «удалено»; `200 {deleted:false}` в том же диалоге после такого ответа — «связка удалена» *(изм. T-456, C-08 v1.5; T-311)*. Неизвестный код → `message` сервера.
 
 ---
 
@@ -871,7 +916,7 @@ C4Component
 | Сетевая изоляция (SEC-13) | адрес процесса — `MV_CORE_ADDR` (по умолчанию `127.0.0.1:8090` для запуска вручную; в compose у `gateway` — `:8088` внутри сети, наружу `127.0.0.1:8088`; T-408/T-409); в compose — публикация **всех** портов только на `127.0.0.1` (`compose-lint`); admin-порт `core` доступен gateway по compose-сети, наружу не публикуется |
 | Доверенные клиенты (SEC-12) | `MV_GATEWAY_CLIENT_IDS=telegram-bot,ci-harness,mvctl` — список допущенных `X-Client-Id`; `MV_GATEWAY_ACTOR_KIND_CLIENTS=ci-harness,mvctl` — кому разрешён `X-Actor-Kind: ci|sim` (имена и значения по умолчанию — манифест `shared/env/vars.go`; прежняя форма одной строки `client_id:platform:allowed_actor_kinds` в манифест не принята, платформа клиента — открытый вопрос §5.1; T-409); неизвестный клиент — `403 client_unknown`; `{client_id}` пути == `X-Client-Id` (`403 client_mismatch`); `route.external_id` — только клиенту платформы связки; служебные и admin-маршруты — только клиенты с `ci` или роль `operator`; `ci-harness` отсутствует в prod-`.env` (профиль `dev`/`test`) |
 | Секреты (SEC-08) | `MV_TELEGRAM_BOT_TOKEN` только из env (пустой → бот не стартует с понятной ошибкой); **редакция токена**: `privacy.Handler` заменяет `bot<digits>:<token>` → `bot<redacted>` в любом сообщении лога и в тексте ошибок HTTP-клиента библиотеки (включая `409 Conflict` и сетевые ошибки; `errors.Handler` бота оборачивает всё через `privacy.Redact`); `WithDebug` запрещён; unit-тест «строка ошибки не содержит токен»; ключей у gateway нет; `.env.example` содержит все переменные §11.3 (NFR-074) |
-| ПДн в БД (SEC-03/04/05) | внешний ID — только `links.db` (в т. ч. `character_requests` через `link_id`); `gateway.db` — только `player_id`; `links.db` файл `0600`, каталог `0700`, `secure_delete=ON`, `auto_vacuum=INCREMENTAL`, `wal_checkpoint(TRUNCATE)` + `incremental_vacuum` сразу после `/forget`; именованный том; бэкап — по политике DevOps (`infrastructure.md`: шифрование `age`, срок ≤ 30 дней) |
+| ПДн в БД (SEC-03/04/05) | внешний ID — только `links.db` (в т. ч. `character_requests` через `link_id`); `gateway.db` — только `player_id`; `links.db` файл `0600`, каталог `0700`, `secure_delete=ON`, `auto_vacuum=INCREMENTAL`, `incremental_vacuum` + `wal_checkpoint(TRUNCATE)` сразу после `/forget` (незавершённое — `503 forget_incomplete`, §7.5; изм. T-456); именованный том; бэкап — по политике DevOps (`infrastructure.md`: шифрование `age`, срок ≤ 30 дней) |
 | ПДн в логах (SEC-01/02) | `slog` через `shared/logging`; middleware `nolog` для `links/*` и `characters`; в gateway внешние ID не попадают в `slog.Attr` по построению (тип `links.Link` имеет `LogValue()` → `redacted`); бот — `privacy.Handler` отбрасывает атрибуты `chat_id`, `external_id`, `username`, `text`; библиотека Telegram — без `WithDebug` в проде; тест NFR-041 (EPIC-005) читает логи обоих процессов |
 | ПДн в событиях | `player.*` строятся из `Command` (после псевдонимизации), `action.key_hash = SHA-256(action_key)`; текст — только в `player.said.text`; аналитика — только `player_id`, счётчики, ID |
 | Инъекции / разметка (SEC-10) | текст `say` и имя — данные (`payload.text`, `entity.name`); экранирование — на стороне промпта (EPIC-003); gateway ограничивает длину и управляющие символы; бот отправляет без `parse_mode` |
@@ -920,7 +965,7 @@ C4Component
 
 ### 11.4. `/health` и логи
 
-`GET /health` → `{status: ok|degraded|fail, deps{bus: ok|fail, links_store: ok|fail, gateway_store: ok|fail, projection: ok|missing|stale, core_admin: ok|unavailable}, sessions_active, rounds_open, outbox_pending, outbox_oldest_age_s, mode}`; `bus` проверяется публикацией в тестовый топик? — нет: по последней успешной операции `Publish/Subscribe` ≤ 30 с и `Bus.Health()` (C-01); `fail` при недоступности любой БД; `degraded` при `projection=missing/stale` (>60 с без событий при активных сессиях) или `core_admin unavailable`. Логи — `slog` JSON: `service=gateway|telegram-bot, context, request_id, correlation_id, event_id, handled` (NFR-033).
+`GET /health` → `{status: ok|degraded|fail, deps{bus: ok|fail, links_store: ok|fail, gateway_store: ok|fail, projection: ok|missing|stale, core_admin: ok|unavailable}, sessions_active, rounds_open, outbox_pending, outbox_oldest_age_s, mode}`; `bus` проверяется публикацией в тестовый топик? — нет: по последней успешной операции `Publish/Subscribe` ≤ 30 с и `Bus.Health()` (C-01); `fail` при недоступности любой БД; `degraded` при `projection=missing/stale` (>60 с без событий при активных сессиях) или `core_admin unavailable`. Логи — `slog` JSON: `service=gateway|telegram-bot, context, request_id, correlation_id, event_id, handled` (NFR-033). *(изм. T-456, код T-303)* `degraded` (HTTP 200) и при `links_compaction: pending` — пока стоит отметка отложенного сжатия `links.db` (§7.5). В коде T-303 `links_store` и `gateway_store` — `ok`, пока контекст запущен; настоящая проверка БД, не занимающая единственное соединение, и `Stop` без мьютекса `Health` на ожидании — T-309.
 
 ---
 

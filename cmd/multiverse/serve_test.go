@@ -126,7 +126,7 @@ func memoryOptions() serveOptions {
 		bus:      busMemory,
 		modeFrom: "--mode",
 		busFrom:  "--bus",
-		idSource: "sequence",
+		idSource: "uuid",
 	}
 }
 

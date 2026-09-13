@@ -144,6 +144,11 @@ var (
 		"memory service address; empty switches memory off (degradation FR-035)")
 	SnapshotEveryFacts = Declare("MV_SNAPSHOT_EVERY_FACTS", "200",
 		"state writes a snapshot every N facts", IsInt())
+	// StateWorlds is read by internal/state when the context starts: one worker
+	// per world, the single writer of that world (EPIC-002 design.md §4.3, T-055).
+	StateWorlds = Declare("MV_STATE_WORLDS", "dark-forest-world",
+		"comma separated worlds the context state serves, one worker each; "+
+			"proposals of any other world are passed over")
 	GMPath = Declare("MV_GM_PATH", "agent",
 		"game master path; the feature flag of the migration off the legacy orchestrator (S5)",
 		OneOf("agent", "legacy"))
@@ -275,6 +280,15 @@ var (
 		"long polling timeout of getUpdates, in seconds", IsInt())
 	TelegramHealthAddr = Declare("MV_TELEGRAM_HEALTH_ADDR", ":8089",
 		"listen address of /health of the bot")
+	// T-310. The names follow MV_TELEGRAM_* of this block; component §11.3
+	// still says MV_BOT_ACTION_KEY_SALT and MV_BOT_RATE_COMMANDS_PER_MIN, the
+	// final names are architect#3's to confirm there.
+	TelegramActionKeySalt = Declare("MV_TELEGRAM_ACTION_KEY_SALT", "",
+		"HMAC key of action_key (ADR-018), at least 16 characters; empty derives it from the bot token by SHA-256",
+		Secret())
+	TelegramCommandsPerMin = Declare("MV_TELEGRAM_COMMANDS_PER_MIN", "20",
+		"commands one Telegram user may send within any 60 seconds before the bot answers \"too often\" (SEC-11, NFR-049)",
+		IsInt())
 )
 
 func init() {

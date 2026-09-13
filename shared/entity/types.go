@@ -49,17 +49,21 @@ func (e *Entity) IsTerminal() bool {
 }
 
 // StatusTransitionAllowed says whether a status may move from one value to
-// another (data-model.md §3.3, §9.1; C-02 v1.2).
+// another (data-model.md §3.3, §9.1; C-02 v1.2, v1.4).
 //
 // Out of a terminal status: never. dead -> alive is the one the invariant
 // inv-09 names explicitly, and the same answer covers abandoned and
 // ascended_final. Into abandoned: only from alive, and only the gateway may
 // propose it (cause=forget) — which of the two rules is broken decides whether
 // State answers dead_entity or level_violation, and that decision is State's.
+//
+// A living status set to the value it already has is allowed: it is a turn
+// with nothing changed, not a refusal (C-02 v1.4). A repeated /forget that
+// arrives before the fact of the first one, or a package proposed again after
+// a version conflict, must not become an error for the player. The same value
+// on a terminal status is still refused, by the rule above: a corpse does not
+// act, even to stay a corpse.
 func StatusTransitionAllowed(from, to string) bool {
-	if from == to {
-		return false
-	}
 	if IsTerminalStatus(from) {
 		return false
 	}

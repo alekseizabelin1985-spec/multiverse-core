@@ -1,7 +1,6 @@
 package mechanics
 
 import (
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +64,7 @@ func TestActorFromEntity(t *testing.T) {
 		t.Fatalf("player: %v", err)
 	}
 	want := Actor{
-		ID: "player-A", Type: entity.TypePlayer,
+		ID: "player-A", Type: entity.TypePlayer, Version: 1,
 		HP: 7, HPMax: 10, Atk: 2, Def: 12,
 		Dmg: "d6", Flee: "2", Status: entity.StatusAlive,
 	}
@@ -90,6 +89,17 @@ func TestActorFromEntity(t *testing.T) {
 	}
 	if npc.LastDamager != "player-A" {
 		t.Errorf("last damager %q, want player-A", npc.LastDamager)
+	}
+	if npc.Kind != "wolf" {
+		t.Errorf("kind %q, want wolf: the loot table is looked up by it", npc.Kind)
+	}
+	if npc.Version != 1 {
+		t.Errorf("version %d, the entity is at 1: it is what ChangesFor pins", npc.Version)
+	}
+	moved := wolfEntity()
+	moved.Version = 12
+	if a, err := ActorFromEntity(moved, nil); err != nil || a.Version != 12 {
+		t.Errorf("a wolf at version 12 reads back as (%+v, %v): the version is the entity's", a, err)
 	}
 	if npc.Participation != "" {
 		t.Errorf("an NPC carries a participation: %q", npc.Participation)
@@ -148,6 +158,14 @@ func TestActorFromEntityRejects(t *testing.T) {
 		"hp is not a number": {
 			playerEntity(map[string]any{entity.AttrHP: "many"}), entity.AttrHP,
 		},
+		// Damage is dice and only dice (T-053, the backlog item of T-050): a
+		// flat number is named as what it is, not reported as missing.
+		"dmg is a flat number": {
+			playerEntity(map[string]any{entity.AttrDmg: 3}), "not a dice expression",
+		},
+		"dmg is not dice": {
+			playerEntity(map[string]any{entity.AttrDmg: "a lot"}), entity.AttrDmg,
+		},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -157,6 +175,20 @@ func TestActorFromEntityRejects(t *testing.T) {
 				t.Errorf("error %v does not name %s", err, c.want)
 			}
 		})
+	}
+
+	// Every NPC has a kind (data-model.md §3.4, C-03 v1.3): without one it
+	// would fall without the trophy of its kind and nothing would notice.
+	for name, kind := range map[string]any{"no kind": nil, "an empty kind": ""} {
+		wolf := wolfEntity()
+		if kind == nil {
+			delete(wolf.Attributes, entity.AttrKind)
+		} else {
+			wolf.Attributes[entity.AttrKind] = kind
+		}
+		if _, err := ActorFromEntity(wolf, nil); err == nil || !strings.Contains(err.Error(), entity.AttrKind) {
+			t.Errorf("an npc with %s answered %v, want a refusal naming %s", name, err, entity.AttrKind)
+		}
 	}
 
 	if _, err := ActorFromEntity(nil, nil); err == nil {
@@ -199,37 +231,5 @@ func TestActorFromEntityTerminalStatus(t *testing.T) {
 		if !r.Excluded(*a) {
 			t.Errorf("%s is not excluded from a round", status)
 		}
-	}
-}
-
-// TestStubs pins what the foundation deliberately does not do yet, so that the
-// day EPIC-002 implements it the test says so (tasks.md T-015 "not included").
-func TestStubs(t *testing.T) {
-	r := load(t)
-	player, _ := r.Stats("player")
-	wolf, _ := r.Stats("wolf")
-	player.ID, wolf.ID = "player-A", "wolf-alpha"
-
-	actors := map[string]*Actor{"player-A": &player, "wolf-alpha": &wolf}
-	_, rolls, err := r.Resolve("01JCATTACK", 0, Action{Kind: ActionAttack, Actor: "player-A", Target: "wolf-alpha"}, actors)
-	if !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("Resolve answered %v, want ErrNotImplemented", err)
-	}
-	if rolls != nil {
-		t.Errorf("Resolve rolled %v while not implemented", rolls)
-	}
-
-	if _, err := ChangesFor(Action{Kind: ActionAttack}, Outcome{}, &player, &wolf, "01JCFACT"); !errors.Is(err, ErrNotImplemented) {
-		t.Errorf("ChangesFor answered %v, want ErrNotImplemented", err)
-	}
-
-	if got := r.NPCTarget(&wolf, []*Actor{&player}); got != nil {
-		t.Errorf("NPCTarget picked %v: the choice belongs to EPIC-002 T-053", got)
-	}
-
-	// The stubs do not touch the actors they are given: the promise the
-	// implementation has to keep as well (§5.1).
-	if player.HP != 10 || wolf.HP != 10 {
-		t.Errorf("a stub changed an actor: player %d, wolf %d", player.HP, wolf.HP)
 	}
 }

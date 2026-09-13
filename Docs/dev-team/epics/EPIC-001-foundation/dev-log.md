@@ -8767,3 +8767,78 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
   - `swarm-llm-laws.md`, C-08, `schemas/**`, код не менялись.
   - `gitleaks dir . --redact -c .gitleaks.toml` по копии 12 изменённых и новых файлов с `.gitleaks.toml` и `.gitleaksignore` ветки (scratch `t457i3-*`) — `no leaks found`. Копия удалена по точному пути.
 - Не коммитил.
+
+<!-- dev-log T-456 -->
+## system-architect#1 · T-456 · C-08 v1.5 (`forget_incomplete`), КД шлюза по коду T-303, накопленные правки контрактов · 2026-09-13
+
+Ветка `task/T-456-c08-forget-incomplete`, Opus. Решения, отвергнутые варианты и строки DoD — карточка `tasks/T-456.md`.
+- **Что сделано.**
+  - `contracts.md` v0.14 со сводкой. C-08 v1.5: `503 forget_incomplete` по коду T-303 и условиям решения по T-303, порядок `/forget`, отдельный ответ `ForgetIncomplete` в OpenAPI — строкой DoD. C-02 v1.6: текст по итоговой карточке T-448, пометки действия; v1.7 — мир в конверте предложения. C-01 v1.10: `eventbus.Permanent`, `Policy.World`. C-07 v1.6: `llm.output.called_at`. C-15 v1.5: класс `invalid`, печать адреса в отказах. Сводка v0.12 (R2-N-1, R2-N-2), §16 п. 8 (скобка).
+  - КД шлюза §3, §4.1, §5.1 (п. 8 — дедлайны), §5.2, §5.6, §6, §7.5, §10.5, §11.1, §11.4; ADR-019 доп. 2; ADR-005 доп. 2 п. 3; `api-contracts.md` §1.2, §1.6; КД State §3.3, §5.1, §9; `data-model.md` §7.2.
+- **Решения по ходу.**
+  - Номер C-08 — v1.5 (v1.4 — T-444). Пометки C-02 v1.6 не сняты: T-448 слита только в EPIC-002, в develop её нет. Формулировка — «действует в EPIC-002 с T-448, в develop — с контрольного слияния EPIC-002».
+  - Клиент `forget_incomplete` сам не повторяет: попытка под читателем занимает единственное соединение `links.db` до 5 с.
+  - Порядок каскада — по коду T-303, хуки до `DELETE`; прежний пункт DoD T-355 заменён строкой.
+  - `called_at` — да: в replay записи не издаются, догон читает поле из записи.
+  - Вопросы T-055 решены в контракте: мир обязателен (политика у издателя, пропуск с `Warn` у State), окончательная ошибка — `Permanent`. Код — новая задача EPIC-001 и T-056.
+  - «§9» поручения для здоровья шлюза — это §11.4 КД (§9 — координатор раундов).
+- **Проверки.**
+  - Правка — скриптами Python в scratch: точная замена с проверкой числа вхождений, CRLF и NUL до записи и после; `sed -i` не использовался. Тексты C-15 и ADR-005 совпадают построчно.
+  - `git status`: изменены только файлы из карточки; код, схемы, `api/gateway.openapi.yaml`, `swarm-llm-laws.md` не менялись, строка 521 с `gitleaks:allow` на месте.
+  - `gitleaks dir . --redact -c .gitleaks.toml` по копии 10 изменённых и новых файлов с `.gitleaks.toml` и `.gitleaksignore` ветки — `no leaks found`. Копия удалена по точному пути.
+- Не коммитил.
+
+<!-- dev-log T-456 итерация 2 -->
+## system-architect#1 · T-456 · итерация 2 по ревью #1 и дополнениям оркестратора · 2026-09-13
+
+Ветка `task/T-456-c08-forget-incomplete`, Opus. Таблица закрытия — карточка `tasks/T-456.md`, «Итерация 2».
+- **Что сделано.**
+  - Ma-1: C-01 v1.8 «Уровень маршрута» — запись 10 с / `wait_ms + 5 с` / 35 с, чтение `0` или не короче записи; старые значения остались только в пометках «прежде».
+  - Ma-2: `Permanent` — только дефект события, который повтор не исправит ни в каком процессе; при отменённом контексте не паркуется; остановленный мир State (`publish_failed` и паника) — обычная ошибка. C-01 v1.10, КД State §9, строки T-460 и T-056.
+  - Mi-1…Mi-3, N-1…N-6: `503 bus_unavailable` при ошибке хука — с T-355 по сентинелу `links.ErrBusUnavailable`; прокси — чтение 35 с; тексты кода и OpenAPI в строках T-311 и T-305; бэклог ревью п. 1 — строка T-311 (`Resolve` после забвения пишет внешний ID снова).
+  - Ревью #2 T-459: номера задач `labels_hash` в C-07 (T-211, T-212, T-213), `ErrLabelTable` подтверждён; нулевое `called_at` — ошибка `Recorder`, у читателя — `ErrBudgetKey`.
+  - T-451: C-15 v1.5 и ADR-005 — не-ASCII и `%` в authority — `invalid`, две точки на конце — `cloud`, при `@` хост в отказе не называется.
+- **Решения по ходу.**
+  - Мир, остановленный паникой, — не `Permanent`: после рестарта предложение решается заново, окончательная ошибка в `dead_letters` читалась бы как дефект события.
+  - Ответ `ForgetIncomplete` в OpenAPI — в T-305: она уже правит файл, T-356 — I2.
+  - Строки таблицы `local-endpoints.tsv` не внесены: таблица вне документов задачи. Все 15 строк проверены `llm_endpoint_classify` (bash) и `Get-LlmEndpointClass` (pwsh) — ответы совпали; список — строка DoD T-451.
+- **Проверки.**
+  - Правка — скриптами Python в scratch, точные замены с проверкой числа вхождений, CRLF и NUL до и после; тексты C-15 и ADR-005 совпадают построчно.
+  - `swarm-llm-laws.md`, код, схемы, `testdata/**`, `api/gateway.openapi.yaml` не менялись.
+  - `gitleaks dir . --redact -c .gitleaks.toml` по копии 11 файлов рабочей копии (10 файлов задачи и `review.md` с записью ревьюера) с конфигурацией ветки — `no leaks found`; копия удалена по точному пути.
+- Не коммитил.
+
+<!-- dev-log T-461 -->
+## developer#1 · T-461 · правило depguard `cmd-telegram-bot` в `.golangci.yml` · 2026-09-13
+
+Ветка `task/T-461-depguard-telegram-bot`, Opus. Таблица прогонов — карточка `tasks/T-461.md`.
+- **Что сделано.**
+  - `.golangci.yml`: правило `cmd-telegram-bot` (перед `cmd-others`) и исключение `!**/cmd/telegram-bot/**` в `internal-unlisted` — текстом из отметки владельца T-310. Оба блока сверены скриптом с карточкой T-310: входят по одному разу, побайтно; файл остался в LF.
+- **Решения по ходу.**
+  - Копия для проверки — кончик `epic/EPIC-004-gateway-bot` `c92eb22`, а не `abfc04b` из карточки T-310: после отметки в эпик слит develop. `.golangci.yml` там — тот же блоб `39c1839`.
+  - Добавлен контроль K1 (правило без исключения в `internal-unlisted`, импорт `client` → находка `internal-unlisted`): он показывает, что зелёный A1 держится на исключении.
+- **Проверки.**
+  - `golangci-lint config verify` — ok; `golangci-lint run ./...` в рабочей папке — 0 issues.
+  - Копия EPIC-004 с новым конфигом: `./...` и `./cmd/telegram-bot/... ./internal/...` — 0 issues; мутант `shared/eventbus` и мутант `internal/gateway/links` — по одной находке `cmd-telegram-bot`; контроль `internal/gateway/client` — 0.
+  - После мутантов `gate.go` и `.golangci.yml` копии возвращены и сверены `cmp`, `git status` копии пуст; `git worktree remove` по точному пути, `git worktree prune`.
+- Не коммитил.
+
+<!-- dev-log T-460 -->
+## developer#2 · T-460 · `eventbus.Permanent` и `Policy.World` по C-01 v1.10 · 2026-09-13
+
+Ветка `task/T-460-permanent-policy-world` (от эпика `a0d45d2`), TEAM-1, Opus, `contract-change`. DoD — из карточки `tasks/T-456.md` (блок EPIC-001, итерация 2); подробности — карточка `tasks/T-460.md`, раздел «Выполнение».
+- **Что сделано.**
+  - `delivery.go`: `ErrPermanent`, `Permanent(err)` (`nil` → `nil`; `Unwrap` — `ErrPermanent` и причина; текст — текст причины). В `Deliver` после проверки `ctx.Err()` — `errors.Is(lastErr, ErrPermanent)` → письмо с `attempts` = номер вызова, затем `Error` с `handled=true` без `panic`/`stack`. Под отменой — `ctx.Err()`, письма нет. Паника не тронута.
+  - `registry.go`: `WorldRule` (`WorldOptional` = 0, `WorldRequired`), `Policy.World`, ветка в `Check` (`World == nil`, пустой `World.Entity.ID` → `ErrPolicyViolation`). `Route` и проверка при чтении получают правило через `Check`.
+  - `shared/testkit/contract`: кейсы `APermanentErrorIsParkedAtOnceWithoutAPause` и `APermanentErrorUnderCancellationIsDeliveredAgain`, поле `Target.Stalled` у обеих целей. README пакета — «Мир в конверте по политике типа», «Окончательная ошибка».
+- **Решения по ходу.**
+  - «Без пауз» проверяется на отдельной шине той же реализации с паузами `StalledBackoff` на ручных таймерах, которые никто не двигает: цели набора собраны с нулевыми паузами ради остальных кейсов, и там отличить «сразу» от «после паузы» нельзя. Чтобы кейс не стал пустым, в конце он показывает, что обычная ошибка на этой шине за 300 мс не повторяется.
+  - Текст письма = текст причины достигается `Error()` обёртки, а не распаковкой в `Deliver`: повторная обёртка `fmt.Errorf("…: %w", Permanent(c))` даёт в письме полный текст цепочки, как у обычной ошибки.
+  - Строка лога пишется только после успешной записи письма (как «parked» у T-441); неудачная запись — прежний «not parked», `handled=false`.
+  - Кейс окончательной ошибки проверяет и журнал (`ReadRange`), как кейс паники.
+  - `All()` реестра сверен дампом в копиях `a0d45d2` и ветки — 65 строк, совпали; ненулевого `World` нет.
+- **Тесты.** `permanent_test.go` (6), `policy_world_test.go` (3), `membus/policy_world_test.go` (2), два contract-кейса.
+- **Мутанты** (копии `t460-<имя>` в scratch, без `-overlay`, удалены по точным путям): M0 контрольный — зелёный; M1 «`Permanent` как обычная ошибка», M2 «парковка под отменой», M3 «пауза перед парковкой», M4 «`WorldRequired` не срабатывает», M5 «пустой id проходит», M6 «застывшая шина без пауз» — красные (unit и contract на membus; kafka под мутантами не гонялся — один интеграционный прогон).
+- **Прогоны.** `go build ./... && go vet ./...` — 0; `go vet -tags integration ./shared/...` — 0; `go test -short -count=1 ./...` — 27 пакетов ok; `golangci-lint run ./...` и `--build-tags integration` по `eventbus`/`contract` — 0 issues; `mvctl contracts check` — ok; `make test` — 0 (без `-race`, нет cgo). `go test -tags integration -count=1 -run TestBusContractOnRedpanda ./shared/testkit/contract/` — ok, оба новых кейса на Redpanda пройдены; контейнеров testcontainers до и после — нет.
+- **Открыто для оркестратора.** Тексты `ErrPermanent` и строки лога в C-01 не заданы — выбраны исполнителем. Обязательное поле `Target.Stalled` меняет публичный тип `shared/testkit/contract`.
+- `.env` не открывался, стенд `:8888` не трогался. Не коммитил, `git add` не делал.

@@ -18,8 +18,16 @@
         "llm_calls": { "type": "integer", "minimum": 0 },
         "dice_rolled_new": { "type": "integer", "minimum": 0 },
         "duration_ms": { "type": "integer", "minimum": 0 },
-        "state_hash_before": { "type": "string" },
-        "state_hash_after": { "type": "string", "minLength": 1 },
+        "state_hash_before": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "state_hash of the snapshot the catch-up started from; absent without one. Same form as snapshot.created.snapshot.state_hash."
+        },
+        "state_hash_after": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "entity.StateHash of the world after the catch-up: sha256: and 64 lowercase hex digits, compared as a string with state_hash_before (metrics.md recovery_state_identical)."
+        },
         "identical": { "type": "boolean" },
         "events_hash_match": { "type": "boolean", "description": "mode=test only (EPIC-005)." },
         "incomplete_record": { "type": "boolean" }

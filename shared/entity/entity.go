@@ -232,7 +232,7 @@ func cloneChanges(in []Change) []Change {
 	}
 	out := make([]Change, len(in))
 	for i, c := range in {
-		out[i] = Change{Path: c.Path, Old: snapshot(c.Old), New: snapshot(c.New)}
+		out[i] = Change{Path: c.Path, Old: snapshot(c.Old), New: snapshot(c.New), HasOld: c.HasOld, HasNew: c.HasNew}
 	}
 	return out
 }

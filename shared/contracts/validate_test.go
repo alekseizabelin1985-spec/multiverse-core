@@ -174,6 +174,7 @@ func TestPayloadExamples(t *testing.T) {
 			"idle": [],
 			"closed_at": "2026-09-09T12:00:30Z"}`},
 		"entity.create.proposed": {eventbus.ActorHuman, `{
+			"proposal_id": "p-create-1",
 			"entity": {"entity": {"id": "player-A", "type": "player"}, "name": "Vasya"},
 			"attributes": {"hp": 10, "hp_max": 10, "status": "alive"},
 			"cause": "create"}`},
@@ -190,7 +191,8 @@ func TestPayloadExamples(t *testing.T) {
 		"entity.created": {eventbus.ActorSystem, `{
 			"entity": {"entity": {"id": "player-A", "type": "player"}, "name": "Vasya"},
 			"version": 1,
-			"attributes": {"hp": 10}}`},
+			"attributes": {"hp": 10},
+			"proposal_id": "p-create-1"}`},
 		"entity.updated": {eventbus.ActorSystem, `{
 			"entity": {"entity": {"id": "player-A", "type": "player"}},
 			"version": 24,
@@ -211,12 +213,13 @@ func TestPayloadExamples(t *testing.T) {
 			"component": "state",
 			"snapshot": {"id": "snap-1", "seq": 3, "taken_at": "2026-09-09T12:00:00Z",
 				"cursor": {"system_events": 1024},
-				"laws_version": "v1", "state_hash": "abcdef", "size_bytes": 4096,
+				"laws_version": "v1", "state_hash": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e", "size_bytes": 4096,
 				"key": "snapshots-dark-forest-world/state/20260909T120000Z-3.json"}}`},
 		"analytics.replay.completed": {eventbus.ActorSystem, `{
 			"mode": "recovery",
 			"replay": {"run_id": "run-1", "snapshot_id": null, "events_replayed": 0, "llm_calls": 0,
-				"dice_rolled_new": 0, "duration_ms": 12, "state_hash_after": "abcdef",
+				"dice_rolled_new": 0, "duration_ms": 12,
+				"state_hash_after": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e",
 				"incomplete_record": false}}`},
 	}
 
@@ -283,7 +286,8 @@ func TestPayloadRejects(t *testing.T) {
 		"unknown snapshot component": {"snapshot.created", `{
 			"component": "core",
 			"snapshot": {"id": "s", "seq": 0, "taken_at": "2026-09-09T12:00:00Z", "cursor": {},
-				"laws_version": "v1", "state_hash": "h", "size_bytes": 1, "key": "k"}}`},
+				"laws_version": "v1", "size_bytes": 1, "key": "k",
+				"state_hash": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e"}}`},
 		"unknown dice purpose": {"dice.rolled", `{
 			"roll": {"index": 0, "formula": "1d20", "seed": "1", "result": 3, "natural": 3},
 			"purpose": "luck",
@@ -291,7 +295,8 @@ func TestPayloadRejects(t *testing.T) {
 		"replay without incomplete_record": {"analytics.replay.completed", `{
 			"mode": "recovery",
 			"replay": {"run_id": "r", "events_replayed": 0, "llm_calls": 0, "dice_rolled_new": 0,
-				"duration_ms": 1, "state_hash_after": "h"}}`},
+				"duration_ms": 1,
+				"state_hash_after": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e"}}`},
 		"created with version two": {"entity.created", `{
 			"entity": {"entity": {"id": "player-A", "type": "player"}},
 			"version": 2, "attributes": {}}`},

@@ -219,7 +219,8 @@ func TestCombatStatsComeFromTheRules(t *testing.T) {
 			if !ok {
 				t.Fatalf("the rules describe no %q", kind)
 			}
-			want.ID = e.ID
+			// The identity and the version are the entity's, not the rules'.
+			want.ID, want.Version = e.ID, e.Version
 
 			have, err := mechanics.ActorFromEntity(e, nil)
 			if err != nil {

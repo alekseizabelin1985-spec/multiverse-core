@@ -18,6 +18,7 @@ import (
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/recording"
 )
 
 // Mode selects how the process consumes time and events.
@@ -79,6 +80,13 @@ type Deps struct {
 	// Mux is the HTTP mux of the process; a context implementing Routes gets
 	// it before Start.
 	Mux *http.ServeMux
+	// Recording is the recorded session of --mode=replay --recording
+	// (C-01 v1.9, "Запись сессии"). The process reads it once, before the bus
+	// is opened, and hands every context the same one; nil means there is no
+	// recording — live mode, or replay without --recording. The payload maps
+	// of its events are shared by every reader, so a context does not change
+	// them: it copies an event's payload before it writes to it.
+	Recording *recording.Recording
 }
 
 // Context is one bounded context of the platform, compiled into the process
