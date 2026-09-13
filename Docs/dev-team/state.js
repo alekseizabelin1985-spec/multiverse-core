@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:28:11+03:00",
+  "updatedAt": "2026-09-13T23:34:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4596,23 +4596,23 @@ window.DEVTEAM_STATE =
         {
           "id": "T-306",
           "title": "characters, worlds/players, session/turns, C-10",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T23:34:13+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
-          "spentMinutes": 0,
+          "spentMinutes": 106,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-306.md"
         },
         {
           "id": "T-307",
           "title": "outbox, long-poll доставок, consumer боя и нарратива",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T23:34:13+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10436,7 +10436,7 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Отметка владельца MV_GATEWAY_*",
       "startedAt": "2026-09-13T23:24:00+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:34:13+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -10446,6 +10446,16 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "Ревью #1 deliver и main",
       "startedAt": "2026-09-13T23:28:11+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-307",
+      "action": "outbox, deliveries, consumer",
+      "startedAt": "2026-09-13T23:34:13+03:00",
       "finishedAt": null
     }
   ],
@@ -14409,6 +14419,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-312 выполнена TEAM-3/developer#2: internal/deliver (long-poll limit 100/wait 25s → send → один ack; без ack при Unavailable/отмене/401, повтор ack перед опросом, подтверждение при остановке до 5 с, backoff 1–30 с), main/serve/health (подкоманда health, счётчики отказов, логгеры поверх privacy, пят"
+    },
+    {
+      "at": "2026-09-13T23:34:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-306 · отметка tech-lead#1: есть (4 переменные с IsDuration, умолчания совпадают везде, проверка WAIT < DEADLINE; фикстура переносится в testdata/analytics — DoD T-307). Коммит 4a7890d, ветка запушена; конфликты tasks.md (шапка, §8 З-10/З-11, §9 0.1.5–0.1.7) разрешены sync; слита в epic/EPIC-004-ga"
+    },
+    {
+      "at": "2026-09-13T23:34:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-307 начата (TEAM-3/developer#1): outbox (store/lease/ack/render/sweeper), long-poll deliveries, consumer combat.decided/narrative.output; строки DoD приёмок T-305/T-306 (rejected по движению и отдыху, OnDelivered один раз, recipients=0, аналитика вне долгой транзакции, перенос фикстуры, README шлю"
     }
   ],
   "blockers": [],
