@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:24:00+03:00",
+  "updatedAt": "2026-09-13T23:28:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4682,7 +4682,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-312",
           "title": "Бот: deliver, main, подкоманда health",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T22:50:37+03:00",
           "finishedAt": null,
@@ -10346,7 +10346,7 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "deliver и main бота",
       "startedAt": "2026-09-13T22:50:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:28:11+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10436,6 +10436,16 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Отметка владельца MV_GATEWAY_*",
       "startedAt": "2026-09-13T23:24:00+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-312",
+      "action": "Ревью #1 deliver и main",
+      "startedAt": "2026-09-13T23:28:11+03:00",
       "finishedAt": null
     }
   ],
@@ -14393,6 +14403,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-306 принята TEAM-3/tech-lead#3: Mi-1 уборка резервов seq под блокировкой трекера (M2/M2b), Mi-3 sweeper персонажей снимает связку под блокировкой и возвращает её, если факт успел прийти (M6/M6b/M6c), Mi-4 ValidCharacterName отвергает пробелы по краям, обрезает вызывающий (по api-contracts §1.3), M"
+    },
+    {
+      "at": "2026-09-13T23:28:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-312 выполнена TEAM-3/developer#2: internal/deliver (long-poll limit 100/wait 25s → send → один ack; без ack при Unavailable/отмене/401, повтор ack перед опросом, подтверждение при остановке до 5 с, backoff 1–30 с), main/serve/health (подкоманда health, счётчики отказов, логгеры поверх privacy, пят"
     }
   ],
   "blockers": [],
