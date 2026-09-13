@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T01:18:17+03:00",
+  "updatedAt": "2026-09-14T01:39:16+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2656,11 +2656,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-469",
           "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -10616,6 +10616,16 @@ window.DEVTEAM_STATE =
       "task": "T-469",
       "action": "Переменные шлюза в compose",
       "startedAt": "2026-09-14T01:18:17+03:00",
+      "finishedAt": "2026-09-14T01:39:16+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-469",
+      "action": "Ревью #1: переменные в compose, правило 9",
+      "startedAt": "2026-09-14T01:39:16+03:00",
       "finishedAt": null
     }
   ],
@@ -14699,6 +14709,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Запущены: T-308 (FakeGateway и HTTP-обвязка, TEAM-3/developer#1), T-309 (снапшот шлюза, live/replay, полный /health, TEAM-3/developer#3), T-316 (интеграция consumer на Redpanda, TEAM-3/developer#2, строго по одному прогону testcontainers), T-471 (законы мира в процессе, rest и строка system, TEAM-1/"
+    },
+    {
+      "at": "2026-09-14T01:39:16+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-469 выполнена devops-engineer#1: в compose шлюзу переданы MV_GM_PATH и четыре MV_GATEWAY_* из T-305, сервису core — MV_ANTHROPIC_API_KEY и MV_OLLAMA_URL (${VAR:-}); MV_CORE_ADMIN_CLIENTS перенесён в x-platform-env. Правило 9 compose-lint: переменная доходит до сервиса, где запущен её читатель (таб"
     }
   ],
   "blockers": [],
