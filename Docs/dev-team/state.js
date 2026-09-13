@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:34:53+03:00",
+  "updatedAt": "2026-09-13T17:36:12+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3191,7 +3191,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-205",
           "title": "A7 · internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#3",
           "startedAt": "2026-09-13T17:08:19+03:00",
           "finishedAt": null,
@@ -9185,7 +9185,7 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "internal/laws и mvctl laws",
       "startedAt": "2026-09-13T17:08:19+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:36:12+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -9275,6 +9275,16 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Документы EPIC-003 под C-07 v1.5",
       "startedAt": "2026-09-13T17:34:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-205",
+      "action": "Ревью #1: законы мира",
+      "startedAt": "2026-09-13T17:36:12+03:00",
       "finishedAt": null
     }
   ],
@@ -12416,6 +12426,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Синхронизация develop (E) → EPIC-003 (49d1c6e), EPIC-004 (fd2af99) без конфликтов. Начаты: T-451 (TEAM-2/developer#1, EPIC-003: Go-правило «локальный адрес» по таблице T-450), T-456 (system-architect#1, EPIC-001: C-08 forget_incomplete, КД шлюза по коду T-303, дедлайн long-poll, замечания T-449/T-45"
+    },
+    {
+      "at": "2026-09-13T17:36:12+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-205 выполнена TEAM-2/developer#3: laws/dark-forest-world.v1.yaml (inv-01…inv-11, law-1/2), internal/laws (строгий Parse, FileSource/ObjectSource, strain, Keeper: Current/Get/Health/Watch/Handle/Subscribe/Bump — world.laws.changed через NewRoot и entity.update.proposed через Derive, proposal_id law"
     }
   ],
   "blockers": [],
