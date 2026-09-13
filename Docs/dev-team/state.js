@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:27:44+03:00",
+  "updatedAt": "2026-09-13T22:28:17+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4700,7 +4700,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-317",
           "title": "README gateway и бота, runbook §6, .env.example",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
@@ -10204,7 +10204,7 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Итерация 2 документации",
       "startedAt": "2026-09-13T22:16:55+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:28:17+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10234,6 +10234,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Итерация 3: скаляры после ApplyOps, строгий страж",
       "startedAt": "2026-09-13T22:27:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-317",
+      "action": "Ревью #2 документации",
+      "startedAt": "2026-09-13T22:28:17+03:00",
       "finishedAt": null
     }
   ],
@@ -14065,6 +14075,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-056 · ревью #2 (TEAM-1/code-reviewer#3): вернуть — 0/1/1/1. Все замечания ревью #1 закрыты; слияние fake_encounter с EPIC-003 — 0 конфликтов, слитое дерево зелёное. Ma-3: канонический дочерний путь под скаляром (status.x, hp.x) превращает скаляр в объект и обходит проверку статуса и потолок hp_max"
+    },
+    {
+      "at": "2026-09-13T22:28:17+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-317 · итерация 2 (tech-writer#1): Ma-1 /health по факту кода (проверка БД — T-309), Ma-2 проверка webhook новым токеном через read -rs / Read-Host -AsSecureString и curl -K - без токена в URL и argv, запрет выкладывать docker compose config/inspect; Mi-1…Mi-11 и Nit сверены с кодом; сухой прогон r"
     }
   ],
   "blockers": [],
