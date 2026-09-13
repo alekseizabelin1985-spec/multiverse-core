@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:20:10+03:00",
+  "updatedAt": "2026-09-13T18:25:18+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4434,14 +4434,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T16:39:05+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T18:25:18+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
-          "spentMinutes": 0,
+          "spentMinutes": 102,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md",
           "branch": "task/T-304-readmodel-consumer",
@@ -4450,16 +4450,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-305",
           "title": "actions: валидация, идемпотентность, лимит, InputFilter",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T18:25:18+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-305.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-305.md",
+          "branch": "task/T-305-actions",
+          "worktree": ".worktrees/T-305"
         },
         {
           "id": "T-306",
@@ -9378,7 +9380,7 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "Приёмка T-304 readmodel и consumer",
       "startedAt": "2026-09-13T18:06:20+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:25:18+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -9438,6 +9440,16 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Ревью #2: распределение T-211/T-212/T-213",
       "startedAt": "2026-09-13T18:20:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "actions: валидация, идемпотентность, публикация player.*",
+      "startedAt": "2026-09-13T18:25:18+03:00",
       "finishedAt": null
     }
   ],
@@ -12687,6 +12699,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-459 · итерация 2 (architect#2): Ma-1 — T-211 делает llm.LabelTable/LabelsHash (ErrLabelTable для ключа вне eK/bK), схему, golden и запись из явного входа Recorder; T-213 заполняет вход из Call.Guard, свойство-тест и сверку ярлыков replay (зависимость T-212→T-213 дала бы цикл); T-212 — только promp"
+    },
+    {
+      "at": "2026-09-13T18:25:18+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-304 принята TEAM-3/tech-lead#3: закрытие Mi-1…Mi-7/N-1…N-4 проверено, R1–R4 и свои мутанты красные; при приёмке добавлен тест курсора проекции за курсором эффектов (A2); решения: Mi-2 документом (переход уникален в процессе, DoD T-307/T-351), Mi-6 degraded (healthcheck compose считает не-ok провал"
+    },
+    {
+      "at": "2026-09-13T18:25:18+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Начата T-305 (TEAM-3/developer#1): actions — валидация, идемпотентность, лимит, InputFilter, публикация player.*; по приёмке T-457 в T-305 входит операция POST /v1/admin/replay/clock под тегом process в OpenAPI."
     }
   ],
   "blockers": [],
