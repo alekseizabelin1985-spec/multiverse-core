@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:51:10+03:00",
+  "updatedAt": "2026-09-13T18:51:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -9540,7 +9540,7 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Вычитка текста уведомления FR-009",
       "startedAt": "2026-09-13T18:43:23+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:51:52+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9580,6 +9580,16 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Приёмка T-456 contracts v0.14",
       "startedAt": "2026-09-13T18:51:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "security-engineer#1",
+      "role": "security-engineer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-318",
+      "action": "Ревью SEC-26 текста уведомления FR-009",
+      "startedAt": "2026-09-13T18:51:52+03:00",
       "finishedAt": null
     }
   ],
@@ -12949,6 +12959,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-456 · ревью #2 (TEAM-1/code-reviewer#1): принять — 0/0/2/5. Версии и история v0.14 согласованы; Permanent в C-01 v1.10, КД State §9, T-460 и T-056 без противоречий; довод «мир после паники — не Permanent» принят; C-15 = ADR-005 побайтно; строки EPIC-004 не спорят. Mi-1 правило печати значения нару"
+    },
+    {
+      "at": "2026-09-13T18:51:52+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-318 · вычитка tech-writer#1: одна содержательная правка («связка» с двумя значениями), длина NoticeText 1913 знаков, 8 подстрок grep-теста и запрет разметки перепроверены; неразрывные пробелы не ставились (сломали бы grep-подстроки). Ревью безопасности (SEC-26) — security-engineer#1."
     }
   ],
   "blockers": [],
