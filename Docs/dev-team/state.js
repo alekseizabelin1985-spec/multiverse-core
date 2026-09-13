@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T13:53:41+03:00",
+  "updatedAt": "2026-09-13T14:00:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2598,15 +2598,40 @@ window.DEVTEAM_STATE =
         {
           "id": "T-053",
           "title": "mechanics — Resolve, NPCTarget (*Actor, error), ChangesFor, dice.rolled",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/developer#1",
           "startedAt": "2026-09-13T12:32:53+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:55:20+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.2",
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 82,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:32",
+              "to": "13.09 13:07",
+              "duration": "34m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:07",
+              "to": "13.09 13:30",
+              "duration": "23m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:30",
+              "to": "13.09 13:45",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:45",
+              "to": "13.09 13:55",
+              "duration": "9m"
+            }
+          ],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-053.md",
           "branch": "task/T-053-resolve-npctarget-changes",
           "worktree": ".worktrees/T-053"
@@ -8161,7 +8186,7 @@ window.DEVTEAM_STATE =
       "task": "T-053",
       "action": "приёмка T-053 (TEAM-1)",
       "startedAt": "2026-09-13T13:45:56+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:55:20+03:00"
     },
     {
       "instance": "developer#2",
@@ -8191,7 +8216,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "T-449 документы по решениям: C-03 v1.3, T-050, локальный адрес, llm, limit_money",
       "startedAt": "2026-09-13T13:49:33+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:00:01+03:00"
     },
     {
       "instance": "developer#2",
@@ -8211,6 +8236,16 @@ window.DEVTEAM_STATE =
       "task": "T-452",
       "action": "приёмка T-452 (TEAM-2)",
       "startedAt": "2026-09-13T13:53:41+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "ревью #1 T-449 (TEAM-1)",
+      "startedAt": "2026-09-13T14:00:01+03:00",
       "finishedAt": null
     }
   ],
