@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:02:07+03:00",
+  "updatedAt": "2026-09-13T16:03:58+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3130,16 +3130,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-202",
           "title": "A2 · Реестр уровней levels.go и валидатор блупринтов",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#1",
+          "startedAt": "2026-09-13T16:03:58+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md",
-          "subwave": "B"
+          "subwave": "B",
+          "branch": "task/T-202-levels-validator",
+          "worktree": ".worktrees/T-202"
         },
         {
           "id": "T-203",
@@ -4172,13 +4174,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-439",
           "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T14:03:36+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:03:58+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 115,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md",
           "subwave": "A",
@@ -8869,7 +8871,7 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Приёмка T-439 ADR-029 и потолок нарратива",
       "startedAt": "2026-09-13T15:50:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:03:58+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8929,6 +8931,16 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "Отметка владельца EPIC-001: Dockerfile, cmd, runbook",
       "startedAt": "2026-09-13T16:02:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "levels.go и валидатор блупринтов",
+      "startedAt": "2026-09-13T16:03:58+03:00",
       "finishedAt": null
     }
   ],
@@ -11812,6 +11824,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-303 · ревью #2 (TEAM-3/code-reviewer#1): принять — 0/0/1/3. M-1 (чтением: /data nonroot 0700, наследование пустым томом; runbook), все условия архитектора по 503, Mi-1…Mi-6, K1–K4 закрыты. R2-Mi-1 повтор каскада по link_id без теста (мутант R1 зелёный); R2-N-2 общий ответ Unavailable в OpenAPI (→ "
+    },
+    {
+      "at": "2026-09-13T16:03:58+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 принята TEAM-2/tech-lead#2: DoD сверен (числа E пересчитаны: 160/185/140), Mi-8 подтверждён; при приёмке закрыты Mi-9 (запись о background_refs и US-018/ADR-017 доп. 1 п. 4), Mi-10 (стенд меряет пороги пересмотра), Mi-11 (перезапись записей нарратива при смене L; живая память в replay), N-6…N-"
+    },
+    {
+      "at": "2026-09-13T16:03:58+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-202 (TEAM-2/developer#1, подволна B): levels.go и валидатор блупринтов — зависимости T-201 и T-006 слиты."
     }
   ],
   "blockers": [],
