@@ -65,6 +65,13 @@ services:
       MV_TELEGRAM_GATEWAY_URL: ${MV_TELEGRAM_GATEWAY_URL:-http://gateway:8088}
       MV_TELEGRAM_POLL_TIMEOUT_S: ${MV_TELEGRAM_POLL_TIMEOUT_S:-25}
       MV_TELEGRAM_HEALTH_ADDR: ${MV_TELEGRAM_HEALTH_ADDR:-:8089}
+      # A secret, but not a required one: empty derives the HMAC key of
+      # action_key from the token (ADR-018, T-310), so no `:?`. Its own
+      # interpolation with the manifest's empty default (rules 3 and 8), in the
+      # form of MV_LLM_API_KEY of core; a silent .env and an empty line in it
+      # give the bot the same empty value (T-464).
+      MV_TELEGRAM_ACTION_KEY_SALT: ${MV_TELEGRAM_ACTION_KEY_SALT:-}
+      MV_TELEGRAM_COMMANDS_PER_MIN: ${MV_TELEGRAM_COMMANDS_PER_MIN:-20}
     ports:
       - "127.0.0.1:8089:8089"
     healthcheck:

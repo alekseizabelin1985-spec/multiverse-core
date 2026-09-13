@@ -60,9 +60,11 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-secret-quoted-list.yml` | 3 | a literal credential in a list item quoted as a whole, `- "KEY=value"` (N-3) |
 | `bad-secret-spaced-colon.yml` | 3 | a bare required credential and a literal password with the colons aligned, `KEY : value` — one space before one colon, several before the other (T-413 review #1 Ma-1, review #2 N-1) |
 | `bad-secret-escaped.yml` | 3 | `$${MINIO_ROOT_PASSWORD:?...}` — compose's escape, so the container gets the literal text as its password (T-413) |
-| `bad-secret-number.yml` | 3 | `MV_LLM_API_KEY: 1234567890` — a literal YAML reads as a number is still a literal (T-429 review #1 N-1) |
+| `bad-secret-number.yml` | 3 | `MV_LLM_API_KEY: 1234567890` — a literal YAML reads as a number is still a literal (T-429 review #1 N-1); the report prints `<withheld>`, and `# expect-absent:` holds the number out of it (T-464 review #1 N-2) |
 | `bad-secret-flow-mapping.yml` | 3 | a literal password in a flow mapping, `environment: {KEY: value, ...}` (T-429; T-413 review #1 N-1) |
 | `bad-secret-multiline-plain.yml` | 3 | `MV_LLM_API_KEY:` with a literal on the next line — a key WITH a value to YAML, not a key without one (T-429; T-413 review #2) |
+| `bad-secret-salt-literal.yml` | 3 | a literal `MV_TELEGRAM_ACTION_KEY_SALT`: a `Secret()` of the manifest whose name ends in `_SALT`, past `MV_.*_KEY`; until rule 3 named `MV_.*_SALT` the file passed every rule (T-464). An optional secret: the refusal advises `${MV_TELEGRAM_ACTION_KEY_SALT:-}`, not `:?`, and prints `<withheld>` for the value (T-464 review #1 Mi-1, N-2) |
+| `bad-secret-required-default.yml` | 3 | `MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fakesecret}` — a required credential with a default of its own; the refusal prints `<withheld>` for the default, and `# expect-absent:` holds the placeholder out of the report (C-15 v1.5, T-464 review #1 N-2) |
 | `bad-llm-url-any-address.yml` | 6 | `MV_OLLAMA_URL` at `0.0.0.0` — an invalid address, not a local one; the old copy of the rule took it for private (T-450) |
 | `bad-llm-url-dotted-name.yml` | 6 | `MV_OLLAMA_URL` at `ollama.local` — any name with a dot is the cloud (T-450) |
 | `bad-llm-url-no-port.yml` | 6 | `MV_OLLAMA_URL` at `http://ollama` — a local host without a port is invalid, not only a loopback one (T-450) |
@@ -76,6 +78,8 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-required-unmarked.yml` | 7 | a `${VAR:?}` of the always-loaded file whose variable the paired `bad-required-unmarked.env` does not mark `[required]` — the operator following the README skips it (T-412 acceptance, T-413) |
 | `bad-required-nested.yml` | 7 | a `:?` nested in a default, `${FOO:-${MV_X:?}}`, whose variable the paired `bad-required-nested.env` does not mark (review #1 Mi-2) |
 | `bad-default-differs-from-manifest.yml` | 8 | a platform variable whose compose default differs from the manifest's — the very `MV_CORE_ADMIN_CLIENTS` line T-411 removed |
+| `bad-default-state-worlds.yml` | 8 | `MV_STATE_WORLDS` of core defaulting to `dark-forest`, not the manifest's `dark-forest-world` (T-055 О-1, T-464) |
+| `bad-default-secret-withheld.yml` | 8 | `MV_TELEGRAM_ACTION_KEY_SALT` with a default of its own, as a plain default, a default taken from another variable and behind `:+` — every refusal prints `<withheld>` in place of what was written, `MV_WORLD_ID` nested in the salt's value included, and `MV_WORLD_ID` with a default of its own as the value of `MV_ANTHROPIC_API_KEY`; `# expect-absent:` holds the placeholder salt out of the report (C-15 v1.5, T-464 review #1 N-2) |
 | `bad-default-undeclared.yml` | 8 | a default for a platform variable the manifest does not declare (C-08's old name for the gateway allow-list) |
 | `bad-default-not-an-address-variable.yml` | 8 | a client allow-list defaulting to `service:port` of a declared service — only the explicit set of network addresses may name a service (T-411 review #1 Mi-1, T-413) |
 | `bad-default-not-a-service.yml` | 8 | a network address that does not name a service of the compose network (one item of a list is enough) |
@@ -121,6 +125,7 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `good-compose-project-name.yml` | — | `${COMPOSE_PROJECT_NAME}` with no modifier: compose sets it itself, and the contract holds compose to third-party defaults for `OLLAMA_*` only (Mi-1) |
 | `good-image-pinned.yml` | — | third-party images from the pins of `build/versions.env`, from an anchor and written `image :` (T-429 review #1 Mi-1) |
 | `good-required-message-nested.yml` | — | `${MV_LLM_URL:?... ${MV_WORLD_ID} ...}`: compose evaluates the message of `:?` only on its way to a refusal, so nothing in it is checked (T-429; T-413 review #1 N-1) |
+| `good-state-and-bot-passthrough.yml` | — | the three lines of T-464 in their own form: `MV_STATE_WORLDS` and `MV_TELEGRAM_COMMANDS_PER_MIN` with the manifest's defaults, the optional secret `MV_TELEGRAM_ACTION_KEY_SALT` as `${VAR:-}` with no `:?` — rule 3 does not take it for a default credential |
 
 A fixture may bring its own example environment: when `x.env` sits next to
 `x.yml`, the linter reads it instead of `.env.example` for rule 7 — both the

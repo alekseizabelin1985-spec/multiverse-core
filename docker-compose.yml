@@ -309,6 +309,10 @@ services:
       # `memory` profile set MV_MEMORY_URL=http://memory:8082 in .env.
       MV_MEMORY_URL: ${MV_MEMORY_URL:-}
       MV_SNAPSHOT_EVERY_FACTS: ${MV_SNAPSHOT_EVERY_FACTS:-200}
+      # The worlds of the context state, one worker each (T-055); the default is
+      # the manifest's (rule 8), so a silent .env and a process started by hand
+      # serve the same world (T-464).
+      MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest-world}
       MV_GM_PATH: ${MV_GM_PATH:-agent}
       MV_LAWS_BREACH_PHASE: ${MV_LAWS_BREACH_PHASE:-false}
       MV_LLM_PROVIDER: ${MV_LLM_PROVIDER:-openai_compat}

@@ -1,0 +1,13 @@
+# Rule 8: MV_STATE_WORLDS of core with a default of its own, the name of the
+# world without its `-world` tail. A container would then serve a world that
+# neither .env.example nor a process started by hand knows, and every proposal
+# of dark-forest-world would be passed over (T-055, T-464). The fix is the
+# manifest's default: ${MV_STATE_WORLDS:-dark-forest-world}.
+#
+# expect-rule: 8
+# expect-text: MV_STATE_WORLDS defaults to 'dark-forest' here and to 'dark-forest-world' in shared/env/vars.go
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest}
