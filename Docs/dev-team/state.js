@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:17:28+03:00",
+  "updatedAt": "2026-09-14T02:25:14+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2656,13 +2656,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-469",
           "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
-          "status": "review",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
-          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T02:25:14+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 61,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-469.md"
         },
@@ -10732,7 +10732,7 @@ window.DEVTEAM_STATE =
       "task": "T-469",
       "action": "Приёмка T-469",
       "startedAt": "2026-09-14T02:09:21+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:25:14+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10742,7 +10742,7 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Приёмка T-471 и отметка владельца EPIC-003",
       "startedAt": "2026-09-14T02:09:21+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T02:25:14+03:00"
     },
     {
       "instance": "developer#1",
@@ -10772,6 +10772,26 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Итерация 2: решения архитектора и ревью #1",
       "startedAt": "2026-09-14T02:17:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-471",
+      "action": "Отметка владельца EPIC-001 по T-471",
+      "startedAt": "2026-09-14T02:25:14+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-471",
+      "action": "Просмотр T-471: ownership.go, пометки C-02, эталон §4.2",
+      "startedAt": "2026-09-14T02:25:14+03:00",
       "finishedAt": null
     }
   ],
@@ -14969,6 +14989,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Решения оркестратора по T-057: Mi-1 — срок снапшота при Stop в бюджете StopTimeout; Mi-2 — принято по §18; досылка запрещена, пока есть интент того же proposal_id; Mi-3 — брать cause/конверт из записанного объекта, если есть, иначе вопрос к T-059; Mi-4 и N-1, N-2 — исправить. Итерация 2 — developer#"
+    },
+    {
+      "at": "2026-09-14T02:25:14+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-469 принята tech-lead#1 без ревью #2 (итерация 2 закрыла только Minor/Nit): DoD 1, 2, 4, 6–8 подтверждены прогонами, DoD 3 и 5 — решением оркестратора (строки §3.1.1 и §16 п. 5 — system-architect после слияния); перенос MV_CORE_ADMIN_CLIENTS в x-platform-env приемлем (SEC-12), строки в runbook и п"
+    },
+    {
+      "at": "2026-09-14T02:25:14+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-471 принята tech-lead#2 (итерация 2 без ревью #2) и отметка владельца EPIC-003 по fake_contexts{,_test}.go; стенд I1-α 3 прогона подряд, make test — 0. До слияния: отметка tech-lead#1 (cmd/multiverse, Dockerfile, env, compose, e2e, имя MV_RULES_PATH) и просмотр system-architect#1 (ownership.go, по"
     }
   ],
   "blockers": [],
