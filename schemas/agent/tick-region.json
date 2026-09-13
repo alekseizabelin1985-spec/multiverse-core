@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/agent/tick-region.json",
+  "$comment": "Answer of the tick phase of a region GM (swarm-llm-laws.md §13.4). The enum of type is the full set of level domain a tick may propose in MVP-1 (encounter.started comes from the rules of detection, not from a model); the runtime narrows it to allowed_event_types of the blueprint when it compiles the schema (TL2-7).",
+  "type": "object",
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["type", "summary", "ops"],
+        "properties": {
+          "type": { "type": "string", "enum": ["region.event_occurred", "npc.moved", "npc.spawned"] },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "entity": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128,
+                "description": "An id longer than 128 is refused by the parser (schema_invalid) before the guardian. The limit is shared with llm.output.rejected.ref (C-07 v1.5)."
+              }
+            },
+            "additionalProperties": false
+          },
+          "affects": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id"],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "description": "An id longer than 128 is refused by the parser (schema_invalid) before the guardian. The limit is shared with llm.output.rejected.ref (C-07 v1.5)."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "ops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "value"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "value": {}
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
