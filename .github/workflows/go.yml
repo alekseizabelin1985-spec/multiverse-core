@@ -10,6 +10,12 @@
 # `race` arrived with T-401 and `scripts-parity` with T-405: until the owner
 # adds them to those rules, they report but do not block.
 #
+# CI runs on `develop` since T-453: under gitflow (2026-09-11) the epics merge
+# into it. Whether `develop` gets a protection rule, and with which required
+# checks, is the owner's decision (backlog of T-453). The triggers come first
+# because a protected branch whose pull requests never get their required
+# checks reported could never take a pull request at all.
+#
 # The race detector runs in three jobs, each over what only it can reach:
 # `unit` — every short test once; `integration` — the adapters and the
 # contract set on the live broker; `race` — the concurrent packages over and
@@ -35,13 +41,15 @@ name: go
 
 on:
   push:
-    # Only the trunk and the integration branches: a branch of an epic reaches
-    # CI through its pull request, and a push trigger on it would spend the
-    # budget twice on the same commit — the concurrency group of a push
-    # (refs/heads/...) and the one of a pull request (refs/pull/N/merge) are
-    # different by construction, so neither run cancels the other.
+    # Only the trunks (`main`, `develop`) and the integration branches: a branch
+    # of an epic reaches CI through its pull request, and a push trigger on it
+    # would spend the budget twice on the same commit — the concurrency group
+    # of a push (refs/heads/...) and the one of a pull request
+    # (refs/pull/N/merge) are different by construction, so neither run
+    # cancels the other.
     branches:
       - main
+      - develop
       - 'integration/**'
     # `paths` with negations rather than `paths-ignore`: documentation must not
     # spend the budget, but blueprints/**/*.md are data the `contracts` job
@@ -59,6 +67,7 @@ on:
   pull_request:
     branches:
       - main
+      - develop
       - 'integration/**'
       - 'epic/**'
 

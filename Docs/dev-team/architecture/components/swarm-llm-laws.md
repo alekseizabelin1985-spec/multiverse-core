@@ -128,7 +128,7 @@ internal/llm/
     registry.go       # providers.Registry: Register(name, factory); New(name, cfg)
     ollama/client.go  # native /api/chat, /api/embed; format=schema, think, keep_alive, options.num_ctx; токены из eval_count
     openai_compat/    # ПРОВАЙДЕР ПО УМОЛЧАНИЮ (C-15 v1.1, U-8): llama-server и любой OpenAI-совместимый сервер, облако — тот же адаптер с другим MV_LLM_URL за гейтом MV_LLM_CLOUD_ENABLED; /v1/chat/completions + response_format json_schema, enable_thinking=false. Прежняя пометка «E-H, включается флагом» устарела (T-409)
-    recorded/         # RecordedProvider: ключ (correlation_id, agent.id, phase, attempt); промах = ошибка
+    recorded/         # RecordedProvider: ключ (correlation_id, agent.id, phase, attempt); промах = ошибка; (изм. T-444) Writer того же формата + фильтр SEC-23 — для mvctl record
     fake/             # FakeProvider: табличные ответы для unit/e2e; счётчик вызовов
   parser/
     parser.go         # Parse(raw) (json.RawMessage, Strategy, error) — восстановление (ADR-016)
@@ -189,7 +189,8 @@ config/
 shared/testkit/swarm/
   fake_narrator.go    # testkit.FakeNarrator (C-05 заглушка для EPIC-004; v0 создаёт F-10, реализация — EPIC-003 I1a)
   fake_encounter.go   # (изм. G2) testkit.FakeEncounter — Phase 1 боя на mechanics.Rules/FixedMechanics без роя: combat.decided/dice.rolled/entity.update.proposed для точки I1-α (см. design.md §4.1)
-  recording_writer.go # testkit.RecordingWriter (C-07) — EPIC-003 I1a вместе с `cmd/mvctl/internal/record` (изм. G2)
+  # recording_writer.go — (изм. T-444, C-07 v1.3) переехал: писатель записей — internal/llm/providers/recorded.Writer, не testkit
+  template/ru.go      # шаблоны деградации; (изм. T-444) в T-228 переезжают в internal/swarm/template (листовой пакет), двойник импортирует ровно его
 cmd/mvctl/internal/
   record/             # (изм. G2) `mvctl record --scenario … --out testdata/recordings/<s>.jsonl` — только actor_kind=ci (SEC-23)
   blueprint/          # `mvctl blueprint validate <dir>` — вызывает agent.Validate (код валидатора — shared/agent)
@@ -276,7 +277,7 @@ type Call struct {
     Schema       parser.Schema                // скомпилированная схема фазы
     Model        string; Params Params; Retries int; Timeout time.Duration
     TextPaths    []string                     // JSON-пути текстовых полей для языка/фильтра: ["text"], ["events[*].summary"]
-    Guard        guardian.Input               // видимость, белые списки, инварианты (§10)
+    Guard        guardian.Input               // видимость, белые списки, инварианты (§10); (изм. T-444) рой видит из llm ровно корень, prompt и guardian — parser только если Schema остаётся parser.Schema (рекомендация: имя схемы строкой)
     LOD          agent.LODLevel; GMPath string
 }
 type Result struct {
@@ -288,14 +289,20 @@ type Result struct {
 var ErrUnavailable, ErrBudget, ErrQuarantined, ErrInvalidAfterRetries, ErrFilter error
 
 // internal/llm/guardian (ADR-017)
-type Input struct { Level agent.AgentLevel; Role string; Scope eventbus.ScopeRef; Allowed []string; Owned []string; View StateView; Laws laws.LawsVersion; Invariants map[string]mechanics.Invariant; AbsenceEventIDs map[string]bool; Kind SchemaKind }
+// (изм. T-444, ADR-001 доп. 2026-09-13 п. 1) страж не импортирует internal/laws и internal/mechanics: вместо laws.LawsVersion
+// и map[string]mechanics.Invariant — данные; адаптер mechanics.Invariant → InvariantFunc живёт в internal/swarm
+type Input struct { Level agent.AgentLevel; Role string; Scope eventbus.ScopeRef; Allowed []string; Owned []string; View StateView; LawsVersion string; CheckKeys []string; Invariants map[string]InvariantFunc; AbsenceEventIDs map[string]bool; Kind SchemaKind }
 type StateView interface { Entity(id string) (Entity, bool); InScope(id string, scope eventbus.ScopeRef) bool; Position(id string) string }
+type InvariantView interface { Get(id string) (*entity.Entity, bool); ByType(t string) []*entity.Entity; WorldID() string } // набор методов mechanics.StateView; страж строит его сам: View + ops на копии (§10.4)
+type InvariantFunc func(v InvariantView, touched []string) []Violation // Violation{InvariantID, EntityID, Message}
 func Evaluate(value json.RawMessage, in Input) Verdict // Verdict{Value json.RawMessage; Rejected []Rejection; Status ValidationStatus}
 
 // internal/llm/filter
 type NarrativeFilter interface { Check(ctx context.Context, text string) (Decision, error); Version() string } // Decision: Pass | Block{Category}
 
 // internal/laws (C-12)
+// (изм. T-444, C-12) источник текущей версии — интерфейс потребителя; WorldView роя его реализует, nil — файлы
+type WorldVersions interface { LawsVersion(worldID string) (version string, ok bool) }
 type Service interface {
     Current(world string) (LawsVersion, error)
     Get(world, version string) (LawsVersion, error)
@@ -511,12 +518,12 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 
 | Реализация | Транспорт | Особенности |
 |---|---|---|
-| `providers/ollama` | `POST {OLLAMA_URL}/api/chat` (native), `POST /api/embed` | `format` = JSON-схема фазы (объект), `think: false` (Phase tick/narrative MVP-1; поле блупринта `thinking`), `keep_alive: -1` (`LLM_KEEP_ALIVE`), `options{temperature, num_predict=max_tokens, num_ctx=LLM_NUM_CTX (8192), seed?}`, `stream: false`; токены из `prompt_eval_count`/`eval_count` (NFR-052); таймаут фазы через `context`; `Health` = `GET /api/tags` + `GET /api/ps` (модели резидентны). Клиент — `net/http` без зависимости от модуля `ollama` |
+| `providers/ollama` | `POST {OLLAMA_URL}/api/chat` (native), `POST /api/embed` | `format` = JSON-схема фазы (объект), `think: false` (Phase tick/narrative MVP-1; поле блупринта `thinking`), `keep_alive: -1` (`LLM_KEEP_ALIVE`), `options{temperature, num_predict=max_tokens, num_ctx=LLM_NUM_CTX (8192), seed?}`, `stream: false`; токены из `prompt_eval_count`/`eval_count` (NFR-052); таймаут фазы через `context`; `Health` = `GET /api/tags` + `GET /api/ps` (модели резидентны). Клиент — `net/http` без зависимости от модуля `ollama` <!-- gitleaks:allow: ложное срабатывание generic-api-key на параметрах генерации (.gitleaksignore); изм. T-444 --> |
 | `providers/openai_compat` | `/v1/chat/completions`, `response_format: {type: json_schema}` | **провайдер по умолчанию** (C-15 v1.1, U-8, T-208): llama-server и любой OpenAI-совместимый сервер; адрес — только `MV_LLM_URL` (обязателен, без значения по умолчанию, `/v1` на конце допустим — T-404); облако — тот же адаптер с внешним адресом, `MV_LLM_API_KEY` и гейтом `MV_LLM_CLOUD_ENABLED=true`. Имена провайдера `openai`/`deepseek` выведены (ADR-005 доп. 2). Прежняя строка «компилируется, включается флагом (E-H)» устарела (T-409) |
 | `providers/recorded` | чтение `testdata/recordings/*.jsonl` или журнала `llm_records` | ключ `(meta.correlation_id, meta.agent.id, phase, attempt)`; промах → `ErrIncompleteRecord` (в `mode=replay` тест падает, в recovery — шаблон с пометкой) |
-| `providers/fake` | in-memory таблица `(phase, matcher) → Response` | счётчик вызовов для NFR-014/NFR-053; генератор записей через `testkit.RecordingWriter` |
+| `providers/fake` | in-memory таблица `(phase, matcher) → Response` | счётчик вызовов для NFR-014/NFR-053; генератор записей — `providers/recorded.Writer` *(изм. T-444, C-07 v1.3; прежде `testkit.RecordingWriter`)* |
 
-`providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `openai_compat` — C-15 v1.1, манифест `shared/env/vars.go`; прежнее «по умолчанию `ollama`» устарело, T-409); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` при старте публикует `config.cloud_enabled {by: operator, provider, allow_external_players}` только если `MV_LLM_CLOUD_ENABLED=true` (без ключей и их фрагментов).
+`providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `openai_compat` — C-15 v1.1, манифест `shared/env/vars.go`; прежнее «по умолчанию `ollama`» устарело, T-409); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` публикует `config.cloud_enabled {enabled, provider, external_players_ack}` при каждом старте `core` и при изменении флага, без URL, ключей и их фрагментов *(изм. T-444, C-06 v1.1–v1.2; прежде — только при `MV_LLM_CLOUD_ENABLED=true` и с полем `by`; подробности — §9.4)*.
 
 ### 9.2. Конвейер `Generate` (порядок побочных эффектов — ADR-005 п. 2)
 
@@ -528,8 +535,8 @@ Generate(call):
   3. for attempt := 1; attempt <= 1+retries; attempt++ :
        resp, err := provider.Generate(ctx(timeout фазы), req)        # ошибка/таймаут → status=error, повтор при временной ошибке, иначе → ErrUnavailable
        value, strategy, perr := parser.Parse(resp.Content, schema)   # ADR-016; perr → status=invalid(schema_invalid) → retry
-       lerr := parser.CheckLanguage(texts(value, call.TextPaths))    # 0 CJK, латиница ≤ LLM_LATIN_MAX_RATIO (0.10) → status=rejected_language → retry
-       fdec, ferr := filter.Check(texts)                              # error → status=filter_error (raw сохраняется); block → status=quarantined (raw НЕ сохраняется) + content.incident.recorded; без повтора
+       lerr := parser.CheckLanguage(texts(value, call.TextPaths))    # 0 CJK, латиница ≤ LLM_LATIN_MAX_RATIO (0.10) → status=invalid + rejected{reason: language} → retry   (изм. T-444: статуса rejected_language нет — C-07 v1.2, ADR-017 доп. 1)
+       fdec, ferr := filter.Check(texts)                              # error → status=filter_error (raw НЕ сохраняется — изм. T-444, C-07 v1.2, ОВ-33); block → status=quarantined (raw НЕ сохраняется) + content.incident.recorded; без повтора
        verdict := guardian.Evaluate(value, call.Guard)               # чистая функция; даёт итоговый status valid|partially_rejected|invalid и rejected[]
        ev := record.LLMOutput(call, attempt, resp, status, hashes, parse{strategy}, filter{…}, tokens, latency)   # ЗАПИСЬ ДО ИСПОЛЬЗОВАНИЯ
        for r in verdict.Rejected: publish llm.output.rejected{llm_output{event{id: ev.ID}}, reason, element, entity}
@@ -538,6 +545,8 @@ Generate(call):
        if status == invalid && verdict.Reason == law_violation(stale laws): обновить laws_version в промпте, retry
   4. исчерпание попыток → ErrInvalidAfterRetries (или ErrUnavailable, если все попытки — ошибки провайдера)
 ```
+
+*(изм. T-444, C-07 v1.3)* Какие поля записи обязательны при каком статусе, проверяет схема `llm.output` (`response_raw` при `valid|partially_rejected|invalid`; `filter` со статусом `pass|block|error` при `valid|partially_rejected`, `quarantined`, `filter_error`; `error{}` — ровно при `error`). То, что зависит от стадии, проверяет свойство-тест шлюза: `filter` при `invalid` есть, только если шаг `filter.Check` наступил (при `schema_invalid` и `language` его нет), а `reasons[]` равно множеству `reason` опубликованных `rejected`. Хеши `prompt_hash` и `response_hash` — `sha256:<64 hex>`. Устаревшие ветки двух строк выше (`rejected_language`, «raw сохраняется» при `filter_error`) приведены к ADR-017 «Дополнение 1»; пометка об устаревании в самом ADR-016 п. 2–3 уже есть (T-409).
 
 Уточнения к ADR-005 (не меняют наблюдаемый порядок эффектов): оценка стража — чистая функция и выполняется **до** записи, чтобы `validation_status` в `llm.output` был окончательным (`partially_rejected` и т. п. из `data-model.md` §7.2); публикация `llm.output.rejected` — после записи со ссылкой на `llm_output.event.id`. Кэш ответов в шлюзе **не вводится**: кэшированный ответ не имел бы собственного `llm.output`, что ломает record-replay; в replay роль «кэша» выполняет `providers/recorded`.
 
@@ -549,7 +558,7 @@ Generate(call):
 
 ### 9.4. Облако (BR-15, ADR-005 п. 6, ADR-009 п. 7)
 
-`MV_LLM_CLOUD_ENABLED=true` + `MV_LLM_API_KEY` + облачный `MV_LLM_URL` у провайдера `openai_compat` (`anthropic` — отдельный провайдер E-H; имена провайдера `openai`/`deepseek` выведены, ADR-005 доп. 2; гейт — по адресу, а не по имени провайдера; T-409); проверка «внешних игроков» требует числа связок `alive` — у `core` нет `links.db`, поэтому шлюз читает флаг `LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS` и публикует `config.cloud_enabled {by: operator, allow_external_players}` при старте; проверка фактического числа игроков — на стороне gateway/оператора (замечание в отчёте). В промпт уходят только `player_id`, имена персонажей и текст `say`.
+`MV_LLM_CLOUD_ENABLED=true` + `MV_LLM_API_KEY` + облачный `MV_LLM_URL` у провайдера `openai_compat` (`anthropic` — отдельный провайдер E-H; имена провайдера `openai`/`deepseek` выведены, ADR-005 доп. 2; гейт — по адресу, а не по имени провайдера; T-409); проверка «внешних игроков» требует числа связок `alive` — у `core` нет `links.db`, поэтому шлюз читает флаг `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS` и публикует `config.cloud_enabled {enabled, provider, external_players_ack}` при каждом старте и при изменении *(изм. T-444, C-06 v1.2: поля — по схеме; `provider` — имя из `MV_LLM_PROVIDER`, заполняется всегда; полей `by`, `model`, `at` нет — время и инициатор в конверте)*; проверка фактического числа игроков — на стороне gateway/оператора (замечание в отчёте). В промпт уходят только `player_id`, имена персонажей и текст `say`.
 
 ### 9.5. Деградация и здоровье
 
@@ -588,7 +597,7 @@ Generate(call):
 
 ### 10.4. Инварианты и законы
 
-`laws.LawsVersion.Laws[kind=invariant].Check` — ключ, совпадающий с `mechanics.Invariant.ID` (C-03). Страж получает `Invariants map[id]mechanics.Invariant` из `Deps.Mechanics.Invariants()` и `Laws.Current(world)`; проверяет только те `id`, что есть в текущей версии законов (законы управляют набором, механика — реализацией). При старте `core` проверяет полноту сопоставления: закон с `check` без реализации → `/health degraded {laws: unknown_check}`. Отклонение с `law_violation` инкрементирует `Laws.Strain().Inc(lawID)` (ADR-008 п. 5).
+`laws.LawsVersion.Laws[kind=invariant].Check` — ключ, совпадающий с `mechanics.Invariant.ID` (C-03). Страж получает `Invariants map[id]guardian.InvariantFunc` и `CheckKeys` — ключи текущей версии законов. Их собирает рой из `Deps.Mechanics.Invariants()` и `Laws.Current(world)`: адаптер `mechanics.Invariant → InvariantFunc` живёт в `internal/swarm`, потому что страж не импортирует ни `internal/mechanics`, ни `internal/laws` *(изм. T-444, ADR-001 доп. 2026-09-13 п. 1; прежде — `map[id]mechanics.Invariant` и `laws.LawsVersion` прямо во входе стража)*. Страж проверяет только те `id`, что есть в `CheckKeys` (законы управляют набором, механика — реализацией). При старте `core` проверяет полноту сопоставления: закон с `check` без реализации → `/health degraded {laws: unknown_check}`. Отклонение с `law_violation` инкрементирует `Laws.Strain().Inc(lawID)` (ADR-008 п. 5).
 
 ---
 
@@ -612,7 +621,7 @@ Read-only проекция сущностей мира: `map[entityID]Entity{ID,
 
 ### 11.4. Секции промпта (`internal/llm/prompt`, ADR-005 п. 4)
 
-System (кэшируемая часть, порядок фиксирован): `<role>` (из `## system` блупринта) → `<laws laws_version="v1">` (декларативные законы `Laws.Current` + инварианты одной строкой) → `<canon>` (`## canon` мира + региона родителя) → `<absolute_limits>` (короткая позитивная формулировка из `config/absolute-limits.yaml.prompt_notice`) → `<format>` (краткое описание схемы; сама схема уходит в `format`). User: `<state>` (WorldView: мир{погода, время}, регион{описание из `## description`}, игрок/участники{hp/hp_max, статус, инвентарь}, NPC{hp, статус}, встреча{раунд}) → `<events>` (окно журнала + события причины, с `actor_kind`) → `<absence since_at=…>` (если есть) → `<facts source="memory">` (если есть) → `<player_text>` (реплики `say` и имена — **только как данные**, `<`→`&lt;`, `>`→`&gt;`, длина ≤ 500) → `<task>` (из `## phase2`/`## tick` с подстановкой плейсхолдеров). `locale` — в `<role>` и в `meta.locale`. `prompt_hash = SHA-256(system + "\n \n" + user)`.
+System (кэшируемая часть, порядок фиксирован): `<role>` (из `## system` блупринта) → `<laws laws_version="v1">` (декларативные законы `Laws.Current` + инварианты одной строкой) → `<canon>` (`## canon` мира + региона родителя) → `<absolute_limits>` (короткая позитивная формулировка из `config/absolute-limits.yaml.prompt_notice`) → `<format>` (краткое описание схемы; сама схема уходит в `format`). User: `<state>` (WorldView: мир{погода, время}, регион{описание из `## description`}, игрок/участники{hp/hp_max, статус, инвентарь}, NPC{hp, статус}, встреча{раунд}) → `<events>` (окно журнала + события причины, с `actor_kind`) → `<absence since_at=…>` (если есть) → `<facts source="memory">` (если есть) → `<player_text>` (реплики `say` и имена — **только как данные**, `<`→`&lt;`, `>`→`&gt;`, длина ≤ 500) → `<task>` (из `## phase2`/`## tick` с подстановкой плейсхолдеров). `locale` — в `<role>` и в `meta.locale`. `prompt_hash = SHA-256(system + "\n \n" + user)`.
 
 Словарь плейсхолдеров блупринта (`shared/agent/placeholders.go`): `{world.name} {world.weather} {world.time_of_day} {world.day} {region.name} {region.description} {player.name} {player.hp} {player.hp_max} {events} {state} {absence} {canon} {laws_version} {locale} {npc.name} {encounter.round}`; неизвестный → ошибка валидации (C-11).
 
@@ -650,7 +659,7 @@ laws:
 
 ### 12.2. Сервис
 
-`FileSource` читает `laws/{world}.v{N}.yaml` при старте (все версии); `Current(world)` = версия из `WorldView.World.laws_version` (истина — State), при отсутствии сущности мира — старшая `approved` из файлов. `ObjectSource` (`laws-{world}/vN.json`, MinIO) — интерфейс есть, реализация E-B. Подписка `world.laws.changed` → перечитать источники → `Watch()` уведомляет рой (агенты берут `Current()` при сборке каждого промпта, отдельного «перезагрузить» не требуется). `Bump(world, path)`: валидирует файл `vN+1` (`based_on = vN`, `status=approved`, `created_by=author`, `check`-ключи известны), публикует `world.laws.changed {laws{version_from, version_to, status: approved}, created_by: author, diff{added[], removed[]}, effective_from{round_boundary: true}}` и `entity.update.proposed {world.laws_version}` от `actor_kind=system, cause=laws`; используется `mvctl laws bump` (EPIC-005). `mvctl laws show` — `Current` + `Strain().Snapshot()`.
+`FileSource` читает `laws/{world}.v{N}.yaml` при старте (все версии); `Current(world)` = версия из `WorldView.World.laws_version` (истина — State), при отсутствии сущности мира — старшая `approved` из файлов. *(изм. T-444, C-12, ADR-001 доп. 2026-09-13 п. 6)* Законы не импортируют рой: версию они получают через интерфейс, объявленный в `internal/laws`, — `WorldVersions{LawsVersion(worldID) (version string, ok bool)}`. `WorldView` роя реализует его напрямую, `nil` или `ok=false` — старшая `approved` из файлов. `mvctl laws show` работает без роя и печатает источник версии. `ObjectSource` (`laws-{world}/vN.json`, MinIO) — интерфейс есть, реализация E-B. Подписка `world.laws.changed` → перечитать источники → `Watch()` уведомляет рой (агенты берут `Current()` при сборке каждого промпта, отдельного «перезагрузить» не требуется). `Bump(world, path)`: валидирует файл `vN+1` (`based_on = vN`, `status=approved`, `created_by=author`, `check`-ключи известны), публикует `world.laws.changed {laws{version_from, version_to, status: approved}, created_by: author, diff{added[], removed[]}, effective_from{round_boundary: true}}` и `entity.update.proposed {world.laws_version}` от `actor_kind=system, cause=author` *(изм. T-444, C-02 v1.5: было `cause=laws` — такой причины нет ни в схеме `entity.update.proposed`, ни в строке `author` таблицы владения; `source=mvctl` → предлагающий `author`)*; используется `mvctl laws bump` (EPIC-003 *(изм. T-444: прежде EPIC-005; реестр `cmd/mvctl/main.go` и `ownership.md` v0.6 отдают `laws` EPIC-003)*). `mvctl laws show` — `Current` + `Strain().Snapshot()`.
 
 ### 12.3. Контракт пробоя: что в MVP-1, что в EPIC-007
 
@@ -767,7 +776,7 @@ categories:
 
 ## 14. Схемы событий и объекты данных (владение EPIC-003)
 
-Все типы из `contracts.md` §0 для EPIC-003 получают `schemas/events/<type>.v1.json` (draft 2020-12, `$ref` на `_common.json`: `EntityRef`, `ScopeRef`, `AgentRef`). Ключевые payload — по `api-contracts.md` §2.3.6–2.3.13, 2.3.15 без изменений; дополнения в пределах совместимости (§16 п. 1 contracts): `llm.output` +`parse{strategy, recovered}` (опц.), `narrative.output` +`narrative_event_id` (= `id`, опц., дубль для удобства gateway), `tick.fired` — `tick.lod_allowed` обязателен, `agent.spawned` +`content_hash` (опц.).
+Все типы из `contracts.md` §0 для EPIC-003 получают `schemas/events/<type>.v1.json` (draft 2020-12, `$ref` на `_common.json`: `EntityRef`, `ScopeRef`, `AgentRef`). Ключевые payload — по `api-contracts.md` §2.3.6–2.3.13, 2.3.15 без изменений; дополнения в пределах совместимости (§16 п. 1 contracts): `llm.output` +`parse{strategy, recovered}` (опц.), `narrative.output` +`narrative_event_id` (= `id`, опц., дубль для удобства gateway), `tick.fired` — `tick.lod_allowed` обязателен, `agent.spawned` +`content_hash` (опц.). *(изм. T-444, C-07 v1.3)* Хеши `content_hash`, `prompt_hash`, `response_hash` — `sha256:<64 hex>` в нижнем регистре; условная обязательность полей `llm.output` и `llm.output.rejected` — в схеме по статусу и причине, `llm.output.rejected` получает опц. `background_ref{event{id}}` для отброшенной ссылки на фоновое событие; `scope` в payload новых схем не копируется (C-01 v1.8). Схемы — T-445.
 
 Объекты MinIO (`shared/objstore/buckets.go`): `snapshots-{world}/swarm/*` (владелец EPIC-003), `prompts-{world}/*` (по флагу `LLM_PROMPT_STORE`, retention — задача DevOps).
 
@@ -950,7 +959,7 @@ sequenceDiagram
 | integration (`-tags integration`) | подписка/дедуп/DLQ через testcontainers Redpanda; снапшот роя в MinIO (versioning); догон с курсора | `internal/swarm/integration_test.go` |
 | e2e (`-tags e2e`) | `cmd/multiverse --contexts=all --mode=replay --bus=memory --recording=testdata/recordings/<s>.jsonl`: `solo-30` (S1), `group-3x30` (S2, I2), `background-6h` (S14, admin-тики; проверка ≤ B), `death`, `flee-fail`, `injections-10` (0 `entity.updated` от нарратива, 0 `world.law_breach.proposed`), `recovery` (рестарт контекстов → `llm_calls=0`, `identical=true`), `degraded` (fake-провайдер возвращает ошибку → 100 % шаблонов) | `test/e2e/` |
 | golden (NFR-065) | 20 ходов + 3 тика: эталоны `testdata/golden/*.json` (схема, язык, числа механики в тексте не противоречат `combat.decided`, фильтр pass) | `internal/llm/golden_test.go` |
-| фикстуры (изм. G2) | записи создаются **`mvctl record` (EPIC-003 I1a, `cmd/mvctl/internal/record`)** на GPU-стенде через `testkit.RecordingWriter`; ключ записи `(correlation_id, agent.id, phase, attempt)` не зависит от текста промпта; **принимаются только сессии `meta.actor_kind=ci` с фикстурными `player-A/B/C`** — событие с `actor_kind=human` в сценарии → отказ (SEC-23, ADR-010 доп. п. 1); `testdata/recordings/*.jsonl merge=binary` (текстовый diff сохраняется); CI `privacy-scan` сканирует `testdata/`; обновление — осознанная задача с ревью диффа нарративов | `testdata/recordings/` (владелец EPIC-003) |
+| фикстуры (изм. G2) | записи создаются **`mvctl record` (EPIC-003 I1a, `cmd/mvctl/internal/record`)** на GPU-стенде через `providers/recorded.Writer` *(изм. T-444, C-07 v1.3; прежде `testkit.RecordingWriter`)*; ключ записи `(correlation_id, agent.id, phase, attempt)` не зависит от текста промпта; **принимаются только сессии `meta.actor_kind=ci` с фикстурными `player-A/B/C`** — событие с `actor_kind=human` в сценарии → отказ (SEC-23, ADR-010 доп. п. 1); `testdata/recordings/*.jsonl merge=binary` (текстовый diff сохраняется); CI `privacy-scan` сканирует `testdata/`; обновление — осознанная задача с ревью диффа нарративов | `testdata/recordings/` (владелец EPIC-003) |
 | golden (изм. G2) | эталоны `testdata/golden/*.json` — только из записей `actor_kind=ci`; набор собирает EPIC-005 005-ops из записей EPIC-003; тест `internal/llm/golden_test.go` — EPIC-003 | `testdata/golden/` |
 | nightly-gpu | матрица §18.1 overview; `phase2 p95`, `valid_first_try`, язык; результат в `ops/metrics/baseline.md` и модели в блупринтах | стенд |
 
@@ -980,7 +989,7 @@ sequenceDiagram
 | 7 | Записи/golden только `actor_kind=ci` (T-5, ADR-010 доп. п. 1) | ограничение в `mvctl record`, `merge=binary`, `privacy-scan` | §18 |
 | 8 | C-01 v1.1: `Journal`, `eventbus.Dedup`, `MV_BUS_VALIDATE_ON_READ`, `shared/clock`/`runtime` (S-1, T-10, F-3) | догон через `Journal.ReadRange…End`; `eventbus.Dedup` вместо `testkit.Dedup`; `Deps.Journal/Clock/Timers`; допущение (1) снято | §3, §4.3, §5.1, §11.2, §19 |
 | 9 | C-05/C-06/C-07/C-11 v1.1 (W-1, W-2, W-4, G-4) | `encounter.started.round{}` из блупринта встречи публикует `region-gm`; glob в `trigger.event_name` — принят (валидатор ≥ 1 совпадение); `parse{}`, `narrative_event_id`, `lod_allowed` обязателен, `content_hash`, `error.code=yielded` — уже в §7–§9, §14 | §8.3, §13.2, §14 |
-| 10 | `config.cloud_enabled {by, provider, allow_external_players}` — издатель контекст `llm` (ADR-005 доп. п. 3) | публикуется при старте только при `MV_LLM_CLOUD_ENABLED=true`, без ключей | §9.1 |
+| 10 | `config.cloud_enabled {by, provider, allow_external_players}` — издатель контекст `llm` (ADR-005 доп. п. 3) | публикуется при старте только при `MV_LLM_CLOUD_ENABLED=true`, без ключей *(запись своего времени: с C-06 v1.1 — при каждом старте; с C-06 v1.2 (T-444) поля — `enabled`, `provider`, `external_players_ack`, полей `by`, `model`, `at` нет)* | §9.1 |
 | 11 | Точка I1-α «соло на шаблонах через бота» (G2) | `testkit/swarm.FakeEncounter` + `FakeNarrator` — Phase 1 на реальной механике без роя; состав — `design.md` §4.1 | §2 |
 | 12 | Экранирование `generated`-фактов памяти (T-9, ADR-005 доп. п. 4) | секция `<facts source="memory">` — те же правила экранирования и лимит длины, что `<player_text>`; `injections-10` включает ≥ 3 инъекции через память (I2, при 005-memory) | §11.3–§11.4 (уточнение), §18 |
 
@@ -997,7 +1006,7 @@ sequenceDiagram
 | **§9.2**, §10.2 (`validation_status`) | Единый enum из **6 значений**: `valid \| partially_rejected \| invalid \| error \| quarantined \| filter_error`. `rejected_language` — **не статус**: это `invalid` + `llm.output.rejected reason=language`. Причины живут только в `llm.output.rejected.reason` (одно событие на отброшенный элемент); `budget_exceeded` — `rejected` без `llm.output`. Новое опциональное поле `llm.output.reasons[]` (сводка причин, заполняет шлюз) | TL2-1, C-07 v1.2, ADR-017 доп. 1; задачи T-215, T-213 |
 | **§10.3**, **§10.4** (страж: видимость и правила) | `status = abandoned` эквивалентен `dead`: сущность **видима** (нужна для фраз «его больше нет»), таблица видимости §10.3 не меняется, но `ops` над ней → `law_violation` / `inv-01 dead_does_not_act`; инвариант действует для `status ∈ dead \| abandoned \| ascended_final`; `narrative.output kind=death` по `abandoned` не генерируется | З-2, C-02 v1.2, ADR-017 доп. 1 п. 5; задачи T-217, T-230, T-246 |
 | **§13.4** (`enum` в `schemas/agent/tick-*.json`) | **Подтверждено** (TL2-7): файл схемы содержит полный набор типов MVP-1 для уровня; рантайм при компиляции подставляет пересечение с `allowed_event_types` блупринта; валидатор проверяет `allowed ⊆ enum` файла. Изменений в T-203 нет | TL2-7 |
-| **§14 п. 10** (`config.cloud_enabled`) | Событие публикуется контекстом `llm` **при каждом старте `core`** — и при `MV_LLM_CLOUD_ENABLED=true`, и при `false` — а также при изменении. Прежняя формулировка «только при `true`» отменена: иначе проекция gateway (`worlds[].llm.cloud_enabled`) после рестарта недетерминирована. Payload — булев флаг, без имени провайдера, URL и ключей (SEC-21) | З-3, C-06 v1.1; задача T-212 |
+| **§14 п. 10** (`config.cloud_enabled`) | Событие публикуется контекстом `llm` **при каждом старте `core`** — и при `MV_LLM_CLOUD_ENABLED=true`, и при `false` — а также при изменении. Прежняя формулировка «только при `true`» отменена: иначе проекция gateway (`worlds[].llm.cloud_enabled`) после рестарта недетерминирована. Payload — булев флаг, без имени провайдера, URL и ключей (SEC-21). *(изм. T-444, C-06 v1.2: «без имени провайдера» — неверно; payload — ровно схема `{enabled, provider, external_players_ack}`, `provider` — имя по шаблону, заполняется всегда; SEC-21 закрывает URL, ключи и их фрагменты)* | З-3, C-06 v1.1, C-06 v1.2; задача T-212 |
 | **§14** (издатели типов), §4.3/§5.1 (старт роя) | «Тип — владелец схемы; фактические издатели — `Spec.Publishers` реестра» (`contracts.md` v0.4 §0, §16 п. 7); `dice.rolled` (владелец EPIC-002) издают агент встречи и `FakeEncounter`; job `contracts` проверяет `source ∈ Spec.Publishers`. Старт догона: рой **ждёт** `analytics.replay.completed {mode: recovery}` с таймаутом `MV_SWARM_REPLAY_WAIT` (120 с) → `/health degraded {state_replay: missing}`; `testkit/state.FakeState` v0 сигнал публикует | TL2-2, TL2-5, TL2-6; задачи T-215, T-237, EPIC-001 T-006/T-017 |
 | **§13.2** (валидатор, `levels.go`) | В `shared/agent/levels.go` добавляется строка **gateway**: `Character.status: alive → abandoned`, `Group.leader_id` (включая `null`). ~~`levels.go` — истина, `shared/contracts.OwnershipRules` — копия~~ (**отменено 2026-09-11, ADR-025, T-409:** строка gateway живёт только в `shared/contracts/ownership.go`, единственной истине; `levels.go` строки шлюза не держит), правится **тем же PR** (метка `contract-change`, ревью tech-lead#1 + system-architect), тест равенства блокирует merge | TL2-3, З-2, `contracts.md` §16 п. 6; задача T-202 |
 
