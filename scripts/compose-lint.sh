@@ -29,9 +29,13 @@
 #   5. NEO4J_PLUGINS is absent (T-17, SEC-32); OLLAMA_ORIGINS is not a wildcard
 #      and OLLAMA_HOST is not 0.0.0.0 (SEC-15);
 #   6. there is no `llama-server` service — it is a native process outside
-#      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL points at loopback,
-#      host.docker.internal, a service of this file or an RFC1918 address, but
-#      never at a public host (SEC-15, ADR-005 add. 2 p. 3);
+#      compose (ADR-005 add. 2 p. 7) — and MV_LLM_URL and MV_OLLAMA_URL of a
+#      service are LOCAL addresses: the rule is not this file's, it is
+#      llm_endpoint_classify of scripts/lib/llm-endpoint.sh, held to the table
+#      testdata/llm/local-endpoints.tsv (T-450). A cloud address is refused
+#      (SEC-15, ADR-005 add. 2 p. 3), and so is an invalid one — 0.0.0.0, a
+#      local host without a port — which is a configuration error the platform
+#      would refuse at start;
 #   7. the always-loaded compose file starts on a clean machine (T-397), and
 #      every variable it requires with `${VAR:?}` or `${VAR?}` — other than an
 #      image pin of build/versions.env — is marked `[required]` in
@@ -619,6 +623,38 @@ for i in "${!raw_pids[@]}"; do
   fi
 done
 
+# Rule 6 needs the ONE rule of a local address, and that rule is a bash function
+# of scripts/lib/llm-endpoint.sh — the same one llm-server and llm-bench call,
+# held to testdata/llm/local-endpoints.tsv (T-450). This file used to carry its
+# own copy in Python (a service of this file, loopback or whatever `ipaddress`
+# calls private), and the copies disagreed: http://ollama:11434 passed here and
+# stopped the platform. So the addresses are taken out of the model by Python,
+# judged here by the function, and the verdicts handed back to rule 6.
+# NUL-separated both ways: a value of compose may hold any character but NUL.
+WORK_DIR="$work" "$python_bin" - <<'PY'
+import json
+import os
+
+work = os.environ["WORK_DIR"]
+with open(os.path.join(work, "model.json"), encoding="utf-8") as fh:
+    services = json.load(fh).get("services") or {}
+with open(os.path.join(work, "llm-urls.bin"), "wb") as out:
+    for name in sorted(services):
+        env = services[name].get("environment") or {}
+        for key in ("MV_LLM_URL", "MV_OLLAMA_URL"):
+            url = env.get(key)
+            if url:
+                out.write(f"{name}\0{key}\0{url}\0".encode("utf-8"))
+PY
+# shellcheck source=scripts/lib/llm-endpoint.sh
+. "$repo_root/scripts/lib/llm-endpoint.sh"
+: >"$work/llm-verdicts.bin"
+while IFS= read -r -d '' llm_service && IFS= read -r -d '' llm_key && IFS= read -r -d '' llm_url; do
+  llm_endpoint_classify "$llm_url" "$llm_key"
+  printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
+    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" >>"$work/llm-verdicts.bin"
+done <"$work/llm-urls.bin"
+
 # Rule 3's second half needs the work tree, not the model. The scope is what
 # the target platform is built from — compose, build/, scripts/, the single Go
 # module and the environment files. Out of scope, and out of this linter's
@@ -636,7 +672,6 @@ minioadmin_hits=$(git grep -i -n -- minioadmin -- \
 WORK_DIR="$work" MINIOADMIN_HITS="$minioadmin_hits" \
   MARKS_PATH="$marks" ENV_EXAMPLE_PATH="$env_example" \
   "$python_bin" - <<'PY'
-import ipaddress
 import json
 import os
 import re
@@ -1028,35 +1063,40 @@ for name, svc in sorted(services.items()):
             "(ADR-005 add. 2 p. 7)",
         )
 
-ALLOWED_HOSTS = {"host.docker.internal", "localhost"} | service_names
-
-
-def local_llm_host(url):
-    host = urlsplit(url).hostname
-    if not host:
-        return False, "no host"
-    if host in ALLOWED_HOSTS:
-        return True, host
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return False, host
-    return (addr.is_loopback or addr.is_private), host
-
-
-for name, svc in sorted(services.items()):
-    for key in ("MV_LLM_URL", "MV_OLLAMA_URL"):
-        url = (svc.get("environment") or {}).get(key)
-        if not url:
-            continue
-        ok, host = local_llm_host(url)
-        if not ok:
-            fail(
-                6,
-                f"{name}: {key} points at the public host {host!r}; a cloud endpoint "
-                "needs MV_LLM_CLOUD_ENABLED=true and never a compose default "
-                "(SEC-15, ADR-005 add. 2 p. 3)",
-            )
+# The verdicts of llm_endpoint_classify (scripts/lib/llm-endpoint.sh), taken
+# in bash before this program started: service, key, class, kind, host, error.
+# No second copy of the rule lives here (T-450). The error is printed as the
+# function wrote it: llm_parse_url cuts the query and the fragment off the value
+# it echoes, and the user information in front of the last @ as well — before
+# the first refusal, the one about the query included (T-450 review #1 N-2,
+# review #2 Mi-R2-1). A key lives there when it is put into the address, so a
+# COMPOSE_LINT_ENV_FILES pointed at a real env file does not carry one into the
+# log; the fixture bad-llm-url-userinfo holds that with a fake password.
+with open(os.path.join(work, "llm-verdicts.bin"), "rb") as fh:
+    fields = [f.decode("utf-8", errors="replace") for f in fh.read().split(b"\0")[:-1]]
+if len(fields) % 6:
+    print("compose-lint: the verdicts of llm_endpoint_classify are malformed "
+          f"({len(fields)} fields, want groups of 6)", file=sys.stderr)
+    sys.exit(2)
+for i in range(0, len(fields), 6):
+    name, key, verdict, kind, llm_host, reason = fields[i:i + 6]
+    if verdict == "local":
+        continue
+    if verdict == "cloud":
+        fail(
+            6,
+            f"{name}: {key} points at {llm_host!r}, which is not a local address "
+            f"(testdata/llm/local-endpoints.tsv); a cloud endpoint needs "
+            "MV_LLM_CLOUD_ENABLED=true and never a compose default "
+            "(SEC-15, ADR-005 add. 2 p. 3)",
+        )
+    else:
+        fail(
+            6,
+            f"{name}: {key} is not an address the platform can use — a "
+            f"configuration error, not the cloud: {reason} "
+            "(testdata/llm/local-endpoints.tsv)",
+        )
 
 # --------------------------------------------------------------------------
 # Rule 7, the marker half — every `${VAR:?}` of the always-loaded file is a

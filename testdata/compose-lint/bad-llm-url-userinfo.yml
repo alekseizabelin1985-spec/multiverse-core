@@ -1,0 +1,28 @@
+# Rule 6: user information in an address that is refused for another reason
+# first. The query, a scheme other than http/https, a value without a scheme
+# and a character outside ASCII are all checked before the @, and their
+# sentences used to print user:pass@ with the rest into the report of this
+# linter (T-450 review #2 Mi-R2-1). Each expect-text holds the cut: the value
+# goes on with …@ right after the scheme, so the fake password FAKEPW123 in
+# front of it cannot be in the report.
+#
+# expect-rule: 6
+# expect-text: core: MV_LLM_URL is not an address the platform can use
+# expect-text: MV_LLM_URL=http://…@127.0.0.1:8888/… carries a query or a fragment
+# expect-text: MV_OLLAMA_URL=ftp://…@ollama:11434 uses scheme 'ftp'
+# expect-text: MV_LLM_URL=…@ollama:11434 has no scheme
+# expect-text: MV_OLLAMA_URL=http://…@ollama:11434 carries a character outside printable ASCII
+services:
+  ollama:
+    profiles: ["gpu"]
+    image: ${OLLAMA_IMAGE:?set OLLAMA_IMAGE in build/versions.env}
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: http://user:FAKEPW123@127.0.0.1:8888/?x=1
+      MV_OLLAMA_URL: ftp://user:FAKEPW123@ollama:11434
+  gm:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: user:FAKEPW123@ollama:11434
+      MV_OLLAMA_URL: http://user:FAKEPW123Ä@ollama:11434
