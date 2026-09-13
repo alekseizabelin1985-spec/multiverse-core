@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:16:04+03:00",
+  "updatedAt": "2026-09-13T14:16:53+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2389,7 +2389,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-446",
           "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:46:40+03:00",
           "finishedAt": null,
@@ -4193,7 +4193,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-303",
           "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -8159,7 +8159,7 @@ window.DEVTEAM_STATE =
       "task": "T-303",
       "action": "links и каркас HTTP-слоя, регистрация контекста gateway",
       "startedAt": "2026-09-13T13:31:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:16:53+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8219,7 +8219,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "T-446 runtime (таймауты, SetDeadlines, ShuttingDown) и раскладка cmd",
       "startedAt": "2026-09-13T13:46:40+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:16:27+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -8349,6 +8349,26 @@ window.DEVTEAM_STATE =
       "task": "T-060",
       "action": "Отметка владельца cmd/multiverse по serve.go",
       "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #1: runtime и раскладка cmd по владельцам",
+      "startedAt": "2026-09-13T14:16:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Ревью #1: links и HTTP-слой gateway",
+      "startedAt": "2026-09-13T14:16:53+03:00",
       "finishedAt": null
     }
   ],
@@ -10968,6 +10988,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-060 принята TEAM-1/tech-lead#2: DoD выполнен, итерация 2 проверена, мутанты M0/M3/M4 красные. При приёмке добавлено WARN «replay without a recording» для --mode=replay без --recording (тест и мутанты M5/M6). make test — 0, internal/replay 96,8 %. До слияния — отметка tech-lead#1 по cmd/multiverse/"
+    },
+    {
+      "at": "2026-09-13T14:16:27+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "2026-09-13 · EPIC-001 · T-446 выполнена TEAM-1/developer#2: runtime.SetDeadlines/ShuttingDown (long-poll отвечает < 1 с после Stop), ReadHeaderTimeout 5s/IdleTimeout 120s; фабрики контекстов по файлам владельцев contexts_{state,swarm,gateway,memory}.go, mvctl — commands_{state,swarm,ops}.go, реест"
+    },
+    {
+      "at": "2026-09-13T14:16:53+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "2026-09-13 · EPIC-004 · T-303 выполнена TEAM-3/developer#1: internal/gateway/links (resolve/consent/forget с хуками до DELETE и CompactLinks до ответа; байтов внешнего ID нет в -wal/-shm), обработчики в новом пакете internal/gateway/handlers (api импортирует бот — без драйвера SQLite), цепочка mid"
     }
   ],
   "blockers": [],
