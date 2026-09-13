@@ -60,7 +60,7 @@ erDiagram
         text description "авторский слой, из блупринта"
         list npc_ids FK
         duration respawn_ttl "кулдаун возрождения, по умолчанию 24 ч"
-        list players_present "проекция позиций, проверяется инвариантом"
+        list players_present "проекция позиций, инвариантом не проверяется (T-457)"
         timestamp last_background_event_at
     }
     Character {
