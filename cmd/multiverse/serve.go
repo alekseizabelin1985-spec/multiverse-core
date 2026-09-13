@@ -100,7 +100,8 @@ func parseServe(args []string, stderr io.Writer) (*serveOptions, error) {
 		joinOr(env.Mode.Enum())+"; overrides "+env.Mode.Name())
 	bus := fs.String("bus", env.Bus.String(),
 		joinOr(env.Bus.Enum())+" (memory only with --contexts=all); overrides "+env.Bus.Name())
-	recording := fs.String("recording", "", "path to the recorded journal read in replay mode")
+	recording := fs.String("recording", "", "recorded session (JSONL) of replay mode: the clock of the contexts "+
+		"starts at its earliest event; its events are not fed to the bus")
 	idSource := fs.String("id-source", "uuid", "uuid|sequence (sequence gives deterministic event ids)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -281,17 +282,24 @@ func (p process) run(ctx context.Context, release func()) error {
 		return err
 	}
 	deps.Clock, deps.Timers = times.clock, times.timers
-	if times.events != nil {
-		// The constructors stamp root events with the clock of the contexts, so
-		// that a root event built in replay carries the time of the events read,
-		// not of the machine (C-01 v1.4 "Источники конструкторов"). Only the
-		// replay clock is installed here: the sources of live mode, and the id
-		// source and the registry of both modes, are T-055's. Deferred before
-		// the bus, so it is put back after the bus has closed — a dead letter
-		// written during the shutdown is still stamped with event time.
-		eventbus.SetClock(times.events)
-		defer eventbus.SetClock(nil)
-	}
+	// The sources of the event constructors are the objects of Deps: the id
+	// generator --id-source chose, the clock of the contexts — the wall clock
+	// in live mode, the EventClock in replay — and the registry the bus routes
+	// by (C-01 v1.4 "Источники конструкторов", T-055). They are installed in
+	// one place, before the bus is opened and before the first context starts,
+	// and taken back in one place: deferred before closeBus, so they are taken
+	// back after the bus has closed and a dead letter written during the
+	// shutdown still gets the id and the time of this run.
+	//
+	// Taken back means reset to the defaults of eventbus, not to what stood
+	// before the run: eventbus has no reader of its sources. A binary runs once
+	// and loses nothing; a test that installed its own sources — with
+	// testkit.Deterministic — has them replaced by the ones of the process for
+	// the length of the run and reset after it. While the sources are process
+	// wide, a test of this package that runs process.run must not call
+	// t.Parallel: two runs would install their sources over each other.
+	installSources(deps)
+	defer installSources(runtime.Deps{})
 
 	// The bus gets its own timers, real in every mode (C-01 v1.4 "Таймеры
 	// повторной доставки"): the pauses between redeliveries are not domain
@@ -348,7 +356,7 @@ func (p process) run(ctx context.Context, release func()) error {
 		// one and root events built before the first read carry that time, so
 		// the run says so rather than pass for a replay of a session (T-408).
 		log.Warn("replay without a recording",
-			slog.Time("clock_start", times.events.Now()),
+			slog.Time("clock_start", times.start),
 			slog.String("mode_from", opts.modeFrom))
 	}
 	_, _ = fmt.Fprintf(p.stdout, "multiverse %s listening on %s, contexts: %s, mode: %s (%s), bus: %s (%s)\n",
@@ -379,10 +387,15 @@ func (p process) run(ctx context.Context, release func()) error {
 // runTime is the time of one run: what the contexts get, what the bus gets, and
 // the replay clock the bus middleware moves (nil in live mode).
 type runTime struct {
-	clock    clock.Clock
-	timers   clock.Timers
-	bus      clock.Timers
-	events   *replay.EventClock
+	clock  clock.Clock
+	timers clock.Timers
+	bus    clock.Timers
+	events *replay.EventClock
+	// start is where the replay clock stood when the run was built. The start
+	// record reports it rather than the clock itself: by then the contexts have
+	// started, and a context that catches up on the journal in its Start has
+	// already moved the clock (review of T-060 by tech-lead#1, Н-1).
+	start    time.Time
 	recorded int
 }
 
@@ -412,8 +425,24 @@ func timeOf(opts serveOptions) (runTime, error) {
 		timers:   replay.NullTimers{},
 		bus:      clock.RealTimers{},
 		events:   events,
+		start:    start,
 		recorded: recorded,
 	}, nil
+}
+
+// installSources installs the sources of the event constructors from deps. The
+// zero Deps resets all three to the defaults of eventbus: UUIDs, the wall clock
+// and no registry.
+func installSources(deps runtime.Deps) {
+	eventbus.SetIDSource(deps.IDs)
+	eventbus.SetClock(deps.Clock)
+	if deps.Contracts == nil {
+		// A nil *contracts.Registry in the interface would not read as "no
+		// registry" to eventbus.
+		eventbus.SetRegistry(nil)
+		return
+	}
+	eventbus.SetRegistry(deps.Contracts)
 }
 
 func shutdown(contexts []runtime.Context, log *slog.Logger) {

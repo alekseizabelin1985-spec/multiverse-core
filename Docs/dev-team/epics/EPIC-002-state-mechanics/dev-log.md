@@ -270,3 +270,123 @@
   - `make test` (Git Bash) — 0; покрытие `shared/entity` 93,9 %, `shared/testkit/state` 89,0 %, gate `internal/mechanics` 94,9 %;
   - `-race` недоступен.
   - Docker, стенд, `.env`, интеграционные тесты не трогались.
+
+<!-- dev-log T-055 -->
+## developer#3 · T-055 · `internal/state`: конвейер предложение → факт, источники конструкторов в `serve.go` · 2026-09-13
+
+Ветка `task/T-055-state-pipeline` (база 34bdcca), TEAM-1, Opus. Не закоммичено. Подробности, таблица DoD → тест, мутанты и рецепт синхронизации с T-446 — карточка `tasks/T-055.md`.
+- **Сделано.**
+  - `internal/state`: `memstore` (рабочий набор в памяти, копии на входе и выходе), `proposal.go`, `Applier` (`apply.go`), `facts.go`, `worker.go` (горутина на мир со своим `recover`), `context.go` (контекст `state`: подписка-посредник, `Stop`, `Health`).
+  - `cmd/multiverse`: регистрация `state` (`contexts_state.go`), один блок источников конструкторов в `serve.go`, Н-1 и Н-2 приёмки T-060.
+  - `MV_STATE_WORLDS` в манифесте и `.env.example`.
+- **WithCauseID — «да».** `parts` — id сущности; у отказа — id сущности или пусто.
+  - Доводы. Ответ на предложение (факты и отказы) публикуется целиком, и только потом копии заменяют сущности в `memstore`, а `proposal_id` попадает в окно. Если публикация упала на втором факте пакета, мир не изменился и шина повторяет то же событие. Первый факт уходит снова — с тем же id, и потребитель, гасящий дубли по id (C-02 «Гарантии»: «факты досылаются»), его не увидит. Со случайным id повтор выглядел бы новостью.
+  - Уникальность частей. Пакет называет каждую сущность один раз (C-02 v1.3 проверяется до всего). Отказ всего пакета — один, под своей сущностью или без неё.
+  - `proposal_id` в `parts` не нужен. Новое событие под тем же `proposal_id` (C-05 п. 1) несёт другой `causation_id`, и id отличается при любых частях. Такой повтор гасит окно `proposal_id`, фактов он не публикует.
+  - Тест `TestAFailedPublicationIsRetriedWithTheSameIDs`, мутант M3 — красный.
+- **Паника — ошибка шине, а не повторная паника.**
+  - Что происходит. Паника в `Applier` ловится `recover` worker'а. Пишется `Error` со стеком и `handled=false`, мир остановлен, `/health fail` с текстом паники по миру. Обработчик подписки получает `ErrWorldStopped` и отдаёт шине ошибку. Шина повторяет ×3 и паркует событие в `dead_letters` с причиной. Каждое следующее предложение этого мира уходит тем же путём, другие миры работают.
+  - Почему не повторная паника. Паника в worker'е и так уже записана со стеком. Повторная паника в обработчике дала бы второй стек на то же событие и ложную панику на каждое последующее предложение, где паники не было. Это исказило бы `service_panics` (NFR-012). Ошибка оставляет событие с причиной в `dead_letters`, это след для разбора.
+  - Цена. Пауза повторов (100/500/2000 мс) на каждое предложение остановленного мира задерживает подписку и для остальных миров. В MVP-1 мир один, и остановленный мир — уже `/health fail`.
+  - `Delivery` панику worker'а поймать не может: `Applier` работает в другой горутине. Поэтому `recover` на границе worker'а обязателен.
+  - Тест `TestAPanicStopsItsWorldAndOnlyItsWorld`, мутанты M7, M14, M23 — красные.
+- **Посредник (C-01 v1.6).** Окно id событий в `dispatch`: `Has` до worker'а, `Add` после ответа без ошибки. Окно `proposal_id` — внутри `Applier`, заполняется после публикации всего ответа. Тест `TestTheRetryOfAFailedDeliveryReachesTheWorker`, мутант M1 — красный.
+- **Остановка (C-01 v1.7).** `Stop` отменяет контекст подписки (он свой: `WithCancel(WithoutCancel(ctx))`) и ждёт возврата обработчика в пределах своего `ctx`. Worker доводит принятое предложение с `context.WithoutCancel`, иначе публикация второй половины пакета оборвалась бы на отменённом контексте (мутант M8). Процесс закрывает шину после `StopAll`, как и раньше.
+- **Отклонения и решения** (подробно в карточке):
+  - чтение подпиской `core.state`, а не курсором, до T-059;
+  - правило C-02 v1.3 включено, потому что без него ломается «версии строго +1»;
+  - предложение без мира в конверте пропускается;
+  - в боях I1-α `cmd/multiverse` контекст `state` обслуживает другой мир, пока стенд держит `FakeState`;
+  - `memoryOptions().idSource` = `uuid`.
+- **Источники конструкторов.** `installSources(deps)` до `openBus`, `defer installSources(runtime.Deps{})` до `defer closeBus`. Сбрасываются значения по умолчанию, а не прежние: у `eventbus` нет читателя источников (бэклог EPIC-001). Комментарий про `t.Parallel` стоит рядом с установкой. Тест в live и replay после `testkit.Deterministic`; мутанты M11, M13 — красные.
+- **Разбор доступов (без cgo, `-race` недоступен).**
+  - Поля `Context` — под `c.mu`, `dispatch` берёт worker под ним же.
+  - `Dedup` — со своим мьютексом; `Has`/`Add` посредника вызывает одна горутина подписки, по событию за раз.
+  - `Applier` вызывает только горутина worker'а.
+  - `memstore` — `RWMutex`, наружу только копии; `Health` читает `Len` под блокировкой.
+  - `worker.failure` — под `w.mu`.
+  - Сущности плана — копии из `memstore`, локальные для worker'а до `Put`, который снова копирует.
+  - `payload.attributes` факта создания — карта копии, сериализуется в `Publish` до `Put`.
+  - В тестах хук шины — под мьютексом, счётчик попыток — `atomic`.
+  - Ожидания в тестах — опрос с дедлайном 60 с как верхней границей; окон короче секунды на реальном времени нет, кроме бюджета 50 мс в `TestStopIsBoundedByItsContext`: там проверяется только «вернулся с ошибкой дедлайна не позже 30 с».
+  - Стресс `-count=40 -cpu 1,2,8 ./internal/state/...` и `-count=5 -cpu 1,4 ./cmd/multiverse/` — зелёные.
+- **Мутанты** (копия `t055-mut` в scratch, без `-overlay`, контрольный первым, удалена по точному пути): 24 из 24 красные.
+- **Прогоны:**
+  - `go build ./... && go vet ./...` — 0;
+  - `gofmt -l` — пусто;
+  - `go test -short -count=1 ./...` — ok;
+  - `go test -tags e2e ./test/e2e/...` — ok;
+  - `golangci-lint run ./...` — 0 issues;
+  - `mvctl contracts check`, `mvctl env check`, `make compose-lint` — 0;
+  - `make test` — exit 0, `internal/state` 93,5 %.
+  - Интеграционных тестов у задачи нет. Docker, стенд, `.env` не трогались.
+
+<!-- dev-log T-055 итерация 2 -->
+## developer#3 · T-055 · итерация 2 по ревью #1 (1 Major, 4 Minor, 3 Nit) · 2026-09-13
+
+Ветка `task/T-055-state-pipeline` (база 34bdcca), TEAM-1, Opus. Не закоммичено. Правки итерации 1 тоже не закоммичены.
+
+- **Ma-1 — фантомный факт. Сделано по решению оркестратора: комбинация Б+А, КД §9 не менялся.**
+  - Б. `Applier.publish` при ошибке `Publish` публикует то же событие ещё раз: тот же объект, те же id и байты. Пауза экспоненциальная, 100 мс → ×2 → потолок 5 с, по `ApplierConfig.Timers`; контекст берёт их из `Deps.Timers`, по умолчанию `clock.RealTimers`. Шине ошибка не возвращается.
+  - Уже вышедшие события ответа повторно не публикуются, повторяется только невышедшее.
+  - Каждая неудача пишется в `Warn` с `handled=true`, `proposal_id`, `event_id`, номером попытки и паузой. Пока идут попытки, мир в `/health` — `degraded` с `publish_attempts_failed`.
+  - Сами публикации идут на `context.WithoutCancel`: шина отказывает отменённому контексту. Паузы ждут контекст мира, то есть контекст обработчика подписки.
+  - А. Отмена этого контекста (`Stop`) обрывает попытки. Мир останавливается с `ErrWorldStopped` + `ErrPublishFailed`. Пишется `Error` с `handled=false`, `reason=publish_failed`, id вышедших событий, ожидавшим событием и `remedy`. В `memstore` ничего не пишется, `proposal_id` в окно не попадает.
+  - `Delivery` на отменённом контексте возвращает `ctx.Err()`, без `dead_letters`, и событие остаётся незакоммиченным. Дальнейшие предложения мира получают `ErrWorldStopped` без решения. `/health` мира — `fail`, `reason: publish_failed`.
+  - Остановка мира хранится в `Applier`, а не в worker'е. Поэтому она переживает `Stop`/`Start` того же экземпляра. Паника тоже переехала туда: `reason: panic`.
+  - `Put` в `memstore` после вышедшего ответа тоже останавливает мир (`keepFailed`). Сегодня путь недостижим: `Put` падает только на пустом id или мире.
+  - Детерминированный путь ревью. Отказ по набору с `entity.id` без `entity.type` публикуется без `entity` в payload, потому что схема требует пару целиком. Часть `WithCauseID` — по-прежнему id сущности. Без этого отказ не прошёл бы схему и держал бы мир в попытках вечно.
+  - Регрессионный тест по зонду P1 — `TestNoTwoFactsOfOneVersionWhileAPublicationKeepsFailing`. Факт волка не выходит 30 раз, это больше, чем шина повторила бы доставку. Проверяется:
+    - `dead_letters` пуст;
+    - 31-я попытка проходит;
+    - `prop-next` решается от v2;
+    - у каждой сущности на шине один факт на версию (`assertOneFactPerVersion`);
+    - каждая версия мира объявлена фактом (`assertAnnounced`);
+    - `/health` в ходе попыток `degraded`, после — `ok`.
+  - `TestAStopThatEndsTheAttemptsStopsTheWorld`: `Stop` посреди попыток. `dead_letters` пуст, мир v1, `Error` с `publish_failed`. После повторного `Start` — `/health fail` с причиной, `prop-next` уходит в `dead_letters` с `ErrWorldStopped`, второго факта v2 нет.
+  - Уровень `Applier`: `TestAFailedPublicationIsPublishedAgainAsItIs` (те же байты во всех попытках, мир не двигается до выхода ответа) и `TestAnAnswerAbandonedWithTheContextStopsTheWorld` (update и create).
+  - Паузы: `TestThePauseBetweenAttemptsDoublesUpToTheCap`.
+  - Ожидания — `clock.Manual`, двигаемый в цикле опроса (`applyAdvancing`, `advancing`). Реальное время только ограничивает дефект сверху, 60 с.
+  - `TestTheRetryOfAFailedDeliveryReachesTheWorker` удалён: повтора доставки при ошибке публикации больше нет. Норму посредника «запомнить после ответа» держит M1 — красный на `TestAPanicStopsItsWorldAndOnlyItsWorld` и `TestAStopThatEndsTheAttemptsStopsTheWorld`.
+- **Mi-1.** Мир читается из `Event.World` напрямую (`worldOf`) и в `Applier`, и в `dispatch`. Предложение без мира — `Warn` «proposal without world in the envelope: no worker is addressed» с `event_id`, `type`, `proposal_id`. Чужой мир остаётся на `Debug`. Норма «world обязателен» — вопрос к system-architect, код пропускает. Тесты: `TestWhatIsNotAProposalOfThisWorldIsPassedOver` (в payload есть `world_id` нашего мира — legacy-фолбэк его бы адресовал), `TestAProposalWithoutAWorldIsReported`.
+- **Mi-2.** `Start` отказывает, пока подписка или любой worker прошлого запуска не вернулись (`previousRunEnded`). `Stop` по таймауту всё равно закрывает `quit` всех worker'ов (`signalStop`). `subErr` пишет только горутина текущего запуска. Тест `TestStopIsBoundedByItsContext`: после таймаута `Start` — ошибка; после освобождения хука `Start` проходит, следующее предложение даёт v3, один факт на версию.
+- **Mi-3.** `TestACreateKeepsNothingUntilItsFactIsOut`: сущности нет в мире ни при одной попытке, один `entity.created` под id обеих попыток. `TestACreateUnderAnAppliedProposalIDIsSilent`: новое событие под применённым `proposal_id` не публикует ничего. Create с оборванными попытками — подтест `create` в `TestAnAnswerAbandonedWithTheContextStopsTheWorld`.
+- **Mi-4.** `TestAnEventDeliveredTwiceIsAnsweredOnce`: отказ `version_conflict`, те же байты через `bus.Append`, затем сторож — один ответ. `TestTheRefusalsOfOnePackageHaveIDsOfTheirOwn`: два отказа пакета с разными id, повтор того же события даёт те же id.
+- **N-1.** `TestTheSourcesOutliveTheBusOfTheRun` (`cmd/multiverse/sources_test.go`). Транспорт процесса строит корневое событие в `Close`, его id — `seq-N` генератора прогона.
+- **N-2.** Инструкция про T-446 снята из комментария `contexts_state.go`, осталась одна фраза про `MV_STATE_WORLDS`. П. 2 рецепта синхронизации в карточке дополнен.
+- **N-3.** `last_change.batch_size` = число применённых наборов (`len(plans)`), как в КД §4.5 п. 9. Проверка — в `TestANonAtomicPackageRefusesOnlyWhatFailed` (2 из 4). Двойник `shared/testkit/state` пишет размер предложенного пакета. Это чужой файл, расхождение уходит в T-056 вместе с заменой двойника.
+- **Мутанты.** Копия дерева в scratch `t055i2-tree` (`tar` без `.git`, `Docs`, `services`), без `-overlay`. Контрольный — первым, базовый прогон копии зелёный. После каждого мутанта файл восстановлен, копия сверена с рабочей папкой (`diff -r` — идентично) и удалена по точному пути. Итог: **21 из 21 красные**.
+  - C0 (контрольный): `version` факта +1.
+  - MA1: ошибка шине после 3 попыток.
+  - MA2: невышедшее событие пропускается, ответ сохраняется («применить без публикации»).
+  - MA3: оборванный ответ не останавливает мир.
+  - MA4: публикация на отменяемом контексте.
+  - MA5: попытки не видны в `/health`.
+  - MA6: отказ с пустым `entity.type`.
+  - MA7: паника не останавливает мир.
+  - MI2a: `Stop` по таймауту не сигналит worker'ам.
+  - MI2b: `Start` не ждёт прошлого запуска.
+  - X9: `Stop` не останавливает worker'ы.
+  - X4: create, `Put` до публикации.
+  - X8: create без окна `proposal_id`.
+  - X1: посредник без окна id событий.
+  - X2: одна `WithCauseID`-часть у всех отказов.
+  - M1: посредник запоминает событие до ответа.
+  - MI1a: `Applier` читает мир через `GetWorldIDFromEvent`.
+  - MI1b: предложение без мира — `Debug`.
+  - N3: `batch_size` = размер предложенного пакета.
+  - X11: сброс источников до `closeBus`.
+  - Не проверялся мутант «`dispatch` через `GetWorldIDFromEvent`». Для событий, прошедших схему, он эквивалентен: у предложения нет ключа мира в payload.
+- **Прогоны** (go1.26, windows/amd64):
+  - `go build ./... && go vet ./...` — 0; `gofmt -l` — пусто;
+  - `go test -short -count=1 ./...` — ok;
+  - `go test -short -count=20 -cpu 1,4 ./internal/state/...` — ok (12 с); `go test -count=5 -cpu 1,4 ./cmd/multiverse/` — ok;
+  - `go test -tags e2e -count=1 ./test/e2e/...` — ok (11 с);
+  - `golangci-lint run ./...` — 0 issues;
+  - `mvctl env check` — 68 переменных, 0; `mvctl contracts check` — 65 типов, 0;
+  - `make test` (Git Bash) — exit 0, `internal/state` 94,1 % (430 из 457), без `-race` (нет cgo).
+  - Интеграционные тесты, Docker, стенд `:8888`, `.env` не трогались.
+- **Риски.**
+  - Событие, которое шина не примет никогда (дефект конструктора, схема), держит подписку `system_events` в попытках для всех миров процесса до `Stop`. Мир `degraded`, `Warn` на каждую попытку. Путь пустого `entity.type` закрыт, других известных нет. Классифицировать ошибки шины как окончательные нельзя: у ошибки схемы нет sentinel в `shared/eventbus`.
+  - При недоступном брокере стоит вся подписка процесса — это цена варианта Б, её назвал ревьюер.
+  - Остановленный мир восстанавливается только рестартом процесса. Догон по фактам журнала (§4.8) — T-059, до него память после рестарта пуста.

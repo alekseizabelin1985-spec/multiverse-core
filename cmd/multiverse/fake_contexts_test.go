@@ -383,6 +383,11 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 	// directory, as for `go run ./cmd/multiverse` from the root of the tree.
 	t.Chdir(filepath.Join("..", ".."))
 	t.Setenv(env.SwarmFake.Name(), "true")
+	// The world of the fixtures belongs to FakeState of the stand, so the
+	// context state of the process serves another one: two States answering
+	// one proposal would publish every fact twice. The stand moves onto the
+	// real State when T-056 replaces FakeState.
+	t.Setenv(env.StateWorlds.Name(), "world-of-no-stand")
 
 	fixtures, err := state.LoadFixtures(filepath.Join("testdata", "fixtures"))
 	if err != nil {

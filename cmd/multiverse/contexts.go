@@ -33,11 +33,16 @@ func init() {
 }
 
 // factoryOf is the factory a context of the platform is registered with: the
-// stub below for every context whose owner has not implemented it, and the
-// hook for swarm.
+// stub below for every context whose owner has not implemented it, the hook
+// for swarm and internal/state for state.
 func factoryOf(name string) func() runtime.Context {
-	if name == swarmContext {
+	switch name {
+	case swarmContext:
 		return newSwarm
+	case stateContext:
+		// The first context with an owner's implementation (EPIC-002 T-055); its
+		// factory is newStateContext of contexts_state.go.
+		return newStateContext
 	}
 	return newStub(name)
 }
