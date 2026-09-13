@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T02:56:55+03:00",
+  "updatedAt": "2026-09-13T03:06:07+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1951,17 +1951,50 @@ window.DEVTEAM_STATE =
         {
           "id": "T-436",
           "title": "kafka-адаптер: Close не отменяет контекст обработчика (C-01 v1.7, ADR-023 п. 4); якорь в контракт-наборе",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-12T01:44:59+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T03:04:19+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 24,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "12.09 01:44",
+              "to": "12.09 01:50",
+              "duration": "5m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 02:44",
+              "to": "13.09 02:48",
+              "duration": "4m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 02:48",
+              "to": "13.09 02:56",
+              "duration": "7m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "13.09 02:56",
+              "to": "13.09 02:59",
+              "duration": "2m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 02:59",
+              "to": "13.09 03:04",
+              "duration": "5m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks.md",
           "branch": "task/T-436-kafka-close-handler-ctx",
-          "worktree": ".worktrees/T-436"
+          "worktree": null,
+          "mergeCommit": "adadca5e96883b51c2e8a6bd4830e4dda91853af",
+          "mergedAt": "2026-09-13T03:06:07+03:00"
         },
         {
           "id": "T-437",
@@ -2007,15 +2040,17 @@ window.DEVTEAM_STATE =
         {
           "id": "T-440",
           "title": "Редакционно: overview.md §18.1 — порядок E → Qwen3.6 → C → A и правило выбора (доп. 3 ADR-005); владение infrastructure.md в ownership.md привести к факту",
-          "status": "todo",
+          "status": "in-progress",
           "assignee": "system-architect#1",
-          "startedAt": null,
+          "startedAt": "2026-09-13T03:06:07+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
+          "card": "epics/EPIC-001-foundation/tasks.md",
+          "branch": "task/T-440-overview-order-ownership",
+          "worktree": ".worktrees/T-440"
         }
       ],
       "defects": [],
@@ -5774,6 +5809,26 @@ window.DEVTEAM_STATE =
       "task": "T-436",
       "action": "итерация 2: комментарии N-1, N-2",
       "startedAt": "2026-09-13T02:56:55+03:00",
+      "finishedAt": "2026-09-13T02:59:11+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-436",
+      "action": "приёмка исправления kafka Close",
+      "startedAt": "2026-09-13T02:59:11+03:00",
+      "finishedAt": "2026-09-13T03:04:19+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-440",
+      "action": "overview.md §18.1 и владение infrastructure.md",
+      "startedAt": "2026-09-13T03:06:07+03:00",
       "finishedAt": null
     }
   ],
@@ -8351,6 +8406,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-434 закоммичена eb5ea38, слита в эпик (225f68b). T-437 начата (devops-engineer#1). Учёт времени поправлен на перерыв сессии"
+    },
+    {
+      "at": "2026-09-13T03:06:07+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-436 закоммичена f57f3e2 (контракт-набор на временной Redpanda на дереве коммита зелёный), слита в эпик (adadca5). T-440 начата (system-architect#1)"
     }
   ],
   "blockers": [],
