@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:46:16+03:00",
+  "updatedAt": "2026-09-13T16:47:06+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2460,7 +2460,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/devops-engineer#2",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9021,7 +9021,7 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Ревью #2: таблица «локальный адрес»",
       "startedAt": "2026-09-13T16:37:09+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:47:06+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -9081,6 +9081,16 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Ревью #1: провайдеры fake и recorded",
       "startedAt": "2026-09-13T16:46:16+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Приёмка T-450 и закрытие утечки userinfo",
+      "startedAt": "2026-09-13T16:47:06+03:00",
       "finishedAt": null
     }
   ],
@@ -12090,6 +12100,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-207 выполнена TEAM-2/developer#2: providers/fake (таблица правил, Calls(), задержка по shared/clock, грязные ответы, ярлыки ADR-029) и providers/recorded (ключ correlation_id/agent.id/phase/attempt, ErrIncompleteRecord без живого вызова, Lookup, Source извне); TestReplayMakesNoLLMCalls; 65 мутанто"
+    },
+    {
+      "at": "2026-09-13T16:47:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · ревью #2 (TEAM-1/code-reviewer#1): принять — 0/0/1/2. M-1 и Mi-1…Mi-5 закрыты; набор недопустимых символов хоста сверен с настоящим Go url.Parse; 78 враждебных URL — bash и pwsh побайтно одинаковы; пробное слияние T-450 → T-455 без конфликтов. Mi-R2-1: логин/пароль из URL (user:pass@) печата"
     }
   ],
   "blockers": [],
