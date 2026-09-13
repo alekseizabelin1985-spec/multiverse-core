@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:30:30+03:00",
+  "updatedAt": "2026-09-13T21:31:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2890,7 +2890,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-056",
           "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
@@ -10091,7 +10091,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Снятие блокера FakeEncounter",
       "startedAt": "2026-09-13T21:23:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:31:13+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10101,6 +10101,16 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Приёмка парсера",
       "startedAt": "2026-09-13T21:30:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Ревью #1 владения и инвариантов",
+      "startedAt": "2026-09-13T21:31:13+03:00",
       "finishedAt": null
     }
   ],
@@ -13854,6 +13864,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-209 · ревью #2 (TEAM-2/code-reviewer#1): принять — 0/0/2/2. Ma-1, Mi-1, Mi-4, N-1, N-3 закрыты; ложные отказы только при незакрытой [ в преамбуле (редко, цена — повтор). Mi-5 регрессия: нечётные кавычки в прозе рассуждения не дают снять хвост и принимается черновик; Mi-6 скобка внутри строки пряче"
+    },
+    {
+      "at": "2026-09-13T21:31:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · итерация 1b (developer#2): блокер снят — FakeEncounter.wound пишет died_at/killed_by только NPC, тесты роя выбирают атаки по исходу (swingUntilTheWolfFalls), WithCauseID сохранён; мутанты B1/B1s/B2/B3 и регресс итерации 1 красные; make test exit 0, internal/state 94,3 %. Ревью #1 — TEAM-1/co"
     }
   ],
   "blockers": [],
