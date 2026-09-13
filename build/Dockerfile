@@ -19,6 +19,9 @@ ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go build -ldflags "-s -w -X main.version=${VERSION} -X multiverse-core.io/shared/logging.Version=${VERSION}" -o /out/ ./cmd/...
+# The empty data directory of the gateway, copied into the runtime image below:
+# the distroless image has no shell to create it there.
+RUN mkdir -m 0700 /gateway-data
 
 # Pinned by digest, not by the floating :nonroot tag (infrastructure.md §2.4);
 # Dependabot (ecosystem docker, directory build/) bumps the line. Refresh with:
@@ -32,6 +35,14 @@ COPY --from=builder /out/ /
 # The data directories the binaries read (blueprints/, rules/, laws/, config/)
 # are added by the tasks that create them: F-10 (rules, fixtures) and EPIC-003
 # (blueprints, laws, absolute limits).
+# MV_GATEWAY_DATA_DIR of compose (T-303): links.db holds player identifiers,
+# and the store refuses a directory open to the group or others (ADR-019 p. 1).
+# Owned by nonroot (65532) with 0700, so the process can create its files, and
+# because an empty named volume mounted at /data (gateway-data) takes the owner
+# and mode of this directory on its first mount; without it the volume is
+# root 0755 and the gateway does not start. A volume created before this line
+# keeps its root 0755: recreate it (Docs/ops/runbook.md, section 2).
+COPY --from=builder --chown=65532:65532 --chmod=0700 /gateway-data /data
 USER nonroot:nonroot
 # No HEALTHCHECK here on purpose: one image serves every role and each role
 # listens on its own port (gateway :8088, core :8090, memory :8082), so a URL

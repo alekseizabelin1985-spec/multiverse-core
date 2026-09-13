@@ -1,8 +1,9 @@
 # Дизайн решения: EPIC-004 «Вход игрока: gateway и Telegram-бот»
 
 Версия 0.1 · 2026-09-09 · architect#3 (TEAM-3) · этап A4 «Планирование», шаг 2 · для tech-lead#3 (нарезка `tasks.md`), developer#1–#2, tester#3, code-reviewer#3.
-Основание: `architecture/components/gateway-and-bot.md` v0.2 (детальный дизайн блока — здесь не дублируется, даются ссылки на разделы), ADR-018/019/020 с дополнениями после G2, ADR-006/009/010 с дополнениями, `contracts.md` v0.2 (C-04, C-08, C-10 — поставляем; C-01, C-02, C-05, C-06, C-14 — потребляем), `threat-model.md` (SEC-03, 06, 07, 08, 10, 11, 12 — обязательны в MVP-1), `plan/epics.md` v0.2 §2 EPIC-004, `plan/teams.md` §4 (слоты TEAM-3: 1 → 2), `plan/decomposition-review.md` §2 (I1 ~14 задач, I2 ~6), `journal.md` (U-1, U-5, U-6, U-7; G2 утверждён 2026-09-09).
-Ветка: `epic/EPIC-004-gateway` от `integration/mvp-1` (одна на весь MVP-1; создаётся tech-lead#3 при старте волны 1). Код не меняется на этом шаге.
+Редакция 0.1.1 · 2026-09-13 · tech-lead#3 по поручению оркестратора — редакционная правка под дерево `develop` 1c2ee7e, `contracts.md` v0.10 и gitflow; решения дизайна и объём не менялись; правки помечены «(сверка 2026-09-13)», история — §10.
+Основание: `architecture/components/gateway-and-bot.md` v0.2 (детальный дизайн блока — здесь не дублируется, даются ссылки на разделы), ADR-018/019/020 с дополнениями после G2, ADR-006/009/010 с дополнениями, `contracts.md` v0.2 (C-04, C-08, C-10 — поставляем; C-01, C-02, C-05, C-06, C-14 — потребляем; действующая редакция — **v0.10**: C-01 v1.7, C-02 v1.4, C-04 v1.3, C-05 v1.6, C-08 v1.3, C-10 v1.1, C-14 v1.2), `threat-model.md` (SEC-03, 06, 07, 08, 10, 11, 12 — обязательны в MVP-1), `plan/epics.md` v0.2 §2 EPIC-004, `plan/teams.md` §4 (слоты TEAM-3: 1 → 2), `plan/decomposition-review.md` §2 (I1 ~14 задач, I2 ~6), `journal.md` (U-1, U-5, U-6, U-7; G2 утверждён 2026-09-09).
+Ветка: **`epic/EPIC-004-gateway-bot`** от `develop` (1c2ee7e), рабочая папка `.worktrees/EPIC-004`; задачи — `task/T-NNN-<slug>` в своих папках `.worktrees/T-NNN` (gitflow). `integration/mvp-1` не используется: поставки другим командам и точки I1-α, I1, I2 попадают в `develop` контрольными слияниями ветки эпика по постоянному разрешению пользователя (2026-09-13), без тегов. Код не меняется на этом шаге. *(Сверка 2026-09-13: заменено «`epic/EPIC-004-gateway` от `integration/mvp-1` (одна на весь MVP-1; создаётся tech-lead#3 при старте волны 1)».)*
 
 ---
 
@@ -10,11 +11,11 @@
 
 **Цель.** Живой человек через Telegram (и CI-харнесс через тот же HTTP API) регистрируется с согласием, создаёт персонажа, играет соло в «Тёмном лесу» (I1) и в группе 2–6 с раундами (I2); внешний ID мессенджера не покидает `links.db`; каждое действие подтверждается ≤ 300 мс, результаты механики и нарратив приходят отдельными сообщениями; `/forget` физически удаляет связку.
 
-**Входит** (по `ownership.md` §1): `internal/gateway/**` (контекст `gateway` процесса `cmd/multiverse`), `cmd/telegram-bot/**`, `api/gateway.openapi.yaml` (включая раздел `admin` — прокси C-06), `internal/gateway/migrations/{links,gateway}/*.sql`, `shared/testkit/gateway` (`FakeGateway`, `Harness` — замена v0 из F-10), схемы событий `schemas/events/{player.*,group.*,round.*,analytics.session.*,analytics.turn.completed}.v1.json`, префикс `snapshots-{world}/gateway/`, файлы `links.db`/`gateway.db`, перенос `services/game-service` → `services/_archive/game-service/` после S9 (U-1).
+**Входит** (по `ownership.md` §1): `internal/gateway/**` (контекст `gateway` процесса `cmd/multiverse`), `cmd/telegram-bot/**`, `api/gateway.openapi.yaml` (включая раздел `admin` — прокси C-06), `internal/gateway/migrations/{links,gateway}/*.sql`, `shared/testkit/gateway` (`FakeGateway` и HTTP-обвязка рядом с `Harness` v0, API которого не меняется — сверка 2026-09-13), схемы событий `schemas/events/{player.*,group.*,round.*,analytics.session.*,analytics.turn.completed}.v1.json` (файлы и регистрация сделаны в EPIC-001 F-4b, содержание — владение EPIC-004), префикс `snapshots-{world}/gateway/`, файлы `links.db`/`gateway.db`, перенос `services/game-service` → `services/_archive/game-service/` после S9 (U-1).
 
 **Не входит.** Механика и State (EPIC-002), рой/LLM/фильтр (a) на выходе/`NarrativeFilter` (EPIC-003), память и `mvctl report` (EPIC-005), шина/контракты/`membus`/CI-каркас (EPIC-001), Discord-бот, WebSocket-стрим (`501`), аутентификация клиентов, инвайт-коды, общий чат группы, свободный текст команд, право на забвение — E-H (EPIC-013). Изменения `shared/*` и контрактов — только запросом к system-architect.
 
-**Границы, которые нельзя нарушать:** gateway не пишет сущности мира (только `entity.*.proposed`, C-02); `round.closed` публикуется до обработки раунда; таймеры только через `Clock`, в `--mode=replay` выключены; `player_events` — только `actor_kind ∈ human|ci|sim`; внешний ID — только `links.db`; `cmd/telegram-bot` импортирует из платформенного кода только `internal/gateway/{client,api}`.
+**Границы, которые нельзя нарушать:** gateway не пишет сущности мира (только `entity.*.proposed`, C-02); `round.closed` публикуется до обработки раунда; таймеры только через `Clock`, в `--mode=replay` выключены; `player_events` — только `actor_kind ∈ human|ci|sim`; внешний ID — только `links.db`; `cmd/telegram-bot` импортирует из платформенного кода только `internal/gateway/{client,api}` (правила depguard для бота в `.golangci.yml` пока нет — по решению system-architect, сверка 2026-09-13).
 
 ---
 
@@ -59,19 +60,19 @@
 2. **Регистрация с согласием** — `links` (`resolve` создаёт `pending_consent` + `link_id`; `consent`; `forget` с checkpoint/vacuum и хуками; `RouteFor`; `character_requests` по `link_id`), `characters` (§7.1: `entity.create.proposed` → `AwaitFact ≤ 2 с` → `201/200/202 creating`), `GET /v1/worlds`, `GET /v1/players/{id}`.
 3. **Соло-ход** — `actions` (таблица предусловий §5.4 для соло-словаря `enter/leave/look/attack/flee/rest/say/defend`, `InputFilter` noop, идемпотентность `action_key`, rate limit 30/мин, `player.*` + `entity.update.proposed` для `enter/leave/rest`; `MV_GM_PATH=legacy` → `gm.created`), `readmodel` (проекция + bootstrap из `state/latest.json` + `AwaitFact`), `consumer` (4 топика, дедуп, курсоры, обработчики `entity.*`, `combat.decided`, `encounter.started/ended`, `narrative.output`), `session` + `turns` (§7.6, `analytics.*`).
 4. **Outbox** — `outbox` (`Enqueue` идемпотентно, `Lease` «голова очереди на игрока», `Ack`, sweeper, `render.Mechanics` golden-тексты), long-poll `GET/POST /v1/clients/{id}/deliveries[/ack]` с `pollguard`.
-5. **API-обвязка** — `api` (server, router, middleware §5.1, ошибки §1.6 + коды C-08 v1.1, DTO), `api/gateway.openapi.yaml` + `openapi_test`, `/health`, `client` (Go-клиент C-08 с повторами), `snapshot` (по `SIGTERM` и `session.ended`, C-14), режимы `live|replay` с `Journal.End()`.
-6. **Testkit (поставляем как поставщик C-04/C-08)** — `shared/testkit/gateway`: `FakeGateway` (in-process HTTP поверх реального `internal/gateway` на `membus`), `Harness` (Go-клиент + фикстуры `player-A/B/C`, `RegisterAndEnter`, `Act`, `AwaitDelivery`, `CloseRound`, режим генератора `player.*` прямо в `membus` — замена v0 из F-10 с сохранением сигнатур v0).
+5. **API-обвязка** — `api` (router, middleware §5.1, ошибки §1.6 + коды C-08 v1.1, DTO; **сверка 2026-09-13:** своего `http.Server` нет — маршруты монтируются на mux сервера процесса `runtime.NewHTTP` (`MV_CORE_ADDR`), таймауты long-poll — по решению system-architect; контекст `gateway` регистрируется в `cmd/multiverse/contexts.go` вместо заглушки), `api/gateway.openapi.yaml` + `openapi_test`, `/health`, `client` (Go-клиент C-08 с повторами), `snapshot` (по `SIGTERM` и `session.ended`, C-14), режимы `live|replay` с `Journal.End()`.
+6. **Testkit (поставляем как поставщик C-04/C-08)** — `shared/testkit/gateway`: `FakeGateway` (in-process HTTP поверх реального `internal/gateway` на `membus`), `Harness` (Go-клиент + фикстуры `player-A/B/C`, `RegisterAndEnter`, `Act`, `AwaitDelivery`, `CloseRound`, режим генератора `player.*` прямо в `membus` — замена v0 из F-10 с сохранением сигнатур v0). **Сверка 2026-09-13:** API `Harness` v0 в дереве (`NewHarness`, `CreatePlayer`, `Enter`, `Leave`, `Look`, `Say`, `Rest`, `Attack`, `Flee`, `Fight`…) с этими именами не совпадает и не меняется; HTTP-обвязка (`RegisterAndEnter`, `Act`, `AwaitDelivery`, `CloseRound`) — рядом. Импорт `internal/gateway` из `shared/testkit` запрещён правилом depguard `shared` — место `FakeGateway` решает system-architect.
 7. **Бот** — `cmd/telegram-bot`: `config` (`MV_*`), `access.Gate` (allowlist, личные чаты, 20/мин), `updates`/`sender` (интерфейсы + `go-telegram/bot` v1.25 + фейки), `commands`, `flow` (онбординг FSM, `/forget confirm`), `render` (уведомление FR-009 по тексту BA, `/help`, ошибки по `code`, доставки без `parse_mode`), `deliver` (long-poll → send → ack), `privacy` (handler + `Redact` токена).
 8. **CI-харнесс как второй клиент** — e2e `solo-30`, `death`, `flee-fail`, `forget`, `recovery`, `privacy-scan` через `Harness` (`X-Client-Id: ci-harness`, `X-Actor-Kind: ci`) на `membus` + `FakeState` + `FakeNarrator`.
-9. **Аналитика сессий** — `analytics.session.started/ended`, `analytics.turn.completed` по C-10 со схемами в `schemas/events/`; фикстура `testdata/analytics/solo-30.jsonl` для EPIC-005 005-ops.
+9. **Аналитика сессий** — `analytics.session.started/ended`, `analytics.turn.completed` по C-10 со схемами в `schemas/events/`; фикстура `testdata/analytics/solo-30.jsonl` для EPIC-005 005-ops (каталог — владение EPIC-005, место файла — по согласию tech-lead#1, сверка 2026-09-13).
 
-**Точка I1-α «соло на шаблонах через бота»** (~3-я неделя волны 1; тег `mvp-1/i1-alpha`): бот + gateway в `integration/mvp-1` вместе с EPIC-002 I1, нарратив — `FakeNarrator` (`generated_by=template`), без роя и LLM. Человек играет через живой Telegram на стенде; замечания → задачи EPIC-002/004. Для I1-α нужны пункты 1–5, 7 и e2e `solo-30`; `snapshot`, `recovery`, `privacy-scan` могут завершаться между I1-α и I1.
+**Точка I1-α «соло на шаблонах через бота»** (~3-я неделя волны 1; контрольное слияние в `develop`, без тега — сверка 2026-09-13): бот + gateway в `develop` вместе с EPIC-002 I1, нарратив — `FakeNarrator` (`generated_by=template`), без роя и LLM. Человек играет через живой Telegram на стенде; замечания → задачи EPIC-002/004. Для I1-α нужны пункты 1–5, 7 и e2e `solo-30`; `snapshot`, `recovery`, `privacy-scan` могут завершаться между I1-α и I1.
 
 **Готовность I1** (`epics.md`): сквозной соло-ход через бота на стенде (I1-α на `FakeNarrator`, затем S1/S9 с роем на интеграции I1); снапшот gateway восстанавливается (S3); e2e зелёные; unit SEC-03…12 зелёные.
 
 ### 3.2. I2 «группа и раунды» (волна 2; ~6–7 задач; developer#1 + developer#2)
 
-Старт — по приёмке I1 тимлидом команды (правило `epics.md` §2); слияние — после зелёного интеграционного прогона I1 и **после** слияния EPIC-002 I2 (atomic-группы) и EPIC-003 I2 (раунд в `encounter`, `group-narrator`) — порядок 002 → 003 → 004.
+Старт — по приёмке I1 тимлидом команды (правило `epics.md` §2); контрольное слияние в `develop` — после зелёного интеграционного прогона I1 и **после** слияния EPIC-002 I2 (atomic-группы) и EPIC-003 I2 (раунд в `encounter`, `group-narrator`) — порядок 002 → 003 → 004.
 
 1. **Группа** — `groups` (§7.4: `group.create/join/leave` через atomic `entity.*.proposed`, `202 pending` при таймауте факта, лидер BR-13 при выходе и — по решению BA — при смерти, `group.entered_region/left_region` при `enter/leave` лидера), `GET /v1/groups/{id}`, предусловия группы в `actions.Validate` (`not_leader`, `group_full`, `in_encounter`…).
 2. **Координатор раундов** — `rounds` по ADR-020 (+доп. п. 1: параметры из `encounter.started.round{}`): открытие по `encounter.started` и первому действию, `Accept`/`already_acted`, закрытие `all_acted|timeout|explicit`, порядок `player.defended` → `round.closed`, `Restore`, ветка `replay`.
@@ -87,22 +88,22 @@
 
 | Направление | Контракт | До готовности реального | Кто и когда заменяет |
 |---|---|---|---|
-| Потребляем | C-02 факты State | `testkit/state.FakeState` v0 (F-10, в `integration/mvp-1` с конца волны 0) | EPIC-002 I1 — реализация State; TEAM-3 заглушку не правит, дефекты — запрос владельцу |
+| Потребляем | C-02 факты State | `testkit/state.FakeState` v0 (F-10, в `develop`) | EPIC-002 I1 — реализация State; TEAM-3 заглушку не правит, дефекты — запрос владельцу |
 | Потребляем | C-05 нарратив/механика | `testkit/swarm.FakeNarrator` (T-220: все шесть поводов C-05, `generated_by=template`) и `testkit/swarm.FakeEncounter` (T-219: Phase 1 боя — `dice.rolled`, `combat.decided`, атомарный пакет, `encounter.*`); механика до EPIC-002 T-053 — `FixedMechanics`. Для read-model встречи и координатора — правила C-05 v1.4 п. 4–6 и C-04 v1.3: конец встречи — первое из «факт сущности `state=resolved`» и `encounter.ended` | EPIC-003 I1a (реальный `FakeNarrator` на шаблонах) → I1b (рой) |
-| Потребляем | C-14 `state/latest.json` | фикстура `testdata/snapshots/state/latest.json` (F-10); `readmodel.bootstrap` пишется против неё | EPIC-002 I1 (реальный указатель + объект) |
-| Потребляем | C-01 шина/журнал | `membus` с `Journal.End()` (F-5t) | kafka-адаптер — тот же интерфейс, integration-тест `consumer` на testcontainers |
+| Потребляем | C-14 `state/latest.json` | фикстура `testdata/fixtures/snapshots/state/latest.json` (F-10; путь по дереву — сверка 2026-09-13); `readmodel.bootstrap` пишется против неё | EPIC-002 I1 (реальный указатель + объект) |
+| Потребляем | C-01 шина/журнал | `shared/eventbus/membus` с `Journal.End()` — вторая реализация C-01 (T-418), не заглушка | kafka-адаптер — тот же интерфейс, integration-тест `consumer` на testcontainers |
 | Потребляем | C-06 admin `core` | не нужен до I2 п. 7; для unit прокси — `httptest.Server` | EPIC-003 I1b |
-| Поставляем | C-04 `player.*` | `testkit/gateway.Harness` v0 (F-10): генератор `player.*` из фикстур в `membus` без HTTP — им пользуются EPIC-002/003 с волны 1 | TEAM-3 в I1 п. 6 заменяет v0 реализацией, **сохраняя сигнатуры v0** (`Harness.Act(player, action)` → тот же тип события); слияние — с I1 (порядок 002 → 004 → 003) |
+| Поставляем | C-04 `player.*` | `testkit/gateway.Harness` v0 (F-10): генератор `player.*` из фикстур в `membus` без HTTP — им пользуются EPIC-002/003 с волны 1 | TEAM-3 в I1 п. 6 **не меняет API v0** (`NewHarness`, `CreatePlayer`, `Enter`, `Attack`, `Flee`…) и ставит HTTP-обвязку рядом; поставка в `develop` — контрольным слиянием с I1 (порядок 002 → 004 → 003). *(Сверка 2026-09-13: заменено «заменяет v0 реализацией, сохраняя сигнатуры v0 (`Harness.Act(player, action)`…)» — такого метода в v0 нет.)* |
 | Поставляем | C-08 HTTP API | `testkit/gateway.FakeGateway` — внутри команды: бот пишется против интерфейса `client` (unit на `httptest`) и против `FakeGateway`, когда он готов | TEAM-3, I1 п. 6 (после п. 1–5) |
-| Поставляем | C-10 аналитика | схемы `analytics.session.*`, `analytics.turn.completed` в `schemas/events/` — первая задача I1 (нужны EPIC-005 005-ops для `mvctl report`) | TEAM-3, I1 |
+| Поставляем | C-10 аналитика | схемы `analytics.session.*`, `analytics.turn.completed` в `schemas/events/` — уже в дереве (EPIC-001 F-4b-2; нужны EPIC-005 005-ops для `mvctl report`) | TEAM-3, I1 (публикация) |
 
-Порядок слияния I1 в `integration/mvp-1`: 002 → **004** → 003 (`teams.md` §3.3); I2: 002 → 003 → **004** → 005. Первая задача I1 — схемы событий C-04/C-10 + `openapi.yaml` скелет (контракты видны другим командам раньше кода).
+Порядок контрольных слияний I1 в `develop`: 002 → **004** → 003 (`teams.md` §3.3); I2: 002 → 003 → **004** → 005. Первые задачи I1 — T-301 (скелет `openapi.yaml`, DTO, коды, клиент; схемы C-04/C-10 уже в дереве) и T-302 (store) параллельно. *(Сверка 2026-09-13: заменено «Порядок слияния I1 в `integration/mvp-1`… Первая задача I1 — схемы событий C-04/C-10 + скелет».)*
 
 ### 3.4. Порядок задач внутри эпика (рекомендация для нарезки)
 
 ```
-I1 (developer#1):  T-a схемы событий + OpenAPI-скелет + Go-клиент DTO
-                → T-b store + миграции (обе БД) + integration-тесты
+I1 (developer#1):  T-a схемы событий (сделаны в EPIC-001) + OpenAPI-скелет + Go-клиент DTO
+                ∥ T-b store + миграции (обе БД) + тесты без тега integration   ← developer#2 (сверка 2026-09-13)
                 → T-c links (resolve/consent/forget/link_id/RouteFor) + api middleware/errors/server
                 → T-d readmodel (+bootstrap, waiters) + consumer (dispatcher, entity/encounter)
                 → T-e actions (validate/idempotency/ratelimit/inputfilter/publish) + characters + session/turns
@@ -124,7 +125,7 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 
 ## 4. Затрагиваемые компоненты и файлы
 
-Структура каталогов — компонентный документ §3 (полная). Новое в v0.2: `cmd/telegram-bot/internal/access/` (allowlist, личные чаты, лимит), `privacy.Redact`, `MV_*` в `config`. Общий код, который **читаем, но не меняем**: `shared/{eventbus,contracts,jsonpath,objstore,env,logging,clock,runtime,entity}`, `shared/eventbus/membus`, `shared/testkit/{state,swarm}`. Файлы вне блока, которые трогает эпик: `go.mod` (добавление `modernc.org/sqlite` v1.58.0, `github.com/pressly/goose/v3` v3.28.0, `github.com/go-telegram/bot` v1.25.0, `github.com/oklog/ulid/v2` — уже учтены F-4; отметка в отчёте), `schemas/events/*` своих типов + запись в `shared/contracts/registry.go` через PR (ревью system-architect), `.env.example` (переменные §11.3 — через tech-lead#1/devops), `docker-compose.yml` сервис `telegram-bot` профиля `bot` (devops, F-6 — уже предусмотрен), `services/game-service` → `services/_archive/` после S9.
+Структура каталогов — компонентный документ §3 (полная). Новое в v0.2: `cmd/telegram-bot/internal/access/` (allowlist, личные чаты, лимит), `privacy.Redact`, `MV_*` в `config`. Общий код, который **читаем, но не меняем**: `shared/{eventbus,contracts,jsonpath,objstore,env,logging,clock,runtime,entity}`, `shared/eventbus/membus`, `shared/testkit/{state,swarm}`. Файлы вне блока, которые трогает эпик: `go.mod` (добавление `modernc.org/sqlite` v1.58.0, `github.com/pressly/goose/v3` v3.28.0, `github.com/go-telegram/bot` v1.25.0; отметка в отчёте). **Сверка 2026-09-13:** этих зависимостей в `go.mod` **нет** — прежнее «уже учтены F-4» неверно: sqlite и goose вносит T-302, go-telegram/bot — T-310, `github.com/oklog/ulid/v2` — только если architect#3 оставит ULID вместо `Deps.IDs` (T-303). `schemas/events/*` своих типов и запись в `shared/contracts/registry.go` — уже в дереве (EPIC-001 F-4b), дальше только правки через system-architect. `shared/env/vars.go` — объявления новых переменных вместе с кодом их чтения; `.env.example` (переменные §11.3 — через tech-lead#1/devops). `docker-compose.bot.yml` — сервис `telegram-bot` профиля `bot` (devops, T-397 — уже есть: `entrypoint /telegram-bot`, healthcheck `telegram-bot health --url`); файл бинарник подстраивает под себя без его правки. `cmd/multiverse/contexts.go` — замена заглушки `gateway` настоящим контекстом (файл EPIC-001, согласование tech-lead#1). `cmd/multiverse/db.go` — `multiverse db backup|check` ждёт БД EPIC-004 (задачи в плане нет). `services/game-service` → `services/_archive/` после S9.
 
 ---
 
@@ -132,7 +133,7 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 
 - **Данные**: две новые БД SQLite (`links.db`, `gateway.db`) — схемы §4.1–4.2 компонентного документа v0.2 (`link_id`, `character_requests(link_id, action_key)`, `rounds.timeout_ms/idle_after_missed`); миграции только `0001_init.sql` для каждой (I2 не добавляет миграций — таблицы группы/раундов уже в I1). Объекты `snapshots-{world}/gateway/{ts}-{seq}.json` + `latest.json` (указатель, C-14 v1.1). Данные as-is game-service не мигрируются.
 - **API**: `api/gateway.openapi.yaml` v1.0.0 по §5.6 с кодами C-08 v1.1; события C-04/C-10 по `api-contracts.md` §2.3.1–2.3.3, 2.3.14 (system-analyst правит §1.1/§1.6 под v0.2 — параллельная задача A4).
-- **Конфигурация**: переменные `MV_*` §11.3 (gateway 21, бот 10); `MV_TELEGRAM_ALLOWED_USER_IDS` заполняет владелец; prod-`.env` держит все три списка клиентов (`MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS`) и без `ci-harness` в каждом (`.env.example`, T-411); профиль `bot` compose с `env_file` только у `telegram-bot`; том `MV_GATEWAY_DATA_DIR` именованный, `0700`.
+- **Конфигурация**: переменные `MV_*` §11.3 (gateway 21, бот 10); `MV_TELEGRAM_ALLOWED_USER_IDS` заполняет владелец; prod-`.env` держит все три списка клиентов (`MV_GATEWAY_CLIENT_IDS`, `MV_GATEWAY_ACTOR_KIND_CLIENTS`, `MV_CORE_ADMIN_CLIENTS`) и без `ci-harness` в каждом (`.env.example`, T-411); профиль `bot` — `docker-compose.bot.yml`: токен получает только `telegram-bot` и только через `environment:` (D-10, правило 4 `compose-lint`), не через `env_file` *(сверка 2026-09-13: заменено «профиль `bot` compose с `env_file` только у `telegram-bot`»)*; переменные бота — `MV_TELEGRAM_*` манифеста `shared/env/vars.go`; том `MV_GATEWAY_DATA_DIR` именованный, `0700`.
 
 ---
 
@@ -147,8 +148,9 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 | Уровень | Что | Где / когда |
 |---|---|---|
 | unit (`-short`) | полный список — компонентный документ §15 (таблица предусловий, `rounds` с `FakeClock`, `outbox.Lease`, `links`, `session`, `turns`, `render` golden, `api` middleware/`openapi_test`, `commands`, `flow` на `FakeUpdateSource`/`FakeSender`) + блок SEC-03…12 | каждая задача; порог покрытия ≥ 60 % по `actions,rounds,outbox,links,turns,session` |
-| integration (`integration`) | миграции обеих БД на временном файле; `/forget` физически (файл + WAL); `consumer` на testcontainers Redpanda (дедуп, курсоры, DLQ, `Journal.End`); версии образов — `testkit.Versions()` | T-b, T-d, T-f |
-| e2e (`e2e`, один процесс `--contexts=all --mode=replay --bus=memory`) | `solo-30`, `death`, `flee-fail`, `forget`, `recovery`, `privacy-scan` (I1); `group-3x30` с `rounds/close`, `forget` в группе (I2); `--chaos=duplicate` для NFR-013 | T-g, T-h, I2 |
+| unit без тега (SQLite — чистый Go) | миграции обеих БД на временном файле; `/forget` физически (файл + WAL) | T-302 (сверка 2026-09-13: было в строке integration) |
+| integration (`integration`) | `consumer` на testcontainers Redpanda (дедуп, курсоры, DLQ, `Journal.End`); версии образов — `testkit.Versions()`; прогон — `go test -tags integration ./internal/gateway/consumer/...`, по одному, с проверкой остатков контейнеров (разрешение пользователя 2026-09-13) | T-316 |
+| e2e (`e2e`, один процесс `--contexts=all --mode=replay --bus=memory`; `swarm` — хук `MV_SWARM_FAKE=true`: `FakeEncounter` + `FakeNarrator`, T-255) | `solo-30`, `death`, `flee-fail`, `forget`, `recovery`, `privacy-scan` (I1); `group-3x30` с `rounds/close`, `forget` в группе (I2); `--chaos=duplicate` для NFR-013 | T-g, T-h, I2 |
 | e2e бота (детерминированный) | `FakeUpdateSource` подаёт сценарий (`/start` → согласие → имя → `/enter` → `/attack` → `/forget confirm`), `FakeSender` записывает исходящие; gateway — `FakeGateway`; проверяются тексты, клавиатуры, стабильность `action_key`, порядок, ack, отказ чужому id/групповому чату | T-k |
 | privacy-scan | регистрация с известным тестовым ID → grep по `gateway.db` (+WAL), событиям `membus`, логам обоих процессов (в т. ч. на фрагмент токена) = 0; job `security` CI сканирует `testdata/` | T-h; на стенде — перед I1 (чек-лист security-review п. 2) |
 | стенд (вне CI, человек + tester#3) | живой Telegram: S9 сквозной соло-ход на I1-α и на I1; `ack_latency_p95_ms` (NFR-003); учения `/forget` (`strings` чист); группа из трёх аккаунтов (I2); allowlist заполнен только владельцем/тестерами | конец I1-α, I1, I2 — задачи с пометкой «стенд», слот разработчика не занимают |
@@ -168,7 +170,7 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 | `FakeNarrator` v0 не публикует `narrative.output` на нужные события для I1-α | С / Н | контракт заглушки C-05 зафиксирован (`combat.decided`/`round.closed`/`player.looked`); e2e `solo-30` — первый потребитель; дефект → задача EPIC-003 I1a |
 | Один разработчик в первых подволнах (слоты 1 → 2): бот ждёт `FakeGateway` | В / С | бот стартует на интерфейсе `client` с `httptest` после T-c (DTO и коды известны из OpenAPI), `FakeGateway` подключается позже; порядок §3.4 |
 | Гонка «действие vs таймер» и восстановление раундов после рестарта (I2) | С / С | мьютекс на scope, `closing`-состояние, идемпотентная публикация по `(scope, seq)`, unit с `FakeClock` + e2e `recovery` в группе (ADR-020) |
-| Расхождение схемы `gateway.openapi.yaml` с кодом и с `api-contracts.md` (правится system-analyst параллельно) | С / Н | `openapi_test` (маршруты и коды ↔ YAML) в CI; при расхождении с `api-contracts.md` — источник истины `contracts.md` v0.2 |
+| Расхождение схемы `gateway.openapi.yaml` с кодом и с `api-contracts.md` (правится system-analyst параллельно) | С / Н | `openapi_test` (маршруты и коды ↔ YAML) в CI; при расхождении с `api-contracts.md` — источник истины `contracts.md` (действующая v0.10) |
 | Профиль `legacy` и `MV_GM_PATH` в gateway живут до S5 | Н / Н | один `if` в `actions.publish`, удаляется задачей EPIC-003 I2; тест на оба значения флага |
 
 ---
@@ -180,7 +182,17 @@ I2: developer#1 — rounds (coordinator/state/store + unit FakeClock) → rounds
 3. FR-025 (`say` не открывает раунд) и BR-13 (лидер при смерти) закрепляются BA до старта I2; реализация — по ADR-020 п. 8 и C-04 v0.2, изменение потребует только правки правила в `groups`/`rounds`.
 4. `encounter.started.round{}` публикует EPIC-003 I2; в I1 и I1-α раундов нет (соло), env-значения по умолчанию достаточны.
 5. Стенд с живым Telegram — машина пользователя; allowlist заполняет пользователь; тестеры — известный круг (U-7).
-6. `Harness` v0 из F-10 имеет сигнатуры, совместимые с реализацией I1 (согласовано через `ownership.md`: v0 создаёт EPIC-001 по спецификации §15 компонентного документа).
-7. Имя ветки — `epic/EPIC-004-gateway` (канон `plan/teams.md` §1 и `plan/epics.md` §5); расхождение с черновиком v0.1 (`epic/EPIC-004-gateway-bot`) устранено tech-lead#3 при нарезке задач. Каталог артефактов эпика остаётся `Docs/dev-team/epics/EPIC-004-gateway-bot/`.
+6. ~~`Harness` v0 из F-10 имеет сигнатуры, совместимые с реализацией I1 (согласовано через `ownership.md`: v0 создаёт EPIC-001 по спецификации §15 компонентного документа).~~ **Не подтвердилось (сверка 2026-09-13):** API v0 в дереве (`NewHarness`, `CreatePlayer`, `Enter`, `Leave`, `Look`, `Say`, `Rest`, `Attack`, `Flee`) не совпадает с §15 (`RegisterAndEnter`, `Act`, `AwaitDelivery`). v0 не меняется, HTTP-обвязка T-308 ставится рядом.
+7. Имя ветки — **`epic/EPIC-004-gateway-bot`** (сверка 2026-09-13: ветка создана по каталогу эпика, `journal.md` 2026-09-13). Прежнее допущение («канон — `epic/EPIC-004-gateway`, `plan/teams.md` §1 и `plan/epics.md` §5») отменено; план правится в `develop`. Каталог артефактов эпика — `Docs/dev-team/epics/EPIC-004-gateway-bot/`.
 
 Связь: ADR-018, ADR-019, ADR-020 (с дополнениями после G2), ADR-006, ADR-009, ADR-010; C-01, C-02, C-04, C-05, C-06, C-08, C-10, C-14.
+
+---
+
+## 10. История версий документа
+
+| Версия | Дата | Автор | Что изменено |
+|---|---|---|---|
+| 0.1 | 2026-09-09 | architect#3 | дизайн эпика, этап A4 шаг 2 |
+| 0.1 + правки без смены номера | 2026-09-09…11 | по записям `journal.md` | имя ветки при нарезке задач (tech-lead#3); имена списков клиентов (T-409, C-08 v1.3) и конец встречи для read-model (T-416, C-05 v1.4) |
+| 0.1.1 | 2026-09-13 | tech-lead#3 | **редакционная правка** по сверке плана с деревом: ветка `epic/EPIC-004-gateway-bot` от `develop`, без `integration/mvp-1` и тегов (контрольные слияния в `develop`), `contracts.md` v0.10, `go.mod` без sqlite/goose/go-telegram (§4), `Harness` v0 не меняется (§3.3, допущение 6), путь фикстуры состояния, тесты SQLite без тега integration (§7), токен бота через `environment:` (§5). Решения дизайна и объём не менялись |

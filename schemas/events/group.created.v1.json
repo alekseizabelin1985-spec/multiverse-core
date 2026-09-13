@@ -23,7 +23,7 @@
         "additionalProperties": false
       }
     },
-    "cause": { "type": "string", "enum": ["create", "join", "leave", "death", "forget", "disband", "group_move"] }
+    "cause": { "type": "string", "enum": ["create", "join", "leave", "death", "forget", "disband"] }
   },
   "required": ["group", "members", "cause"],
   "additionalProperties": false
