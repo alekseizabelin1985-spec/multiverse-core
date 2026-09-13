@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:01:56+03:00",
+  "updatedAt": "2026-09-13T23:02:39+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2608,7 +2608,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T22:40:47+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -2652,6 +2652,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-468.md"
+        },
+        {
+          "id": "T-469",
+          "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-469.md"
         }
       ],
       "defects": [],
@@ -10324,7 +10337,7 @@ window.DEVTEAM_STATE =
       "task": "T-464",
       "action": "Ревью #1 compose",
       "startedAt": "2026-09-13T22:52:25+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:02:39+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10334,6 +10347,16 @@ window.DEVTEAM_STATE =
       "task": "T-306",
       "action": "Приёмка персонажей, сессий, ходов",
       "startedAt": "2026-09-13T23:00:11+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-464",
+      "action": "Приёмка T-464",
+      "startedAt": "2026-09-13T23:02:39+03:00",
       "finishedAt": null
     }
   ],
@@ -14249,6 +14272,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-056 · отметка tech-lead#1: есть. Правило shared-testkit-state узкое (4 пробных импорта отвергнуты), стенд на state.Context со строгим стражем, WorldRequired только у двух типов предложений, contracts check ok; слитое с develop дерево собрано и зелёное (build, vet, lint, тесты, e2e). Риск: издатели"
+    },
+    {
+      "at": "2026-09-13T23:02:39+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-464 · ревью #1 (TEAM-1/code-reviewer#1): принять — 0/0/1/2. Умолчания совпадают с манифестом, ${VAR:-} у соли законна, MV_.*_SALT без лишних совпадений, фикстуры и мутанты по ожиданию, docker compose config (только ключи) подтверждает доставку. Mi-1 правило 3 советует соли :? (сломал бы профиль bo"
     }
   ],
   "blockers": [],
