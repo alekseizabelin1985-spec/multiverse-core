@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:50:05+03:00",
+  "updatedAt": "2026-09-13T20:50:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -10002,6 +10002,16 @@ window.DEVTEAM_STATE =
       "action": "Отметка владельца runtime/serve/.golangci.yml",
       "startedAt": "2026-09-13T20:44:27+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-458",
+      "action": "Приёмка T-458 и индекс EPIC-002",
+      "startedAt": "2026-09-13T20:50:52+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -13664,6 +13674,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Флак shared/testkit/gateway TestTheSkirmishStopsSwingingWhenTheFightEnds повторился (make test при приёмке T-208, ранее при T-303) — заведена T-467 (EPIC-004, стабилизация теста под нагрузкой полного ./...), counters.task = 467."
+    },
+    {
+      "at": "2026-09-13T20:50:52+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · отметка tech-lead#1: есть. Deps.Recording без цикла импорта, литералы Deps во всех эпиках именованные; serve.go читает запись один раз, маршрут часов только в replay; .golangci.yml сливается с EPIC-001 (T-461) и остальными эпиками без конфликтов. Н-1 параметр replayOptions затеняет пакет; Н-"
     }
   ],
   "blockers": [],
