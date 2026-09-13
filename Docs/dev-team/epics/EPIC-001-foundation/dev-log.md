@@ -8842,3 +8842,102 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Прогоны.** `go build ./... && go vet ./...` — 0; `go vet -tags integration ./shared/...` — 0; `go test -short -count=1 ./...` — 27 пакетов ok; `golangci-lint run ./...` и `--build-tags integration` по `eventbus`/`contract` — 0 issues; `mvctl contracts check` — ok; `make test` — 0 (без `-race`, нет cgo). `go test -tags integration -count=1 -run TestBusContractOnRedpanda ./shared/testkit/contract/` — ok, оба новых кейса на Redpanda пройдены; контейнеров testcontainers до и после — нет.
 - **Открыто для оркестратора.** Тексты `ErrPermanent` и строки лога в C-01 не заданы — выбраны исполнителем. Обязательное поле `Target.Stalled` меняет публичный тип `shared/testkit/contract`.
 - `.env` не открывался, стенд `:8888` не трогался. Не коммитил, `git add` не делал.
+
+<!-- dev-log T-463 -->
+## devops-engineer#1 · T-463 · срок архивов бэкапа 30 дней и маскировка значения в отказах LLM-скриптов · 2026-09-13
+
+Ветка `task/T-463-backup-retention-endpoint-mask`, Opus. Части (а) и (б); (в) — в T-464. Таблица прогонов — карточка `tasks/T-463.md`.
+- **Что сделано.**
+  - (а) `scripts/backup-prune.sh`: удаление строго старше 30 суток по штампу в имени, иначе по mtime; `minio-*.tgz`, `redpanda-*.tgz` и их строки `SHA256SUMS`, `links/links-*.db.age`, `links/gateway-*.db`. Каждый файл — `rm -f -- <путь>`, ссылки и чужие подкаталоги не трогаются. Цели `backup-prune`, `backup-prune-test`, `backup-prune-mutants`; `backup` вызывает очистку, `ci` и задание CI `scripts-parity` — тест. Runbook, раздел 4: срок, формат имён, `schtasks /Create … /SC DAILY`, `/Query`, признаки невыполнения. `infrastructure.md` §5.6 — только срок и очистка, с пометкой.
+  - (б) `llm_endpoint_judge` и `Set-LlmEndpointClass`: при `@` в значении четыре фразы печатают только схему и не называют хост. Стенд: `AbsentFold`, `H67`–`H71`, мутанты `M29`/`M30`. `compose-lint --fixtures`: `# expect-absent:` и фикстура `bad-llm-url-at-after-path`.
+- **Решения по ходу.**
+  - Одна реализация очистки, на bash; `--dir` обязателен; `--log` для задания Планировщика.
+  - Ветка «прочий invalid» (`malformed`) недостижима — сценария нет, держит P01. В `H70` после `@` стоит `10.0.0.5`: фраза any-address сама советует `127.0.0.1`.
+  - Случай символьных ссылок и мутанты P08/P10 на Windows без Developer Mode — SKIPPED, выполняются в CI на Linux.
+- **Проверки.** `make scripts-parity` — 112 passed (K01/K02 прежние); `make parity-mutants` — 31 мутант, M00 первым, M29/M30 KILLED, rc=0; `make compose-lint` — ok, fixtures 59 bad/11 good; `make backup-prune-test` — ok (1 skipped); `make backup-prune-mutants` — ok; `go build/vet`, `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok, 27 пакетов; `gitleaks dir` по копии изменённых файлов — no leaks.
+- Для system-architect: ~~снять «Код расходится» в C-15 v1.5 и ADR-005 после слияния~~ — сужено при приёмке (вариант (б), см. запись приёмки ниже); четыре расхождения §5.6 — в карточке.
+- Не коммитил.
+
+<!-- dev-log T-463 iteration 2 -->
+## devops-engineer#1 · T-463 · итерация 2: хост не называется ни в одном отказе при `@`, строже `--dir`, штамп из будущего · 2026-09-13
+
+Ветка `task/T-463-backup-retention-endpoint-mask`, Opus. Основание — ревью #1 (0/1/5/6) и решения оркестратора. Таблица прогонов — карточка `tasks/T-463.md`, «Итерация 2».
+- **Что сделано.**
+  - Ma-1: облачный отказ правила 6 `compose-lint` при `@` в значении не называет хост (флаг маски — седьмое поле вердикта), фикстура `bad-llm-url-at-cloud` с `expect-absent`. Отказ `up` «refusing to start a second server» в `llm-server.sh`/`.ps1` при `@` называет переменную вместо пробы; сценарий `U19`, мутанты `M31`/`M32`. Мутанты маски `compose-lint` — вручную в копии.
+  - Mi-2: `backup-prune.sh` отвергает относительный `--dir`, корень диска и путь без компонента со словом `backup` — до обращения к диску и после `pwd -P`.
+  - Mi-3: штамп позже «сейчас» больше чем на сутки не доверяется — возраст по mtime, `WARNING` в выводе.
+  - Mi-4: очистка в `make backup` нефатальна (`|| echo WARNING`); в runbook строки восстановления — архив старше 30 дней держать вне `$BACKUP_DIR`.
+  - Mi-5: случай `stuck` (отказ `rm` через подмену, строка `SHA256SUMS` остаётся, код 1); флаг `--require-links`; в CI — шаг `make backup-prune-mutants`, оба шага очистки с `if: ${{ !cancelled() }}`.
+  - N-1 — случай `gap` (время в разрыве перевода часов), N-2 — `10#` для `--now @…`, N-3 — junction для `links/` на Windows, N-4 и N-6 — строки runbook.
+- **Решения по ходу.**
+  - «Компонент `backup*`» понят как «компонент содержит `backup`»: иначе отвергался бы каталог по умолчанию `multiverse-backups`.
+  - Тест запускает скрипт из временного каталога: относительный `--dir` у мутанта не должен разрешаться от корня репозитория, где есть `backups/`.
+  - Мутант R2 (без проверки штампа туда-обратно) выживает и дальше: GNU date сам отвергает время в разрыве. Проверка признана защитной.
+  - Junction в Git Bash — только с `MSYS2_ARG_CONV_EXCL='*'`, иначе `/J` превращается в путь.
+- **Проверки.** `make scripts-parity` — 111 сценариев, 113 passed, 2 known-failing (прежние); `make parity-mutants` — 33 мутанта, M00 первым, M31/M32 KILLED (U19), rc=0; `make compose-lint` — ok, fixtures 60 bad/11 good; `make backup-prune-test` — ok (1 part skipped: ссылка на файл; links/ — через junction); `make backup-prune-mutants` — 17, P00 первым, P08 и P11–P16 KILLED, P10 SKIPPED, rc=0; `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok, 27 пакетов.
+- Для system-architect: ~~после слияния снять «Код расходится» в C-15 v1.5 и ADR-005~~ — сужено при приёмке (вариант (б), см. запись приёмки ниже). Ma-1 закрыт. Mi-1 — в T-468.
+- Не коммитил.
+
+<!-- dev-log T-463 acceptance -->
+## tech-lead#1 · T-463 · приёмка: Ma-2 по варианту (б), N-7 и N-8, T-468 · 2026-09-13
+
+Рабочая папка `.worktrees/T-463`, Opus. Подробности и таблица прогонов — карточка `tasks/T-463.md`, «Приёмка (tech-lead)».
+- **Решение.** Принята после ревью #2 (0/1/0/2), итераций ревью — 2.
+- **Ma-2 (решение оркестратора, вариант (б)).** Код `llm-bench` не менялся. Строка для system-architect сужена в карточке, DoD 11 и двух записях выше. Пометку «Код расходится» в C-15 v1.5 и ADR-005 не снимать, а сузить до трёх отказов `llm-bench` (`llm-bench.sh:844-846`, `llm-bench.ps1:478-482`) и строк успеха и `health` `llm-server`. Вся маскировка вывода скриптов — T-468 (`todo`, карточка и раздел в `tasks.md`), после ответа system-architect об охвате C-15.
+- **N-7.** `backup-prune.sh`: mtime впереди больше чем на сутки — `WARNING … its mtime is more than a day ahead of now`, файл остаётся. Случай `mixed` дополнен (`minio-ahead.tgz`, `redpanda-ahead.tgz`, итог `9 removed, 11 kept`), мутанты P17/P18, runbook, раздел 4.
+- **N-8.** Комментарий `--fixtures` в `compose-lint.sh` приведён к факту; поведение не менялось.
+- **DoD 4.** Мутанты очистки — только в CI, в `make ci` их нет; `make ci` дольше не стал.
+- **Проверки.** `bash -n` — ok; `make backup-prune-test` — ok (1 part skipped); `make backup-prune-mutants` — 19, P00 первым, P17/P18 KILLED, P10 SKIPPED, rc=0; `make scripts-parity` — 113 passed, 2 known-failing; `make compose-lint` — ok, fixtures 60/11; `golangci-lint run ./...` — 0 issues; `go test -short -count=1 ./...` — ok.
+- **Слияние с `3e3c95b`.** Конфликт только дописывания в конец `dev-log.md` и `review.md`; `tasks.md` и `runbook.md` — чисто, остальные файлы на кончике не менялись.
+- Не коммитил.
+
+<!-- dev-log T-464 -->
+## devops-engineer#1 · T-464 · `MV_STATE_WORLDS` и `MV_TELEGRAM_*` в compose · 2026-09-13
+
+Ветка `task/T-464-compose-env-passthrough` от `epic/EPIC-001-foundation` (`55ec4c4`), Opus. Часть (в) T-463. Таблицы прогонов и мутантов — карточка `tasks/T-464.md`.
+- **Что сделано.**
+  - `docker-compose.yml`, `core`: `MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest-world}` (О-1 T-055).
+  - `docker-compose.bot.yml`, `telegram-bot`: `MV_TELEGRAM_ACTION_KEY_SALT: ${MV_TELEGRAM_ACTION_KEY_SALT:-}` и `MV_TELEGRAM_COMMANDS_PER_MIN: ${MV_TELEGRAM_COMMANDS_PER_MIN:-20}` (замечание 1 T-310).
+  - `compose-lint`, правило 3: `MV_.*_SALT` в `SECRET_KEY` — литерал соли проходил все правила.
+  - Фикстуры: `bad-default-state-worlds` (8), `bad-secret-salt-literal` (3), `good-state-and-bot-passthrough`; строки в `README.md`.
+- **Решения по ходу.**
+  - Соль — `${VAR:-}`, а не ключ без значения: правило 3 §3.1.1 оставляет ключ без значения обязательным секретам, та же форма у `MV_LLM_API_KEY`; для `config.Load` формы равносильны.
+  - Эталон §4.2 не менялся (решение оркестратора); отставание на 7 имён — вопрос system-architect.
+  - Правка правила 3 — сверх буквы поручения; откатывается вместе со своей фикстурой, если ревью сочтёт её лишней.
+- **Проверки.** `make compose-lint` — ok, 15 сервисов, 3 файла, 8 правил; fixtures 62 bad/12 good. `bash -n` — ok. `mvctl env check` — 74 переменные, exit 0. Модель `docker compose config` с пробным env-файлом: три ключа доходят со значением пробы, без строки и с пустой строкой — умолчание манифеста; на файлах `HEAD` — ABSENT; печатались только ключи. Мутанты K0 (контрольный), K1, K2, R1, R2 — как ожидалось. `gitleaks dir --redact` по копиям — no leaks, контроль — 1 находка. Go не менялся, `golangci-lint` не нужен.
+- Для system-architect: `MV_STATE_WORLDS` ↔ `MV_WORLD_ID` (О-2 T-055); отставание эталона §4.2.
+- Не коммитил.
+
+## tech-lead#1 · T-464 · приёмка: Mi-1, N-1, N-2 закрыты, T-469 · 2026-09-13
+
+Рабочая папка `.worktrees/T-464`, Opus. Подробности, таблицы мутантов и прогонов — карточка `tasks/T-464.md`, «Приёмка (tech-lead)».
+- **Решение.** Принята после ревью #1 (0/0/1/2), итераций ревью — 1. DoD 1–6 подтверждены.
+- **Mi-1.** `scripts/compose-lint.sh`, правило 3: `advice(key)`. Обязательным секретам линтер советует `${KEY:?...}`, остальным — `${KEY:-}` без `:?`. В `bad-secret-salt-literal.yml` добавлены `expect-text` с советом и `expect-absent` со старым.
+- **N-1.** Комментарий `MUST_BE_REQUIRED` перечисляет законно пустые секреты: `MV_LLM_API_KEY`, `MV_ANTHROPIC_API_KEY`, `MV_TELEGRAM_ACTION_KEY_SALT`.
+- **N-2.** Сделано здесь, в T-468 не выносилось: `WITHHELD = "<withheld>"`, `is_secret`. Правило 3 не печатает литерал и умолчание. У `check` правила 8 параметр `hidden` (по имени подстановки, вложенности и ключу-секрету). Фикстуры: `bad-secret-number` изменена, новые `bad-default-secret-withheld` (8) и `bad-secret-required-default` (3), все с `expect-absent`; строки в `README.md`.
+- **Мутанты.** B0; K0 первым; M1–M7 — KILLED. Копия `t464acc-mut` удалена по точному пути.
+- **Проверки.** `bash -n` — ok; `make compose-lint` — ok, 15 сервисов, 8 правил, fixtures 64 bad/12 good; `mvctl env check` — 74, exit 0; `gitleaks dir --redact` по копии изменённых при приёмке файлов — no leaks.
+- **Слияние с `55ec4c4`.** Кончик равен базе ветки: `merge-file` по `compose-lint.sh`, `README.md` фикстур, `tasks.md` — 0 конфликтов, результат равен рабочей копии. Правила T-463 (маска правила 6, комментарий `--fixtures`) не тронуты.
+- **Для system-architect**: `MV_STATE_WORLDS` и `MV_WORLD_ID` (рекомендация — независимые, проверка при старте); эталон §4.2 отстаёт на 7 имён (отдельная правка по T-453 и `make secrets-scan`); соль в перечне законно пустых секретов §3.1.1 и `<withheld>` в тексте правил 3 и 8.
+- **`tasks.md` 0.1.4.** Разделы T-464 (`done`) и T-469 (`todo`, карточка `tasks/T-469.md`): `MV_GATEWAY_*` T-305/T-306 и `MV_ANTHROPIC_API_KEY` в compose, проверка «переменная контекста доходит до сервиса» (`contract-change`), правило формы передачи. При приёмке найдено: `gateway` читает `MV_GM_PATH`, compose передаёт его только `core` — в DoD 3 T-469.
+- Не коммитил.
+
+<!-- dev-log T-470 -->
+## system-architect#1 · T-470 · `contracts.md` v0.15: C-01 v1.11, C-02 v1.8, C-03 v1.4, C-14 v1.3, C-15 v1.6; КД State, `data-model.md` §3.3, ADR-001, ADR-005 · 2026-09-13
+
+Рабочая папка `.worktrees/T-470`, ветка `task/T-470-contracts-state-grammar` от `55ec4c4`, Opus. Подробности — карточка `tasks/T-470.md`.
+- **Внесено.** Тексты просмотра T-056 (C-02 v1.8, C-03 v1.4, C-14 v1.3, КД State §4.1, §4.5 п. 1–3 и 7–9, §4.6, §4.10, §8, §10, `data-model.md` §3.3, ADR-001) и C-01 v1.11 по ревью T-458 с поправками ревью #2; КД State §6.1, §6.2 по ревью T-458, п. 5 (задача T-466 покрыта целиком). Грамматика C-02 v1.8 п. 2 сверена с `canonicalPath` рабочей копии T-056: ключ — не запись `strconv.Atoi`, индекс до девяти цифр, `scope` не скаляр.
+- **Решено.** `@` в любом месте значения адреса — `invalid` (C-15 v1.6, ADR-005); правило печати — весь вывод, поэтому маскировка строк успеха T-468 не нужна. Пометка «Код расходится» сужена до `llm-bench` и строк успеха и `health` `llm-server`, дополнена расхождением классов с v1.6. C-05 v1.8a — смерть персонажа без `died_at`/`killed_by`. Соль `MV_TELEGRAM_ACTION_KEY_SALT` — в законно пустых секретах `infrastructure.md` §3.1.1 п. 3 (замена одной строки).
+- **Передать.** Строки DoD для T-471, T-057, T-212, T-237, T-468 и новой задачи EPIC-003 (Go, `@` → `invalid`) — в карточке.
+- **Проверки.** CRLF у всех изменённых файлов (число `\r\n` = числу `\n`), NUL и BOM нет; тексты C-15 и ADR-005 совпадают построчно; в диффе `infrastructure.md` одна строка, §4.2, `.env.example` и `swarm-llm-laws.md` не тронуты; `gitleaks dir --redact` по копии изменённых файлов — no leaks found (конфигурация `.gitleaks.toml`, 8 файлов, копия удалена по точному пути).
+- Код, схемы и `testdata/**` не менялись. Не коммитил.
+
+<!-- dev-log T-470 iteration 2 -->
+## system-architect#1 · T-470 · итерация 2: скаляры только по `data-model.md` §3, «Код расходится до T-471», Nit ревью #1 · 2026-09-13
+
+Рабочая папка `.worktrees/T-470`, Opus. Основание — ревью #1 code-reviewer#1 (0/1/2/4) и решения оркестратора; подробности — карточка, раздел «Итерация 2».
+- **Ma-1.** Перечень скаляров — только таблицы `data-model.md` §3: добавлены строки `encounter_chance` (§3.2) и `loot_claimed_by` (§3.4); `name` и `last_session_ended_at` — скаляры §3, в код их вносит приёмка T-056. C-02 v1.8 п. 2 и КД §3.2 ссылаются на §3 одинаково.
+- **Mi-1.** «Код расходится до T-471» у нормы отдыха и пустой строки `system` (C-02 v1.8 п. 3, п. 6, «Связка», «Издатель bootstrap», КД §4.1, §4.6); у «Заглушки» C-02, §17 и КД §8 — оговорка контрольного слияния EPIC-002.
+- **Mi-2, N-1…N-4.** Контейнеры §3 скалярами не считаются; названа T-472; C-05 v1.8a в заголовке карточки; в таблице адресов строк с `@` в пути пока нет (C-15 и ADR-005 одинаково); переполнение — у `int` 32-битной платформы; `MV_ANTHROPIC_API_KEY` в композицию пока не передаётся — строка для T-469.
+- **Проверки.** CRLF у всех изменённых файлов, NUL и BOM нет; C-15 и ADR-005 совпадают построчно; дифф `infrastructure.md` — одна строка; `gitleaks dir --redact` по копии — no leaks found, копия удалена по точному пути.
+- Код не менялся. Не коммитил.

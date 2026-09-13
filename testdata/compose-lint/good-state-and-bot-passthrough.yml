@@ -1,0 +1,16 @@
+# A clean file for rules 3 and 8 (T-464): the three lines docker-compose.yml and
+# docker-compose.bot.yml pass through, in their own form. MV_STATE_WORLDS and
+# MV_TELEGRAM_COMMANDS_PER_MIN repeat the manifest's defaults. The optional
+# secret MV_TELEGRAM_ACTION_KEY_SALT is its own interpolation with the
+# manifest's empty default and no `:?` - rule 3, which now names `MV_.*_SALT`,
+# must not take that for a default credential.
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_STATE_WORLDS: ${MV_STATE_WORLDS:-dark-forest-world}
+  telegram-bot:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_TELEGRAM_ACTION_KEY_SALT: ${MV_TELEGRAM_ACTION_KEY_SALT:-}
+      MV_TELEGRAM_COMMANDS_PER_MIN: ${MV_TELEGRAM_COMMANDS_PER_MIN:-20}

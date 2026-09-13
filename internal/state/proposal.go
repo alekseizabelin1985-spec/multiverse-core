@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
@@ -37,11 +41,8 @@ const (
 )
 
 // Proposal is a proposal as State decides it (state-and-mechanics.md §4.1): the
-// payload read into the model types, and the event it came in, which every fact
-// derives from.
-//
-// Who proposed it (Proposer of §4.1) is not read here yet: it is what the
-// ownership check of T-056 needs, and nothing before it does.
+// payload read into the model types, who proposed it, and the event it came in,
+// which every fact derives from.
 type Proposal struct {
 	// ID is proposal_id. It is required in both types (C-02 v1.6) and nothing
 	// is put in its place.
@@ -54,6 +55,8 @@ type Proposal struct {
 	Changes []entity.ChangeSet
 	Atomic  bool
 	Cause   string
+	// Proposer is read off the envelope for the ownership check (§4.6).
+	Proposer Proposer
 }
 
 // CreateSpec is what entity.create.proposed asks to create.
@@ -98,7 +101,7 @@ type wireCreate struct {
 // the returned proposal when that much could be read; a payload without
 // proposal_id returns ErrNoProposalID.
 func ParseProposal(ev eventbus.Event) (*Proposal, error) {
-	p := &Proposal{Event: ev}
+	p := &Proposal{Event: ev, Proposer: proposerOf(ev)}
 	raw, err := json.Marshal(ev.Payload)
 	if err != nil {
 		return p, fmt.Errorf("%w: %s: %w", ErrMalformed, ev.Type, err)
@@ -165,4 +168,119 @@ func cloneOps(ops []entity.Op) []entity.Op {
 		}
 	}
 	return out
+}
+
+// malformedOp reports the first change set holding an operation that no entity
+// could take, whatever the world holds: a verb outside the four of C-02, a path
+// not written in its canonical form, a path under a field of the entity rather
+// than an attribute, or a value no reader of the bus could hold (§4.5 p. 1,
+// C-02 v1.6). Such a
+// proposal is refused whole, before the window of applied proposals and before
+// anybody's rights are asked: it is a defect of its form, not of its proposer.
+//
+// What depends on the entity — an inc on a text, an index past the end — is
+// left to ApplyOps at step 7 and refuses its own change set.
+func malformedOp(sets []entity.ChangeSet) (entity.Ref, bool) {
+	for _, set := range sets {
+		for _, op := range set.Ops {
+			if !knownOp(op.Op) || !canonicalPath(op.Path) || reservedRoot(op.Path) || underScalar(op.Path) ||
+				!entity.JSONCompatible(op.Value) {
+				return set.Ref(), true
+			}
+		}
+	}
+	return entity.Ref{}, false
+}
+
+func knownOp(kind entity.OpKind) bool {
+	switch kind {
+	case entity.OpSet, entity.OpInc, entity.OpAppend, entity.OpRemove:
+		return true
+	default:
+		return false
+	}
+}
+
+// canonicalPathSegment is one key of a path with its indices: a name without
+// dots and brackets, then any number of [n] with n written without leading
+// zeros and in at most nine digits. inventory[01] would address inventory[1]
+// under a second spelling (review #2 of T-056, N-3), and an index past nine
+// digits no longer reads as an index at all: on an object it becomes a key
+// made of digits (condition У-1 of system-architect).
+var canonicalPathSegment = regexp.MustCompile(`^([^.\[\]]+)(\[(0|[1-9][0-9]{0,8})\])*$`)
+
+// canonicalPath reports whether a path is written the one way State compares
+// paths by: keys between single dots, indices in brackets after a key, no dot at
+// either end, no empty key, no empty or non-numeric index, and no key that
+// reads as an integer — inventory.0 is inventory[0] on a list, and a remove
+// written that way would announce the path of the element instead of the path
+// of the list that C-02 v1.6 gives it (condition У-1 of system-architect).
+//
+// entity.ApplyOps reads status., .status and a..b as the attribute status, while
+// the checks of steps 5 and 6 and the matrix of the status compare the string
+// of the path: a path in another form would write status past all of them, and
+// entity.updated would carry that form to every reader (review #1 of T-056,
+// Ma-2). system-architect placed the canonical grammar for every reader in
+// shared/entity and the catch-up rule (answer 2 of the review of T-056, C-02
+// v1.8 p. 2); until that task (T-472) moves it, State refuses the other forms
+// itself.
+func canonicalPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	for _, segment := range strings.Split(path, ".") {
+		match := canonicalPathSegment.FindStringSubmatch(segment)
+		if match == nil {
+			return false
+		}
+		if _, err := strconv.Atoi(match[1]); err == nil {
+			return false
+		}
+	}
+	return true
+}
+
+// scalarAttributes are the attributes data-model.md §3 types as one value — a
+// number, a text, a time, a duration or a reference — whatever the type of the
+// entity: no name of §3 is a scalar of one type and a container of another.
+// scope is not one of them: it can be the object {id, type}. A path below a
+// scalar (status.x, hp.x, state.x) is a path no entity could hold:
+// entity.ApplyOps would replace the value with an object, and every reader of
+// the attribute would stop reading it (review #2 of T-056, Ma-3; review #3,
+// Mi-7; condition У-2 of system-architect).
+//
+// system-architect placed the rule in shared/entity, next to entity.Attr*, for
+// every reader (answer 2 of the review of T-056); until that task (T-472) moves it,
+// State refuses such a path at step 1.
+var scalarAttributes = []string{
+	// Every type (§3): name has no entity.Attr* constant (review #1 of T-470).
+	"name",
+	// Character and NPC (§3.3, §3.4); last_session_ended_at has no constant
+	// either, see the note in shared/entity/attrs.go.
+	"last_session_ended_at",
+	entity.AttrHP, entity.AttrHPMax, entity.AttrAtk, entity.AttrDef, entity.AttrDmg, entity.AttrFlee,
+	entity.AttrStatus, entity.AttrPosition, entity.AttrActorKind, entity.AttrGroupID, entity.AttrEncounterID,
+	entity.AttrKind, entity.AttrRegionID, entity.AttrDiedAt, entity.AttrKilledBy, entity.AttrLootClaimedBy,
+	// World (§3.1).
+	entity.AttrLawsVersion, entity.AttrWeather, entity.AttrTimeOfDay, entity.AttrDay, entity.AttrSeason,
+	entity.AttrEpoch, entity.AttrLocale, entity.AttrBlueprintRef,
+	// Region (§3.2).
+	entity.AttrDescription, entity.AttrRespawnTTL, entity.AttrPerceptionRadius, entity.AttrEncounterChance,
+	entity.AttrLastBackgroundEventAt,
+	// Group and encounter (§3.6, §3.7).
+	entity.AttrLeaderID, entity.AttrState, entity.AttrResolution, entity.AttrRoundSeq, entity.AttrTaskAgentID,
+	entity.AttrOpenedByEventID, entity.AttrClosedByEventID,
+}
+
+// underScalar reports whether a path goes below a scalar attribute.
+func underScalar(path string) bool {
+	root := rootOf(path)
+	return root != path && slices.Contains(scalarAttributes, root)
+}
+
+// reservedRoot mirrors the rule of entity.ApplyOps: the fields of the entity
+// and the roots starting with an underscore are not attributes.
+func reservedRoot(path string) bool {
+	root := rootOf(path)
+	return slices.Contains(entity.ReservedPaths, root) || strings.HasPrefix(root, "_")
 }

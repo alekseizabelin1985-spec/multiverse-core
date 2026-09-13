@@ -157,7 +157,7 @@ func TestAThousandProposalsMoveTheVersionByOneEach(t *testing.T) {
 	publish(t, bus, create("prop-born", ref("counter", entity.TypeNPC), "", map[string]any{"turns": 0}))
 	proposals := make([]eventbus.Event, n)
 	for i := range n {
-		proposals[i] = update(t, fmt.Sprintf("prop-%04d", i), "tick", true,
+		proposals[i] = update(t, fmt.Sprintf("prop-%04d", i), "author", true,
 			set(ref("counter", entity.TypeNPC), nil, op(entity.OpInc, "turns", 1)))
 		publish(t, bus, proposals[i])
 	}
@@ -207,7 +207,7 @@ func TestANumberPastTheSafeRangeOverTheBusIsInvalidOp(t *testing.T) {
 		}
 		return out
 	}
-	setOp := update(t, "prop-set-past", "move", true,
+	setOp := update(t, "prop-set-past", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpSet, "seed", "PAST")))
 	createPast := create("prop-create-past", ref("player-B", entity.TypePlayer), "", map[string]any{"seed": "PAST"})
 	for _, ev := range []eventbus.Event{setOp, createPast} {
@@ -258,10 +258,10 @@ func TestNoTwoFactsOfOneVersionWhileAPublicationKeepsFailing(t *testing.T) {
 		return nil
 	})
 	publish(t, bus.Bus,
-		update(t, "prop-round", "combat", true,
+		update(t, "prop-round", "author", true,
 			set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -2)),
 			set(ref("wolf-alpha", entity.TypeNPC), version(1), op(entity.OpInc, "hp", -3))),
-		update(t, "prop-next", "combat", true,
+		update(t, "prop-next", "author", true,
 			set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 
 	waitFor(t, "the world to report the failed attempts", func() bool {
@@ -312,7 +312,7 @@ func TestAStopThatEndsTheAttemptsStopsTheWorld(t *testing.T) {
 		}
 		return nil
 	})
-	publish(t, bus.Bus, update(t, "prop-round", "combat", true,
+	publish(t, bus.Bus, update(t, "prop-round", "author", true,
 		set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -2)),
 		set(ref("wolf-alpha", entity.TypeNPC), version(1), op(entity.OpInc, "hp", -3))))
 	waitFor(t, "a second attempt", advancing(manual, func() bool { return attempts.Load() >= 2 }))
@@ -352,7 +352,7 @@ func TestAStopThatEndsTheAttemptsStopsTheWorld(t *testing.T) {
 	waitFor(t, "prop-round delivered again and refused by the stopped world", func() bool {
 		return refusedByTheStoppedWorld(bus.Bus, "prop-round")
 	})
-	publish(t, bus.Bus, update(t, "prop-next", "combat", true,
+	publish(t, bus.Bus, update(t, "prop-next", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 	waitFor(t, "prop-next refused by the stopped world", func() bool {
 		return refusedByTheStoppedWorld(bus.Bus, "prop-next")
@@ -448,7 +448,7 @@ func TestANegativeExpectedVersionIsRefusedInAFormTheBusPublishes(t *testing.T) {
 		create("prop-w", ref("wolf-alpha", entity.TypeNPC), "", map[string]any{"hp": 10}))
 	untilEnd(t, bus, 4)
 
-	proposal := update(t, "prop-below-zero", "combat", false,
+	proposal := update(t, "prop-below-zero", "author", false,
 		set(ref("player-A", entity.TypePlayer), version(7), op(entity.OpInc, "hp", -2)),
 		set(ref("wolf-alpha", entity.TypeNPC), nil, op(entity.OpInc, "hp", -3)))
 	raw, err := json.Marshal(proposal)
@@ -500,7 +500,7 @@ func TestAnEventDeliveredTwiceIsAnsweredOnce(t *testing.T) {
 	publish(t, bus, create("prop-born", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10}))
 	untilEnd(t, bus, 2)
 
-	stale := update(t, "prop-stale", "combat", true,
+	stale := update(t, "prop-stale", "author", true,
 		set(ref("player-A", entity.TypePlayer), version(7), op(entity.OpInc, "hp", -1)))
 	publish(t, bus, stale)
 	untilEnd(t, bus, 4)
@@ -511,7 +511,7 @@ func TestAnEventDeliveredTwiceIsAnsweredOnce(t *testing.T) {
 	if err := bus.Append(eventbus.TopicSystemEvents, raw); err != nil {
 		t.Fatal(err)
 	}
-	publish(t, bus, update(t, "prop-sentinel", "combat", true,
+	publish(t, bus, update(t, "prop-sentinel", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 	waitFor(t, "the answer to the sentinel", func() bool { return len(answersTo(t, bus, "prop-sentinel")) == 1 })
 
@@ -522,15 +522,27 @@ func TestAnEventDeliveredTwiceIsAnsweredOnce(t *testing.T) {
 
 // Mi-1 of review #1: a proposal without a world in its envelope reaches no
 // worker, and the log says so at Warn with the event, its type and its
-// proposal_id.
+// proposal_id. Since C-02 v1.7 the registry refuses such a proposal on Publish
+// and, with MV_BUS_VALIDATE_ON_READ, on read; it reaches State only past a bus
+// that does not validate on read, which is how it comes here.
 func TestAProposalWithoutAWorldIsReported(t *testing.T) {
 	bus := newBus(t)
-	_, logged := running(t, bus, world)
+	_, logged := running(t, bus.Lenient(), world)
 	publish(t, bus, create("prop-born", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10}))
-	worldless := update(t, "prop-worldless", "combat", true,
+	worldless := update(t, "prop-worldless", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1)))
 	worldless.World = nil
-	publish(t, bus, worldless, update(t, "prop-sentinel", "combat", true,
+	if err := bus.Publish(context.Background(), worldless); !errors.Is(err, eventbus.ErrPolicyViolation) {
+		t.Fatalf("Publish of a proposal without a world = %v, want the policy of the registry (WorldRequired)", err)
+	}
+	raw, err := json.Marshal(worldless)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bus.Append(eventbus.TopicSystemEvents, raw); err != nil {
+		t.Fatal(err)
+	}
+	publish(t, bus, update(t, "prop-sentinel", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 	waitFor(t, "the answer to the sentinel", func() bool { return len(answersTo(t, bus, "prop-sentinel")) == 1 })
 
@@ -567,10 +579,10 @@ func TestAPanicStopsItsWorldAndOnlyItsWorld(t *testing.T) {
 		return nil
 	})
 	hitA := func(id string) eventbus.Event {
-		return update(t, id, "combat", true, set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1)))
+		return update(t, id, "author", true, set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1)))
 	}
 	publish(t, bus.Bus, hitA("prop-panics"), hitA("prop-after"),
-		inWorld(update(t, "prop-b-hit", "combat", true,
+		inWorld(update(t, "prop-b-hit", "author", true,
 			set(ref("player-B", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))), second))
 	waitFor(t, "two dead letters and the fact of the second world", func() bool {
 		letters, _ := bus.DeadLetters()
@@ -631,7 +643,7 @@ func TestStopFinishesTheProposalInHand(t *testing.T) {
 		}
 		return nil
 	})
-	slow := update(t, "prop-slow", "combat", true, set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -1)))
+	slow := update(t, "prop-slow", "author", true, set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -1)))
 	publish(t, bus.Bus, slow)
 	<-entered
 
@@ -670,9 +682,9 @@ func TestStopFinishesTheProposalInHand(t *testing.T) {
 	if err := bus.Append(eventbus.TopicSystemEvents, raw); err != nil {
 		t.Fatal(err)
 	}
-	sentinel := update(t, "prop-after-restart", "combat", true,
+	sentinel := update(t, "prop-after-restart", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1)))
-	publish(t, bus.Bus, update(t, "prop-slow", "combat", true,
+	publish(t, bus.Bus, update(t, "prop-slow", "author", true,
 		set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -1))), sentinel)
 	waitFor(t, "the fact of the proposal after the restart", func() bool {
 		return len(onTopic(t, bus.Bus, state.TypeUpdated)) == 2
@@ -720,7 +732,7 @@ func TestStopIsBoundedByItsContext(t *testing.T) {
 		return nil
 	})
 	t.Cleanup(letGo)
-	publish(t, bus.Bus, update(t, "prop-stuck", "combat", true,
+	publish(t, bus.Bus, update(t, "prop-stuck", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 	<-entered
 
@@ -745,7 +757,7 @@ func TestStopIsBoundedByItsContext(t *testing.T) {
 	waitFor(t, "Start once the run before has ended", func() bool {
 		return c.Start(context.Background(), deps) == nil
 	})
-	publish(t, bus.Bus, update(t, "prop-after", "combat", true,
+	publish(t, bus.Bus, update(t, "prop-after", "author", true,
 		set(ref("player-A", entity.TypePlayer), nil, op(entity.OpInc, "hp", -1))))
 	waitFor(t, "the answer to prop-after", func() bool { return len(answersTo(t, bus.Bus, "prop-after")) == 1 })
 	assertOneFactPerVersion(t, bus.Bus)
@@ -923,4 +935,28 @@ func (l *lockedBuffer) String() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.buf.String()
+}
+
+// The laws of Config.Invariants reach the Applier of every world the context
+// serves: a create that stands nowhere is refused law_violation inv-10.
+func TestTheContextHoldsItsWorldsToTheLaws(t *testing.T) {
+	bus := newBus(t)
+	testkit.Deterministic(t, "t056")
+	eventbus.SetRegistry(contracts.Default())
+	c := state.New(state.Config{Worlds: []string{world}, Invariants: laws(t)})
+	if err := c.Start(context.Background(), runtime.Deps{Bus: bus}); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Stop(context.Background()) })
+
+	publish(t, bus, create("prop-nowhere", ref("wolf-beta", entity.TypeNPC), "", map[string]any{
+		"hp": 5, "hp_max": 5, "status": "alive", "position": "nowhere",
+	}))
+	waitFor(t, "the answer to prop-nowhere", func() bool { return len(answersTo(t, bus, "prop-nowhere")) == 1 })
+
+	answer := answersTo(t, bus, "prop-nowhere")[0]
+	assertRejected(t, answer, "prop-nowhere", state.ReasonLawViolation, "wolf-beta")
+	if law, _ := answer.Path().GetString("details.invariant_id"); law != "inv-10" {
+		t.Errorf("details.invariant_id %q, want inv-10", law)
+	}
 }

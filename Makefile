@@ -309,7 +309,7 @@ parity-mutants: ## The control mutants of scripts-parity: each must turn the sta
 	@go run ./testdata/script-parity -mutants $(PARITY_ARGS)
 
 .PHONY: ci
-ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint scripts-parity test-e2e ## Everything CI runs without Docker
+ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint scripts-parity backup-prune-test test-e2e ## Everything CI runs without Docker
 
 # `make ci` is the owner's check on Windows, where -race cannot run: there
 # test-race prints SKIPPED and steps aside instead of failing the whole run
@@ -493,6 +493,39 @@ backup: ## Tar the MinIO and Redpanda volumes into $(BACKUP_DIR)
 	$(COMPOSE) start redpanda core
 	(cd "$(BACKUP_DIR)" && sha256sum "minio-$$stamp.tgz" "redpanda-$$stamp.tgz" >> SHA256SUMS)
 	echo "backup: $(BACKUP_DIR)/minio-$$stamp.tgz, $(BACKUP_DIR)/redpanda-$$stamp.tgz"
+	# The same retention as the daily task, once more after a fresh archive. The
+	# term does not depend on this call: the task of the Task Scheduler runs
+	# backup-prune whether backups are still made or not (T-463, R2-Mi-1).
+	# Not fatal: the archives above are made and the containers run again, and a
+	# copy an antivirus holds open must not fail `backup`, nor `deploy` after it;
+	# the daily task retries tomorrow (T-463 review #1 Mi-4).
+	bash scripts/backup-prune.sh --dir "$(BACKUP_DIR)" ||
+		echo "backup: WARNING backup-prune exited $$? — the archives above are made; see its output, the daily task retries (runbook, section 4)" >&2
+
+# Copies older than 30 days go: the volume archives with their SHA256SUMS lines
+# and the host copies of links.db/gateway.db in links/ (T-463, §5.6). By age,
+# never by count; each file by its own path. The owner runs it daily from the
+# Task Scheduler (runbook, section 4); DRY_RUN=1 only lists.
+.PHONY: backup-prune
+backup-prune: ## Remove the backup copies older than 30 days from $(BACKUP_DIR); DRY_RUN=1 lists them
+	@bash scripts/backup-prune.sh --dir "$(BACKUP_DIR)" $(if $(filter 1,$(DRY_RUN)),--dry-run)
+
+# The test of backup-prune on a temporary directory with faked stamps and
+# mtimes; no Docker, no real backup directory. Part of ci and of the CI job
+# scripts-parity. The mutants are the check of the test itself: not part of ci
+# (on Windows they take minutes), but the CI job runs them on Linux.
+# BACKUP_PRUNE_TEST_ARGS=--require-links turns a case of symbolic links this
+# system cannot make into a failure; CI passes it (T-463 review #1 Mi-5).
+BACKUP_PRUNE_TEST_ARGS ?=
+.PHONY: backup-prune-test
+backup-prune-test: ## Test of scripts/backup-prune.sh on a temporary directory
+	@bash -n scripts/backup-prune.sh
+	bash -n scripts/backup-prune-test.sh
+	bash scripts/backup-prune-test.sh $(BACKUP_PRUNE_TEST_ARGS)
+
+.PHONY: backup-prune-mutants
+backup-prune-mutants: ## The control mutants of backup-prune-test: each must turn it red
+	@bash scripts/backup-prune-test.sh --mutants $(BACKUP_PRUNE_TEST_ARGS)
 
 .PHONY: restore
 restore: ## Unpack a backup into its volume: make restore FILE=minio-<date>.tgz
