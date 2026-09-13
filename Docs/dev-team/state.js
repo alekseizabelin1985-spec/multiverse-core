@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:50:09+03:00",
+  "updatedAt": "2026-09-13T18:51:10+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2539,7 +2539,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-1/system-architect#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -9530,7 +9530,7 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Ревью #2 contracts v0.14",
       "startedAt": "2026-09-13T18:40:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:51:10+03:00"
     },
     {
       "instance": "tech-writer#1",
@@ -9570,6 +9570,16 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Постановка T-458",
       "startedAt": "2026-09-13T18:50:09+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-456",
+      "action": "Приёмка T-456 contracts v0.14",
+      "startedAt": "2026-09-13T18:51:10+03:00",
       "finishedAt": null
     }
   ],
@@ -12933,6 +12943,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-458 · постановка: TEAM-1/tech-lead#2 пишет раздел tasks.md и карточку (ветка task/T-458-session-recording от a037efb)."
+    },
+    {
+      "at": "2026-09-13T18:51:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-456 · ревью #2 (TEAM-1/code-reviewer#1): принять — 0/0/2/5. Версии и история v0.14 согласованы; Permanent в C-01 v1.10, КД State §9, T-460 и T-056 без противоречий; довод «мир после паники — не Permanent» принят; C-15 = ADR-005 побайтно; строки EPIC-004 не спорят. Mi-1 правило печати значения нару"
     }
   ],
   "blockers": [],
