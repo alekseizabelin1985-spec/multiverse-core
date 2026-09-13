@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:35:11+03:00",
+  "updatedAt": "2026-09-13T14:36:44+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2464,6 +2464,36 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks/T-453.md",
           "branch": "task/T-453-gitleaks-env-example-ci-develop",
           "worktree": ".worktrees/T-453"
+        },
+        {
+          "id": "T-454",
+          "title": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race) и флак fight-05 в TestTheProcessRunsTheFightsOfIAlpha",
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T14:36:44+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-454.md",
+          "branch": "task/T-454-ci-race-testkit-state-fight05",
+          "worktree": ".worktrees/T-454"
+        },
+        {
+          "id": "T-455",
+          "title": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (профиль legacy)",
+          "status": "in-progress",
+          "assignee": "TEAM-1/devops-engineer#1",
+          "startedAt": "2026-09-13T14:36:44+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-455.md",
+          "branch": "task/T-455-ci-compose-lint-chroma-image",
+          "worktree": ".worktrees/T-455"
         }
       ],
       "defects": [],
@@ -8470,6 +8500,26 @@ window.DEVTEAM_STATE =
       "action": "Приёмка T-214 и T-215 (схемы EPIC-003)",
       "startedAt": "2026-09-13T14:35:11+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race)",
+      "startedAt": "2026-09-13T14:36:44+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (проф",
+      "startedAt": "2026-09-13T14:36:44+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -11142,6 +11192,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-448 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/2/3. Ma-1 граница ±2^53 включительна и проверяется после декодирования во float64: 2^53+1 с шины молча записывается как 2^53 (подтверждено зондом через двойник). Mi-1 нет отдельных тестов на три решения; Mi-2 две проверки наличия old/new. Реше"
+    },
+    {
+      "at": "2026-09-13T14:36:44+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Первый прогон CI go на develop (447b892, run 34754402826) — failure. unit/race/integration: DATA RACE в shared/testkit/state/consumer_test.go (projection.Handle пишет, waitFor читает без синхронизации) — локально -race недоступен (нет cgo), поэтому не виден; unit: флак fight-05 в TestTheProcessRunsT"
     }
   ],
   "blockers": [],
