@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/recording"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -20,6 +21,13 @@ import (
 // time of its own event takes ev.Timestamp, or builds with eventbus.Derive,
 // which inherits it (see the package documentation).
 //
+// A read of history is the exception (C-01 v1.11): a handler whose context is
+// marked by recording.ReadJournal gets the event as the journal holds it, and
+// the clock does not move. A journal read whole as a reference — the llm.output
+// records of a session — carries the times of their causes up to the end of
+// the session; observing them would put the clock in the future of the
+// scenario before its first input, and the harness would get clock_behind.
+//
 // A nil clock in replay is a defect of the process, not of an event, and
 // panics when the middleware is built — at start, not on the first delivery.
 func Middleware(mode runtime.Mode, ec *EventClock) eventbus.Middleware {
@@ -31,6 +39,9 @@ func Middleware(mode runtime.Mode, ec *EventClock) eventbus.Middleware {
 	}
 	return func(h eventbus.Handler) eventbus.Handler {
 		return func(ctx context.Context, ev eventbus.Event) error {
+			if recording.InReadJournal(ctx) {
+				return h(ctx, ev)
+			}
 			ec.Observe(ev.Timestamp)
 			ev.Meta.Replay = true
 			return h(ctx, ev)

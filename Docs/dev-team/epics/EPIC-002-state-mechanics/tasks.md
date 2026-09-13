@@ -1,9 +1,11 @@
 # Задачи EPIC-002 «Состояние и механика» (I1 — волна 1, I2 — волна 1.8→2)
 
-Версия 0.1.2 · 2026-09-13 · tech-lead#1 (TEAM-1) · статус: G3 утверждён 2026-09-09; v0.1.2 — редакционная правка без изменения объёма, переутверждение не требуется.
+Версия 0.1.4 · 2026-09-13 · tech-lead#1 (TEAM-1); v0.1.3, v0.1.4 — tech-lead#2 (TEAM-1) · статус: G3 утверждён 2026-09-09; v0.1.2 — редакционная правка без изменения объёма, переутверждение не требуется; v0.1.3 — добавлена задача T-458 по решению system-architect#1 (T-457); v0.1.4 — приёмка T-458, строки DoD T-061 и T-066, слова статуса в заголовках по `state.js`.
 **Правки сведения 3** (`architecture/consolidation.md` §14.1 З-2, `contracts.md` v0.4 C-02 v1.2, ADR-017 доп. 1 п. 5; внесено tech-lead#1): T-053 (`NPCTarget` — `abandoned` = `dead`), T-054 (inv-01 для `status ∈ dead|abandoned|ascended_final`), T-056 (`abandoned` — терминальный, переход только `alive → abandoned` от gateway, `cause=forget`). Схемы `entity.*.proposed` с `cause=forget` создаёт EPIC-001 T-006 (F-4b-1). Структура подволн не менялась.
 **Правки ревизии контрактов T-416** (`contracts.md` v0.7: C-01 v1.4, C-02 v1.4; ADR-025, ADR-027; внесено tech-lead#1 2026-09-11): T-055 — решение о `WithCauseID` для фактов State; T-060 — таймеры шины сужены до решения архитектора; T-061, критерии I1/I2 и §5 — `FakeEncounter` вместо `WithEncounterStub`, `mvctl report`, таблица владения одна. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 **Редакционная правка v0.1.2** (2026-09-13, tech-lead#1; сверка плана EPIC-002 с деревом, `journal.md` 2026-09-13): индекс приведён к `contracts.md` v0.10 (C-01 v1.7, C-02 v1.4, C-03 v1.2, C-14 v1.2), к дереву `develop` 1c2ee7e и к gitflow. Ветка эпика — от `develop`, задачи — ветки `task/T-NNN-<slug>` в своих папках. Вместо `integration/mvp-1`, «раннего merge» и тегов — контрольные слияния в `develop` по постоянному разрешению пользователя (2026-09-13). T-050 и T-051 ужаты до S «сверка и добор»: их код в `develop` с EPIC-001. Правка `StatusTransitionAllowed(x, x)` перенесена из T-056 в T-050. DoD T-052…T-071 дополнены по C-01 v1.5–v1.7, C-02 v1.3–v1.4, C-03 v1.2, C-14 v1.2. Состав задач, порядок, подволны и исполнители не менялись. Добавленные пункты помечены «(сверка 2026-09-13)», отменённые зачёркнуты с пометкой «заменено (сверка 2026-09-13)».
+**Добавление v0.1.3** (2026-09-13, tech-lead#2, TEAM-1; основание — EPIC-001 T-457: `contracts.md` v0.13, C-01 v1.9, §16 п. 8; `ownership.md` v0.7 §3 п. 4 (а)): в конец индекса добавлен раздел **T-458** «Запись сессии» (`shared/recording` переносом из `internal/replay`, `ReadJournal`, `Deps.Recording` в `serve.go`, маршрут часов replay, `EventClock.Advance`), M, developer#3, подволна 1.4, `contract-change`; часть А — первой. Сверка «Файлов» с T-056 и T-057 — в разделе задачи: пересечений нет. Прочие разделы не менялись.
+**Правка v0.1.4** (2026-09-13, tech-lead#2, TEAM-1; основание — приёмка T-458, карточка `tasks/T-458.md`, раздел «Приёмка»; EPIC-001 `tasks/T-457.md`, «Строки DoD для владельцев задач» → EPIC-002): T-458 — статус `done` и строка приёмки; T-061 — зависимость от T-458, строки DoD T-457 (время корней через маршрут часов) и приёмки T-458 (общий клиент маршрута с разбором `clock_behind`, терпимый разбор тела ошибки, справочное чтение журнала только через `recording.ReadJournal`); T-066 — строки DoD T-457 (inv-01, сторона NPC). Слова статуса в заголовках приведены к `state.js`: T-050, T-051, T-052, T-053, T-054, T-060 — `done`; T-056 — `in_progress`. Раздел T-056, кроме слова статуса, не менялся: задача в работе у developer#2, строки T-457 для неё в индекс не внесены (вопрос оркестратору из приёмки T-458). Прочие разделы не менялись.
 
 Команда TEAM-1 · ветка **`epic/EPIC-002-state-mechanics`** от `develop` 1c2ee7e (после контрольного слияния EPIC-001 → `develop` 2026-09-13), папка `.worktrees/EPIC-002` · G2 утверждён 2026-09-09. ~~(от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0)~~ заменено (сверка 2026-09-13).
 **Gitflow (сверка 2026-09-13)**: задача — ветка `task/T-NNN-<slug>` от ветки эпика, в своей папке `.worktrees/T-NNN`; исполнитель ведёт карточку `tasks/T-NNN.md`, `dev-log.md` и `review.md` в ветке задачи; этот индекс правит только tech-lead#1. После приёмки оркестратор сливает ветку задачи в ветку эпика; конфликт разрешает исполнитель, которого назначит tech-lead#1. Задачи одной подволны у разных исполнителей ведутся параллельно в разных папках.
@@ -41,7 +43,7 @@
 
 ### Подволна 1.1
 
-### T-050: I1-1 · `shared/entity` — сверка и добор, `StatusTransitionAllowed(x, x)` по C-02 v1.4 · Размер: S ~~M~~ · Статус: in-progress · Исполнитель: developer#2 · Подволна 1.1 · Ветка: `task/T-050-entity-reconcile`
+### T-050: I1-1 · `shared/entity` — сверка и добор, `StatusTransitionAllowed(x, x)` по C-02 v1.4 · Размер: S ~~M~~ · Статус: done · Исполнитель: developer#2 · Подволна 1.1 · Ветка: `task/T-050-entity-reconcile`
 - **Описание (сверка 2026-09-13)**: код T-011 в `develop`, покрытие `shared/entity` 86,9 %. Сверить с деревом пункты прежнего описания: геттеры `attrs.go` для всех атрибутов `data-model.md` §3, `HistoryLimit = 50`, `Ref.EventRef`/`RefFrom`, полный набор тестов `ApplyOps` (§11). Добрать недостающее. **Перенесено из T-056**: `entity.StatusTransitionAllowed(x, x)` отвечает `true` для нетерминального `x` (C-02 v1.4 «Статус в то же значение»), для терминальных — по-прежнему `false`.
   ~~Прежнее описание: сверить `shared/entity` v2 (из T-011) с `state-and-mechanics.md` §3: геттеры `attrs.go` для **всех** атрибутов `data-model.md` §3 (в т. ч. `flee`, `encounter`, `participation`, `died_at`, `killed_by`, `inventory[].source`), обрезка `HistoryEntry` до 50, `Ref` ⇄ `eventbus.EntityRef` в обе стороны, полный набор тестов `ApplyOps` (§11).~~ Заменено (сверка 2026-09-13): это сделано в T-011, остаётся сверка.
 - **Файлы**: `shared/entity/{types,attrs,entity,ops,hash}.go` + тесты (`ref.go` нет: `Ref` живёт в `entity.go`).
@@ -51,7 +53,7 @@
   - **(сверка 2026-09-13)** В `dev-log.md` — таблица сверки «пункт прежнего описания → место в дереве → тест»; недостающее добрано тестами. Покрытие `shared/entity` не ниже 86,9 %.
   - **(сверка 2026-09-13; C-02 v1.4, перенос из T-056)** `StatusTransitionAllowed(alive, alive) = true`. Строка `alive→alive` в `TestStatusTransitionAllowed` меняет ожидание на `true`. Строки `abandoned→abandoned`, `dead→dead`, `ascended_final→ascended_final` — `false`. Мутант «вернуть `from == to → false`» краснеет. `shared/testkit/state` (`statusRefusal`) зелёный без правок. Метка `contract-change`: сигнатура не меняется, меняется ответ; ревью system-architect.
 
-### T-051: I1-3 · `mechanics` — RNG и формулы: сверка и добор · Размер: S ~~M~~ · Статус: in-progress · Исполнитель: developer#1 · Подволна 1.1 · Ветка: `task/T-051-rng-statistics`
+### T-051: I1-3 · `mechanics` — RNG и формулы: сверка и добор · Размер: S ~~M~~ · Статус: done · Исполнитель: developer#1 · Подволна 1.1 · Ветка: `task/T-051-rng-statistics`
 - **Описание (сверка 2026-09-13)**: `rng.go` (`Seed`, `NewRNG`) и `formula.go` с вычислителем (`CheckExpr.Eval`) в `develop`, покрытие `internal/mechanics` 94,9 %. Сверить с прежним DoD и добрать статистические тесты: воспроизводимость 1000×4, χ² равномерности d20, корреляция соседних индексов бросков.
   ~~Прежнее описание: довести `rng.go` (`Seed(eventID, rollIndex)`, `NewRNG`, бросок `NdM+K` на одном RNG) и `formula.go` — от парсера (T-015) до **вычислителя** мини-грамматики `check`/`dice` (`state-and-mechanics.md` §5.3) с подстановкой статов актёров.~~ Заменено (сверка 2026-09-13): вычислитель сделан в EPIC-001.
 - **Файлы**: `internal/mechanics/{rng,formula}_test.go`; `rng.go`/`formula.go` — только если сверка найдёт дефект.
@@ -62,7 +64,7 @@
 
 ### Подволна 1.2
 
-### T-052: I1-2 · Схемы EPIC-002 — ревизия и примеры · Размер: S · Статус: todo · Исполнитель: developer#2 · Подволна 1.2
+### T-052: I1-2 · Схемы EPIC-002 — ревизия и примеры · Размер: S · Статус: done · Исполнитель: developer#2 · Подволна 1.2
 - **Описание**: ревизия восьми схем, созданных в F-4b (T-006): `entity.create.proposed`, `entity.update.proposed`, `entity.created`, `entity.updated`, `entity.update.rejected`, `dice.rolled`, `snapshot.created`, `analytics.replay.completed` — enum ops, `expected_version` опционален, `reason` enum **C-02 v1.4** ~~C-02 v1.1~~ (включая `duplicate_entity` и **`law_violation`**), `changed[]` для `append`, `component` enum (**C-14 v1.2** ~~C-14 v1.1~~), `mode ∈ {recovery, test}`; примеры `api-contracts.md` §2.3.4/5/12 валидны.
   - **(сверка 2026-09-13)** Фикстуры payload по образцу T-214: на каждый из восьми типов пара `testdata/fixtures/events/<тип>.v1.valid.json` и `<тип>.v1.invalid.json`. Сверку делает существующий `test/fixtures/events_test.go`, его не правим.
 - **Файлы**: `schemas/events/{entity.*,dice.rolled,snapshot.created,analytics.replay.completed}.v1.json`; **(сверка 2026-09-13)** `testdata/fixtures/events/<тип>.v1.{valid,invalid}.json` (16 файлов), счёт типов и файлов в `testdata/fixtures/events/README.md`. ~~тесты в `shared/contracts`~~ Заменено (сверка 2026-09-13): `shared/contracts` — EPIC-001; сверку схем и фикстур уже делают `mvctl contracts check` и `test/fixtures`.
@@ -71,7 +73,7 @@
 - **DoD**: `make contracts` зелёный; каждая схема покрывает соответствующий пример из `api-contracts.md`; поля `mode=test`, `events_hash_match` в `analytics.replay.completed` **не удалены и не переименованы** (совладение с EPIC-005 — уведомить tech-lead#1 при любой правке); FR-034 (enum причин отказа) отражён; общий DoD §1.
   - **(сверка 2026-09-13)** `go test ./test/fixtures/...` зелёный. Валидная фикстура каждого из восьми типов доходит до обработчика. Невалидная паркуется в `dead_letters` при валидации при чтении и проходит при `MV_BUS_VALIDATE_ON_READ=false`. Каждая невалидная фикстура нарушает ровно одно правило схемы, и оно названо (README или имя случая). `entity.update.rejected.reason` — семь значений C-02 v1.4, отдельного значения `invariant` нет. `mvctl privacy scan testdata/` чист.
 
-### T-053: I1-4 · `mechanics` — `Resolve`, `NPCTarget`, `ChangesFor`, `dice.rolled` · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.2
+### T-053: I1-4 · `mechanics` — `Resolve`, `NPCTarget`, `ChangesFor`, `dice.rolled` · Размер: M · Статус: done · Исполнитель: developer#1 · Подволна 1.2
 - **Описание**: `resolve.go` (таблица исходов §5.4: попадание/крит/фамбл/промах, урон по формулам, `flee`), `target.go` (`NPCTarget` — без `Participation`, это I2), `changes.go` (`ChangesFor`: ops HP с clamp, `status`, `died_at`/`killed_by`, `inventory append` с `source`, `encounter.npcs[].last_damager`), `dice_event.go` (`DiceRolledPayload` ↔ схема), `actor.go` (`ActorFromEntity`).
   - **(сверка 2026-09-13; C-03 v1.2)** Файлы уже в дереве. `DiceRolledPayload` и `ActorFromEntity` реализованы в форме v1.2, остаётся сверка схемы. Содержание пишется для `Resolve` и `ChangesFor` (сейчас `ErrNotImplemented`) и для `NPCTarget`.
   - **(сверка 2026-09-13)** Сигнатура **`NPCTarget(npc *Actor, candidates []*Actor) (*Actor, error)`** — единственная правка сигнатуры C-03 v1.2. Потребители правятся той же задачей: `shared/testkit/mechanics` (`FixedMechanics.NPCTarget`, `fixed_test.go`, `consumer_test.go`) и `internal/mechanics/actor_test.go`.
@@ -88,7 +90,7 @@
 
 ### Подволна 1.3
 
-### T-054: I1-5 · `mechanics` — инварианты соло (inv-01, 02, 03, 09, 10) · Размер: M · Статус: accepted (приёмка 2026-09-13; `done` — после «Учёт времени» и слияния) · Исполнитель: developer#1 · Подволна 1.3 · Ветка: `task/T-054-solo-invariants`
+### T-054: I1-5 · `mechanics` — инварианты соло (inv-01, 02, 03, 09, 10) · Размер: M · Статус: done (приёмка 2026-09-13; `done` — после «Учёт времени» и слияния) · Исполнитель: developer#1 · Подволна 1.3 · Ветка: `task/T-054-solo-invariants`
 - **Описание**: реализации `Check` для inv-01, inv-02, inv-03, inv-09, inv-10 в `invariants.go`; inv-04/05/06 — `Check` по `overlayView` в I2 (T-066); inv-07/08 — `Check=nil` (`Where: audit|guardian`). Один набор id совпадает с `laws@v1` (ADR-012 п. 5).
   - **(сверка 2026-09-13; C-03 «Состояние реализации»)** Сейчас `Invariants()` возвращает 10 записей, у всех `Check == nil`.
 - **Дополнение (сведение 3, C-02 v1.2, ADR-017 доп. 1 п. 5; З-2)**: **inv-01 `dead_does_not_act` срабатывает для `status ∈ dead | abandoned | ascended_final`** — покинутый персонаж (`abandoned`) трактуется как `dead` во всех правилах, целях и раундах; отдельного инварианта для `abandoned` не заводим.
@@ -122,7 +124,7 @@
 
 ### Подволна 1.4
 
-### T-056: I1-6b · `state` — владение, инварианты, дедуп, матрица отказов; **замена `FakeState` v0** · Размер: M · Статус: todo · Исполнитель: developer#2 · Подволна 1.4
+### T-056: I1-6b · `state` — владение, инварианты, дедуп, матрица отказов; **замена `FakeState` v0** · Размер: M · Статус: in_progress · Исполнитель: developer#2 · Подволна 1.4
 - **Описание**: `ownership.go` (проверка по статичной таблице `contracts.OwnershipRules`, `level_violation`), `invariants.go` (подключение `mechanics.Invariants()` к конвейеру), `dedup.go` (`proposal_id`: LRU + `last_change`), `world.go` (мир без `latest.json` → `/health degraded {world: uninitialized}`, предложения отклоняются `unknown_entity`); полная матрица причин отказа **C-02 v1.4** ~~C-02 v1.1~~ (`unknown_entity`, `version_conflict`, `invalid_op`, `duplicate_entity`, `level_violation`, **`law_violation`** ~~`invariant`~~, `dead_entity`); **замена заглушки**: `shared/testkit/state.FakeState` = `state.Applier` над `memstore` без `Store` I/O, `WithInvariants()` — реальный.
   - **(сверка 2026-09-13; C-02 v1.3–v1.4)** Нормы поверх таблицы владения: пакет с одной сущностью дважды (v1.3), связка «путь ↔ причина» (v1.4), статус в то же значение (v1.4). ~~Правка `StatusTransitionAllowed(x, x)` (C-02 v1.4 называет T-056)~~ перенесена в T-050 (сверка 2026-09-13); здесь — поведение State: матрица переходов применяется к изменениям, оставшимся после `ApplyOps`, а не к операциям предложения.
 - **Дополнение (сведение 3, `contracts.md` v0.4 C-02 v1.2; З-2)**: статус **`abandoned`** — терминальный.
@@ -154,7 +156,7 @@
   - **(приёмка T-055, 2026-09-13)** Стенд боёв I1-α — на настоящем State: в `fightThroughTheProcess` (`cmd/multiverse/fake_contexts_test.go`, файл EPIC-001 — через tech-lead#1) снять `t.Setenv(env.StateWorlds.Name(), "world-of-no-stand")`, контекст `state` процесса обслуживает мир фикстур, `FakeState` стенда уходит. Бои I1-α через процесс (`fightThroughTheProcess` и его потребители, включая `TestTheStandWaitsUntilTheFakeHasLearntTheWorld`) зелёные, у каждой сущности один факт на версию;
   - **(приёмка T-055, 2026-09-13; бэклог ревью #1 T-055 п. 2)** `plan` сверяет не только `entity.id`, но и `entity.type` набора с типом сущности мира: несовпадение → `invalid_op` с `entity` из набора, факта нет; владение §4.6 берёт тип из мира, а не из набора. Тест: набор `{id: player-A, type: npc}` над `player`.
 
-### T-060: I1-10 · `internal/replay` — `EventClock`, `NullTimers`, `Recording`, middleware · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.4 · ⚠ только через tech-lead#1 (сборка в **`cmd/multiverse/serve.go`** ~~`cmd/multiverse/main.go`~~)
+### T-060: I1-10 · `internal/replay` — `EventClock`, `NullTimers`, `Recording`, middleware · Размер: M · Статус: done · Исполнитель: developer#1 · Подволна 1.4 · ⚠ только через tech-lead#1 (сборка в **`cmd/multiverse/serve.go`** ~~`cmd/multiverse/main.go`~~)
 - **Описание**: `cursor.go`, `eventclock.go` (время из `timestamp` события, монотонность), `timers.go` (`NullTimers` — тики только из `tick.fired`), `journal.go`, `recording.go` (`*.jsonl` round-trip + `Index`), `middleware.go`; сборка в `cmd/multiverse`: `--mode=replay` → `EventClock` + `NullTimers` + middleware, `--recording=<file>`, `--id-source=sequence`. ~~Правка `cmd/multiverse/main.go` — **одним PR через tech-lead#1**.~~ **(сверка 2026-09-13)** Флаги `--mode`, `--recording`, `--id-source` уже разбирает `cmd/multiverse/serve.go`; сборка replay — правка `serve.go` в ветке задачи, приёмка tech-lead#1. Тот же файл правит T-055 (источники конструкторов) — согласовать, при конфликте слияния разрешает developer#1.
 - **Файлы**: `internal/replay/**`, `cmd/multiverse/serve.go` (сборка режима) ~~`cmd/multiverse/main.go` (регистрация)~~.
 - **Зависимости**: T-003 (волна 0, в `develop`), C-01.
@@ -180,9 +182,18 @@
 ### T-061: e2e-харнесс `solo-30` (каркас прогона) · Размер: M · Статус: todo · Исполнитель: developer#1 · Подволна 1.5
 - **Описание**: каркас e2e EPIC-002: один процесс `--contexts=all --bus=memory --mode=replay`, сборка `Harness` v0 (EPIC-004) + `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) + реальные `mechanics` *(T-416: заменено `FakeNarrator(WithEncounterStub(Rules))` — такой заглушки нет)*; сбор доменных событий, сверка порядка `player.attacked → dice.rolled → combat.decided → entity.update.proposed → entity.updated → narrative.output`; режим `--chaos=duplicate`. До готовности `state` работает на `FakeState`, затем переключается флагом.
 - **Файлы**: **(сверка 2026-09-13)** `test/e2e/solo30_test.go` (`//go:build e2e`, пакет `test/e2e` рядом со `stubs_v0_test.go`), хелперы — в том же пакете. ~~`internal/state/e2e_test.go` (или `test/e2e/solo30_test.go`, `-tags e2e`), хелперы в `internal/state/testsupport`~~ заменено (сверка 2026-09-13): e2e платформы живут в `test/e2e`.
-- **Зависимости**: T-053, T-018 (волна 0, в `develop`).
+- **Зависимости**: T-053, T-018 (волна 0, в `develop`); **T-458** (маршрут `POST /v1/admin/replay/clock`, `EventClock.Advance`, `recording.ReadJournal`; приёмка T-458, 2026-09-13) — старт после её слияния в ветку эпика.
 - **Ссылки**: `design.md` §4.1 I1-11, §4.3 (`FakeEncounter`, T-219; *T-416: было `WithEncounterStub`*); `epics.md` §2 (I1-α); `contracts.md` §17, C-05 «Заглушка»; NFR-062.
 - **DoD**: `make test-e2e` прогоняет 30 ходов ≤ 1 мин без Docker и без сети; порядок событий хода соответствует §7.1; `dead_letters` = 0; каркас параметризован реализацией State (заглушка/реальная); общий DoD §1.
+  - **(T-457, 2026-09-13; C-01 v1.9 «Время корневых событий в replay»)** Время корней задаёт харнесс:
+    - перед каждым входом — `POST /v1/admin/replay/clock` у процесса с контекстом `gateway` (в e2e одного процесса — тот же сервер), `at` — из сценария, ответ `204`;
+    - до первого вызова харнесс проверяет, что времена корней входов не убывают. Корень входа — `player.*` без `causation_id`, опубликованный шлюзом в ответ на HTTP-вход; корни таймера шлюза (`cause=round_timeout`) — не входы и не проверяются (T-457, итерация 3, R2-Mi-2);
+    - убывание или `409` — остановка прогона с сообщением: корень, его `at`, время предыдущего входа и `message` процесса. `400` — дефект харнесса, прогон падает;
+    - тесты: два прогона `solo-30` дают побайтово одинаковую последовательность доменных событий (E2E-12), время корня равно `at` шага; сценарий с убывающим `at` останавливается до первого входа.
+  - **(приёмка T-458, 2026-09-13; C-01 v1.11; ревью #2 system-architect T-458)** Клиент маршрута часов и чтение журнала:
+    - **общий клиент маршрута** — один для харнесса и `mvctl` (подкоманда `mvctl` — не в этой задаче). Клиент шлёт `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS` процесса. `204` — успех; `409` с `error.code = clock_behind` — отдельная ошибка (`errors.Is`) с `message` процесса; `400` (`invalid_body`) — ошибка дефекта клиента; `403`, `404`, `405` — ошибка со статусом, тело не разбирается (у `404` и `405` это ответ mux, схемы нет). Пакет клиента — не `internal/replay`: его импортирует только `cmd/multiverse` (depguard); место согласовать с tech-lead#1 до кода;
+    - **тело ошибки разбирается терпимо**: без `DisallowUnknownFields`, `details` и незнакомые поля — не ошибка, ветвление только по `error.code`, `message` — только текст. Тест: тело `409` с `details` и лишним полем даёт ту же ошибку `clock_behind`; мутант «строгий разбор» краснеет;
+    - **справочное чтение журнала** (записи LLM и любой журнал-справочник) в харнессе и контекстах-зондах — только `recording.ReadJournal`: свой обработчик над `Deps.Journal.ReadRange`/`Tail` в replay — доставка, он двигает часы процесса и ставит `meta.replay`. Тест: контекст-зонд в `Start` читает через `ReadJournal` заранее заполненный `llm_records` со временем позже первого корня; первый вызов часов на время первого корня отвечает `204`.
 
 ### Подволна 1.6
 
@@ -255,7 +266,14 @@
   - **(приёмка T-054, 2026-09-13; ревью T-054 Minor-1, Minor-2)** Закон inv-01 (`checkDeadDoesNotAct`) меняется по ответу system-architect на вопросы В1 и В2 приёмки T-054; ответ и довод — в `dev-log.md`:
     - **сторона NPC** (Minor-2, В2): рекомендация тимлида — нарушение, когда встреча не `resolved`, `npcs[]` не пуст и **все** NPC терминальны; мёртвые NPC остаются в `npcs[]` как история (`living_enemies`). Тесты: два волка, первый убит, бой идёт, `touched` = встреча и убитый (зонд P1) → нарушения нет; оба мертвы, встреча открыта → нарушение. Строки «a corpse named twice», «both sides» `TestInvDeadDoesNotAct` пересмотреть. Мутант «хватает одного терминального NPC» краснеет;
     - **сторона участников** (Minor-1, В1): при варианте А (агент встречи выводит погибшего из участия, пункт C-05) проверка не меняется, зонд P2 закрепляется тестом как нарушение со ссылкой на пункт C-05; при варианте Б проверка участников снимается, а DoD T-054 «три терминальных статуса — одно нарушение» закрепляется на стороне NPC. Зонд P3 (гонка `/forget` в соло) — по тому же ответу и согласованно с тестом T-056;
-    - без ответа архитектора этот пункт открыт, и T-066 по нему не принимается.
+    - без ответа архитектора этот пункт открыт, и T-066 по нему не принимается. *(T-457, 2026-09-13: ответ дан — строка ниже.)*
+  - **(T-457, 2026-09-13; C-05 v1.8 п. 9 (а); ответ на В1, В2 приёмки T-054)** Закон inv-01, сторона NPC: нарушение на каждом NPC, когда встреча не `resolved`, `npcs[]` не пуст и **все** NPC терминальны. Сторона участников (п. 9 (б), условие `touched`) — в T-056.
+    - Новые тесты: два волка, первый убит, бой идёт (P1) — нарушения нет; оба мертвы, встреча открыта — нарушение на обоих. Мутант «хватает одного терминального NPC» краснеет на P1.
+    - Существующие строки `TestInvDeadDoesNotAct` не правятся и остаются зелёными (Mi-4 ревью T-457); это заменяет «пересмотреть» в строке выше:
+      - «a dead wolf is still a target», «a fight is opened against a corpse», «a fight without a state is taken as on», «both sides» (после T-056) — один NPC, и он терминален;
+      - «a corpse named twice is one violation» — одно нарушение на id;
+      - «a fighter the world does not hold» — NPC вне `View` не терминален.
+    - Групповой тест P2 на `overlayView`; сама сторона участников — T-056.
 
 ### T-067: I2-2 · `Participation` в механике (`idle`/`out_of_combat`) · Размер: S · Статус: todo · Исполнитель: developer#1 · Подволна 1.10
 - **Описание**: `Actor.Participation` из `encounter.participants[]`; `NPCTarget` исключает `idle|out_of_combat|dead`; `Resolve` возвращает `ErrInvalidTarget` для недопустимой цели; `ActorsFromEncounter`.
@@ -355,3 +373,168 @@
   - EPIC-003: `shared/testkit/swarm/fake_encounter.go:1629-1635` при отсутствующем `new` строит `remove` без `value`, а не `set null`;
   - EPIC-004: DoD T-314/T-355 — `proposal_id` каскада `/forget` = `forget:{player_id}`; `dead_entity` на своём предложении забвения → 200.
 - **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). C-02 v1.6 — форма `changed[]` по наличию ключей, `proposal_id` обязателен у `entity.create.proposed` и `entity.created`, числа |x| ≤ 2^53−1, правило догона — реализован по решению system-architect#1; ревью #2 — «принять» (0/0/3/2). При приёмке закрыты Mi-3 и N-4 (тесты двойника `TestChangedCarriesAPresentNull`, `TestTheAttributesOfACreateAreCheckedBeforeTheWorld`, мутанты приёмки красные) и Mi-4 (строка карточки). Mi-5 (строка `shared/testkit/swarm/fake_narrator_test.go`, зона EPIC-003) оставлен решением оркестратора; отставание текста C-02 v1.6 в `contracts.md` доводит T-456. Совместимость с кончиком эпика `1fc6480` подтверждена прогоном на слитом дереве. Строки DoD внесены в T-055, T-056, T-059. Подробно — `tasks/T-448.md`, раздел «Приёмка».
+
+### T-458: Запись сессии · `shared/recording` (перенос из `internal/replay`), `ReadJournal`, `Deps.Recording` в `serve.go`, маршрут часов replay, `EventClock.Advance` · Размер: M · Статус: done · Исполнитель: developer#3 · Волна 1 · Подволна 1.4 · Ветка: `task/T-458-session-recording` · contract-change
+- **Исполнитель**: developer#3 (TEAM-1, Opus). **Ветка**: `task/T-458-session-recording` от `epic/EPIC-002-state-mechanics` `a037efb` (кончик эпика после слияния T-055), папка `.worktrees/T-458`. Задача заведена по решению system-architect#1 в T-457 (EPIC-001; C-01 v1.9, «Порядок поставки»). Раздел написал tech-lead#2 2026-09-13.
+- **Причина**: вопросы приёмки T-060 и ревью T-207.
+  - Формат записи живёт в `internal/replay`, а depguard пускает этот пакет только в `cmd/multiverse`. Поэтому `providers/recorded` (EPIC-003) не может прочитать запись без второго читателя JSONL.
+  - В replay часы корневых событий стоят на последнем увиденном времени. Все корни сценария получают одно время, и законы времени идут не так, как в записанной сессии.
+  - Решение C-01 v1.9: формат, чтение файла и журнала, индекс и ключ `llm.output`, писатель переезжают в `shared/recording` (пакет EPIC-001). Процесс кладёт прочитанную запись в `runtime.Deps.Recording`. Время корней задаёт харнесс через `POST /v1/admin/replay/clock` → `EventClock.Advance`.
+- **Зависит от**:
+  - T-457 (EPIC-001, `done`): `contracts.md` v0.13 (C-01 v1.9, §16 п. 8) и `ownership.md` v0.7 уже в `develop` и в ветке эпика;
+  - T-055 (`done`, слита в эпик `a037efb`): блок источников конструкторов в `serve.go`, поверх которого идёт правка;
+  - T-060 (`done`, в эпике): код `internal/replay`, который переносится. В заголовке раздела T-060 выше статус `todo` отстал от карточки и `state.js` *(v0.1.4: заголовок исправлен)*.
+- **Ждут эту задачу**:
+  - EPIC-003 T-212 — условие старта: контрольное слияние EPIC-002 с T-458 в `develop` и синхронизация EPIC-003;
+  - EPIC-003 T-221 (`recording.Writer`, `ReadJournal`) и T-237 (`ReadJournal` в фазе догона) — тоже через `develop`;
+  - EPIC-002 T-061 (маршрут часов).
+- **Порядок внутри задачи — часть А первой.**
+  - **Часть А — поставка другим эпикам:** пакет `shared/recording`, `LLMOutputKeyOf`, `ReadJournal`, поле `Deps.Recording` и его заполнение в `serve.go`, тест `Derive`, depguard. Пункты DoD А1–А9. Именно этого ждут T-212, T-221 и T-237.
+  - **Часть Б — нужна только EPIC-002:** `EventClock.Advance` и маршрут `POST /v1/admin/replay/clock`. Пункты DoD Б1–Б2, потребитель — харнесс T-061.
+  - На ревью задача сдаётся целиком. Если часть Б не укладывается в сессию, исполнитель останавливается после зелёных прогонов части А и записывает это в карточку. Разбиение на две задачи решает оркестратор по отчёту tech-lead#2.
+- **Файлы**:
+  - перенос `git mv`: `internal/replay/recording.go` → `shared/recording/recording.go`, `internal/replay/recording_test.go` → `shared/recording/recording_test.go`. Новый код — в новых файлах, чтобы переименование опознавалось (сходство ≥ 50 %);
+  - новые файлы: `shared/recording/journal.go` и `journal_test.go`; пакетный комментарий `recording` — в `recording.go` или в `doc.go`;
+  - `internal/replay/eventclock.go`: пакетный комментарий без `Recording`, `Advance`, `ErrClockBehind`. Тесты — `internal/replay/clock_test.go`;
+  - обработчик маршрута часов — новый `internal/replay/clockroute.go` и `clockroute_test.go`. Это зона EPIC-002, а `serve.go` только монтирует маршрут;
+  - `shared/runtime/runtime.go` — поле `Recording` (исключение §16 п. 8);
+  - `shared/eventbus/derive_replay_test.go` — новый файл (исключение §16 п. 8). Тест не кладётся в `types_test.go`: `shared/eventbus` параллельно правит T-460 (EPIC-001);
+  - `cmd/multiverse/serve.go` — чтение записи один раз, `Deps.Recording`, монтирование маршрута в replay, справка `--recording`;
+  - тесты процесса — `cmd/multiverse/replay_test.go`, `sources_test.go` (при необходимости) или новый `cmd/multiverse/replay_clock_test.go`;
+  - `.golangci.yml` — `**/shared/recording/**` в `files` правила `no-testkit-in-production`, с комментарием.
+- **Не трогать**:
+  - `internal/state/**`, `internal/mechanics/**`, `shared/testkit/**`;
+  - `internal/llm/**` (привязку `providers/recorded` к пакету делает T-212) и `cmd/mvctl/**` (T-221);
+  - `api/gateway.openapi.yaml`: операцию под тегом `process` вносит EPIC-004;
+  - `cmd/multiverse/{main,contexts}.go`;
+  - `cmd/multiverse/serve_test.go`: его правит EPIC-004 в своей ветке;
+  - не-тестовые файлы `shared/eventbus/**` (T-460);
+  - `shared/env/**` и `.env.example`: новых переменных нет, `MV_REPLAY_RECORDING` не вводится;
+  - `architecture/**` и `plan/**`: общие документы правятся на `develop` (`ownership.md` §3 п. 1).
+- **Ссылки**:
+  - `contracts.md` v0.13, C-01 v1.9: «Запись сессии», «Чтение журнала», «Источники записей LLM», «Время в обработчике replay», «Время корневых событий в replay», «Порядок поставки»; §16 п. 8 — исключение T-458;
+  - `plan/ownership.md` v0.7: §1 (строка `shared/recording/**`), §3 п. 4 (а);
+  - карточка `epics/EPIC-001-foundation/tasks/T-457.md`: «Часть 3», «Итерация 2», «Строки DoD для владельцев задач» → EPIC-002 → T-458;
+  - карточка `tasks/T-060.md`: мутанты M6, M7, M12, M13, M16, M20–M22; «Отметка владельца», Н-2;
+  - `state-and-mechanics.md` §6; ADR-001 доп. п. 2, ADR-003, ADR-009 п. 9, ADR-010;
+  - EPIC-003 `tasks.md`, разделы T-212, T-221, T-237 — потребители пакета;
+  - NFR-061, US-017.
+- **DoD** (в дополнение к общему DoD §1):
+  - **А1. Перенос с историей.** Файлы переносятся `git mv`, как требует C-01 v1.9: без второй копии кода. `git diff --cached -M --summary a037efb` показывает `rename internal/replay/recording.go => shared/recording/recording.go` и то же для теста, со сходством ≥ 50 %. После коммита `git log --follow shared/recording/recording.go` доходит до коммитов T-060. `git mv` меняет индекс. Если исполнителю индекс трогать нельзя, перенос по списку из карточки делает оркестратор, до правок содержимого.
+  - **А2. API пакета `recording`.**
+    - Состав: `TypeLLMOutput`; `Recording` с методами `Len`, `Start`, `Events`, `Index`; `Open` и `Read` (были `OpenRecording` и `ReadRecording`); `LLMOutputKey`, `LLMOutputKeyOf`; `Writer` (`NewWriter`, `Append`, `Close`); `ReadJournal`.
+    - Префикс ошибок — `recording:` (был `replay:`). Поведение перенесённого кода не меняется, кроме `LLMOutputKeyOf` (А4). Golden-значения `LLMOutputKey` прежние.
+    - `internal/replay` имён записи не экспортирует и псевдонимов не держит. Пакетный комментарий (`eventclock.go:1-8`) не упоминает `Recording` (N-5 T-457). В пакете остаются `EventClock`, `NullTimers`, `Cursor`, `ReadToEnd`/`CatchUp`, `Middleware`/`WithMiddleware`.
+    - `go list -deps ./shared/recording` не содержит `multiverse-core.io/internal/…`, `shared/runtime` и `shared/testkit`.
+  - **А3. Совместимость потребителей `internal/replay`.**
+    - Все импортёры переведены на новый пакет: `cmd/multiverse/serve.go` (`recording.Open`), `cmd/multiverse/replay_test.go` (`recording.NewWriter`), остальные — по `git grep`.
+    - `git grep -nE "replay\.(OpenRecording|ReadRecording|NewWriter|Recording|TypeLLMOutput|LLMOutputKey)"` пуст.
+    - Тесты `internal/replay` и `cmd/multiverse` зелёные без ослабления ожиданий. Среди них `TestTheModeDecidesTheTimeOfTheContextsAndNotOfTheBus`, `TestReplayMovesTheClockOfTheContextsByTheEventsTheyRead`, `TestReplayRedeliversAFailingHandlerWithoutHanging`, `TestReplayRefusesAnUnreadableRecording`, `TestReplayLogsTheRecordingItRunsOn`, `TestReplayWithoutARecordingStartsAndWarns`, `TestTheProcessInstallsTheSourcesOfTheConstructorsFromDeps`. Единственная допустимая правка ожиданий — префикс текста ошибки, если тест его сверяет.
+    - Тесты перенесённого файла живут на новом месте, пакет `recording_test`.
+  - **А4. `LLMOutputKeyOf`** возвращает `""`, если выполнено любое условие:
+    - нет `meta.agent.id`;
+    - `phase` отсутствует или пуста;
+    - `attempt` не целое число ≥ 1: дробное (`1.5`), `0`, отрицательное, строка или поле отсутствует.
+
+    `attempt` из JSON (`float64`) и из Go (`int`) дают один ключ. Тест — таблицей. Мутант «усечение через `jsonpath.GetInt`» (прежний код) краснеет на `1.5`, мутант «`attempt ≥ 0`» — на `0`.
+  - **А5. `ReadJournal(ctx, j eventbus.Journal, topic string, from int64) (*Recording, error)`.**
+    - `End` снимается один раз, до чтения. Читается `[from, End)`; при `End ≤ from` — пустая запись без ошибки.
+    - Обработчик только добавляет событие и всегда отвечает `nil`. Разбирает payload потребитель, после чтения.
+    - Ошибка — если чтение вернуло `next < End` без ошибки (так `membus` отвечает на остановку) или `ctx` отменён: `recording: journal <topic> read stopped at <next> of <end>`. Ошибка `End` или `ReadRange` входит в цепочку через `%w`.
+    - Контракт-тесты на `membus` (`shared/eventbus/membus`, без Docker) в `shared/recording/journal_test.go`:
+      - полное чтение: события разных типов в порядке офсетов, `Len() == End − from`, чтение с `from > 0`;
+      - событие, опубликованное после снятия `End`, в запись не попадает;
+      - `Close` шины посреди чтения → ошибка, текст называет `next` и `End`; мутант «частичное чтение без ошибки» краснеет;
+      - отменённый `ctx` → ошибка;
+      - `llm.output`, валидный по схеме, но без ключа (нет `phase`, дробный `attempt`), попадает в запись, а `dead_letters` пуст; мутант «разбор и отказ в обработчике» краснеет.
+    - Интеграционный прогон на Redpanda не требуется: `Journal` kafka-адаптера держит общий contract-тест `shared/testkit/contract`.
+    - Зонд в `cmd/multiverse`: `ReadJournal` над `Deps.Journal` процесса в `--mode=replay`. Там журнал обёрнут middleware T-060, и тест закрепляет, двигает ли чтение `EventClock` и ставит ли `meta.replay` у прочитанных событий. Факт записывается в карточку для T-212 и T-237. Поведение в этой задаче не меняется.
+  - **А6. Поле `runtime.Deps.Recording *recording.Recording`** с doc-комментарием по C-01 v1.9:
+    - процесс читает запись один раз, до открытия шины;
+    - `nil` — записи нет;
+    - payload событий общий для всех читателей, контекст его не меняет.
+
+    Цикла импорта нет. Литералы `runtime.Deps{…}` в тестах всех пакетов компилируются без правок.
+  - **А7. `serve.go`.**
+    - Запись читается ровно один раз, `recording.Open`, до открытия шины. `EventClock` стартует с её `Start`, тот же `*Recording` кладётся в `Deps.Recording`.
+    - В live и в replay без `--recording` поле равно `nil`. Отказы старта прежние: нечитаемая запись — до `openBus`, `--recording` без replay — ошибка разбора флагов.
+    - Тест со свидетелем-контекстом:
+      - в replay с записью `Deps.Recording != nil`, `Len()` равен числу событий файла, `Start()` равен начальному времени часов;
+      - за прогон файл открывается один раз — шпионом или сравнением указателя;
+      - в live и в replay без записи поле равно `nil`.
+    - Справка `--recording`: «recording of a session: sets the start of the clock in replay mode and feeds providers/recorded» (Н-2 отметки tech-lead#1 по T-060). `TestTheHelpOfRecordingSaysWhatItDoes` обновлён.
+    - Блок источников конструкторов T-055 и `times.bus = clock.RealTimers{}` не меняются. Стражи — тесты T-055 и T-060.
+  - **А8. Тест «`Derive` наследует `Meta.Replay`»** — `shared/eventbus/derive_replay_test.go`:
+    - причина с `Replay=true` → следствие с `true`;
+    - причина с `false` → `false`;
+    - внук сохраняет значение.
+
+    Мутант «`Derive` не копирует `Replay`» краснеет. Не-тестовые файлы `shared/eventbus` не меняются.
+  - **А9. depguard — кому разрешён `shared/recording`.**
+    - Потребителям новых разрешений не нужно: это слой `shared/*`, открытый всем, а `*recording.Recording` и так приходит контекстам через `runtime.Deps`.
+    - Потребители по C-01 v1.9: `shared/runtime`, `cmd/multiverse`, `internal/llm/providers/recorded` (T-212), `cmd/mvctl/internal/record` (T-221), догон окна бюджета (T-237).
+    - Пакету запрещён `internal/*` правилом `shared`. Зонд: временный файл в `shared/recording` с импортом `internal/replay` краснит `golangci-lint`, файл удаляется по точному пути.
+    - `**/shared/recording/**` добавлен в `files` правила `no-testkit-in-production`: пакет попадает в бинарник через `shared/runtime`. Зонд: импорт `shared/testkit` в не-тестовом файле пакета краснит линтер, в `_test.go` — нет.
+    - Правила `internal-replay` и `cmd-others` не меняются: `internal/replay` по-прежнему импортирует только `cmd/multiverse`.
+  - **Б1. `EventClock.Advance(at time.Time) error` и `replay.ErrClockBehind`.** Сравнение и сдвиг — под одной блокировкой `mu`.
+    - `at` раньше `Now()` → `ErrClockBehind`, текст называет оба времени, часы не меняются.
+    - `at`, равный `Now()`, → `nil`, часы не меняются.
+    - `at` позже → `nil`, `Now() == at`.
+    - Тесты: три ветки; параллельные `Advance` и `Observe` (≥ 8 горутин × 1000 вызовов), после которых `Now()` равно максимуму поданных времён. В CI тест идёт под `-race`; локально на Windows без cgo `-race` недоступен.
+    - Мутант «`Advance` = `Now()` + `Observe` без общей блокировки» детерминированным тестом может не ловиться. Если он выжил, в карточке объясняется почему; атомарность держат код и `-race` в CI.
+  - **Б2. Маршрут `POST /v1/admin/replay/clock`.**
+    - Обработчик — в `internal/replay` (например, `ClockHandler(ec *EventClock) http.Handler`). `serve.go` монтирует его на `srv.Mux` через `runtime.AdminOnly` только при `--mode=replay`, до `runtime.StartAll`.
+    - Тело — `{"at": "<RFC 3339>"}`, дробные секунды допустимы.
+    - Ответы:
+      - `204` — `at` не раньше времени часов;
+      - `409` с кодом `clock_behind` — `at` раньше, часы не меняются;
+      - `400` — тело не JSON, нет `at` или `at` не RFC 3339;
+      - `403` — нет `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS`;
+      - `405` — другой метод;
+      - `404` — в live, маршрута нет.
+    - Тело ответов `400` и `409` — JSON с полем `error`, как у `forbid` в `shared/runtime/http.go`. Точная форма записывается в карточку: по ней EPIC-004 пишет операцию под тегом `process`.
+    - Тесты через процесс (`process.run` на `membus`, свидетель-контекст) — все ветки выше и **время корней не идёт назад**:
+      - после `204` на `at1` корень, построенный контекстом через `NewRoot`, получает `Timestamp == at1`;
+      - после `409` на `at0 < at1` следующий корень снова получает `at1`, а не `at0`;
+      - после `204` на `at2 > at1` — `at2`.
+    - Мутант «откат молча проглатывается» (`Observe` вместо `Advance`, ответ `204`) краснеет. Мутант «маршрут монтируется и в live» краснеет.
+  - **Покрытие и мутанты.**
+    - Покрытие `internal/replay` и `shared/recording` ≥ 90 % каждого (`go test -cover`). У T-060 было 96,8 % вместе с записью; порог gate — 60 %, `shared/recording` в gate не входит. Цифры до и после — в карточке.
+    - Мутанты T-060 повторены на `shared/recording`:
+      - M6 — `Index`: побеждает последняя запись;
+      - M7 — ключ без длин частей;
+      - M12 — длинные строки не дочитываются;
+      - M13 — нечитаемая запись игнорируется;
+      - M16 — `Writer` обрезает файл;
+      - M20 — `Start` берёт первую строку;
+      - M21 — `Start` не пропускает нулевое время;
+      - M22 — ошибка чтения уходит в разбор JSON.
+    - Новые мутанты — из пунктов А4, А5, А8, Б1, Б2.
+    - Мутанты гоняются в копии дерева в scratch, контрольный — первым. Таблица «мутант → тест → результат» — в карточке.
+  - **Прогоны** в `.worktrees/T-458`: `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `go test -tags e2e ./test/e2e/...`, `golangci-lint run ./...`, `go run ./cmd/mvctl contracts check`, `make test`, `make ci BASE=develop` (общий DoD §1). Docker и стенд не нужны.
+  - **Ревью и просмотр до слияния.**
+    - Метка `contract-change`.
+    - Ревью system-architect: `shared/recording/**`, `shared/runtime/runtime.go`, `shared/eventbus/derive_replay_test.go`, строка `.golangci.yml`. Основание — исключение `contracts.md` §16 п. 8 и `ownership.md` §3 п. 4 (а). Отметка — в карточке, раздел «Ревью system-architect».
+    - Обязательный просмотр tech-lead#1: те же файлы и `cmd/multiverse/serve.go`. Отметка — в карточке, раздел «Отметка владельца (tech-lead#1)».
+    - Без обеих отметок задача не принимается. Приёмка — tech-lead#2; code-reviewer — как у остальных задач эпика.
+  - **Готовность к поставке.**
+    - Совместимость с кончиком эпика и с `develop` проверена на слитом дереве в копии: build, vet, `go test -short ./...`, e2e, `golangci-lint`.
+    - Отдельно сверяются `.golangci.yml` (EPIC-003 и T-451 правят блок `exclusions`) и `cmd/multiverse/serve_test.go` (правка EPIC-004).
+    - Конфликты и рецепт их разрешения — в карточке.
+- **Поставка** (после приёмки, делает оркестратор):
+  - Сразу после слияния T-458 в эпик — контрольное слияние EPIC-002 → `develop`. Это условие старта EPIC-003 T-212 и привязок T-221 и T-237 к пакету.
+  - Условия постоянного разрешения: зелёные `make ci` и `make secrets-scan`, все слитые в эпик задачи приняты, запись в `journal.md`; без тегов, push и `main`.
+  - Затем синхронизация `develop` → EPIC-001, EPIC-003, EPIC-004. До контрольного слияния EPIC-001 состав `Deps` не меняет (C-01 v1.9).
+- **Сверка с T-056 и T-057** (tech-lead#2, 2026-09-13).
+  - «Файлы» не пересекаются:
+    - T-056 — `internal/state/{ownership,invariants,dedup,world}.go`, `shared/testkit/state/**`, строки реестра `shared/contracts` и `cmd/multiverse/fake_contexts_test.go` (строки приёмки T-055);
+    - T-057 — `internal/state/{store,intent,snapshot}.go`.
+
+    Ни одна из них не правит `serve.go`, `internal/replay` и `shared/runtime`.
+  - Порядок: T-458 идёт параллельно T-056, каждая в своей папке; T-057 — после T-056, как в плане. Если при слиянии всё же возникнет конфликт, его разрешает developer#3.
+  - Смысловые стыки:
+    - поле `Deps.Recording` только добавляется, и литералы `runtime.Deps{…}` в тестах `internal/state` не ломаются;
+    - маршрут `/v1/admin/replay/clock` и будущий `POST /v1/admin/state/{world}/snapshot` (T-059) живут на одном mux процесса. Пути не пересекаются, оба закрыты `runtime.AdminOnly`;
+    - в replay `Deps.Journal` обёрнут middleware T-060, поэтому догон State (T-059) и `ReadJournal` двигают один `EventClock` (зонд А5).
+  - T-061 стартует после слияния T-458: ей нужен маршрут часов (строка T-457).
+- **Приёмка**: **принято** · 2026-09-13 · tech-lead#2 (TEAM-1). Части А и Б сделаны целиком за две итерации: DoD А1–А9 и Б1–Б2 выполнены, условия system-architect У-1…У-4 закрыты (`ReadJournal` — чтение истории и в replay часы не двигает, C-01 v1.11; шаблон `POST`; тела ошибок — форма `Error`; префиксы `recording:`). Ревью #1 code-reviewer#3 — «принять» (0/0/2/5), ревью #2 system-architect#1 — «одобрено» (0/0/0/2), отметка tech-lead#1 есть (Н-1, Н-2). При приёмке закрыты Н-1 (параметр `replayOptions` — `path`) и N2-1 (ошибки `Writer` — `recording: open <path>: …`, `recording: sync <path>: …`, ошибка закрытия файла с тем же префиксом; тесты `TestErrorsOfTheWriterCarryThePrefixOnce`, `TestCloseReportsTheFailedStepWithThePrefix`, мутанты приёмки красные). Трёхстороннее слияние `tasks.md` и `.golangci.yml` с кончиком эпика `862c8c0` — без конфликтов. Строки DoD внесены в T-061 и T-066; строки для EPIC-001, EPIC-003 и EPIC-004 — в карточке, «Передать в другие эпики». Подробно — `tasks/T-458.md`, раздел «Приёмка».

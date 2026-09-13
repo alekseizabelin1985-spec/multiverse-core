@@ -390,3 +390,56 @@
   - Событие, которое шина не примет никогда (дефект конструктора, схема), держит подписку `system_events` в попытках для всех миров процесса до `Stop`. Мир `degraded`, `Warn` на каждую попытку. Путь пустого `entity.type` закрыт, других известных нет. Классифицировать ошибки шины как окончательные нельзя: у ошибки схемы нет sentinel в `shared/eventbus`.
   - При недоступном брокере стоит вся подписка процесса — это цена варианта Б, её назвал ревьюер.
   - Остановленный мир восстанавливается только рестартом процесса. Догон по фактам журнала (§4.8) — T-059, до него память после рестарта пуста.
+
+<!-- dev-log T-458 -->
+## developer#3 · T-458 · Запись сессии: `shared/recording`, `ReadJournal`, `Deps.Recording`, маршрут часов replay · 2026-09-13
+
+Ветка `task/T-458-session-recording` (от `a037efb`), TEAM-1, Opus. Подробности — карточка `tasks/T-458.md`, раздел «Выполнение (developer)». Сделаны части А и Б. Кроме двух `git mv` в индекс ничего не добавлялось, коммитов нет.
+- **Что сделано.**
+  - `git mv internal/replay/recording{,_test}.go shared/recording/` отдельным шагом. Против `a037efb` сходство 74 % и 80 %.
+  - API пакета — `Open`/`Read`, ошибки с префиксом `recording:`.
+  - `LLMOutputKeyOf` не усекает `attempt`: целое ≥ 1, одинаково из JSON и из Go.
+  - Новый `recording.ReadJournal` с контракт-тестами на membus.
+  - Поле `runtime.Deps.Recording`.
+  - `serve.go` читает запись один раз (`timeOf`, шпион `process.openRecording`), монтирует маршрут часов в replay и выводит новую справку `--recording`.
+  - Тест `Derive` в новом `shared/eventbus/derive_replay_test.go`.
+  - `**/shared/recording/**` добавлен в `no-testkit-in-production`.
+  - `EventClock.Advance` и `ErrClockBehind`.
+  - `internal/replay/clockroute.go`: `POST /v1/admin/replay/clock` отвечает 204/400/405/409, 403 даёт `runtime.AdminOnly`, в live — 404.
+- **Решения по ходу.**
+  - В `process` добавлено поле `openRecording`, а не пакетная переменная: так уже внедрён `openBus`, и `serve_test.go` (EPIC-004) менять не нужно.
+  - Равный `at` часы не трогает: `Now()` сохраняет исходную зону.
+  - Тела 400/405/409 — `{"error": <код>, "message": <текст>}`, форма записана в карточку для EPIC-004.
+- **Отклонения.**
+  - Тест «`llm.output` без ключа» идёт на membus с `SkipValidateOnRead`. По схеме и политике роя запись без ключа не проходит валидацию, и на валидирующей шине её паркует `Delivery` ещё до обработчика.
+  - Зонд depguard использует `internal/mechanics`: импорт `internal/replay` из `shared/recording` — цикл импорта.
+- **Факт зонда А5.** В replay `ReadJournal` над `Deps.Journal` проходит через middleware T-060. Чтение сдвигает `EventClock` на самое позднее время прочитанного, у событий записи `Meta.Replay == true`. Закреплено тестом, поведение не менялось, вопрос — system-architect.
+- **Мутанты** (копии `scratchpad/t458-<имя>`, без `-overlay`, удалены по точным путям). Контрольный мутант первым, красный. M6, M7, M12, M13, M16, M20–M22 на новом месте красные. Из 21 нового мутанта 19 красные.
+  - Выжил А5 «убрана ветка `End ≤ from`»: на membus эквивалентен.
+  - Выжил Б1 «`Now()` + `Observe` без общей блокировки»: DoD это предполагал, атомарность держат блокировка и `-race` в CI.
+  - Зонды depguard: импорт `internal/*` и `shared/testkit` в не-тестовом файле красные, `testkit` в `_test.go` — зелёный.
+- **Прогоны** (go1.26.8, windows/amd64):
+  - `gofmt -l` — пусто;
+  - `go build ./... && go vet ./...` — 0;
+  - `go test -short -count=1 ./...` — 31 пакет ok;
+  - `go test -tags e2e -count=1 ./test/e2e/...` — ok;
+  - `golangci-lint run ./...` — 0 issues;
+  - `mvctl env check` — 68 переменных, 0; `contracts check` — 65 типов, 0;
+  - `make test` — exit 0, `internal/replay` 100 % (было 96,8 % вместе с записью), `shared/recording` 96,6 %; без `-race` (нет cgo).
+  - Интеграционные тесты не нужны по DoD, Docker, стенд `:8888` и `.env` не трогались.
+- **Слияние.** С кончиком эпика `281348a` по коду расхождений нет. `.golangci.yml` сливается с EPIC-003 через `git merge-file` без конфликтов. `serve_test.go` задача не меняет.
+
+<!-- dev-log T-458 iteration 2 -->
+## developer#3 · T-458 · итерация 2: чтение истории без часов replay, шаблон и тела маршрута часов · 2026-09-13
+
+Ветка `task/T-458-session-recording`, TEAM-1, Opus. Основание — ревью system-architect#1 (У-1…У-4, А5 — вариант (б)) и ревью #1 code-reviewer#3 (Mi-1, Mi-2, N-1…N-5). Подробности — карточка `tasks/T-458.md`, раздел «Итерация 2 (developer)». Индекс не менялся (два `git mv`), коммитов нет.
+- **Что сделано.**
+  - У-1: `ReadJournal` читает журнал под меткой контекста, `recording.InReadJournal(ctx)` её проверяет. Middleware replay пропускает помеченный обработчик без `Observe` и без `Meta.Replay`. В зону задачи добавлены `internal/replay/middleware.go` и `middleware_test.go`. Зонд А5 перевёрнут: часы после `ReadJournal` стоят на старте записи, `Meta.Replay` как в журнале, `POST …/clock` раньше прочитанных событий — `204`.
+  - У-2: маршрут монтируется шаблоном `POST /v1/admin/replay/clock`. Процесс с контекстом, монтирующим `POST /v1/admin/{path...}`, стартует; `GET` получает `405` с `Allow: POST` от mux.
+  - У-3 и Mi-2: тела `400`/`409` (и защитного `405`) — `{"error":{"code","message"}}`. `403` у `AdminOnly` не тронут.
+  - У-4: `Read` — `recording: line N: …`, `Open` — `recording: <path>: line N: …` и `recording: open <path>: …`.
+  - Mi-1: процессный тест маршрута часов — с записью и без.
+  - N-1…N-5: объяснение мутанта `Advance` (логическая гонка, не гонка данных, `-race` не видит, атомарность держит блокировка; поправка к записи итерации 1 выше); `rec == nil` при ошибке; `times.recording != nil` и `recordingPath`; `shared/recording/*` в `desc` depguard; `wholeAttempt` — все целые типы и `float32`.
+- **Решения по ходу.** Метка ставится только на `ReadRange`, `End` читается с контекстом вызывающего. `ClockPath` остался путём, метод добавляется в `serve.go`. Двойник журнала в тесте ошибок теперь отдаёт одно событие до ошибки, чтобы R2 было что вернуть.
+- **Мутанты** (копии `scratchpad/t458i2-<имя>`, без `-overlay`, удалены по точным путям): контрольный первым — красный; R1, R2 и 16 новых на У-1…У-4, N-2, N-5 — все красные. Мутант «шаблон без метода» в первой редакции не собрался, переписан и перепрогнан — красный по тестам.
+- **Прогоны** (go1.26.8, windows/amd64): `gofmt -l` пусто; `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — все ok; e2e — ok; `golangci-lint run ./...` — 0 issues (повтор с `--allow-parallel-runners` после отказа из-за линтера другой папки); `make test` — exit 0, `internal/replay` 100 %, `shared/recording` 97,8 %. Docker, стенд `:8888` и `.env` не трогались.

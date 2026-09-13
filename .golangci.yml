@@ -85,17 +85,22 @@ linters:
         # internal/gateway/gatewaytest is a double of the same kind that lives
         # next to what it doubles (FakeGateway, ADR-001 addendum, boundary 1e),
         # so it is banned from shipped code on the same terms.
+        #
+        # shared/recording is code of the binary as well: shared/runtime imports
+        # it for Deps.Recording, so a double imported there would ship (C-01
+        # v1.9, T-458).
         no-testkit-in-production:
           files:
             - "**/internal/**"
             - "**/cmd/**"
             - "**/shared/eventbus/**"
+            - "**/shared/recording/**"
             - "!**/cmd/multiverse/fake_contexts.go"
           deny:
             - pkg: multiverse-core.io/shared/testkit
-              desc: "shared/testkit is for tests: production code (internal/*, cmd/*, shared/eventbus/* including membus) must not import a double (ADR-001 p. 3). The one exception is cmd/multiverse/fake_contexts.go (testkit/swarm, the hook of I1-α, T-255; removed by T-256)"
+              desc: "shared/testkit is for tests: production code (internal/*, cmd/*, shared/eventbus/* including membus, shared/recording/*) must not import a double (ADR-001 p. 3). The one exception is cmd/multiverse/fake_contexts.go (testkit/swarm, the hook of I1-α, T-255; removed by T-256)"
             - pkg: multiverse-core.io/internal/gateway/gatewaytest
-              desc: "internal/gateway/gatewaytest (FakeGateway) is for tests: production code (internal/*, cmd/*, shared/eventbus/*) must not import it (ADR-001 addendum, boundary 1e)"
+              desc: "internal/gateway/gatewaytest (FakeGateway) is for tests: production code (internal/*, cmd/*, shared/eventbus/*, shared/recording/*) must not import it (ADR-001 addendum, boundary 1e)"
 
         # The hook of I1-α: one file, one package, and the trailing $ so that
         # swarmx or swarm/anything does not pass by prefix (depguard matches
