@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:16:55+03:00",
+  "updatedAt": "2026-09-13T22:18:57+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4607,7 +4607,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#2",
           "startedAt": "2026-09-13T21:19:59+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -10151,7 +10151,7 @@ window.DEVTEAM_STATE =
       "task": "T-311",
       "action": "Ревью #1 flow/render",
       "startedAt": "2026-09-13T22:05:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:18:57+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -10191,6 +10191,16 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Итерация 2 документации",
       "startedAt": "2026-09-13T22:16:55+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-311",
+      "action": "Приёмка flow и render",
+      "startedAt": "2026-09-13T22:18:57+03:00",
       "finishedAt": null
     }
   ],
@@ -14004,6 +14014,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-317 · ревью #1 (TEAM-3/code-reviewer#3): вернуть — 0/2/11/8. Ma-1 README шлюза описывает проверку БД в /health как реализованную (она в T-309); Ma-2 проверка webhook вписывает токен в команду/адрес и проверяет отозванным токеном. Minor: описание /forget, Harness v0, MV_GATEWAY_DATA_DIR, правило de"
+    },
+    {
+      "at": "2026-09-13T22:18:57+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-311 · ревью #1 (TEAM-3/code-reviewer#2): принять — 0/0/7/6. Тексты FR-009 побайтно из T-318 (SHA в тесте), 24 подстроки, FSM и согласие только кнопкой, клиент не повторяет только forget_incomplete. Mi-1…Mi-3 тесты (согласие после отправки, Reset после 503, notice_due); Mi-4 ответ не по контракту в"
     }
   ],
   "blockers": [],
