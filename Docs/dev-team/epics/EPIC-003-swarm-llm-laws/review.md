@@ -3049,3 +3049,185 @@ Ma-1 закрыт: ADR-029 оформлен, КД §10.2/§13.4.2 и DoD T-203 �
 Строки DoD T-202 выполнены. Отклонения 1–4 корректны. Белые списки, glob и отказ при пустом окружении подтверждены мутантами. Порядок находок детерминирован. Предупреждения C-02 v1.6 соответствуют контракту и границе 2^53−1. Тест корпуса сравнивает полный список находок. Правка `domain-fair.md` тесты T-201 не ослабляет.
 
 Mi-1 и Mi-2 — пробелы статической проверки без обхода рантайм-границы (белый список событий держит). Их можно закрыть итерацией 2 или строками бэклога — по решению tech-lead#2 при приёмке. Mi-2 зависит от вопроса 3. N-1…N-4 — по желанию исполнителя.
+
+## T-207 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-2)
+
+### Границы ревью
+
+Ветка `task/T-207-fake-recorded-providers`, папка `.worktrees/T-207`, база `d5237b0` (эпик после слияния T-439). Коммитов у задачи нет, ревьюировалось рабочее дерево:
+- новые `internal/llm/providers/fake/{fake,dirty}.go` и тесты, `internal/llm/providers/recorded/{recorded,source}.go` и тесты (`recorded_test.go`, `source_test.go`, `replay_test.go`), `internal/llm/providers/README.md`;
+- `tasks.md` (строка статуса T-207), запись `<!-- dev-log T-207 -->` в `dev-log.md`, карточка `tasks/T-207.md`.
+
+`.golangci.yml`, `internal/llm/*.go` (T-206), `shared/*` не менялись.
+
+Эталоны: раздел T-207 в `tasks.md` (ревизия 4); КД `swarm-llm-laws.md` §9.1; `contracts.md` C-07 v1.3 (ключ, таблица полей по статусу), C-15 v1.2 («Заглушка»); ADR-010 п. 2; ADR-029 п. 2–3 (`pattern` ярлыков); схема `schemas/events/llm.output.v1.json`; `internal/replay/recording.go` в `epic/EPIC-002-state-mechanics` (`cc9a63c`, только чтение): `LLMOutputKey`, `LLMOutputKeyOf`, `Recording.Events`, `Recording.Index`.
+
+Отклонение «чтения `*.jsonl` и `llm_records` в пакете нет» — решение оркестратора по T-457 (формат, чтение и индекс записи уходят в `shared/recording`). Дефектом T-207 оно не считается.
+
+### Что проверено и сошлось
+
+- **Промах `recorded`.** Промах любой из четырёх частей ключа даёт `ErrIncompleteRecord` и нулевой `Response`. У провайдера нет ссылки на живой провайдер и нет ветки с шаблоном: пройти мимо записи некуда. Ключ без агента, попытки, `correlation_id` или с неизвестной фазой даёт `ErrNoCallKey`, не промах. Статусы: `error` → `*FailureError` (`Is(ErrRecordedFailure)`), `quarantined`/`filter_error` без `response_raw` → `ErrResponseWithheld`. Исключение — Ma-1.
+- **`WithCall` через контекст.** C-15 не меняется, для других провайдеров значение инертно. Если `WithCall` забыть, ошибка громкая (`ErrNoCallKey`), молчаливого промаха нет. Риск устаревшей попытки при наследовании контекста — в «Рисках» и бэклоге (T-212).
+- **Совпадение ключа с `internal/replay.LLMOutputKey`.** Порядок частей один: `correlation_id` → `agent.id` → `phase` → `attempt`. Обе стороны берут `ev.CorrelationID()` и `ev.Meta.Agent.ID`. Кодирование `<длина>:<часть>` у replay и структура `Key` у провайдера задают одно отношение равенства: разделителей нет ни там, ни там. Проба в копии дерева: для записей тестов после `overTheWire` (числа — `float64`) `replay.LLMOutputKey(rec.Key…)` == `replay.LLMOutputKeyOf(ev)` у всех трёх записей, включая агента с `:` (`a:b`) и попытку 12. Расходится только разбор записей, которые схема отвергает: `attempt` 1.5 replay усекает до 1, а `recorded` отказывает всему источнику; `attempt` 0 и фаза вне enum replay индексирует, `recorded` отказывает. На записях по схеме ключи совпадают, остальное — предложение в бэклог для `shared/recording`. Дубли в обоих местах решаются одинаково: остаётся первый.
+- **Интерфейс `Source` и адаптер над `shared/recording`.** `Source func(ctx, eventbus.Handler) error` и `Events(iter.Seq[eventbus.Event])` принимают `Recording.Events(recorded.TypeLLMOutput)` нынешнего `internal/replay` без правки провайдера. Тот же вид будет и у `shared/recording`, если туда переедет `Recording`. Если `shared/recording` даст свой индекс или ключ, `recorded.Key` сможет стать обёрткой без ломки вызывающих. Сигнатура `New(ctx, Source)` при этом не меняется. Про адаптер над журналом — Mi-3.
+- **`fake`: детерминизм.** Правила перебираются по порядку таблицы, отвечает первое подходящее. Пустая фаза и `nil`-матчер означают «любой». Индекс ответа сдвигается под тем же замком, что и счётчик, последний ответ повторяется. Промах — `ErrNoMatch` с нулевым ответом. `Replies` копируются при `Add`, у каждой фабрики свой `next`. `Calls()` считает промахи и вызовы, отменённые во время задержки; для уже завершённого контекста проверки нет — Mi-2.
+- **Задержка на `clock.Manual`.** Хук `WithOnDelay` зовётся после `timers.After(d)` и вне замка провайдера, поэтому тест может ждать в хуке, не блокируя провайдер. Гонки «сдвинул часы до взвода» нет. Длительность взведённого таймера тест не проверяет — Mi-1.
+- **Ярлыки ADR-029.** `EntityLabel`/`BackgroundLabel` на 1…99 проходят `^e[1-9][0-9]?$`/`^b[1-9][0-9]?$` (КД §13.4, ADR-029 п. 3), 0 и 100 не проходят (так и задумано). `Narrative.JSON()` пишет `[]` вместо `null` у обязательных массивов, `tone` — `omitempty`.
+- **`TestReplayMakesNoLLMCalls`.** Каждая запись сессии проходит `contracts.Validate` по схеме `llm.output`. Воспроизведение идёт после кодирования и декодирования JSON. Ответы равны побайтно, `live.Calls()` не растёт ни на воспроизведении, ни на промахе. Замечание к форме теста — N-1.
+- **depguard и запреты.** `internal-llm` пускает `internal/llm/` в свои пакеты. `internal-memory` и `internal-swarm` пускают `providers$`/`fake$` так, как описывает таблица README (`fake$` — только в `_test.go`). `internal-replay` провайдеров не видит, `shared` не видит `internal`. `time.Now/After/…`, `os.Getenv` и `init` в `providers/` не встречаются (grep пуст). Регистрации в `init` нет, только `Factory`.
+- **README.** API обоих пакетов совпадает с экспортом. Имена `FakeProvider`/`RecordedProvider` ↔ `fake.Provider`/`recorded.Provider` записаны (`README.md:14`). Пример опирается на существующие `llm.ErrUnavailable` и `providers.Register`.
+
+### Прогоны (go1.26.8 windows/amd64, golangci-lint из PATH)
+
+| Команда | Итог |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=1 -cover ./internal/llm/...` | ok; `llm` 99.6 %, `providers` 97.6 %, `fake` 100 %, `recorded` 100 % |
+| `go test -short -count=20 ./internal/llm/providers/...` | ok (флейков нет) |
+| `golangci-lint run ./internal/llm/...` | 0 issues |
+| `gofmt -l internal/llm` | пусто |
+| `go run ./cmd/mvctl contracts check` | 65 типов, 8 топиков, 58 файлов схем |
+
+`-race` не запускался: `CGO_ENABLED=0`, gcc нет. Docker, стенд LLM и интеграционные тесты не трогались.
+
+### Мутанты и пробы ревьюера
+
+Копия `go.mod`, `go.sum`, `internal/llm`, `shared`, `schemas` в своём scratch (`t207rev-copy`), без `-overlay`. Базовый прогон копии зелёный. Мутации — точной заменой (строка встречается ровно один раз), после каждой файл восстановлен. В конце копия снова зелёная и удалена по точному пути.
+
+| # | Мутант / проба | Результат |
+|---|---|---|
+| M0 | контрольный: промах `recorded` → нулевой ответ без ошибки | убит |
+| M1 | `fake.wait`: `timers.After(d / 2)` | **выжил** (10 из 10 прогонов) → Mi-1 |
+| M2 | `fake.Generate`: `ctx.Err()` до `take` (уже завершённый контекст не считается) | **выжил** → Mi-2 |
+| M3 | промах `fake` не считается | убит |
+| M4 | `recorded`: из дублей остаётся последний | убит |
+| M5 | `KeyOf` не проверяет фазу | убит |
+| M6 | `recorded.Generate`: ветка статуса `error` отключена | убит |
+| M7 | `Generate`: удержание по статусу вместо `!HasRaw` | выжил — эквивалентен на записях по схеме; к Ma-1 |
+| M8 | индекс ответа правила не сдвигается | убит |
+| P1 | проба: `quarantined` с `response_raw` (схема отвергает: `allOf`/`not`) через `recorded.New` → `Generate` | `New` — ok, `Generate` → `"blocked text"`, `err = nil` → **Ma-1** |
+| P2 | проба: ключ `recorded` ↔ `replay.LLMOutputKey`/`LLMOutputKeyOf` (копия `recording.go` из EPIC-002) | совпадает на записях по схеме; расхождение на `attempt` 1.5 и 0 (см. выше) |
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Суть | Как исправить |
+|---|---|---|---|---|
+| Ma-1 | Major | `internal/llm/providers/recorded/recorded.go:282`, `:195` | **Запись `quarantined`/`filter_error` с `response_raw` отдаёт заблокированный текст как обычный ответ.** `parseRecord` проверяет, что у `valid`/`partially_rejected`/`invalid` `response_raw` есть. Обратное правило C-07 v1.3 он не проверяет: у `quarantined`, `filter_error` и `error` `response_raw` запрещён. `Generate` решает по `!rec.HasRaw`, а не по статусу. Проба P1: запись `quarantined` с `response_raw: "blocked text"` схему не проходит, `New` принимает её молча, `Generate` возвращает `"blocked text"` и `nil`. Для статуса фильтра это fail-open: фильтр (a) закрыт в записанном прогоне, а replay/восстановление отдают текст дальше по конвейеру. Через журнал такая запись не пройдёт: доставка валидирует схему. Файлы записей (`testdata/recordings`, будущий `shared/recording`) схему при чтении не проверяют, и строгость `ErrMalformedRecord` пакет ввёл ровно для них (`recorded.go:37-40`). Проверена половина таблицы C-07, вторая — нет. | (1) В `parseRecord` для `quarantined`, `filter_error` и `error` при `out.ResponseRaw != nil` вернуть `bad("validation_status=%s with response_raw")`. (2) В `Generate` решать по статусу: `quarantined`/`filter_error` → `ErrResponseWithheld` независимо от `HasRaw` (защита в глубину: `Writer` T-221 в том же пакете может завести запись в обход `parseRecord`). (3) В `TestAMalformedRecordFailsTheSource` — случаи «quarantined/filter_error/error с `response_raw`». |
+| Mi-1 | Minor | `internal/llm/providers/fake/fake_test.go:211-247` | `TestADelayWaitsOnTheManualClock` не проверяет длительность взведённого таймера. Проверка «ответил до срока» (`:237-241`) — неблокирующий `select` сразу после `close(release)`: горутина к этому моменту обычно ещё не дошла до своего `select`. Мутант `After(d / 2)` выжил 10 из 10: таймер срабатывает на `Advance(2s)`, тест этого не видит, а `LatencyMs` = 3000 берётся из `Reply.Delay`, не из таймера. Кроме того, при регрессии порядка «хук до взвода» (F20 разработчика) тест висит до `-timeout` go test (10 мин по умолчанию), а не падает. | Обернуть `manual.Timers()` шпионом, который запоминает `d` каждого `After`, и после `<-armed` проверить `d == 3s` — детерминированно, без гонки с горутиной. Неблокирующую проверку `:237-241` тогда можно убрать; ожидание в хуке оставить или заменить шпионом. |
+| Mi-2 | Minor | `internal/llm/providers/fake/fake_test.go:277-302`; `fake.go:214-225` | README (`:75`) и doc `Generate` обещают: `Calls()` считает отменённые вызовы. Тест есть только для отмены во время задержки (`TestACancelledContextEndsTheDelay`). Для уже завершённого контекста счётчик не проверен: мутант M2 (`ctx.Err()` до `take`) выжил. Именно это поведение отличает «шлюз ходил к провайдеру» от «не ходил» в тестах уступки и NFR-014. | В `TestADoneContextFailsTheCall` после цикла проверить `p.Calls() == 2` и `p.CallsFor(llm.PhaseTick) == 1`. |
+| Mi-3 | Minor | `internal/llm/providers/recorded/source.go:12-16` | Doc `Source` зовёт писать адаптер прямо над `eventbus.Journal.ReadRange` («the shape is that of … ReadRange, so an adapter … is a few lines»). Разработчик сам нашёл, что так нельзя (карточка, бэклог п. 6). Ошибка обработчика `New` (`ErrMalformedRecord`) в `ReadRange` уходит в повторы и `dead_letters`, наружу возвращается `nil`. Короткое чтение `membus` при остановке тоже приходит без ошибки. Итог — неполный индекс без ошибки и промах далеко от причины, то есть ровно то, от чего защищает `ErrMalformedRecord`. Автор адаптера (T-212 или задача EPIC-001) прочитает doc, а не dev-log. | Переписать абзац как контракт `Source`: отдать все события записи; ошибку `h` вернуть без изменений, без повторов и `dead_letters`; неполное чтение — ошибка. Адаптер над журналом сначала собирает события, потом отдаёт (`Events`). Фразу «a few lines» убрать. |
+| N-1 | Nit | `internal/llm/providers/recorded/replay_test.go:101-106`, `:117-123` | `providerFor` ничего не моделирует: у `rec` нет ссылки на `live`, поэтому «промах не проваливается в живой вызов» верно по построению и упасть не может. Нагрузку несут сравнение ответов и проверка схемы. Это соответствует DoD (тест шлюза `mode=replay` → `recorded` — T-212), но комментарий `:117-123` обещает больше. | Убрать `providerFor` и в комментарии прямо сказать, что сторона шлюза — T-212. |
+| N-2 | Nit | `internal/llm/providers/fake/fake.go:244-262`; `README.md:65`, `:75` | Вызов с уже завершённым контекстом или отменённый во время задержки расходует ответ правила (`r.next` сдвигается). В тесте уступки повторная постановка получит второй ответ, а не первый. Поведение разумное, но не описано. | Одна фраза в doc `Rule` и в README: «отменённый вызов расходует ответ». |
+| N-3 | Nit | `internal/llm/providers/fake/fake.go:7-9` | Doc пакета: «outside internal/llm the linter admits it only into the tests of swarm and memory». Но `cmd/*` без ограничений (C-15 v1.2, `README.md:28`). | «…only into the tests of swarm and memory, and into cmd/*». |
+| N-4 | Nit | `internal/llm/providers/recorded/recorded.go:170-175`; `source.go:18-20` | `Factory(ctx, src)` перечитывает `src` при каждом `registry.New`. `Events` над одноразовым `iter.Seq` (например, над чтением потока) второй раз даст провайдер без записей: всё станет промахами — громко, но далеко от причины. | Сказать в doc `Factory`/`Events`, что источник должен быть перечитываемым, либо читать один раз (`sync.OnceValues`). |
+| N-5 | Nit | `internal/llm/providers/recorded/recorded.go:150-156` | Дубль ключа отсекается после `parseRecord`: битая повторная доставка хорошей записи валит весь источник, хотя `internal/replay.Index` оставил бы первую. Строгость оправдана, но с replay процесса она расходится. | Оставить, записать в doc `New` («битая запись валит источник, даже если это дубль») и учесть в `shared/recording` (бэклог п. 1). |
+
+### Вердикт
+
+**Вернуть** · Critical 0 · Major 1 · Minor 3 · Nit 5.
+
+Ma-1 — единственная причина возврата: статус фильтра в записи должен закрывать текст при любом содержимом записи. Исправление — две проверки и три тестовых случая. Mi-1…Mi-3 желательно закрыть той же итерацией: тесты и doc, кода провайдеров они не меняют. На итерации 2 проверяются только исправления и регрессия от них.
+
+### Открытые вопросы
+
+Нет.
+
+### Предложения в бэклог
+
+1. **`shared/recording` (T-457, system-architect#1).** Одна функция извлечения ключа `llm.output` для `internal/replay` и `recorded`. Сейчас на записях вне схемы они расходятся: replay усекает `attempt` 1.5 до 1 и индексирует `attempt` 0 и фазу вне enum, `recorded` отказывает источнику. Туда же — проверка таблицы C-07 «поле по статусу» при чтении файла записи (для журнала её делает доставка).
+2. **T-212 (строка DoD).** `recorded.WithCall` ставить на контекст **каждой попытки** от базового контекста вызова, не от контекста прошлой попытки. Иначе `ctx.Value` найдёт ближайшее значение, и если `WithCall` на повторе забыт, попытка 2 молча получит запись попытки 1. Тест шлюза: «попытка 2 в `mode=replay` читает запись попытки 2».
+3. **`.golangci.yml` (system-architect, по образцу T-445).** Правило `internal-llm` пускает `internal/llm/` префиксом, поэтому production-код шлюза (`internal/llm/*.go`, T-212) может импортировать `providers/fake`. Если граница «`fake` — только в тестах» должна держаться и внутри `llm`, нужна пара правил production/tests для `internal/llm`, с исключением самого `providers/fake` и тестов `recorded`.
+4. Из карточки T-207 п. 5: при следующей правке C-15 «Заглушка» и КД §9.1 назвать `fake.Provider`/`recorded.Provider` и `recorded.WithCall`.
+
+### Риски и допущения
+
+- `WithCall` через контекст до ответа T-457 — допущение. Если архитектор выберет поля `Request.AgentID/Attempt` (C-15 v1.3), `KeyOf` и тесты поменяются, провайдер — нет.
+- Проба P2 сравнивала ключ с `recording.go` на `cc9a63c` ветки EPIC-002. Если `LLMOutputKeyOf` там изменится до слияния, сверку надо повторить.
+- `-race` в этом окружении недоступен. Конкурентные тесты (`TestConcurrentCallsAreCountedOnce`, `TestConcurrentCallsReadTheSameRecords`) проверены 20 повторами без детектора гонок. Прогон с `-race` — за CI.
+
+## T-207 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-2)
+
+### Границы ревью
+
+Итерация 2 по ревью #1: ветка `task/T-207-fake-recorded-providers`, папка `.worktrees/T-207`, база `d5237b0`. Коммитов нет, ревьюировалось рабочее дерево. По правилу повторной итерации проверены только исправления Ma-1, Mi-1…Mi-3, N-1…N-5 и регрессия от них. Прочитаны раздел «Итерация 2 (по ревью #1)» карточки, запись «Итерация 2» под `<!-- dev-log T-207 -->` и схема `schemas/events/llm.output.v1.json`.
+
+Изменены `fake/fake.go`, `fake/fake_test.go`, `recorded/{recorded,source}.go`, `recorded/{recorded,replay}_test.go`, `README.md`. Добавлен `recorded/withheld_internal_test.go`. Вне `internal/llm/providers` код не менялся. `tasks.md` в diff — одна строка статуса T-207.
+
+`recorded.WithCall` остаётся временно: по решению system-architect (T-457, итерация 2) его заменят поля `AgentID`/`Attempt` в `llm.Request` в T-212. Дефектом это не считается.
+
+### Проверка закрытия
+
+| # | Итог | Чем проверено |
+|---|---|---|
+| Ma-1 | **закрыто** | `tableOfC07` (`recorded.go:295-302`) и `check` (`:305-322`) сверены с `allOf` схемы построчно, совпадение полное. (1) `response_raw` обязателен у `valid`/`partially_rejected`/`invalid`, запрещён у `quarantined`/`filter_error`/`error`. (2) `filter.status=pass` у `valid`/`partially_rejected`. (3) `block` у `quarantined`. (4) `error` у `filter_error`. (5) `error` без `filter`. (6) `error{code}` только у `error`, `code` непустой (у схемы `required` + `minLength: 1`). У `invalid` проверки `filter` нет, как в схеме: условие по стадии конвейера схема сама выносит в `$comment` корня (T-211/T-213). Обоснование «зависит от стадии» верное. `TestAMalformedRecordFailsTheSource`: 17 случаев `ofTheTable`, каждый меняет одно поле записи, прошедшей схему (`TestTheRecordsOfTheTestsPassTheSchema`), поэтому отказ `contracts.Validate` вызван именно этой строкой. `Generate` (`:216-221`) решает по статусу. `withheld_internal_test.go` строит запись в обход разбора. Пробы P1 ревью #1 («quarantined с текстом») больше не проходят. |
+| Mi-1 | **закрыто** | Шпион `spyTimers` (`fake_test.go:227-246`) запоминает `d`, а хук видит, что уже взведено. Порядок проверяется без блокировки: хук пишет в буферизованный канал ёмкостью 1. Мутант `After(d / 2)` падает на `[1.5s]`, мутант «хук до взвода» — на `[]`, оба сразу. `receive` ограничивает каждое ожидание 10 с. **Флака от 50 мс нет.** Проверка «ответил раньше срока» (`:287-292`) одностороння: у верного провайдера таймер 3 с после `Advance(2s)` не срабатывает, ответа в канале нет при любой скорости CI. Медленный CI может только пропустить регрессию, но не уронить верный код. Регрессию «задержка не ждёт таймер» детерминированно ловит и `TestACancelledContextEndsTheDelay`: мутант F1 падает 20/20 в каждом из двух тестов. |
+| Mi-2 | **закрыто** | `TestADoneContextFailsTheCall` (`fake_test.go:351-354`): `Calls()==2`, по фазам 1 и 1. Мутант «`ctx.Err()` до `take`» (M2 ревью #1) убит. |
+| Mi-3 | **закрыто** | Doc `Source` (`source.go:15-30`) и README (`:112-117`) описывают контракт: все события или ошибка, ошибка обработчика без повторов и `dead_letters`, неполное чтение — ошибка. Там же сказано, почему `Journal.ReadRange` не `Source`, и как строить адаптер (собрать, проверить полноту, отдать через `Events`). «A few lines» убрано. |
+| N-1 | закрыто | `providerFor` удалён. Комментарий `replay_test.go:68-76` говорит, что счётчик верен по построению, а выбор `recorded` в `mode=replay` — T-212. |
+| N-2 | закрыто | Doc `Rule` (`fake.go:101-104`) и `Generate` (`:216-219`), README `:64`, `:75`. `TestACancelledCallUsesUpItsReply` проверяет оба пути: контекст завершён до вызова (без задержки) и отменён во время задержки. |
+| N-3 | закрыто | `fake.go:8-10`: «…and into cmd/*». |
+| N-4 | закрыто | `recorded.Factory` через `sync.OnceValues` (`recorded.go:186-195`). На ошибке возвращается `nil`-интерфейс (`return nil, err`), типизированного `nil` нет. Ошибка запоминается навсегда — **приемлемо**. `ctx` и `src` фабрики фиксированы, поэтому повторное чтение дало бы ту же ошибку (отменённый `ctx`) или, хуже, чтение одноразового источника. В `mode=replay` запись неизменна, и отказ чтения — отказ прогона. Поведение описано в doc и в README `:139`. `TestFactoryReadsTheSourceOnce` проверяет и провайдер, и ошибку. |
+| N-5 | закрыто | Строгость оставлена и описана: doc `New` (`recorded.go:146-150`), README `:130`. `TestAMalformedDuplicateFailsTheSource` — битая копия идёт второй, ошибка называет её id. Мутант «дубль проверяется до разбора» убит (у разработчика — R18). |
+
+Регрессий от исправлений не найдено. `Record`/`Lookup` не менялись. Порядок проверок в `parseRecord` (агент → фаза → попытка → статус → таблица → модель) сохраняет прежние случаи. Запретов `time.Now/After/…`, `os.Getenv` и `init` в production-файлах `providers/` нет. В тестах `clock.RealTimers` используется только для ограничения ожиданий.
+
+### Прогоны (go1.26.8 windows/amd64)
+
+| Команда | Итог |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=5 -cover ./internal/llm/providers/...` | ok; `providers` 97.6 %, `fake` 100 %, `recorded` 100 % |
+| `golangci-lint run ./internal/llm/...` | 0 issues |
+| `gofmt -l internal/llm` | пусто |
+
+`-race` не запускался: `CGO_ENABLED=0`, gcc нет. Docker, стенд LLM и интеграционные тесты не трогались.
+
+### Мутанты и пробы ревьюера
+
+Копия `go.mod`, `go.sum`, `internal/llm`, `shared`, `schemas` в своём scratch (`t207r2-copy`), без `-overlay`. Базовый прогон копии зелёный. Точная замена (строка встречается ровно один раз), файл после каждого мутанта восстановлен. В конце копия снова зелёная и удалена по точному пути.
+
+| # | Мутант / проба | Результат |
+|---|---|---|
+| C0 | контрольный: промах `recorded` → нулевой ответ без ошибки | убит |
+| R1 | строка `valid` без `filter: "pass"` | убит («valid without filter») |
+| R2 | строка `partially_rejected` без `filter: "pass"` | убит |
+| R3 | строка `filter_error` без `filter: "error"` | убит |
+| R4 | строка `error` без `noFilter` | убит |
+| R5 | `error.code` не проверяется на пустоту | убит |
+| R6 | `error{}` у статуса не `error` разрешён | убит |
+| R7 | строка `quarantined` без `filter: "block"` | убит |
+| R8 | `Generate` удерживает только `quarantined` | убит внутренним тестом (`filter_error` с текстом) |
+| R9 | `Factory` без `sync.OnceValues` | убит (`pulls = 2`) |
+| R10 | `invalid` запрещает `filter` | убит (`TestAnInvalidRecordMayCarryAFilter`) |
+| F1 | `wait` не ждёт таймер (`default: return nil`) | убит 20/20 и в `TestADelayWaitsOnTheManualClock`, и в `TestACancelledContextEndsTheDelay` |
+| F2 | `timers.After(d / 2)` (M1 ревью #1) | убит: `[1.5s]` |
+| F3 | хук до взвода таймера | убит сразу: `[]`, без зависания |
+| F4 | `ctx.Err()` до `take` (M2 ревью #1) | убит |
+| F5 | без проверки контекста у ответа без задержки | убит |
+| P1 | проба: `null` вместо поля — `valid` с `"error": null`, `quarantined` с `"response_raw": null`, `error` с `"filter": null` | схема отвергает все три (тип); `New` принимает все три; текст не отдаётся ни в одном случае (`quarantined` → `ErrResponseWithheld`) → N-1 |
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Суть | Как исправить |
+|---|---|---|---|---|
+| N-1 | Nit | `internal/llm/providers/recorded/recorded.go:256-277`; `recorded_test.go:305-308` | Разбор читает поля таблицы указателями, поэтому JSON `null` для него — отсутствие поля. Схема отвергает `null` по типу (`string`/`object`). Проба P1: записи `valid` + `"error": null`, `quarantined` + `"response_raw": null`, `error` + `"filter": null` схема отвергает, а `New` принимает. Утечки текста нет: статус удерживает ответ, строки таблицы по смыслу выполнены. Но комментарий теста обещает, что «the provider and llm.output.v1.json refuse the same records», а это верно только в одну сторону. README `:153` уже честно говорит, что остальную схему провайдер не проверяет. | Смягчить комментарий: «every record of the table the provider refuses, the schema refuses too». Различение «нет поля» и `null` (`json.RawMessage`) — при переносе разбора в `shared/recording`, в T-207 не требуется. |
+
+### Вердикт
+
+**Принять** · Critical 0 · Major 0 · Minor 0 · Nit 1.
+
+Ma-1 закрыт полностью: таблица C-07 v1.3 совпадает с `allOf` схемы, все 17 строк проверены и сверены со схемой. Удержание по статусу защищено внутренним тестом. Mi-1…Mi-3 и N-1…N-5 закрыты, выжившие мутанты ревью #1 (M1, M2, M7) убиты. Nit N-1 на приёмку не влияет.
+
+### Открытые вопросы
+
+Нет.
+
+### Предложения в бэклог
+
+1. **`shared/recording` (T-457).** В общий разбор `llm.output` добавить различение «поля нет» и `null` для полей таблицы C-07 (N-1). Пункт 1 ревью #1 (одна функция ключа для `internal/replay` и `recorded`) остаётся в силе.
+2. **T-212.** При замене `recorded.WithCall` на `llm.Request.AgentID/Attempt` сохранить `ErrNoCallKey` для пустых частей и тест «попытка 2 в `mode=replay` читает запись попытки 2» (п. 2 ревью #1). `KeyOf` и `TestACallWithoutItsKeyIsNotAMiss` переписать под поля запроса.
+
+### Риски и допущения
+
+- `-race` недоступен. Конкурентные тесты и тесты задержки проверены `-count=5` (у разработчика — `-count=20`) без детектора гонок. Прогон с `-race` — за CI.
+- Одностороннюю проверку «раньше срока» на 50 мс флакающей не считаю: у верного провайдера она пройдёт при любой нагрузке. На медленном CI она может пропустить регрессию, но эту регрессию детерминированно ловят шпион длительности и `TestACancelledContextEndsTheDelay`.

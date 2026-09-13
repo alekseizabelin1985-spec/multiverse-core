@@ -2618,3 +2618,89 @@ fence (принят незакрытый, потеряна строка откр
   - на первом прогоне выжили двое: M31 (порядок серьёзностей в пределах поля) — дописан тест; M44 эквивалентный —
     проверка удалена из кода;
   - копия удалена по сохранённому точному пути.
+
+<!-- dev-log T-207 -->
+### developer#2 · T-207 · провайдеры `fake` и `recorded` · 2026-09-13
+
+Ветка `task/T-207-fake-recorded-providers` (база `d5237b0`), папка `.worktrees/T-207`. Коммитов нет, файлы не в индексе. Стенд LLM, Docker, интеграционные тесты не трогались. Карточка — `tasks/T-207.md`.
+
+#### Что сделано
+- `internal/llm/providers/fake` (`fake.go`, `dirty.go`):
+  - таблица `Rule{Phase, Match, Replies}` — отвечает первое подходящее правило, последний ответ повторяется; промах — `ErrNoMatch`;
+  - `Calls()`/`CallsFor`/`EmbedCalls`/`Requests`;
+  - задержка на `clock.Timers` с хуком `WithOnDelay`, отмена контекста — `ctx.Err()`;
+  - `Models()` из `WithModels` или из ответов таблицы, `SetHealth`, детерминированный `Embed`;
+  - «грязные» ответы (`WithPreamble`, `WithThink`, `InFence`, `WithTrailingText`, `WithTrailingComma`);
+  - ярлыки ADR-029 (`EntityLabel`, `BackgroundLabel`, `Narrative.JSON`);
+  - `Factory`.
+- `internal/llm/providers/recorded` (`recorded.go`, `source.go`):
+  - ключ C-07; части ключа, которых нет в `llm.Request`, приходят через `WithCall(ctx, agent, attempt)`;
+  - промах — `ErrIncompleteRecord`, вызов без ключа — `ErrNoCallKey`, запись `error` — `*FailureError`, `quarantined`/`filter_error` — `ErrResponseWithheld`;
+  - `Lookup` для сверки `prompt_hash`; битая запись — `ErrMalformedRecord` на весь источник;
+  - источник — функция `Source`, адаптеры `Events`/`Slice`.
+- Тест «replay: `llm_calls=0`» — `TestReplayMakesNoLLMCalls`; записи тестов проходят схему `llm.output` (`contracts.Validate`).
+- `internal/llm/providers/README.md` — API и таблица импорта по `depguard`.
+
+#### Решения по ходу
+- **Ключ через контекст.** `llm.Request` (C-15) не несёт `agent.id` и `attempt`. Контекст не меняет контракт; альтернатива — поля `Request` в C-15 v1.3 — вопрос к system-architect (T-457).
+- **Регистрации в `init` нет:** только фабрики, имена регистрирует проводка.
+- **Чтение записей вне пакета.** Первая версия читала `*.jsonl` и журнал `llm_records` своими адаптерами. По сообщению оркестратора (T-457: формат, чтение и индекс записи — в `shared/recording`, парсер у провайдера отклонён) адаптеры `JSONL` и `Journal` удалены вместе с тестами. Декодирование JSON осталось только в тестовом помощнике. После появления `shared/recording` — адаптер `Source` над ним (T-212/задача EPIC-001).
+- **Урок удалённого `Journal`** (для `shared/recording`): разбор внутри обработчика `ReadRange` уводит ошибку в повторы и `dead_letters`, а короткое чтение `membus` при остановке приходит без ошибки.
+
+#### Отклонения от дизайна
+- Нет чтения `*.jsonl`/`llm_records` в пакете (выше).
+- Имена `fake.Provider`/`recorded.Provider` вместо `FakeProvider`/`RecordedProvider`.
+- `Response.Provider` у `recorded` — провайдер записи.
+
+#### Проверки
+- `go build ./... && go vet ./...` — 0.
+- `go test -short -count=1 ./...` — ok; `fake` и `recorded` — 100 %.
+- `golangci-lint run ./...` — 0 issues.
+- `mvctl contracts check` — ok.
+- `make test` — exit 0, gate `internal/llm` 99.6 %.
+- `gitleaks dir` — no leaks.
+- Мутанты в копии в scratch без `-overlay`, контрольный первым. Итог по итоговому дереву — 65 мутантов, все убиты. В первом прогоне выжили 3 (F15b, F20, S8), по ним добавлены проверки. Копия удалена по точному пути.
+
+#### Итерация 2 · по ревью #1 · 2026-09-13 · developer#2
+
+Вердикт ревью #1 — «вернуть» (Critical 0, Major 1, Minor 3, Nit 5). Закрыты все пункты. Коммита нет, файлы не в индексе.
+
+| # | Ответ | Что сделано |
+|---|---|---|
+| Ma-1 | исправлено | `parseRecord` держит всю таблицу C-07 v1.3 «поле ↔ статус» (`tableOfC07`, строки `allOf` схемы): `response_raw` обязателен у `valid`/`partially_rejected`/`invalid` и запрещён у `quarantined`/`filter_error`/`error`; `filter.status` — `pass`/`block`/`error` по статусу, у `error` `filter` запрещён; `error.code` только у `error`. `Generate` удерживает ответ по статусу, а не по `HasRaw`. В `TestAMalformedRecordFailsTheSource` — 17 случаев таблицы, включая три из ревью; для каждого проверяется, что схема тоже отказывает. Внутренний тест `TestGenerateWithholdsByTheStatus` — запись `quarantined`/`filter_error` с текстом в обход разбора. |
+| Mi-1 | исправлено | Шпион таймеров запоминает длительность: после хука проверяется `[3s]`. Порядок «таймер, затем хук» проверяется тем, что видит шпион в момент хука, без блокировки. Каждое ожидание в тестах задержки ограничено (`receive`, 10 с по `clock.RealTimers`). Мутант «хук до взвода» падает за 0.00 с. |
+| Mi-2 | исправлено | `TestADoneContextFailsTheCall`: `Calls()==2`, по фазам 1 и 1. |
+| Mi-3 | исправлено | Doc `Source` — контракт: все события или ошибка; ошибка обработчика — как есть, без повторов и `dead_letters`; неполное чтение — ошибка. Про `Journal.ReadRange` сказано, почему он не `Source`, и как строить адаптер (собрать, проверить полноту, отдать через `Events`). То же в README. |
+| N-1 | исправлено | `providerFor` убран; комментарий теста говорит, что счётчик `fake` верен по построению, а выбор `recorded` в `mode=replay` без провала в живой вызов — T-212. |
+| N-2 | исправлено | Doc `Rule`, `Generate` и README: отменённый вызов (до вызова и во время задержки) расходует ответ. Тест `TestACancelledCallUsesUpItsReply`. |
+| N-3 | исправлено | Doc пакета `fake`: «…and into cmd/*». |
+| N-4 | исправлено кодом | `recorded.Factory` читает источник один раз (`sync.OnceValues`): те же провайдер или ошибка при следующих вызовах. На ошибке фабрика отдаёт `nil`-интерфейс, а не типизированный `nil`. Doc `Events`: последовательность перечитывается при каждом чтении. Тест `TestFactoryReadsTheSourceOnce`. |
+| N-5 | оставлено строгим, описано | Запись проверяется до поиска ключа, поэтому битый дубль хорошей записи валит источник (`internal/replay` оставил бы первую копию). Doc `New`, README, тест `TestAMalformedDuplicateFailsTheSource`. |
+
+Дополнительно: `TestAnInvalidRecordMayCarryAFilter`. У `invalid` `filter` зависит от стадии конвейера, поэтому разбор его не требует и не запрещает.
+
+##### Проверки (go1.26.8 windows/amd64)
+- `go build ./... && go vet ./...` — 0.
+- `gofmt -l internal/llm` — пусто.
+- `go test -short -count=1 ./...` — все ok; `fake` 100 %, `recorded` 100 %.
+- `go test -short -count=20 ./internal/llm/providers/...` — ok.
+- `golangci-lint run ./...` — 0 issues.
+- `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 файлов схем.
+- `make test` (Git Bash) — exit 0, без `-race` (нет cgo); coverage-gate `internal/llm` 99.6 %.
+- `gitleaks dir --redact internal/llm/providers` — no leaks.
+- Стенд LLM, Docker, интеграционные тесты не трогались.
+
+##### Мутанты
+Копия `go.mod`, `go.sum`, `internal/llm`, `shared`, `schemas` в scratch (`t207i2-copy`), без `-overlay`. Скрипт `t207i2-mutants.py`: точная замена (строка встречается ровно один раз), после каждого мутанта файл восстановлен. Базовый и итоговый прогоны копии зелёные. Копия удалена по точному пути.
+
+23 мутанта, контрольный C0 («промах — нулевой ответ без ошибки») первым. Убиты все 23:
+- R1–R13 — строки таблицы и проверка в разборе;
+- R14 — удержание только `quarantined`;
+- R15 — удержание по `HasRaw` (M7 ревью; убит внутренним тестом);
+- R16 — фабрика перечитывает источник;
+- R17 — типизированный `nil` на ошибке;
+- R18 — битый дубль пропускается;
+- F1 — `After(d / 2)` (M1 ревью);
+- F2 — хук до взвода: падение, не зависание;
+- F3 — `ctx.Err()` до `take` (M2 ревью);
+- F4 — задержка не ждёт таймер.
