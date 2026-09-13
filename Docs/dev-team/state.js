@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:41:05+03:00",
+  "updatedAt": "2026-09-13T16:46:16+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3231,7 +3231,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#2",
           "startedAt": "2026-09-13T16:10:55+03:00",
           "finishedAt": null,
@@ -8961,7 +8961,7 @@ window.DEVTEAM_STATE =
       "task": "T-207",
       "action": "Провайдеры fake и recorded",
       "startedAt": "2026-09-13T16:10:55+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:46:16+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9071,6 +9071,16 @@ window.DEVTEAM_STATE =
       "task": "T-210",
       "action": "Ревью #1: бюджет вызовов LLM",
       "startedAt": "2026-09-13T16:41:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Ревью #1: провайдеры fake и recorded",
+      "startedAt": "2026-09-13T16:46:16+03:00",
       "finishedAt": null
     }
   ],
@@ -12074,6 +12084,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-210 выполнена TEAM-2/developer#3: internal/llm/budget.go — окна по (world, level, phase, provider), фон B/час на мир (global+domain, все провайдеры; B=0 — ни одного вызова), интерактив N/мин (0 — выключен), Allow → BudgetExceededError с budget{kind,limit,window}, Observe/Handle по llm.output с иде"
+    },
+    {
+      "at": "2026-09-13T16:46:16+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-207 выполнена TEAM-2/developer#2: providers/fake (таблица правил, Calls(), задержка по shared/clock, грязные ответы, ярлыки ADR-029) и providers/recorded (ключ correlation_id/agent.id/phase/attempt, ErrIncompleteRecord без живого вызова, Lookup, Source извне); TestReplayMakesNoLLMCalls; 65 мутанто"
     }
   ],
   "blockers": [],
