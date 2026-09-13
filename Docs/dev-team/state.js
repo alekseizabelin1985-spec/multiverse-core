@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:50:13+03:00",
+  "updatedAt": "2026-09-13T19:54:53+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3141,7 +3141,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -3215,13 +3215,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-203",
           "title": "A3 · Пять блупринтов MVP-1 и схемы schemas/agent/",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T18:40:06+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T19:54:53+03:00",
           "reviewIterations": 2,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 70,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-203.md",
           "subwave": "C"
@@ -3330,9 +3330,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-209",
           "title": "B4 · Парсер ответа, компиляция схем, проверка языка",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
@@ -3604,9 +3604,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-222",
           "title": "R1 · Реестр блупринтов и индекс scope",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
@@ -9782,7 +9782,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Ревью #1 записи сессии",
       "startedAt": "2026-09-13T19:36:55+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:54:53+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -9822,7 +9822,7 @@ window.DEVTEAM_STATE =
       "task": "T-203",
       "action": "Приёмка T-203 и индекс EPIC-003 0.3.9",
       "startedAt": "2026-09-13T19:38:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:54:53+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9842,6 +9842,26 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Хранение бэкапов 30 дней и маскировка значения",
       "startedAt": "2026-09-13T19:48:25+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-209",
+      "action": "Парсер ответа LLM, схемы, язык",
+      "startedAt": "2026-09-13T19:54:53+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-222",
+      "action": "Реестр блупринтов и индекс scope",
+      "startedAt": "2026-09-13T19:54:53+03:00",
       "finishedAt": null
     }
   ],
@@ -13409,6 +13429,24 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Push выполнен (правило разрешения добавлено пользователем): develop 447b892..81eb173, epic/EPIC-001 dcdb530..3f34195, EPIC-002 4119170..281348a, EPIC-003 69db467..b9a169c, EPIC-004 734ae03..d121a99. gitleaks по 119 коммитам вне origin (без слияний) — no leaks found. Контроль CI на develop — gh run l"
+    },
+    {
+      "at": "2026-09-13T19:54:53+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-203 принята TEAM-2/tech-lead#2: Mi-4/N-4 — равенство трёх наборов (блупринт, publishedByDesign, белый список роли) и owned_entity_types = ownedFromContracts, 9 мутантов красные; индекс 0.3.9 — замены T-456 N-4 (T-211/T-212/T-250), DoD T-216, T-222, T-223, T-236 (У-3), раздел T-447, строка T-260. И"
+    },
+    {
+      "at": "2026-09-13T19:54:53+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · ревью #1 кода (TEAM-1/code-reviewer#3): принять — 0/0/2/5. Перенос чистый, мутанты T-060 красные, LLMOutputKeyOf — прежнее усечение было ошибкой; Advance — выживший мутант эквивалентен. Mi-1 нет теста маршрута часов в replay без --recording (R1 выжил); Mi-2 три формы тела ошибок (AdminOnly, "
+    },
+    {
+      "at": "2026-09-13T19:54:53+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Запущены T-209 (парсер ответа, компиляция схем, язык; TEAM-2/developer#3 вместо занятого developer#2) и T-222 (реестр блупринтов и индекс scope; TEAM-2/developer#1)."
     }
   ],
   "blockers": [],
