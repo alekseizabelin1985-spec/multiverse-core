@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:18:57+03:00",
+  "updatedAt": "2026-09-13T22:23:08+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2595,7 +2595,7 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T19:48:25+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -2639,6 +2639,19 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-466.md"
+        },
+        {
+          "id": "T-468",
+          "title": "Маскировка значения с @ во всём выводе скриптов: строки успеха и health llm-server, llm-bench (после ответа system-architect по C-15)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-468.md"
         }
       ],
       "defects": [],
@@ -10161,7 +10174,7 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Ревью #2",
       "startedAt": "2026-09-13T22:05:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:23:08+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10201,6 +10214,16 @@ window.DEVTEAM_STATE =
       "task": "T-311",
       "action": "Приёмка flow и render",
       "startedAt": "2026-09-13T22:18:57+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-463",
+      "action": "Приёмка T-463 (вариант б)",
+      "startedAt": "2026-09-13T22:23:08+03:00",
       "finishedAt": null
     }
   ],
@@ -14020,6 +14043,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-311 · ревью #1 (TEAM-3/code-reviewer#2): принять — 0/0/7/6. Тексты FR-009 побайтно из T-318 (SHA в тесте), 24 подстроки, FSM и согласие только кнопкой, клиент не повторяет только forget_incomplete. Mi-1…Mi-3 тесты (согласие после отправки, Reset после 503, notice_due); Mi-4 ответ не по контракту в"
+    },
+    {
+      "at": "2026-09-13T22:23:08+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-463 · ревью #2 (TEAM-1/code-reviewer#1): вернуть — 0/1/0/2. Ma-1, Mi-2…Mi-5, N-1…N-6 закрыты (--dir против junction, .., UNC; мутанты R0–R4 и P13/P14/P16 убиты). Ma-2: отказы llm-bench при @ печатают хост и значение. Решение оркестратора: вариант (б) — объём T-463 не расширять, пометку «Код расход"
     }
   ],
   "blockers": [],
