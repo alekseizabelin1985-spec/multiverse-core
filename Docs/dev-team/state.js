@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:25:18+03:00",
+  "updatedAt": "2026-09-13T18:26:52+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2535,11 +2535,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-456",
           "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-1/system-architect#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4526,7 +4526,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -9390,7 +9390,7 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Ревью #1: contracts v0.14, C-08, КД шлюза",
       "startedAt": "2026-09-13T18:10:39+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:26:52+03:00"
     },
     {
       "instance": "architect#2",
@@ -9420,7 +9420,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Ревью #2: ядро бота",
       "startedAt": "2026-09-13T18:15:25+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:26:52+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -9450,6 +9450,26 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "actions: валидация, идемпотентность, публикация player.*",
       "startedAt": "2026-09-13T18:25:18+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Приёмка T-310 ядро бота",
+      "startedAt": "2026-09-13T18:26:52+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-456",
+      "action": "Итерация 2: дедлайны C-01, Permanent",
+      "startedAt": "2026-09-13T18:26:52+03:00",
       "finishedAt": null
     }
   ],
@@ -12711,6 +12731,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Начата T-305 (TEAM-3/developer#1): actions — валидация, идемпотентность, лимит, InputFilter, публикация player.*; по приёмке T-457 в T-305 входит операция POST /v1/admin/replay/clock под тегом process в OpenAPI."
+    },
+    {
+      "at": "2026-09-13T18:26:52+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 · ревью #2 (TEAM-3/code-reviewer#2): принять — 0/0/1/2. M-1 подтверждён по исходнику go-telegram/bot v1.25.0 (окно потери — одно обновление), M-2, Mi-1…Mi-3, N-1…N-6 закрыты. Mi-4 синхронный отказ на общем клиенте 30 с (~300 чужих аккаунтов занимают обработчик на минуту); N-7 хранение id в пам"
+    },
+    {
+      "at": "2026-09-13T18:26:52+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-456 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/2/3/6. C-08 v1.5, КД шлюза, C-02 v1.6/v1.7, C-07 v1.6, C-15 v1.5 сверены с кодом. Ma-1 в C-01 v1.8 остались старые дедлайны маршрутов (противоречат КД §5.1 п. 8); Ma-2 Permanent при отменённом контексте и Permanent(ErrWorldStopped) ломают T-055 "
     }
   ],
   "blockers": [],
