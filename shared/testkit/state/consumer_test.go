@@ -3,6 +3,7 @@ package state_test
 import (
 	"context"
 	"slices"
+	"sync"
 	"testing"
 
 	"multiverse-core.io/shared/contracts"
@@ -27,7 +28,12 @@ import (
 // projection is a read-model of the kind C-02 tells a consumer to build: the
 // hit points of everyone it has heard about, assembled from entity.created and
 // entity.updated alone. It knows nothing about who published them.
+//
+// The subscription hands it events on a goroutine of its own while the test
+// reads it, so what it holds is behind a lock, as in any consumer that answers
+// questions about its projection while the bus is still feeding it.
 type projection struct {
+	mu      sync.Mutex
 	hp      map[string]int
 	refused []string
 }
@@ -36,6 +42,8 @@ func newProjection() *projection { return &projection{hp: map[string]int{}} }
 
 func (p *projection) Handle(_ context.Context, ev eventbus.Event) error {
 	path := ev.Path()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	switch ev.Type {
 	case "entity.created":
 		id, _ := path.GetString("entity.entity.id")
@@ -60,6 +68,14 @@ func (p *projection) Handle(_ context.Context, ev eventbus.Event) error {
 		p.refused = append(p.refused, reason)
 	}
 	return nil
+}
+
+// seen is the hit points the projection holds for one entity and a copy of the
+// refusals it has heard, read under the lock the subscription writes under.
+func (p *projection) seen(id string) (int, []string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.hp[id], slices.Clone(p.refused)
 }
 
 // TestAConsumerBuildsItsProjectionFromTheStub drives the projection through
@@ -92,11 +108,14 @@ func TestAConsumerBuildsItsProjectionFromTheStub(t *testing.T) {
 		t.Fatalf("publish: %v", err)
 	}
 
+	var refused []string
 	waitFor(t, "the projection to catch up", func() bool {
-		return view.hp[playerA] == 6 && len(view.refused) == 1
+		var hp int
+		hp, refused = view.seen(playerA)
+		return hp == 6 && len(refused) == 1
 	})
-	if view.refused[0] != state.ReasonVersionConflict {
-		t.Errorf("the consumer saw %q, want %q", view.refused[0], state.ReasonVersionConflict)
+	if refused[0] != state.ReasonVersionConflict {
+		t.Errorf("the consumer saw %q, want %q", refused[0], state.ReasonVersionConflict)
 	}
 
 	cancel()

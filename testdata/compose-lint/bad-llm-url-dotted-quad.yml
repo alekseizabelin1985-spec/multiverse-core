@@ -1,0 +1,13 @@
+# Rule 6: a dotted quad with the root dot. 127.0.0.1. is not an address to
+# Go's netip.ParseAddr: the platform's client hands it to DNS as a name, and a
+# resolver may answer with anything, so it is the cloud, like 127.1
+# (system-architect#1 on T-450 review #1 M-1, testdata/llm/local-endpoints.tsv).
+#
+# expect-rule: 6
+# expect-text: core: MV_LLM_URL points at '127.0.0.1.', which is not a local address
+# expect-text: a cloud endpoint needs MV_LLM_CLOUD_ENABLED=true
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_LLM_URL: http://127.0.0.1.:8888

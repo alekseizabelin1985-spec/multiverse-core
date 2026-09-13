@@ -1206,3 +1206,82 @@
   - При появлении `shared/runtime/README.md` описать `SetDeadlines`/`ShuttingDown` с примером long-poll из `shutdown_test.go`. Сейчас их описывают только doc-комментарии и C-01 v1.8.
   - Дедлайн чтения для long-poll (КД шлюза §5.1 п. 8: `wait_ms + 5 с` или 0) уже передан в T-456, п. 4 состава. Отдельной задачи не нужно.
   - Через оркестратора — tech-lead#2: в DoD T-256 уточнить, что хук снимается строкой `newSwarmContext` в `contexts_swarm.go`, а константа `swarmContext` лежит в `contexts.go` EPIC-001. Через оркестратора — tech-lead#3: в T-303 фабрику `newGateway` положить в `contexts_gateway.go`, `contexts.go` не править.
+
+### T-454: CI на Linux — гонка данных в `testkit/state` и флак fight-05 стенда `cmd/multiverse` · Размер: S · Статус: done · Волна 1
+- **Причина (оркестратор, 2026-09-13)**: первый прогон `go.yml` на Linux (run 34754402826, `develop` `447b892`) красный в `unit`, `race`, `integration`. (1) DATA RACE `shared/testkit/state/consumer_test.go` — `TestAConsumerBuildsItsProjectionFromTheStub`: `(*projection).Handle` пишет в горутине `membus.Subscribe`, `waitFor` читает без синхронизации. (2) Флак `cmd/multiverse` `TestTheProcessRunsTheFightsOfIAlpha/fight-05` под `-race`: «nobody resolved the attack of player-A on wolf-alpha within 2s … the fake had not yet learnt wolf-alpha from entity.created when player-A entered». Локально `-race` недоступен (нет cgo).
+- **Состав**:
+  1. Проекция потребителя под мьютексом, чтение через `seen` (копия отказов); проверки прежние. Аудит «обработчик пишет — тест читает» по `shared/testkit/**`, `cmd/multiverse`, `test/e2e`: других гонок нет; скрытая передача `stand.bus/world` из горутины `process.run` в тест (детектор молчал из-за аннотации `ioSync` на вводе-выводе сокета) сделана явной каналом `opened`.
+  2. Стенд `cmd/multiverse` ждёт готовности двойника по событию: обёртка транспорта `learning` отмечает `entity.created` каждой сущности bootstrap после успешного возврата обработчика `system_events` двойника; персонаж входит только после этого (`ready`, бюджет 10 с — предохранитель). Регрессия `TestTheStandWaitsUntilTheFakeHasLearntTheWorld` (факты держатся, пока стенд не начнёт ждать) воспроизводит текст CI на мутанте без ожидания.
+  3. Попутно (стресс `-cpu 1`): конец боя читался из журнала раньше, чем двойник публиковал `encounter.ended` (death «ended ""» 5–7 из 200). Стенд ждёт событие с id из `closed_by_event_id` закрытого энкаунтера.
+- **DoD**: мутанты M0 (контроль), M2 (без ожидания — красный, текст CI), M3 (конец боя сразу — 7/200 красных на `-cpu 1`); стресс `-count=50 -cpu 1,2,4,8` fight-тестов и `shared/testkit/state` — ok; `go build/vet`, `go test -short ./...` (27 ok), e2e, `golangci-lint` (0), `make test` — зелёные; `-race` не запускался (gcc нет). Должны позеленеть `unit`, `race`, `integration`; не проверены «Coverage floor» `unit` и e2e-часть `make test-race` (в прогоне не выполнялись).
+- **Метка**: нет. Правки только в `_test.go`; production-код заглушек и `cmd/multiverse/*.go` не менялись.
+- **Исполнитель**: developer#2 (Opus). Ветка `task/T-454-ci-race-testkit-state-fight05` (от эпика `dcdb530`). Карточка — `tasks/T-454.md`.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #1 (0/0/1/3). Mi-1 закрыт при приёмке: unit-тесты `learning` без процесса (`cmd/multiverse/fake_contexts_learning_test.go`). `ready` не возвращается, пока двойник не обработал все факты; отметка только после возврата обработчика; ошибка двойника отметки не даёт. Мутанты в копии дерева: R1 (`ready` не ждёт `learnt`), R3 (отметка до обработчика), R6' (отметка при ошибке) — красные 10/10, контроль C0 — ошибка компиляции. N-1 (сообщение без `missing()`), N-2 (`unlearnt`: отказ двойника или факт не дошёл), N-3 (перенос комментария) — внесены без повторного ревью. Прогоны: build/vet, `-count=3` testkit и `cmd/multiverse`, `-count=10 -cpu 1,4` IAlpha и проекции, e2e, `golangci-lint` 0, `make ci BASE=epic/EPIC-001-foundation` — зелёные; `-race` — только CI. С T-446 (уже в эпике) — чисто; с T-303 (EPIC-004, `startProcess`) моделирование `git merge-file` — 0 конфликтов, рецепт на случай конфликта — карточка, «Приёмка».
+- **Бэклог (из T-454, 2026-09-13)** — отдельные задачи, не блокируют:
+  - `/health` у `swarm.FakeContext`/`FakeEncounter` — ok только после догоняния журнала, по образцу stateful-контекстов C-14; тогда обёртка `learning` стенда `cmd/multiverse` не нужна. Решение за tech-lead#2 (EPIC-003, владелец `shared/testkit/swarm`); до T-256 вряд ли оправдано.
+  - Runbook (`Docs/ops/runbook.md`) и README: гонки проверяют только задания CI `unit`/`race`/`integration`, пока у разработчиков нет cgo (`make test`/`make ci` пишут `test-race: SKIPPED`); либо установка gcc в инструкцию разработчика — решение владельца. tech-writer, сверка — devops-engineer.
+
+### T-450: Единое правило «локальный адрес» для скриптов и линтера compose · Размер: M · Статус: done · Волна 1
+- **Причина (решение system-architect#1, заведена оркестратором)**: правило «локальный адрес» было записано трижды и по-разному:
+  - гейт облака платформы `IsLocalEndpoint` в `internal/llm` (EPIC-003, T-206): loopback, `localhost`, `host.docker.internal`, RFC 1918;
+  - `scripts/lib/llm-endpoint.sh` / `LlmEndpoint.psm1`: то же плюс `0.0.0.0`, `::`, `fd??:`, `fe80:` по строковому префиксу, без имени сервиса;
+  - `scripts/compose-lint.sh`, правило 6: сервис своего файла и всё, что `ipaddress` Python называет private, включая `0.0.0.0/8` и адреса документации.
+  Поэтому `MV_OLLAMA_URL=http://ollama:11434` линтер принимал, а платформа отвергала.
+- **Правило** (решение architect#1). Ответ — один из трёх:
+  - `local`: loopback `127.0.0.0/8` и `::1`, `localhost` и `*.localhost`, `host.docker.internal`, однословное имя без точки (сервис compose), RFC 1918, link-local `169.254.0.0/16` и `fe80::/10`, IPv6 ULA `fc00::/7`, IPv4-mapped формы всех перечисленных;
+  - `invalid`: `0.0.0.0` и `::`, локальный хост без явного порта, порт вне 1–65535, отказы `normalizeURL` T-206 (`?`, `#`, userinfo, не http/https);
+  - `cloud`: всё остальное — публичные адреса, имена с точкой (включая `.local`), CGNAT `100.64.0.0/10`, адреса документации, числовые формы.
+- **Состав**:
+  1. `testdata/llm/local-endpoints.tsv` — единая таблица случаев: URL, ответ, причина; не меньше 40 строк, все классы и граничные формы.
+  2. `llm_endpoint_classify` в `llm-endpoint.sh` и `Get-LlmEndpointClass` в `LlmEndpoint.psm1` — классификация по правилу. `llm-server`/`llm-bench` берут класс оттуда же; изменения поведения описаны.
+  3. Правило 6 `compose-lint.sh` вызывает функцию скрипта вместо своего `is_private`; фикстуры для ollama и `0.0.0.0`.
+  4. Тесты паритета sh и pwsh по таблице — в стенде `testdata/script-parity` (T-405).
+  5. `infrastructure.md` (новый §6.3.1, строка правила 6 в §3.1.1; §6.4 и §4.2 не тронуты), `Docs/ops/runbook.md` §3.
+  - Go-тест `IsLocalEndpoint` по таблице — T-451 (EPIC-003), не здесь. ADR-005 и C-15 — T-449.
+- **DoD**:
+  1. Таблица ≥ 40 строк, все три класса. Покрыты граничные формы, регистр, завершающая точка, IPv6 в скобках, mapped-формы, числовые формы, порты 0/65536/без порта, `?` и `#`.
+  2. Обе реализации отвечают на каждую строку как таблица; `kind` (причина одним словом) у двух половин совпадает. Проверки стенда `T01`/`T02` выполняются при любом `-run`.
+  3. `compose-lint` без своей копии правила; `bash scripts/compose-lint.sh` и `--fixtures` зелёные, новые фикстуры отвергаются правилом 6 по своей причине.
+  4. Мутанты краснеют: «однословное имя — облако» и «`0.0.0.0` не any-address» — в обеих половинах стенда и в фикстурах `compose-lint`; контрольный мутант первым.
+  5. `make scripts-parity`, `make parity-mutants`, `bash -n`, разбор `.ps1`, `make ci BASE=develop` — зелёные.
+- **Исполнитель**: devops-engineer#2 (Opus). Ветка `task/T-450-local-endpoint-table` (от эпика с T-405, `ab6cb1d`). Карточка — `tasks/T-450.md`.
+- **Решения исполнителя** (уточнения правила, записаны в шапке таблицы; на ревью architect#1):
+  - завершающая точка снимается только у зарезервированных имён (`localhost.`, `*.localhost.`, `host.docker.internal.` — `local`); IPv4 с точкой (`127.0.0.1.`, `0.0.0.0.`) и `ollama.` — `cloud` (решение system-architect#1, итерация 2);
+  - однословное имя начинается с буквы и состоит из `[a-z0-9_-]`;
+  - записанный порт считается явным, включая `:80`; ведущие нули порта незначимы;
+  - `host:` с пустым портом, скобки не вокруг IPv6 и `%` в хосте (экранирование, зона IPv6) — `invalid`;
+  - из `0.0.0.0/8` any-address — только `0.0.0.0`; `::127.0.0.1` и `64:ff9b::/96` — не mapped-формы.
+- **(приёмка tech-lead#1, 2026-09-13)** Принята после ревью #2 (0/0/1/2), итераций ревью — 2. При приёмке закрыты:
+  - Mi-R2-1: userinfo вырезается из печатаемого значения до первого отказа, одинаково в `llm-endpoint.sh` и `LlmEndpoint.psm1`. Проверки: сценарии `H61`–`H66` с `Absent: FAKEPW123`, мутант M28, фикстура `bad-llm-url-userinfo`; мутант `compose-lint` C8 красный;
+  - N-R2-1: строка про точку выше;
+  - N-R2-2: `infrastructure.md` §3.1.2 — 29 мутантов, 105 сценариев, `T01`/`T02`; §4.2 п. 4 — ссылка на §6.3.1.
+
+  Прогоны зелёные: `make scripts-parity` (107 PASS, 2 KNOWN-FAILING, `T01`/`T02` по 123), мутанты M00, M01, M18–M28, `compose-lint` и `--fixtures` (58 bad, 11 good), `bash -n`, разбор `.ps1`, `secrets-scan`, `gitleaks dir`. Слияние: T-450, затем T-455. Три файла сливаются без конфликтов; в `tasks.md` конфликт от дописывания в конец с обеих сторон. Подробности — в карточке, раздел «Приёмка (tech-lead)».
+- **Бэклог (из приёмки T-450, 2026-09-13)** — отдельные строки, не блокируют:
+  1. T-451 (DoD): Go-тест читает таблицу и `endpointStandCases`; `canonicalHost` не снимает точку у IPv4; `needsExplicitPort` — любой `local`; `0.0.0.0`/`::` — ошибка конфигурации; тексты ошибок не печатают userinfo.
+  2. T-456 (DoD, C-15): символы хоста, которые отвергает `url.Parse` (пробел, `\`, `^`, `` ` ``, `{`, `|`, `}`), — в список `invalid`; ни одна реализация не печатает userinfo в текстах отказов.
+  3. Nit: комментарий `LLM_EP_RAW` в `llm-endpoint.sh:152` («with any userinfo masked») устарел.
+  4. Из итерации 2 исполнителя: топологическая проверка `kind=service` в `compose-lint` (N-3 ревью #1); скорость `llm_parse_url` без fork; сценарий на `//` в конце пути (ревью #1, п. 4).
+
+### T-455: CI `compose-lint` на `develop` — окружение процесса скрывало заглушку `CHROMA_IMAGE` · Размер: XS · Статус: done · Волна 1
+- **Причина (оркестратор, 2026-09-13)**: первый прогон CI на `develop` (run 34754402826, коммит `447b892`, job 103716226089). Задание `compose-lint` упало на шаге «The house rules»: `error while interpolating services.chromadb.image: required variable CHROMA_IMAGE is missing a value`. Шаг `docker compose --env-file build/versions.env --env-file .github/ci.env config -q` перед ним прошёл, фикстуры и hadolint пропущены.
+- **Найдено (devops-engineer#1)**: не `.env` владельца — копия без `.env` проходит, а с `--env-file` compose `.env` не читает. Шаг «Read the pinned versions» экспортирует `build/versions.env` в `$GITHUB_ENV`, в том числе пустой по D-3 `CHROMA_IMAGE`. Переменная процесса у compose выше `--env-file`, и она скрыла заглушку `.github/ci.env`. Шаг `config -q` читает только `docker-compose.yml`, где `CHROMA_IMAGE` нет.
+- **Состав**:
+  1. `scripts/compose-lint.sh`: до первого `docker compose` снять из окружения все имена, объявленные в `--env-file` линтера, `build/versions.env` и `.env.example` правила 7 (или в парном `.env` фикстуры). Правило 6 и шапку не трогать.
+  2. `--fixtures`: каждый прогон — с этими именами, экспортированными пустыми. Зависимость линтера от окружения краснеет на любой машине, не только в CI.
+  3. D-3 не меняется: `build/versions.env`, `.github/ci.env`, `docker-compose.legacy.yml` (`${CHROMA_IMAGE:?}`) и правило 7 — без правок.
+  4. `testdata/compose-lint/README.md` и `infrastructure.md` §3.1.1 («Что читается», «Фикстуры») — вслед за скриптом.
+- **DoD**:
+  - scratch-копия `git archive HEAD` без `.env` с `build/versions.env`, экспортированным как в CI: до правки — ошибка CI дословно, после — ok;
+  - `scripts/compose-lint.sh` — ok (15 сервисов, 8 правил); `--fixtures` — ok (52 bad, 10 good); `bash -n` — ok; `CHROMA_IMAGE= QDRANT_IMAGE= make compose-lint` — ok;
+  - контрольный мутант (снятие имён отключено) — `--fixtures` красный;
+  - остальные шаги задания `compose-lint` и `scripts-parity` проверены на зависимость от окружения (карточка);
+  - `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0; `gitleaks dir` по копии изменённых файлов — no leaks;
+  - зелёный `compose-lint` в CI на `develop` — после слияния, оркестратор.
+- **Метка**: нет. Контракты и Go-код не меняются.
+- **Исполнитель**: devops-engineer#1. Ветка `task/T-455-ci-compose-lint-chroma-image` (от эпика `dcdb530`). Карточка — `tasks/T-455.md`.
+- **Бэклог (из T-455, 2026-09-13)** — отдельные задачи, не блокируют:
+  - `go.yml:425-426`, задание `compose-lint`: убрать шаг «Read the pinned versions» (выбран при приёмке). Шаг `docker compose … config -q` (`:438`) несёт ту же ловушку: окружение шага выше `--env-file`. Сейчас он безопасен, потому что в `docker-compose.yml` нет `${VAR:?}` с пустым значением в `build/versions.env`. В копии с окружением CI `config -q` — rc=0, тот же вызов с `-f docker-compose.legacy.yml --profile legacy` — rc=1. Ни одному шагу задания пины из окружения не нужны: compose получает их через `--env-file`, hadolint их не читает. Запасной вариант — `env -u` по именам `build/versions.env` для `config -q`. devops-engineer.
+  - hadolint (`go.yml:450`, `:460`) на `develop` ещё ни разу не выполнялся: в прогоне 34754402826 оба шага пропущены после падения. Проверить первый реальный прогон после слияния эпика в `develop`. devops-engineer.
+  - Упавшие в том же прогоне `unit` (`go test -short -race`), `race` (`make test-race`) и `integration` к T-455 не относятся — разбор отдельными задачами, оркестратор.
+- **Приёмка (tech-lead#1, 2026-09-13)**: принята после ревью #1 (0/0/1/2); Mi-1, N-1 и N-2 закрыты при приёмке. `declared_names` понимает `KEY: value` (разделитель `[=:]`): проба `T455_PROBE: dummy` в копии без `.env` при `T455_PROBE=` даёт тот же вердикт, что в чистом окружении, а мутант с `=` повторяет дефект T-455. Тексты скрипта, `infrastructure.md` §3.1.1 и README фикстур сведены к тому, что проверяют фикстуры; умолчание env-файлов — одна переменная `default_env_files`. Рабочая папка: `bash -n`, `compose-lint.sh`, `--fixtures` (52/10), `make compose-lint` — ok; `make secrets-scan BASE=epic/EPIC-001-foundation` — rc=0; `gitleaks dir` по изменённым файлам — no leaks. Копия с `set -a; . build/versions.env; set +a`: основной прогон и `--fixtures` — ok. **Порядок слияния: сначала T-450, затем T-455**; модель `merge-file` после правок приёмки — без конфликтов, после синхронизации повторить `--fixtures`. Подробности — карточка `tasks/T-455.md`, «Приёмка (tech-lead)».
