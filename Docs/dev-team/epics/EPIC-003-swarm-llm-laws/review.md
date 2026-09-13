@@ -3902,3 +3902,103 @@ Ma-1 закрыт правкой данных по варианту (а). Каж
 - Ma-1 и Mi-4 оценены по тексту КД §5.4: кода `Emitter` ещё нет. Если architect#2 при правке КД §13.3 и `api-contracts.md` §3.3 решит, что `Emitter` сверяет `owned_entity_types` по таблице владения, а не по блупринту, Mi-4 снижается до Nit.
 - Отступление `allowed_event_types` от скелетов §3.3 ждёт отражения в КД и `api-contracts.md` у architect#2. Уведомление идёт через оркестратора, в дереве T-203 документы дизайна не менялись.
 - `make test`, `make secrets-scan` и `gitleaks` ревьюер не повторял. Итерация 2 меняет данные блупринтов и тест, секретов нет, исполнитель прогнал `gitleaks dir blueprints`.
+
+## T-208 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-2)
+
+### Границы ревью
+
+- **Ветка:** `task/T-208-openai-compat-provider`, папка `.worktrees/T-208`, база `b9a169c`. Коммитов у задачи нет, ревьюировалось рабочее дерево: `git diff` плюс неотслеживаемый каталог `internal/llm/providers/openai_compat/`.
+  - Код: `client.go`, `wire.go`, `client_test.go`, `cancel_test.go`, `export_test.go`, восемь фикстур `testdata/*.json`.
+  - `go.mod`, `go.sum`: тестовая зависимость `go.uber.org/goleak v1.3.0`.
+  - Артефакты: `dev-log.md`, карточка `tasks/T-208.md`. Их правка в ветке задачи ожидаема: в этом эпике карточки и dev-log ведутся в ветке задачи.
+  - `internal/llm/{types,config}.go`, реестр провайдеров, `shared/env`, `.env.example`, `contracts.md` не тронуты.
+- **Сверено с:** раздел T-208 `tasks.md` (ревизия 4) и карточка; C-15 v1.5 (интерфейс, «Реализации», «Гарантии»); C-07 v1.6 (`llm.output`: `params`, `tokens`, `latency_ms`); ADR-005 доп. 2 п. 1–4 и уточнение T-435 п. 4 (2,5 знака на токен); КД роя §9.1, §9.2, §9.5; `ops/metrics/baseline.md` §1 и §5; `internal/llm` T-206 и T-451 (`CheckCloudGate`, `IsLocalEndpoint`, `aboutTheHost`, `Secret`); `llm_health_probe` в `scripts/lib/llm-endpoint.sh` (T-403).
+- **Решения оркестратора учтены:** признак оценки токенов — вопрос к system-architect, до решения `WARN` в логе допустим; `WithRequiredModels` как опция — допустима до T-212; рукописные фикстуры допустимы, переснять — T-260/T-263.
+
+### Прогоны (go1.26.8 windows/amd64)
+
+| Команда | Итог |
+|---|---|
+| `go build ./... && go vet ./...` | 0 |
+| `go test -short -count=1 ./internal/llm/...` | ok: `llm`, `providers`, `providers/fake`, `providers/openai_compat`, `providers/recorded` |
+| `go test -short -count=3 -cover ./internal/llm/providers/openai_compat/` | ok, покрытие 95,6 % |
+| `golangci-lint run ./internal/llm/...` | 0 issues |
+| `gofmt -l internal/llm` | пусто |
+| `go run ./cmd/mvctl env check` | 73 переменные, совпадают с `.env.example` |
+| `go mod verify` | all modules verified |
+| `GOPROXY=off go mod tidy -diff` | пусто, exit 0 |
+
+Docker, стенд `127.0.0.1:8888`, облачные API, `.env` и интеграционные тесты не трогались, сетевых запросов за пределы `httptest` не было. `-race` не запускался: нет cgo.
+
+### Мутанты ревьюера
+
+Копия `go.mod`, `go.sum`, `internal/llm`, `shared` лежала в scratch `t208r1-mut`, без `-overlay`. Базовый прогон копии зелёный. Замена точная: строка встречается в файле ровно один раз, после каждого мутанта файл восстанавливается. Команда — `go test -short -count=1 ./internal/llm/providers/openai_compat/`. Копия удалена по точному пути.
+
+| # | Мутант | Результат |
+|---|---|---|
+| C0 | контрольный: лишняя `{` в `deref` | **красный** (`client.go:601:1: syntax error`) |
+| R1 | `CheckRedirect` удалён: редирект выполняется | красный (`TestARedirectIsNotFollowed`) |
+| R2 | для `local` `Transport.Proxy = http.ProxyFromEnvironment` | красный (`TestALocalAddressDoesNotUseTheProxy`, три подтеста) |
+| R2b | R2 и прямая проверка `Transport.Proxy` в тесте выключена: остаётся только проверка дозвона | в окружении без `HTTP(S)_PROXY`: весь пакет — **выжил**, `-run ^TestALocalAddressDoesNotUseTheProxy$` — красный → Mi-1 |
+| R3 | тело ответа ≠ 200 дописывается в `Detail` | красный (`TestErrorsOfTheServer/500`, `/400`, `/401`) |
+| R4 | `Authorization: Bearer ` ставится всегда | красный (`TestAuthorizationOnlyWithAKey/no_key`) |
+| R5 | `withheld` всегда `false`: при `@` причина сетевой ошибки печатается | красный (`TestNoAnswerIsUnavailableAndNamesNoAddressWithAnAt`) |
+| R6 | в `New` не проставляется `Provider` для пустого имени: `Endpoint()` пуст, гейт облака молча пропускается | красный (`TestNewRunsTheCloudGate`, `TestTheRegistryBuildsTheProvider`) |
+| R7 | `transportError` не смотрит на `ctx`: отмена и таймаут дают `ErrUnavailable` | красный (`TestCancelClosesTheConnection`, `TestTheTimeoutOfTheRequestBoundsTheCall`) |
+| R8 | `Health` без запасного пути `/v1/models` на 401/403/404/405/501 | красный (`TestHealth`, три случая) |
+
+Мутанты разработчика (41) повторно не прогонялись. Их список в карточке сверен с кодом: замены осмысленны, и названные тесты проверяют эти ветки.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Суть | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `internal/llm/providers/openai_compat/client_test.go:535-580` | **Поведенческая половина теста прокси зависит от порядка тестов.** Комментарий обещает две проверки: «одной мало». Но `http.ProxyFromEnvironment` читает окружение один раз на процесс (`envProxyOnce` в `net/http/transport.go`). К `TestALocalAddressDoesNotUseTheProxy` в полном прогоне пакета предыдущие тесты уже сделали запросы через этот транспорт, и `t.Setenv("HTTP_PROXY", …)` на закэшированную функцию не действует. Мутант R2b это показывает: в окружении без `HTTP(S)_PROXY` (CI) он выживает весь пакет и краснеет только при `-run`. Сейчас регрессию ловит только прямая проверка `Transport.Proxy != nil` (строка 568). На машине разработчика обе половины краснели по другой причине: в окружении оболочки уже заданы `HTTP_PROXY`/`HTTPS_PROXY`, их кэширует первый тест. DoD п. 10 формально выполнен, но тест не проверяет того, что заявляет. | Проверку дозвона вынести в дочерний процесс: `exec.Command(os.Args[0], "-test.run=^TestProxyChild$", …)` с `cmd.Env`, где `HTTP_PROXY`/`HTTPS_PROXY` указывают на недоступный адрес. Дочерний тест выбирать флагом теста, а не переменной окружения, — из-за `forbidigo`. В дочернем процессе `ProxyFromEnvironment` впервые читает уже заданное окружение. Минимум — переписать комментарий честно: сторож — прямая проверка `Transport.Proxy`, а проверка дозвона работает только под `-run`. |
+| N-1 | Nit | `internal/llm/providers/openai_compat/client.go:447-454`, `:438-443` | Документация `RequestError` обещает «never the address … or the body». При этом `Detail` без ответа печатает текст сетевой ошибки: `dial tcp 10.0.0.5:8080: …` называет хост и порт, что при адресе без `@` разрешено правилом T-451. `net/http` может процитировать первую строку ответа не-HTTP сервера (`malformed HTTP response "…"`). Ключ, URL целиком и userinfo прокси в тексты не попадают: `url.Error` разобран, `proxyconnect` печатает только адрес прокси. | Уточнить комментарий: «never the URL, the key or the body of an answer; the host and the port of a network error are named unless the address holds an @ (T-451)». |
+| N-2 | Nit | `internal/llm/types.go:84-88` (вне diff, T-206) | Комментарий `llm.Params` говорит: «a zero field … a provider leaves it out of the request and the server default applies». `openaicompat.orDefault` ссылается на `llm.Params` как на источник, а делает обратное: по DoD ревизии 4 и ADR-005 доп. 2 п. 1 подставляет умолчания фазы. Нулевое значение означает «не задано» и там, и там, различается только, кто решает. | Одной фразой поправить комментарий `llm.Params`: «a provider sends its default of the phase (openai_compat) or leaves the field out». Можно в этой задаче (тот же TEAM-2, файл T-206) или в T-211. |
+
+### Что проверено и замечаний не дало
+
+- **Безопасность.**
+  - Редирект не выполняется (`ErrUseLastResponse`): 3xx даёт `RequestError` без `Location` и тела; `Health` на 3xx отвечает `unavailable`.
+  - Для `local` `Transport.Proxy = nil`, для `cloud` — `http.ProxyFromEnvironment`.
+  - Гейт облака вызывается в `New` после нормализации имени провайдера (R6), так что `Factory` и `New` без реестра гейт не обходят.
+  - `Bearer` ставится только при `Secret.IsSet()`, во всех четырёх методах.
+  - Тело ответа ≠ 200 вычитывается и отбрасывается. `json.Unmarshal` на кривом 200 цитирует не содержимое, а тип значения. Ошибка `http.NewRequestWithContext` (она печатает URL) заменена фразой. `url.Error` разобран. При `@` причина не печатается, как `aboutTheHost`.
+  - `WARN` оценки токенов несёт провайдер, модель и фазу, без текста.
+- **Протокол.**
+  - `response_format{type: json_schema, json_schema{name, schema}}` уходит только при схеме, схема проверяется `json.Valid` до запроса.
+  - `chat_template_kwargs.enable_thinking = Params.Think` уходит всегда. `stream:false`, `system` идёт первым.
+  - Семплинг идёт без `omitempty`, `max_tokens` — только при > 0. Умолчания `0.7 / 0.8 / 20 / 0 / 1.5` совпадают с ADR-005 доп. 2 и `baseline.md` §1 («сэмплинг сервера перекрывается в каждом запросе»).
+  - `usage` читается через указатели: частичный `usage` оценивается по недостающей части. `cached_tokens` — 0 без `prompt_tokens_details`.
+  - `timings` берутся, только если есть обе величины и обе ≥ 0, иначе задержка по `clock.Clock`. `reasoning_content` отбрасывается, `ReasoningLen` считается в рунах.
+  - Embeddings раскладываются по `index`, отказ при несовпадении числа, повторе индекса, пустом векторе.
+  - Models отдаёт id как есть. Health: 200/503/запасной путь совпадают с `llm_health_probe`. Отличие одно, и оно в пользу Go: 503 от `/v1/models` после запасного пути даёт `loading`.
+  - Фикстуры по форме совпадают с ответами llama-server b10878: `timings.cache_n`, `system_fingerprint`, `models[]` рядом с `data[]`.
+- **Ошибки против C-15 и КД §9.2/§9.5.** `ErrUnavailable` — нет ответа, 408, 429, 5xx. Отмена и таймаут — ошибка контекста (R7). Остальные 4xx не помечены: решение «после повторов → `ErrUnavailable`» остаётся за шлюзом (T-212). C-15 разметки кодов не задаёт, отклонение 4 карточки обосновано.
+- **Время.** Производственный код берёт время только из `clock.Clock`, тесты — `clock.RealTimers`, `forbidigo` чист. `context.WithTimeout` для `Request.Timeout` и HTTP-таймауты идут по настенным часам — принятый риск: ответ провайдера в replay не воспроизводится, его отдаёт `recorded`.
+- **goleak.** `v1.3.0` — последняя версия (2023-10-24), `h1:` в `go.sum` совпадает с `go list -m -json`. `go mod verify` и `tidy -diff` чисты. Зависимость тестовая: из production-кода `goleak` не импортируется. `shared/testkit/swarm` отдельно запрещает его в своём дереве. Отметка владельца `go.mod` — за tech-lead#1 (`plan/ownership.md` §3 п. 5: «добавление зависимости — любой командой, с пометкой в отчёте»).
+- **Нулевые `Params`.** Нулевое поле — «не задано» (T-206), провайдер подставляет умолчание фазы. Цена (явный `top_k: 0` или `presence_penalty: 0` не запросить) названа в отклонении 10. C-15 «Гарантии» (новые поля с нулевыми значениями) не нарушены.
+- **Тесты отмены.** Отмена проверена до заголовков и посреди тела. Сервер видит закрытие через `r.Context().Done()`, `goleak.VerifyNone(IgnoreCurrent())` стоит последним `defer`. `err` из горутины читается после закрытия `done`, гонки нет.
+
+### Вердикт
+
+**Принять** · Critical 0 · Major 0 · Minor 1 · Nit 2.
+
+DoD T-208 (ревизия 4) выполнен. Протокол chat completions и расширения llama.cpp реализованы по ADR-005 доп. 2. Требования безопасности держатся кодом, и каждое ловит свой тест: восемь мутантов ревьюера из восьми красные. Mi-1 — дефект теста, не кода: регрессию `Proxy` ловит прямая проверка. Его и оба Nit разумно закрыть до слияния без нового ревью или отдельной строкой бэклога.
+
+### Открытые вопросы
+
+Нет. Признак оценки токенов уже передан system-architect решением оркестратора.
+
+### Предложения в бэклог
+
+1. **T-211 / T-212 (запись `llm.output.params`).** `llm.Params` помечен как «the sampling as sent», но `openai_compat` отправляет вместо нулей умолчания фазы. Если шлюз пишет `Request.Params`, запись покажет `top_p`/`top_k`/`presence_penalty` отсутствующими, хотя ушли `0.8 / 20 / 1.5`. Нужно решение system-architect#1: писать фактический семплинг (провайдер отдаёт итоговые `Params`, например `openaicompat.EffectiveParams`) или умолчания фазы переезжают в шлюз.
+2. **E-H / EPIC-013 (облако).** Поддерживаю предложение разработчика: `top_k`, `min_p`, `chat_template_kwargs` — расширения llama.cpp. Строгий OpenAI-совместимый вендор отвечает на них 400, то есть облачный путь `openai_compat` без профиля полей не работает. До EPIC-013 это стоит записать в C-15 «Реализации» как известное ограничение.
+3. **T-212 (`Health`).** Поддерживаю предложение разработчика: у провайдера нет своего таймаута на `Health` и на `Generate` без `Request.Timeout`. Опрос раз в 10 с (КД §9.5) должен идти с контекстом с дедлайном, иначе зависший сервер держит опрос бесконечно.
+
+### Риски и допущения
+
+- Фикстуры рукописные: наличие `timings` и `prompt_tokens_details.cached_tokens` на билде b10878 не подтверждено. Переснять — T-260/T-263.
+- В окружении оболочки этой машины заданы `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` (значения не читались). Тесты на `127.0.0.1` от них не зависят, облачный путь их учитывает. Для Mi-1 контрольный прогон шёл с этими переменными, снятыми через `env -u`.
+- `-race` не запускался (нет cgo). Копия дерева и скрипт мутантов удалены по точному пути.

@@ -2910,3 +2910,40 @@ fence (принят незакрытый, потеряна строка откр
   - M9 — без `dice.rolled`.
   - M10–M12 — без каждого из добавленных предложений.
 - Копия удалена по точному пути.
+
+<!-- dev-log T-208 -->
+### developer#2 · T-208 · B3a «Провайдер `openai_compat` (llama-server)» · 2026-09-13
+
+Ветка `task/T-208-openai-compat-provider` (база `b9a169c`), папка `.worktrees/T-208`. Коммитов нет, файлы не в индексе. Стенд LLM, облачные API, Docker и интеграционные тесты не трогались. Карточка с таблицей DoD, мутантами и бэклогом — `tasks/T-208.md`.
+
+**Что сделано.** `internal/llm/providers/openai_compat` (пакет `openaicompat`), только `net/http`:
+- `Generate` → `/v1/chat/completions`: `response_format json_schema` при схеме, `chat_template_kwargs.enable_thinking = Params.Think` всегда, семплинг на запрос с умолчаниями фазы `0.7 / 0.8 / 20 / 0 / 1.5`, `stream:false`, `Bearer` только с ключом;
+- токены из `usage` (с `cached_tokens`), без `usage` — оценка по длине и `WARN`;
+- задержка из `timings`, иначе по `clock.Clock`;
+- `reasoning_content` отбрасывается, `ReasoningLen` — длина в символах;
+- `Embed` → `/v1/embeddings`, `Models` → `/v1/models`;
+- `Health` → `/health`: 200/503/запасной путь через `/v1/models` (T-403), сверка моделей из `WithRequiredModels`;
+- гейт облака в `New`, `/v1` в адресе снимается;
+- `Transport.Proxy = nil` для `local`, прокси окружения для `cloud`;
+- редиректы не выполняются;
+- ошибки без адреса, ключа и тела ответа.
+
+`go.mod`: тестовая зависимость `go.uber.org/goleak v1.3.0` (из кэша модулей, пометка по `plan/ownership.md`).
+
+**Решения по ходу.**
+- Модели для `Health` — опция `WithRequiredModels`: в C-15 `Health(ctx)` модели не принимает.
+- Запасной путь `/health` → `/v1/models` — как у скриптов: стенд владельца отвечает на `/health` 404.
+- `ErrUnavailable` — только нет ответа, 408, 429, 5xx. Отмена — ошибка контекста.
+- Пометка оценки токенов — только лог: поля нет ни в `llm.Response`, ни в схеме `llm.output`. Вопрос — оркестратору.
+- `Response.Model` — модель запроса; `json_schema.name` — имя фазы.
+
+**Как тестировал.** `httptest` с ответами формата llama-server, написанными вручную: снимать их со стенда задача не разрешает. 64 теста и подтеста, покрытие пакета 95,2 %. Отмена до заголовков и посреди тела — с `goleak`. Прокси проверен при недоступном `HTTP(S)_PROXY` на именах, которые знает только диалер теста.
+Прогоны:
+- `go build ./... && go vet ./...` — зелёные;
+- `go test -short -count=1 ./...` — ok;
+- `golangci-lint run ./...` — 0 issues;
+- `mvctl env check` — 73;
+- `make test` — exit 0, `internal/llm` 98,4 %;
+- `gitleaks dir` — чисто.
+
+Мутанты — копия в scratch без `-overlay`, контрольный первым. Итог 41 из 41; один выживший закрыт тестом, два некорректных мутанта переписаны. Копия удалена по точному пути.

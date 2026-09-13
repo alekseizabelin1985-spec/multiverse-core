@@ -1,0 +1,1 @@
+{"choices":[{"finish_reason":"stop","index":0,"message":{"role":"assistant","content":"Тропа пуста."}}],"created":1757716803,"model":"Qwen3.8-27B-UD-Q3_K_XL","object":"chat.completion","id":"chatcmpl-t208-no-usage"}
