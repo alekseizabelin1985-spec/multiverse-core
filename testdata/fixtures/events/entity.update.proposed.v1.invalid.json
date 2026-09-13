@@ -1,0 +1,14 @@
+{
+  "changes": [
+    {
+      "entity": { "entity": { "id": "wolf-alpha", "type": "npc" } },
+      "expected_version": 12,
+      "ops": [
+        { "op": "set", "path": "hp", "value": 7 },
+        { "op": "set", "path": "status", "value": "alive" }
+      ]
+    }
+  ],
+  "atomic": true,
+  "cause": "combat"
+}
