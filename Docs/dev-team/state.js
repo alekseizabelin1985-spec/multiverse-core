@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T23:51:21+03:00",
+  "updatedAt": "2026-09-13T23:59:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2673,7 +2673,7 @@ window.DEVTEAM_STATE =
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T23:07:57+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4682,14 +4682,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-312",
           "title": "Бот: deliver, main, подкоманда health",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T22:50:37+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T23:59:03+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
-          "spentMinutes": 0,
+          "spentMinutes": 65,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-312.md"
         },
@@ -10476,7 +10476,7 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "Приёмка deliver и main",
       "startedAt": "2026-09-13T23:39:26+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T23:59:03+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10496,6 +10496,16 @@ window.DEVTEAM_STATE =
       "task": "T-470",
       "action": "Ревью #2 contracts v0.15",
       "startedAt": "2026-09-13T23:51:21+03:00",
+      "finishedAt": "2026-09-13T23:59:03+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-470",
+      "action": "Приёмка contracts v0.15",
+      "startedAt": "2026-09-13T23:59:03+03:00",
       "finishedAt": null
     }
   ],
@@ -14501,6 +14511,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-470 · итерация 2 (system-architect#1): §3 — единственный источник скаляров (добавлены encounter_chance и loot_claimed_by; name и last_session_ended_at вносит приёмка T-056); пометки «Код расходится до T-471» у rest и строки system, оговорка про двойник v0 в develop; Mi-2, N-1…N-4 закрыты; C-15 = A"
+    },
+    {
+      "at": "2026-09-13T23:59:03+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-312 принята TEAM-3/tech-lead#3: Mi-1…Mi-3, N-2 тесты цикла доставки; Mi-4 отдельный клиент Telegram для ответов flow (10 с); N-1; N-3 доставка стартует после getMe (колбэк OnReady в updates); комментарии docker-compose.bot.yml; замена ValidName — DoD T-315; индекс 0.1.8. Итераций ревью — 1. Коммит"
+    },
+    {
+      "at": "2026-09-13T23:59:03+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-470 · ревью #2 (code-reviewer#1): принять — 0/0/1/1. Ma-1 (§3 совпадает с кодом кроме name/last_session_ended_at, которые вносит приёмка T-056), Mi-1 пометки у rest и system сверены с кодом, регрессии нет (C-15 = ADR-005, infrastructure одна строка). Mi-3 источник скаляров без §3.5 Item; N-5 приме"
     }
   ],
   "blockers": [],
