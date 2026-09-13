@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T01:42:52+03:00",
+  "updatedAt": "2026-09-14T01:55:22+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2656,7 +2656,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-469",
           "title": "Devops: MV_GATEWAY_* и MV_ANTHROPIC_API_KEY в compose, машинная проверка доставки переменных контекста до сервиса, правило формы передачи",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -3215,11 +3215,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-471",
           "title": "Законы мира в процессе: rules/dark-forest.yaml и Config.Invariants в contexts_state.go; норма rest hp == hp_max и строка system по C-02 v1.8 (после T-470, T-056)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4624,11 +4624,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.8",
           "spentMinutes": 0,
@@ -4638,11 +4638,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.10",
           "spentMinutes": 0,
@@ -4738,7 +4738,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-316",
           "title": "Integration-тесты consumer на Redpanda",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10576,7 +10576,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "FakeGateway и HTTP-обвязка",
       "startedAt": "2026-09-14T01:18:17+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:55:22+03:00"
     },
     {
       "instance": "developer#3",
@@ -10586,7 +10586,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Снапшот шлюза и полный /health",
       "startedAt": "2026-09-14T01:18:17+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:55:22+03:00"
     },
     {
       "instance": "developer#2",
@@ -10606,7 +10606,7 @@ window.DEVTEAM_STATE =
       "task": "T-471",
       "action": "Законы мира в процессе",
       "startedAt": "2026-09-14T01:18:17+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:55:22+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -10626,7 +10626,7 @@ window.DEVTEAM_STATE =
       "task": "T-469",
       "action": "Ревью #1: переменные в compose, правило 9",
       "startedAt": "2026-09-14T01:39:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T01:55:22+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10636,6 +10636,46 @@ window.DEVTEAM_STATE =
       "task": "T-316",
       "action": "Ревью #1: consumer на Redpanda",
       "startedAt": "2026-09-14T01:42:52+03:00",
+      "finishedAt": "2026-09-14T01:55:22+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-316",
+      "action": "Итерация 2 по ревью #1",
+      "startedAt": "2026-09-14T01:55:22+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-308",
+      "action": "Ревью #1: FakeGateway и HTTPHarness",
+      "startedAt": "2026-09-14T01:55:22+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-471",
+      "action": "Ревью #1: законы в процессе, rest",
+      "startedAt": "2026-09-14T01:55:22+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#3",
+      "role": "architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Решения по восьми вопросам T-309",
+      "startedAt": "2026-09-14T01:55:22+03:00",
       "finishedAt": null
     }
   ],
@@ -14737,6 +14777,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Находки T-316 и решения оркестратора: (1) Dispatcher не переподписывается после сбоя брокера — шлюз глух до перезапуска процесса; исправление — отдельная задача EPIC-004 в internal/gateway/consumer (переподписка с backoff, /health восстанавливается), приоритет I1-α; публичный API shared/eventbus не "
+    },
+    {
+      "at": "2026-09-14T01:55:22+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-316 · ревью #1 (code-reviewer#3): принять — 0/0/2/3. Mi-1 шаг 8 принимает лишние исходы (ветвление по taken(), любая ошибка Err()); Mi-2 расчётные цифры помечены как замер. Итерация 2 — developer#2 по Minor/Nit, один интеграционный прогон."
+    },
+    {
+      "at": "2026-09-14T01:55:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-469 · ревью #1 (code-reviewer#2): принять — 0/0/3/2. Mi-1 ветка env_file в правиле 9 мертва (compose config переносит env_file в environment); Mi-2 нет фикстур --contexts=all и неизвестного контекста; Mi-3 нет фикстуры правила 3 на литерал MV_ANTHROPIC_API_KEY. Перенос MV_CORE_ADMIN_CLIENTS в x-pl"
+    },
+    {
+      "at": "2026-09-14T01:55:22+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 выполнена TEAM-3/developer#1: gatewaytest.FakeGateway (настоящий шлюз на 127.0.0.1:0, свой membus, clock.Manual, без окружения процесса) и HTTPHarness в shared/testkit/gateway через internal/gateway/client (RegisterAndEnter, Act, AwaitDelivery/Of, CloseRound, NewCIClient); сквозной long-poll д"
+    },
+    {
+      "at": "2026-09-14T01:55:22+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 выполнена TEAM-3/developer#3: снапшот шлюза (C-14, 5 последних, snapshot.created), восстановление сессий и ходов при старте, догон до Journal.End, /health шлюза с настоящей проверкой БД, sessions_active/rounds_open/outbox_pending/outbox_oldest_age_s; /health бота degraded после 7 неудачных опр"
+    },
+    {
+      "at": "2026-09-14T01:55:22+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Контрольное слияние M (EPIC-004 → develop): make ci BASE=develop — lint, test, contracts, secrets-scan, privacy-scan, vuln, compose-lint зелёные; scripts-parity дважды упал на таймаутах разных сценариев под нагрузкой (U16; H47–H49), EPIC-004 скрипты LLM не меняет; все четыре сценария поодиночке PASS"
     }
   ],
   "blockers": [],
