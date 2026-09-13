@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:02:47+03:00",
+  "updatedAt": "2026-09-13T18:04:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -9305,7 +9305,7 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Приёмка T-205 законы мира",
       "startedAt": "2026-09-13T17:48:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:04:03+03:00"
     },
     {
       "instance": "developer#2",
@@ -9345,6 +9345,16 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Ревью #1: документы EPIC-003 под C-07 v1.5",
       "startedAt": "2026-09-13T17:58:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-205",
+      "action": "Отметка владельца: vars.go, .env.example, mvctl",
+      "startedAt": "2026-09-13T18:04:03+03:00",
       "finishedAt": null
     }
   ],
@@ -12534,6 +12544,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние F (постоянное разрешение): epic/EPIC-001-foundation → develop (7ad4222), состав — T-457 (contracts.md v0.13, ownership v0.7). make ci BASE=develop — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация develop → EPIC-002/003/004 без конфликтов: C-07 v1.5, C"
+    },
+    {
+      "at": "2026-09-13T18:04:03+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-205 принята TEAM-2/tech-lead#2: Mi-1 закрыт (CurrentFrom однократно перечитывает каталог на пару мир/версия), Mi-2 описан (отклонение 13), Mi-3/Mi-4/N-1/N-2/N-3 закрыты; 13 мутантов убиты, internal/laws 98,7 %. Строки DoD T-234 (WorldView реализует WorldVersions, все id реестра в Config.Checks) и "
     }
   ],
   "blockers": [],
