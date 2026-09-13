@@ -192,6 +192,15 @@ make ci                 # всё из CI, что не требует Docker; mak
 (копируется в `.env`, секреты там всегда пусты). Проверка соответствия кода и
 примера: `go run ./cmd/mvctl env check`.
 
+Процесс платформы, запущенный на хосте без Docker (`go run ./cmd/multiverse serve
+--contexts=all --bus=memory`), открывает SQLite шлюза в `MV_GATEWAY_DATA_DIR`, а
+умолчание `/data` — путь тома внутри контейнера. На хосте каталог задают явно и
+вне репозитория (в `links.db` — идентификаторы игроков):
+
+```bash
+MV_GATEWAY_DATA_DIR="$HOME/.multiverse/gateway" go run ./cmd/multiverse serve --contexts=all --bus=memory
+```
+
 ## Документация
 
 - [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md) — соглашения для агентов и

@@ -19,6 +19,7 @@ import (
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/runtime"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 )
 
 // recorder is the one timeline of a run: what the contexts did and when the
@@ -131,9 +132,14 @@ func memoryOptions() serveOptions {
 
 // onLoopback makes the process listen on a port of its own choosing and puts
 // validation on read back on the shipped default.
+//
+// It also gives the gateway context a data directory of the test: since T-303
+// the gateway of --contexts=all is real and opens its SQLite files at start,
+// and the default /data of the manifest is no place for a test.
 func onLoopback(t *testing.T) {
 	t.Helper()
 	t.Setenv(env.CoreAddr.Name(), "127.0.0.1:0")
+	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t))
 	clearVar(t, env.BusValidateOnRead.Name())
 }
 

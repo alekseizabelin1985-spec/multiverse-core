@@ -1,4 +1,4 @@
-package replay_test
+package recording_test
 
 import (
 	"bytes"
@@ -12,9 +12,9 @@ import (
 	"testing/iotest"
 	"time"
 
-	"multiverse-core.io/internal/replay"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/recording"
 	"multiverse-core.io/shared/testkit"
 )
 
@@ -34,7 +34,7 @@ func session(t *testing.T) []eventbus.Event {
 		map[string]any{"roll_index": 0, "sides": 20, "value": 17, "nested": map[string]any{"list": []any{1, "two", 3.5, nil, true}}},
 		eventbus.WithAgent(enc))
 	llm := func(agent eventbus.AgentRef, phase string, attempt int, answer string) eventbus.Event {
-		return eventbus.Derive(root, replay.TypeLLMOutput, contracts.SourceSwarm,
+		return eventbus.Derive(root, recording.TypeLLMOutput, contracts.SourceSwarm,
 			map[string]any{"phase": phase, "attempt": attempt, "response_raw": answer}, eventbus.WithAgent(agent))
 	}
 	return []eventbus.Event{
@@ -51,7 +51,7 @@ func session(t *testing.T) []eventbus.Event {
 
 func writeRecording(t *testing.T, path string, events []eventbus.Event) {
 	t.Helper()
-	w, err := replay.NewWriter(path)
+	w, err := recording.NewWriter(path)
 	if err != nil {
 		t.Fatalf("NewWriter: %v", err)
 	}
@@ -74,9 +74,9 @@ func TestRecordingRoundTripIsByteForByte(t *testing.T) {
 	events := session(t)
 	writeRecording(t, first, events)
 
-	rec, err := replay.OpenRecording(first)
+	rec, err := recording.Open(first)
 	if err != nil {
-		t.Fatalf("OpenRecording: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
 	if rec.Len() != len(events) {
 		t.Fatalf("Len = %d, want %d", rec.Len(), len(events))
@@ -95,9 +95,9 @@ func TestRecordingRoundTripIsByteForByte(t *testing.T) {
 		t.Errorf("%d lines for %d events: one event per line", n, len(events))
 	}
 
-	again, err := replay.OpenRecording(second)
+	again, err := recording.Open(second)
 	if err != nil {
-		t.Fatalf("OpenRecording(second): %v", err)
+		t.Fatalf("Open(second): %v", err)
 	}
 	for i, ev := range slices.Collect(again.Events()) {
 		orig := events[i]
@@ -122,18 +122,18 @@ func TestIndexFindsAnLLMOutputByItsKey(t *testing.T) {
 	redelivered.Payload = map[string]any{"phase": "decision", "attempt": 1, "response_raw": "a second answer"}
 	writeRecording(t, path, append(events, redelivered))
 
-	rec, err := replay.OpenRecording(path)
+	rec, err := recording.Open(path)
 	if err != nil {
-		t.Fatalf("OpenRecording: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
-	index := rec.Index(replay.TypeLLMOutput, replay.LLMOutputKeyOf)
+	index := rec.Index(recording.TypeLLMOutput, recording.LLMOutputKeyOf)
 	cid := events[0].ID
 
 	want := map[string]string{
-		replay.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 1):  "enc decision 1",
-		replay.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 2):  "enc decision 2",
-		replay.LLMOutputKey(cid, "encounter-wolf:solo:A", "narrative", 1): "enc narrative 1",
-		replay.LLMOutputKey(cid, "region-gm:dark-forest", "decision", 1):  "gm decision 1",
+		recording.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 1):  "enc decision 1",
+		recording.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 2):  "enc decision 2",
+		recording.LLMOutputKey(cid, "encounter-wolf:solo:A", "narrative", 1): "enc narrative 1",
+		recording.LLMOutputKey(cid, "region-gm:dark-forest", "decision", 1):  "gm decision 1",
 	}
 	if len(index) != len(want) {
 		t.Errorf("index has %d records, want %d: only llm.output, one per key", len(index), len(want))
@@ -149,9 +149,9 @@ func TestIndexFindsAnLLMOutputByItsKey(t *testing.T) {
 		}
 	}
 	for _, miss := range []string{
-		replay.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 3),
-		replay.LLMOutputKey("other-chain", "encounter-wolf:solo:A", "decision", 1),
-		replay.LLMOutputKey(cid, "region-gm:dark-forest", "narrative", 1),
+		recording.LLMOutputKey(cid, "encounter-wolf:solo:A", "decision", 3),
+		recording.LLMOutputKey("other-chain", "encounter-wolf:solo:A", "decision", 1),
+		recording.LLMOutputKey(cid, "region-gm:dark-forest", "narrative", 1),
 	} {
 		if _, ok := index[miss]; ok {
 			t.Errorf("a record was found under %q, which was never recorded", miss)
@@ -163,9 +163,9 @@ func TestIndexFindsAnLLMOutputByItsKey(t *testing.T) {
 // boundary gives another key — a plain separator would not.
 func TestLLMOutputKeyKeepsThePartsApart(t *testing.T) {
 	pairs := [][2]string{
-		{replay.LLMOutputKey("a:b", "c", "decision", 1), replay.LLMOutputKey("a", "b:c", "decision", 1)},
-		{replay.LLMOutputKey("ab", "c", "decision", 1), replay.LLMOutputKey("a", "bc", "decision", 1)},
-		{replay.LLMOutputKey("a", "b", "decision", 11), replay.LLMOutputKey("a", "b", "decision1", 1)},
+		{recording.LLMOutputKey("a:b", "c", "decision", 1), recording.LLMOutputKey("a", "b:c", "decision", 1)},
+		{recording.LLMOutputKey("ab", "c", "decision", 1), recording.LLMOutputKey("a", "bc", "decision", 1)},
+		{recording.LLMOutputKey("a", "b", "decision", 11), recording.LLMOutputKey("a", "b", "decision1", 1)},
 	}
 	for _, p := range pairs {
 		if p[0] == p[1] {
@@ -180,15 +180,15 @@ func TestLLMOutputKeyOfNeedsEveryPart(t *testing.T) {
 	testkit.Deterministic(t, t.Name())
 	agent := eventbus.WithAgent(eventbus.AgentRef{ID: "encounter-wolf:solo:A", Level: "task"})
 	cases := map[string]eventbus.Event{
-		"no agent": eventbus.NewRoot(replay.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
+		"no agent": eventbus.NewRoot(recording.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
 			map[string]any{"phase": "decision", "attempt": 1}),
-		"no phase": eventbus.NewRoot(replay.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
+		"no phase": eventbus.NewRoot(recording.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
 			map[string]any{"attempt": 1}, agent),
-		"no attempt": eventbus.NewRoot(replay.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
+		"no attempt": eventbus.NewRoot(recording.TypeLLMOutput, contracts.SourceSwarm, "w", nil, eventbus.ActorSystem,
 			map[string]any{"phase": "decision"}, agent),
 	}
 	for name, ev := range cases {
-		if key := replay.LLMOutputKeyOf(ev); key != "" {
+		if key := recording.LLMOutputKeyOf(ev); key != "" {
 			t.Errorf("%s: key %q, want none", name, key)
 		}
 	}
@@ -198,7 +198,7 @@ func TestEventsFiltersByType(t *testing.T) {
 	events := session(t)
 	path := filepath.Join(t.TempDir(), "s.jsonl")
 	writeRecording(t, path, events)
-	rec, err := replay.OpenRecording(path)
+	rec, err := recording.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,9 +228,9 @@ func TestReadRecordingToleratesLayoutAndNamesBrokenLines(t *testing.T) {
 	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
 
 	ok := "\n" + lines[0] + "\r\n\n" + lines[1] // CRLF, blank lines, no final newline
-	rec, err := replay.ReadRecording(strings.NewReader(ok))
+	rec, err := recording.Read(strings.NewReader(ok))
 	if err != nil || rec.Len() != 2 {
-		t.Fatalf("ReadRecording = %v, %v; want 2 events", rec, err)
+		t.Fatalf("Read = %v, %v; want 2 events", rec, err)
 	}
 
 	for name, tc := range map[string]struct {
@@ -241,7 +241,7 @@ func TestReadRecordingToleratesLayoutAndNamesBrokenLines(t *testing.T) {
 		"not event":  {lines[0] + "\n" + lines[1] + "\n{\"id\":\"x\"}\n", "line 3: not an event"},
 		"line limit": {"{\"type\":\"x\",\"pad\":\"" + strings.Repeat("a", 16<<20) + "\"}\n", "line 1: longer than"},
 	} {
-		if _, err := replay.ReadRecording(strings.NewReader(tc.body)); err == nil || !strings.Contains(err.Error(), tc.want) {
+		if _, err := recording.Read(strings.NewReader(tc.body)); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: error %v, want one containing %q", name, err, tc.want)
 		}
 	}
@@ -252,11 +252,11 @@ func TestReadRecordingToleratesLayoutAndNamesBrokenLines(t *testing.T) {
 	big.Payload = map[string]any{"phase": "decision", "attempt": 1, "response_raw": strings.Repeat("я", 100_000)}
 	bigPath := filepath.Join(t.TempDir(), "big.jsonl")
 	writeRecording(t, bigPath, []eventbus.Event{big})
-	if rec, err := replay.OpenRecording(bigPath); err != nil || rec.Len() != 1 {
+	if rec, err := recording.Open(bigPath); err != nil || rec.Len() != 1 {
 		t.Errorf("a 200 KiB line: %v, %v; want it read", rec, err)
 	}
 
-	if rec, err := replay.ReadRecording(strings.NewReader("")); err != nil || rec.Len() != 0 {
+	if rec, err := recording.Read(strings.NewReader("")); err != nil || rec.Len() != 0 {
 		t.Errorf("empty recording = %v, %v; want no events and no error", rec, err)
 	} else if _, ok := rec.Start(); ok {
 		t.Error("Start of an empty recording reports a time")
@@ -279,7 +279,7 @@ func TestStartIsTheEarliestTimestamp(t *testing.T) {
 		// The zero timestamp comes last, so that nothing after it can hide it.
 		at(t0.Add(time.Hour)), at(t0), at(t0.Add(time.Minute)), at(time.Time{}),
 	})
-	rec, err := replay.OpenRecording(path)
+	rec, err := recording.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestStartIsTheEarliestTimestamp(t *testing.T) {
 
 	zeroPath := filepath.Join(t.TempDir(), "zero.jsonl")
 	writeRecording(t, zeroPath, []eventbus.Event{at(time.Time{})})
-	zero, err := replay.OpenRecording(zeroPath)
+	zero, err := recording.Open(zeroPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,9 +303,9 @@ func TestStartIsTheEarliestTimestamp(t *testing.T) {
 func TestReadRecordingReportsTheReadErrorOfACutLine(t *testing.T) {
 	boom := errors.New("disk gone")
 	r := io.MultiReader(strings.NewReader("{\"type\":\"player.looked\",\"id\":\"ev-"), iotest.ErrReader(boom))
-	_, err := replay.ReadRecording(r)
+	_, err := recording.Read(r)
 	if !errors.Is(err, boom) {
-		t.Fatalf("ReadRecording = %v, want the read error %v", err, boom)
+		t.Fatalf("Read = %v, want the read error %v", err, boom)
 	}
 	if !strings.Contains(err.Error(), "line 1") {
 		t.Errorf("error %q does not name the line", err)
@@ -314,8 +314,34 @@ func TestReadRecordingReportsTheReadErrorOfACutLine(t *testing.T) {
 
 func TestOpenRecordingNamesAMissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "absent.jsonl")
-	if _, err := replay.OpenRecording(path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("OpenRecording(absent) = %v, want os.ErrNotExist", err)
+	if _, err := recording.Open(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Open(absent) = %v, want os.ErrNotExist", err)
+	}
+}
+
+// C-01 v1.11 (review of T-458 by system-architect, У-4): every error of the
+// package starts with its prefix, a direct Read included, and Open names the
+// path once, without the word of the prefix repeated.
+func TestErrorsOfReadAndOpenCarryThePrefixOnce(t *testing.T) {
+	const broken = "{\"id\":\"x\"}\n"
+	if _, err := recording.Read(strings.NewReader(broken)); err == nil ||
+		err.Error() != "recording: line 1: not an event: no type" {
+		t.Errorf("Read = %v, want \"recording: line 1: not an event: no type\"", err)
+	}
+
+	path := filepath.Join(t.TempDir(), "broken.jsonl")
+	if err := os.WriteFile(path, []byte(broken), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recording.Open(path); err == nil || err.Error() != "recording: "+path+": line 1: not an event: no type" {
+		t.Errorf("Open = %v, want \"recording: %s: line 1: not an event: no type\"", err, path)
+	}
+
+	absent := filepath.Join(t.TempDir(), "absent.jsonl")
+	_, err := recording.Open(absent)
+	if err == nil || !strings.HasPrefix(err.Error(), "recording: open ") || strings.Count(err.Error(), absent) != 1 ||
+		strings.HasPrefix(err.Error(), "recording: open recording") {
+		t.Errorf("Open(absent) = %v, want \"recording: open <path>: …\" naming the path once", err)
 	}
 }
 
@@ -326,7 +352,7 @@ func TestNewWriterRefusesToOverwrite(t *testing.T) {
 	if err := os.WriteFile(path, []byte("kept\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if w, err := replay.NewWriter(path); !errors.Is(err, os.ErrExist) {
+	if w, err := recording.NewWriter(path); !errors.Is(err, os.ErrExist) {
 		if w != nil {
 			_ = w.Close()
 		}

@@ -10,6 +10,7 @@ import (
 	"multiverse-core.io/internal/replay"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/recording"
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 )
@@ -151,6 +152,70 @@ func TestWithMiddlewareDrivesTheClockOnEveryReadPath(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// C-01 v1.11 (review of T-458 by system-architect, A5): recording.ReadJournal
+// is a read of history, not a delivery. Through the middleware of a replay it
+// gets the events as the journal holds them — meta.replay as published, true
+// or false — and the clock stays where it was. A ReadRange with a handler of
+// the caller over the same transport and the same events is a delivery and
+// runs under the clock, as in T-060.
+func TestMiddlewareInReplayLeavesAReadOfHistoryAsTheJournalHoldsIt(t *testing.T) {
+	src := testkit.Deterministic(t, t.Name())
+	bus := newBus(t)
+	topic := topicOf(t, "player.looked")
+
+	src.Clock.Set(t0.Add(2 * time.Hour))
+	plain := looked("plain")
+	src.Clock.Set(t0.Add(3 * time.Hour))
+	replayed := looked("replayed")
+	replayed.Meta.Replay = true
+	for _, ev := range []eventbus.Event{plain, replayed} {
+		if err := bus.Publish(t.Context(), ev); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+	ec := replay.NewEventClock(t0)
+	tr := replay.WithMiddleware(bus, replay.Middleware(runtime.ModeReplay, ec))
+
+	rec, err := recording.ReadJournal(t.Context(), tr, topic, 0)
+	if err != nil {
+		t.Fatalf("ReadJournal: %v", err)
+	}
+	if got := ec.Now(); !got.Equal(t0) {
+		t.Errorf("after ReadJournal the clock is at %v, want it unmoved at %v", got, t0)
+	}
+	want := []eventbus.Event{plain, replayed}
+	if rec.Len() != len(want) {
+		t.Fatalf("Len = %d, want %d", rec.Len(), len(want))
+	}
+	i := 0
+	for ev := range rec.Events() {
+		if ev.ID != want[i].ID || ev.Meta.Replay != want[i].Meta.Replay || !ev.Timestamp.Equal(want[i].Timestamp) {
+			t.Errorf("event %d came out of ReadJournal as %s replay=%t at %v, want %s replay=%t at %v",
+				i, ev.ID, ev.Meta.Replay, ev.Timestamp, want[i].ID, want[i].Meta.Replay, want[i].Timestamp)
+		}
+		i++
+	}
+
+	var delivered []eventbus.Event
+	if _, err := tr.ReadRange(t.Context(), topic, 0, 2, func(ctx context.Context, ev eventbus.Event) error {
+		if recording.InReadJournal(ctx) {
+			t.Error("a ReadRange with a handler of the caller runs under the mark of ReadJournal")
+		}
+		delivered = append(delivered, ev)
+		return nil
+	}); err != nil {
+		t.Fatalf("ReadRange: %v", err)
+	}
+	if got := ec.Now(); !got.Equal(replayed.Timestamp) {
+		t.Errorf("after a delivery the clock is at %v, want the latest event %v", got, replayed.Timestamp)
+	}
+	for _, ev := range delivered {
+		if !ev.Meta.Replay {
+			t.Errorf("the delivery handed %s on without meta.replay", ev.ID)
+		}
 	}
 }
 

@@ -26,6 +26,7 @@ import (
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 	"multiverse-core.io/shared/testkit/state"
 	"multiverse-core.io/shared/testkit/swarm"
 )
@@ -753,6 +754,7 @@ func startProcess(t *testing.T, contexts []runtime.Context, open openBusFunc) *r
 	t.Helper()
 	addr := loopbackAddr(t)
 	t.Setenv(env.CoreAddr.Name(), addr)
+	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t)) // the gateway of --contexts=all is real since T-303
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &running{addr: addr, cancel: cancel, done: make(chan error, 1)}
 	go func() { r.done <- newProcess(contexts, open).run(ctx, cancel) }()
