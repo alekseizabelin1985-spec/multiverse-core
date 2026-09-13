@@ -2,7 +2,9 @@ package eventbus
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"runtime/debug"
 	"time"
@@ -95,7 +97,7 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 	if !d.SkipValidateOnRead {
 		if err := d.validate(ev); err != nil {
 			d.log(ctx, "event rejected on read", ev, pos, err)
-			return d.deadLetter(ctx, ev, err, 0, nil)
+			return d.deadLetter(ctx, pos, ev, err, 0, nil, "")
 		}
 	}
 
@@ -112,7 +114,7 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 			// A panic is a defect, not a transient failure (C-01 v1.5): a retry
 			// would run the handler again over state the panic may have left half
 			// changed, and a deterministic panic would simply happen four times.
-			return d.deadLetter(ctx, ev, err, attempt+1, nil)
+			return d.deadLetter(ctx, pos, ev, err, attempt+1, nil, "")
 		}
 		lastErr = err
 		if lastErr == nil {
@@ -125,8 +127,7 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 			return ctx.Err()
 		}
 	}
-	d.log(ctx, "event parked in dead letters", ev, pos, lastErr)
-	return d.deadLetter(ctx, ev, lastErr, len(backoff)+1, nil)
+	return d.deadLetter(ctx, pos, ev, lastErr, len(backoff)+1, nil, "event parked in dead letters")
 }
 
 // DeliverRaw parks a message that could not be decoded into an event. There is
@@ -134,8 +135,7 @@ func (d Delivery) Deliver(ctx context.Context, pos Position, ev Event, h Handler
 func (d Delivery) DeliverRaw(ctx context.Context, pos Position, raw []byte, cause error) error {
 	ev := Event{}
 	err := fmt.Errorf("decode message at %s/%d: %w", pos.Topic, pos.Offset, cause)
-	d.log(ctx, "undecodable message parked in dead letters", ev, pos, err)
-	return d.deadLetter(ctx, ev, err, 0, raw)
+	return d.deadLetter(ctx, pos, ev, err, 0, raw, "undecodable message parked in dead letters")
 }
 
 // validate applies the read-side checks. A Delivery without a registry checks
@@ -164,12 +164,21 @@ func (d Delivery) validate(ev Event) error {
 	return nil
 }
 
-func (d Delivery) deadLetter(ctx context.Context, ev Event, cause error, attempts int, raw []byte) error {
+// deadLetter writes the dead letter and says in the log what became of the
+// event. parked is logged only once the write has succeeded: a line claiming
+// the event was parked before the write is known to have happened is a lie
+// whenever the write fails, and after Close it is the only trace the event
+// leaves, because the subscription returns nil (review #1 of T-436, Mi-1).
+// An empty parked means the caller has already logged why the event goes to
+// dead_letters.
+func (d Delivery) deadLetter(ctx context.Context, pos Position, ev Event, cause error, attempts int, raw []byte, parked string) error {
 	if cause == nil {
 		cause = fmt.Errorf("%w: handler failed without an error", ErrInvalidEnvelope)
 	}
 	if d.DLQ == nil {
-		return fmt.Errorf("eventbus: no dead letter sink for %s (cause: %v)", ev.Type, cause)
+		err := fmt.Errorf("eventbus: no dead letter sink for %s (cause: %v)", ev.Type, cause)
+		d.logNotParked(ctx, ev, pos, err, false)
+		return err
 	}
 	body, truncated := truncateRaw(raw)
 	dl := DeadLetter{
@@ -185,9 +194,48 @@ func (d Delivery) deadLetter(ctx context.Context, ev Event, cause error, attempt
 	// handler, otherwise a shutdown silently drops the failed event.
 	writeCtx := context.WithoutCancel(ctx)
 	if err := d.DLQ.WriteDeadLetter(writeCtx, dl); err != nil {
-		return fmt.Errorf("eventbus: write dead letter for %s: %w (cause: %v)", ev.Type, err, cause)
+		wrapped := fmt.Errorf("eventbus: write dead letter for %s: %w (cause: %v)", ev.Type, err, cause)
+		d.logNotParked(ctx, ev, pos, wrapped, busClosed(err))
+		return wrapped
+	}
+	if parked != "" {
+		d.log(ctx, parked, ev, pos, cause)
 	}
 	return nil
+}
+
+// busClosed tells a dead letter refused by a closed bus from a write that
+// failed on a bus still running. A closed membus and Kafka.writer on a closed
+// bus refuse with ErrClosed; a kafka writer taken from Kafka.writer before
+// Close and called after it refuses with io.ErrClosedPipe, which Kafka.write
+// wraps — hence errors.Is. A write already inside WriteMessages when Close
+// comes is waited for and does not fail this way. Only the error of the sink
+// is looked at: the cause is never in the chain (C-01 v1.6). stopped, on which
+// the read loops of the kafka adapter end, includes this test, so
+// bus_closed=true in the log always leads to a nil return of the loop (T-443).
+func busClosed(err error) bool {
+	return errors.Is(err, ErrClosed) || errors.Is(err, io.ErrClosedPipe)
+}
+
+// logNotParked reports an event whose dead letter was not written. Either way
+// it stays uncommitted and is delivered again. On a closed bus that is the
+// orderly end of a subscription caught by Close, so Warn; on a running bus the
+// subscription fails on it and the topic does not move, so Error. The line
+// carries handled=false at either level, as logPanic does: NFR-033 wants the
+// field on error logs, and the event is not accounted for in both cases.
+func (d Delivery) logNotParked(ctx context.Context, ev Event, pos Position, err error, closed bool) {
+	if d.Log == nil {
+		return
+	}
+	level := slog.LevelError
+	if closed {
+		level = slog.LevelWarn
+	}
+	d.Log.Log(ctx, level, "event not parked in dead letters; it stays uncommitted and will be delivered again",
+		append(d.eventAttrs(ev, pos),
+			slog.Bool("handled", false),
+			slog.Bool("bus_closed", closed),
+			slog.Any("error", err))...)
 }
 
 // truncateRaw cuts the body down to what dead_letters can carry.

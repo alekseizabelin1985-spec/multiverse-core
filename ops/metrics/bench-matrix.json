@@ -9,7 +9,7 @@
   ],
   "_contract": "The architect edits this file; scripts/llm-bench.{sh,ps1} read it and never change. A key added here is inert until a script reads it, so it is safe to record intent in advance.",
   "version": "0.3",
-  "updated": "2026-09-12",
+  "updated": "2026-09-13",
   "n_per_cell": 10,
   "_n_per_cell": "Deviation from infrastructure.md §6.4 (20), decided in T-013: testdata/bench/prompts.jsonl holds 10 situations per phase, and repeating a prompt inside one run would be answered from the prompt cache of llama.cpp (usage.prompt_tokens_details.cached_tokens) — a repeated request measures the cache, not the model, and would pull p95 down. The sample size the decision rests on comes from runs_required instead: 3 runs x 10 = 30 measurements per cell.",
   "runs_required": 3,
@@ -17,7 +17,7 @@
   "num_ctx": [8192, 16384],
   "kv_cache": ["f16", "q8_0"],
   "_cells": "A configuration is measured in the cells of num_ctx x kv_cache. The server is started with those parameters before the run (make llm-up with MV_LLM_NUM_CTX; --ctx-size = MV_LLM_NUM_CTX x slots) — the script does not restart the server, it only records the values it was told (§6.4 rule 1). The counted runs of E in T-402 went outside these cells twice over: a 4 x 200192 window and a q4_0 KV, which is not one of the two types above (T-435, two named deviations).",
-  "_model_ids": "Model ids here, in the blueprints and in ops/models.txt are file stems. The server has to report the stem itself (llama-server --alias, task T-437); without --alias it reports the path to the file, the bench skips the phases and the platform cannot match the model of a blueprint (T-435, ADR-005 execution note p. 6). No alias field is added here.",
+  "_model_ids": "Model ids here, in the blueprints and in ops/models.txt are file stems. The server has to report the stem itself: since T-437 (2026-09-13) scripts/llm-server.{sh,ps1} pass --alias <file name without .gguf> in single mode, so make llm-up reports Qwen3.8-27B-UD-Q3_K_XL for E and Qwen3.6-35B-A3B-UD-Q3_K_XL for Q36-A3B; router mode passes no alias and the server names the models by file. A llama-server started by hand without --alias still reports the path to the file: the bench skips the phases and the platform cannot match the model of a blueprint (T-435, ADR-005 execution note p. 6). T-437 checked the alias on a fake server; run 1 of session T-438 confirms it on the real b10878. No alias field is added here (editorial, T-442).",
   "configs": {
     "E": {
       "provider": "openai_compat",
