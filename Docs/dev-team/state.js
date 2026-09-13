@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:28:14+03:00",
+  "updatedAt": "2026-09-13T14:35:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2945,11 +2945,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-448",
           "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
@@ -8379,7 +8379,7 @@ window.DEVTEAM_STATE =
       "task": "T-448",
       "action": "Ревью #1: форма changed[], proposal_id, ±2^53",
       "startedAt": "2026-09-13T14:16:04+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:35:11+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -8449,6 +8449,26 @@ window.DEVTEAM_STATE =
       "task": "T-450",
       "action": "Ревью #1: таблица «локальный адрес» и скрипты",
       "startedAt": "2026-09-13T14:28:14+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Итерация 2: граница 2^53−1, тесты решений, форма Change",
+      "startedAt": "2026-09-13T14:35:11+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-214",
+      "action": "Приёмка T-214 и T-215 (схемы EPIC-003)",
+      "startedAt": "2026-09-13T14:35:11+03:00",
       "finishedAt": null
     }
   ],
@@ -11116,6 +11136,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-450 выполнена TEAM-1/devops-engineer#2: таблица testdata/llm/local-endpoints.tsv (107 случаев: 36 local, 32 cloud, 39 invalid), общий судья bash/pwsh с ручным разбором IPv4/IPv6, compose-lint правило 6 через bash-функцию, проверки T01/T02 и сценарии D07/D08, мутанты M18–M23 и C1–C4 убиты, make ci "
+    },
+    {
+      "at": "2026-09-13T14:35:11+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/2/3. Ma-1 граница ±2^53 включительна и проверяется после декодирования во float64: 2^53+1 с шины молча записывается как 2^53 (подтверждено зондом через двойник). Mi-1 нет отдельных тестов на три решения; Mi-2 две проверки наличия old/new. Реше"
     }
   ],
   "blockers": [],
