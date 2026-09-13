@@ -160,7 +160,7 @@ mvctl (CLI, не демон) ── читает шину/MinIO, публику�
 | `make test-e2e` | `go test -tags e2e -count=1 -timeout 10m ./...` (один процесс `--contexts=all --mode=replay --bus=memory`) |
 | `make test-race` | то, что вызывает задание CI `race` (T-401): `go test -race -count=$(RACE_COUNT) -timeout 10m $(RACE_PKGS)`, затем `go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...` с `GOFLAGS=-race`. `RACE_PKGS` и `RACE_COUNT=3` — единственный экземпляр списка пакетов и числа повторов. Без cgo — отказ с кодом 1, причина называет сработавшую половину условия: компилятора нет в `PATH` или `CGO_ENABLED=0` при найденном компиляторе. Внутри `make ci` — `SKIPPED` с кодом 0 (`ci: RACE_OPTIONAL := 1`). `RACE_OPTIONAL` задан в файле, поэтому значение из окружения его не меняет; `make ci RACE_OPTIONAL=` делает отказ строгим |
 | `make contracts` | `go run ./cmd/mvctl contracts check && go run ./cmd/mvctl blueprint validate blueprints/ && go run ./cmd/mvctl env check && go test ./shared/contracts/... -run TestSchemasValid` |
-| `make secrets-scan` | `gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .` (диапазон ветки; `BASE=integration/mvp-1` по умолчанию) + `gitleaks dir --no-banner --redact .` (рабочая копия) |
+| `make secrets-scan` | `gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .` (диапазон ветки) + `gitleaks dir --no-banner --redact .` по содержимому индекса (ОВ-8). `BASE=develop` по умолчанию с T-453: ствол gitflow; прежняя `integration/mvp-1` стоит на F-0, и её диапазон рос с каждой задачей. На самой `develop` передавать `BASE=main`. Если `BASE` не разрешается в коммит, цель отказывает: gitleaks на таком диапазоне пишет «0 commits scanned» и выходит с 0. Пустой диапазон `BASE..HEAD` (сама `develop`, ветка уже в `BASE`) — предупреждение в stderr с подсказкой `BASE=main`, не отказ. CI цель не вызывает, у задания `security` свой скан |
 | `make vuln` | `govulncheck ./...` |
 | `make compose-lint` | `scripts/compose-lint.sh` — восемь правил по трём compose-файлам (§3.1.1), затем `scripts/compose-lint.sh --fixtures` — самопроверка на `testdata/compose-lint/` |
 | `make ci` | `lint test test-race contracts secrets-scan privacy-scan vuln compose-lint test-e2e` — то же, что CI без Docker-тестов; `make ci-full` добавляет `test-integration`. `test-race` внутри `ci` без cgo печатает `SKIPPED` и не валит прогон: `make ci` — проверка владельца на Windows, где детектор недоступен (ОВ-5, T-401) |
@@ -329,7 +329,7 @@ CMD ["server", "/data", "--console-address", ":9001"]
 
 ### 3.1. Workflow `.github/workflows/go.yml`
 
-Триггеры: `push` и `pull_request` в `main`, `integration/**`, `epic/**`, `feature/agent-gm-core` (ветки по `teams.md` §3; `develop` не используется); `paths-ignore: ['Docs/**', '**/*.md']` (кроме `blueprints/**/*.md` — они данные; исключение через `paths` в отдельном фильтре); `concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}`; **`permissions: {contents: read}`** на уровне workflow, job `security` — `security-events: write` (SARIF) (T-15, ADR-010 доп. п. 3). Все job'ы — `runs-on: ubuntu-latest`, `timeout-minutes` явные; все `uses:` — по SHA с комментарием версии.
+Триггеры (сверено с `go.yml` в T-453): `push` — `main`, `develop`, `integration/**` с фильтром `paths` (`'**'`, `'!Docs/**'`, `'!**/*.md'`, `'blueprints/**/*.md'`: блупринты — данные, порядок шаблонов важен, последний выигрывает); `pull_request` — `main`, `develop`, `integration/**`, `epic/**`, без фильтра путей, потому что пропущенный фильтром workflow не отчитывается, и обязательная проверка навсегда блокирует PR из одной документации. `develop` добавлен в оба триггера в T-453. С перехода на gitflow (2026-09-11) эпики сливаются в `develop`, и без триггера PR в защищённую `develop` ждал бы проверок, которые не придут. `push` в `epic/**` CI не запускает: ветка эпика попадает в CI через свой PR, а второй триггер тратил бы бюджет дважды на один коммит. `feature/agent-gm-core` прежней редакции в `go.yml` нет. `concurrency: {group: ci-${{ github.ref }}, cancel-in-progress: true}`; **`permissions: {contents: read}`** на уровне workflow, job `security` — `security-events: write` (SARIF) (T-15, ADR-010 доп. п. 3). Все job'ы — `runs-on: ubuntu-latest`, `timeout-minutes` явные; все `uses:` — по SHA с комментарием версии.
 
 Общий шаг: `grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"` — версии образов доступны и compose-lint, и testcontainers (в `go.yml` так; `cat` прежней редакции сверен и заменён в T-399).
 
@@ -464,6 +464,7 @@ repos:
 4. Фича-флаги MVP-1 — тоже env: `MV_GM_PATH=agent|legacy` (миграция GM, S5), `MV_LLM_CLOUD_ENABLED`, `MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS`, `MV_LAWS_BREACH_PHASE=false`, `MV_LLM_STORE_PROMPTS=false`, `MV_BUS_VALIDATE_ON_READ=true`. Переключение флага = перезапуск процесса (горячая перезагрузка — E-F).
 5. **Формат `.env.example` (T-397, T-404, T-413; внесено в T-399).**
    - **Комментарий к переменной с пустым значением пишется строкой выше, никогда после `=`.** Парсер dotenv у compose обрезает хвостовой комментарий только после непустого значения, после пустого он берёт текст комментария как значение. Строка `MINIO_ROOT_USER=   # обязательна` давала непустой логин-комментарий: `${VAR:?}` молчал, MinIO стартовал с мусорной учёткой. `set -a; . ./.env` в Makefile читал ту же строку как пустую, то есть compose и make расходились. Правило 7 `compose-lint` такую строку отвергает. После непустого значения инлайн-комментарий допустим (`MV_ENV=dev   # dev|ci|prod`). В `build/versions.env` и `.github/ci.env` инлайн-комментарии запрещены вовсе (§2.4).
+   - **За пустой переменной, в имени которой есть идентификатор правила gitleaks `generic-api-key`, следующей непустой строкой идёт комментарий, а не другая переменная (T-453).** Идентификаторы по исходнику правила (`cmd/generate/config/rules/generic.go`) для пина `GITLEAKS_VERSION=v8.30.1` (`build/versions.env`): `ACCESS`, `API`, `AUTH`, `CREDENTIAL`, `CREDS`, `KEY`, `PASSWD`/`PASSWORD`, `SECRET`, `TOKEN`. Совпадение — подстрокой в любом месте имени, без учёта регистра, кроме `API` (`api`/`Api`/`API`; в именах `MV_*` это всегда совпадение). Стоп-слова и allowlist правила в расчёт не берутся: они держат находку только до первого переименования. При смене пина список сверяется заново. Правило gitleaks `generic-api-key` после знака равенства пропускает до пяти пробельных символов, перевод строки тоже, и берёт следующую строку вида `ИМЯ=значение` за значение ключа. Так `MV_LLM_API_KEY` склеивался с `MV_LLM_NUM_CTX` в эталоне §4.2: сам `.env.example` исключён путём в `.gitleaks.toml`, эталон в `Docs/` — нет, и находку гасил построчный отпечаток, который сдвигался с каждой правкой документа выше §4.2. Пустая строка между ними не спасает: при CRLF это четыре символа. Строка на `#` в захват правила не входит. Ещё две такие пары, `MV_MINIO_SECRET_KEY` → `MV_MINIO_USE_SSL` и `MV_NEO4J_PASSWORD` → `MV_EMBED_MODEL`, находку не давали только из-за стоп-слов правила, то есть до первого переименования. T-453 поставил комментарий над всеми тремя переменными.
    - **Обязательная для оператора переменная помечается `[required]` в комментарии над ней.** Пометка может стоять в любой строке сплошного блока комментария над переменной (T-404). Это единственный список обязательных: README и `CLAUDE.md` называют правило «заполнить помеченные», а не имена, чтобы текст не расходился с файлом.
    - Пометка машиночитаемая, и правило 7 сверяет её в обе стороны. Из `.env.example` с заполненными `[required]` собирается «чистая машина», и на ней должен интерполироваться `docker-compose.yml`. Каждая `${VAR:?}`/`${VAR?}` этого файла, кроме пинов `build/versions.env`, обязана нести пометку.
    - Переменная, которую чистая машина заполнять не обязана (токен бота, тег образа Chroma), в `docker-compose.yml` не требуется: её место — файл профиля (§1.3).
@@ -513,6 +514,7 @@ MV_MINIO_ENDPOINT=minio:9000         # без схемы; на хосте 127.0.
 MV_MINIO_ACCESS_KEY=
 # [required] секрет
 MV_MINIO_SECRET_KEY=
+# true — к объектному хранилищу по https; локальный стек — false
 MV_MINIO_USE_SSL=false
 MV_WORLD_ID=dark-forest-world        # мир по умолчанию для mvctl и bootstrap
 # публичный ключ age для бэкапа links.db (не секрет; §5.6)
@@ -547,7 +549,8 @@ MV_LLM_PROVIDER=openai_compat        # openai_compat|ollama|anthropic|recorded|f
 MV_LLM_URL=
 # пусто для локального llama-server; секрет — только для облачного эндпоинта
 MV_LLM_API_KEY=
-MV_LLM_NUM_CTX=8192                  # контекст на слот; --ctx-size llama-server = MV_LLM_NUM_CTX x число слотов
+# контекст на слот; --ctx-size llama-server = MV_LLM_NUM_CTX x число слотов
+MV_LLM_NUM_CTX=8192
 MV_LLM_STORE_PROMPTS=false           # полные промпты в prompts-{world} (ILM 30 дн.)
 MV_LLM_CLOUD_ENABLED=false           # гейт по HOST в MV_LLM_URL, не по имени провайдера (ADR-005 доп. 2 п. 3)
 MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS=false
@@ -588,7 +591,8 @@ MV_NEO4J_URI=neo4j://neo4j:7687
 MV_NEO4J_USER=neo4j
 # [required] секрет; = NEO4J_PASSWORD
 MV_NEO4J_PASSWORD=
-MV_EMBED_MODEL=nomic-embed-text      # или bge-m3 — по замеру
+# модель эмбеддингов сервиса памяти; или bge-m3 — по замеру
+MV_EMBED_MODEL=nomic-embed-text
 
 # ===== telegram-bot (профиль bot) =====
 # Сервис — в docker-compose.bot.yml (T-397); пустой токен громко падает только при профиле bot, поэтому пометки обязательности нет.
@@ -609,7 +613,7 @@ MV_TELEGRAM_HEALTH_ADDR=:8089
 #LEGACY_CHROMA_COLLECTION=multiverse_events
 ```
 
-Проверка формата эталона (T-399), теми же средствами, что в ревью T-397: `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*#'` по блоку выше и по `.env.example` не находит ни одной строки. Пометку `[required]` несут ровно семь переменных: `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `NEO4J_PASSWORD`, `MV_MINIO_ACCESS_KEY`, `MV_MINIO_SECRET_KEY`, `MV_LLM_URL`, `MV_NEO4J_PASSWORD` — как в файле. Состав меняется вместе с `docker-compose.yml`, и сверяет его правило 7, а не этот список.
+Проверка формата эталона (T-399), теми же средствами, что в ревью T-397: `grep -nE '^[A-Za-z_][A-Za-z0-9_]*=[[:space:]]*#'` по блоку выше и по `.env.example` не находит ни одной строки. Пометку `[required]` несут ровно семь переменных: `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`, `NEO4J_PASSWORD`, `MV_MINIO_ACCESS_KEY`, `MV_MINIO_SECRET_KEY`, `MV_LLM_URL`, `MV_NEO4J_PASSWORD` — как в файле. Состав меняется вместе с `docker-compose.yml`, и сверяет его правило 7, а не этот список. Проверка T-453: за каждой пустой переменной с идентификатором `generic-api-key` в имени (полный список — §4.1 п. 5) следующая непустая строка начинается с `#`, и `gitleaks dir` по копии этого документа и `.env.example` без `.gitleaksignore` находок не даёт.
 
 Каждая переменная в реестре `shared/env` имеет описание; `mvctl env check` (job `contracts`, `make contracts`) проверяет: (а) каждая зарегистрированная `MV_*` есть в `.env.example`; (б) каждая `MV_*` из `.env.example` зарегистрирована; (в) переменные, помеченные `secret`, в `.env.example` пусты; (г) обязательные переменные без дефолта пусты в примере и документированы. Инфраструктурные переменные (без префикса) сверяются со списком в `shared/env/infra.go`; секция `legacy` исключена из проверки. Так закрывается NFR-074 без парсинга `os.Getenv` по исходникам — линтер `forbidigo` дополнительно гарантирует, что мимо реестра ничего не читается.
 

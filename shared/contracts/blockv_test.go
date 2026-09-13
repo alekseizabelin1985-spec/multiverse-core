@@ -19,6 +19,14 @@ type blockVExample struct {
 	payload   string
 }
 
+// The hashes of the examples have the form of C-07 v1.3: sha256: and 64
+// lowercase hex digits. The prompt and the response of a record are hashed
+// apart, so the examples carry two values rather than one.
+const (
+	exampleHashA = "sha256:9f2c4d1e8b7a6f5043e2d1c0b9a8f7e6d5c4b3a2918f7e6d5c4b3a2f1e0d9c8b"
+	exampleHashB = "sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"
+)
+
 // blockVExamples holds one valid example per type of block "в" (T-009). The
 // completeness of the table is checked by TestPayloadExamples, which counts
 // the examples of both blocks against the registry.
@@ -85,7 +93,7 @@ var blockVExamples = map[string]blockVExample{
 		"scope": {"id": "solo:player-A", "type": "solo"},
 		"ttl_expires_at": "2026-09-09T12:45:00Z",
 		"lod": "rule-only",
-		"content_hash": "9f2c4d"}`},
+		"content_hash": "` + exampleHashA + `"}`},
 	"agent.child_resolved": {SourceSwarm, eventbus.ActorSystem, true, `{
 		"agent": {"id": "encounter-wolf:solo:player-A", "level": "task", "blueprint": "encounter-wolf"},
 		"parent": {"id": "domain-dark-forest:region:dark-forest-01"},
@@ -100,14 +108,16 @@ var blockVExamples = map[string]blockVExample{
 	"agent.blueprint_reloaded": {SourceSwarm, eventbus.ActorCI, true, `{
 		"blueprint": "domain-dark-forest",
 		"version_from": "1.0", "version_to": "1.1",
-		"content_hash": "9f2c4d"}`},
+		"content_hash": "` + exampleHashA + `"}`},
 	"llm.output": {SourceLLM, eventbus.ActorHuman, true, `{
 		"phase": "narrative", "attempt": 1,
 		"provider": "openai_compat", "model": "qwen3-8b",
 		"params": {"temperature": 0.7, "max_tokens": 512, "thinking": false, "format": "json_schema"},
-		"prompt_hash": "9f2c4d", "response_raw": "{\"text\": \"…\"}", "response_hash": "1a2b3c",
+		"prompt_hash": "` + exampleHashA + `", "response_raw": "{\"text\": \"…\"}",
+		"response_hash": "` + exampleHashB + `",
 		"response_len": 214,
 		"validation_status": "valid",
+		"filter": {"applied": true, "status": "pass", "filter_version": "a-2026-09"},
 		"laws_version": "v1",
 		"latency_ms": 1840, "tokens": {"prompt": 1200, "completion": 180, "cached": 900},
 		"cost_usd": 0,
@@ -265,29 +275,42 @@ func TestBlockVPayloadRejects(t *testing.T) {
 		// of a refusal are a different field of a different type (ADR-017).
 		"rejected reason used as a status": {"llm.output", `{
 			"phase": "narrative", "attempt": 1, "provider": "fake", "model": "m", "params": {},
-			"prompt_hash": "h", "response_hash": "h", "response_len": 1,
+			"prompt_hash": "` + exampleHashA + `", "response_hash": "` + exampleHashB + `",
+			"response_raw": "{}", "response_len": 2,
 			"validation_status": "rejected_unknown_entity",
 			"laws_version": "v1", "latency_ms": 1,
 			"tokens": {"prompt": 1, "completion": 1}, "cost_usd": 0}`},
 		"budget_exceeded used as a status": {"llm.output", `{
 			"phase": "narrative", "attempt": 1, "provider": "fake", "model": "m", "params": {},
-			"prompt_hash": "h", "response_hash": "h", "response_len": 1,
+			"prompt_hash": "` + exampleHashA + `", "response_hash": "` + exampleHashB + `",
+			"response_raw": "{}", "response_len": 2,
 			"validation_status": "budget_exceeded",
 			"laws_version": "v1", "latency_ms": 1,
 			"tokens": {"prompt": 1, "completion": 1}, "cost_usd": 0}`},
 		"record without a prompt hash": {"llm.output", `{
 			"phase": "narrative", "attempt": 1, "provider": "fake", "model": "m", "params": {},
-			"response_hash": "h", "response_len": 1, "validation_status": "valid",
+			"response_hash": "` + exampleHashB + `", "response_raw": "{}", "response_len": 2,
+			"validation_status": "valid",
+			"filter": {"applied": true, "status": "pass", "filter_version": "a-2026-09"},
 			"laws_version": "v1", "latency_ms": 1,
 			"tokens": {"prompt": 1, "completion": 1}, "cost_usd": 0}`},
 		"unknown parse strategy": {"llm.output", `{
 			"phase": "narrative", "attempt": 1, "provider": "fake", "model": "m", "params": {},
-			"prompt_hash": "h", "response_hash": "h", "response_len": 1, "validation_status": "valid",
+			"prompt_hash": "` + exampleHashA + `", "response_hash": "` + exampleHashB + `",
+			"response_raw": "{}", "response_len": 2, "validation_status": "valid",
+			"filter": {"applied": true, "status": "pass", "filter_version": "a-2026-09"},
 			"laws_version": "v1", "latency_ms": 1,
 			"tokens": {"prompt": 1, "completion": 1}, "cost_usd": 0,
 			"parse": {"strategy": "guess", "recovered": true}}`},
 		"unknown rejection reason": {"llm.output.rejected", `{
+			"llm_output": {"event": {"id": "ev-llm-1"}},
 			"reason": "too_long", "phase": "narrative", "attempt": 1}`},
+		// The fallback of narrative.output calls the same situation "budget";
+		// the reason of a refusal is budget_exceeded, and one word from the
+		// other dictionary must not slip through (T-215, T-445).
+		"budget used as a reason": {"llm.output.rejected", `{
+			"llm_output": {"event": {"id": "ev-llm-1"}},
+			"reason": "budget", "phase": "tick", "attempt": 1}`},
 		"narrative without recipients": {"narrative.output", `{
 			"recipients": [], "text": "…", "generated_by": "llm", "kind": "turn",
 			"locale": "ru", "laws_version": "v1"}`},
@@ -360,60 +383,6 @@ func TestBlockVPayloadRejects(t *testing.T) {
 				t.Fatalf("error %v, want an invalid payload", err)
 			}
 		})
-	}
-}
-
-// TestQuarantinedRecordKeepsNoText pins the rule the category (a) filter rests
-// on (C-07, ADR-016 p. 3): a text that was blocked is not stored, so a record
-// with validation_status=quarantined must not carry response_raw. The hash and
-// the length stay — they are what an audit needs.
-func TestQuarantinedRecordKeepsNoText(t *testing.T) {
-	const withoutText = `{
-		"phase": "narrative", "attempt": 1, "provider": "openai_compat", "model": "qwen3-8b",
-		"params": {"temperature": 0.7},
-		"prompt_hash": "9f2c4d", "response_hash": "1a2b3c", "response_len": 214,
-		"validation_status": "quarantined",
-		"filter": {"applied": true, "status": "block", "filter_version": "a-2026-09"},
-		"laws_version": "v1", "latency_ms": 1840,
-		"tokens": {"prompt": 1200, "completion": 180}, "cost_usd": 0,
-		"reasons": ["filter_blocked"]}`
-
-	example := blockVExample{SourceLLM, eventbus.ActorHuman, true, withoutText}
-	if err := Validate(newBlockVEvent(t, "llm.output", example)); err != nil {
-		t.Fatalf("a quarantined record without the text is rejected: %v", err)
-	}
-
-	example.payload = strings.Replace(withoutText,
-		`"validation_status": "quarantined",`,
-		`"validation_status": "quarantined", "response_raw": "the blocked text",`, 1)
-	if err := Validate(newBlockVEvent(t, "llm.output", example)); !errors.Is(err, ErrInvalidPayload) {
-		t.Fatalf("error %v, want the blocked text refused", err)
-	}
-
-	// The same text under a status that keeps it is fine: the rule is about
-	// quarantine, not about response_raw as such.
-	example.payload = strings.Replace(withoutText,
-		`"validation_status": "quarantined",`,
-		`"validation_status": "valid", "response_raw": "the text",`, 1)
-	if err := Validate(newBlockVEvent(t, "llm.output", example)); err != nil {
-		t.Fatalf("a valid record with the text is rejected: %v", err)
-	}
-
-	// filter_error means the filter itself failed, so the text was never
-	// judged: it is withheld on the same grounds as a blocked one
-	// (orchestrator decision on OV-33, review T-009 M-1).
-	example.payload = strings.Replace(withoutText,
-		`"validation_status": "quarantined",`,
-		`"validation_status": "filter_error",`, 1)
-	if err := Validate(newBlockVEvent(t, "llm.output", example)); err != nil {
-		t.Fatalf("a filter_error record without the text is rejected: %v", err)
-	}
-
-	example.payload = strings.Replace(withoutText,
-		`"validation_status": "quarantined",`,
-		`"validation_status": "filter_error", "response_raw": "the unjudged text",`, 1)
-	if err := Validate(newBlockVEvent(t, "llm.output", example)); !errors.Is(err, ErrInvalidPayload) {
-		t.Fatalf("error %v, want the unjudged text refused", err)
 	}
 }
 

@@ -15137,6 +15137,1123 @@ M-1 закрыт по существу. Пометка известного де
   `make parity-mutants` и пять своих мутантов на инструментированной копии стенда в скретче. Копия и деревья удалены по
   точному пути.
 
+## T-445 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-445 (M, `contract-change`). Работа не закоммичена и лежит в `.worktrees/T-445`, ветка
+`task/T-445-depguard-registry-schemas` от эпика `0fff090`, коммитов в ветке нет. Изменены `.golangci.yml`, пять схем
+(`_common.json`, `llm.output`, `llm.output.rejected`, `agent.spawned`, `agent.blueprint_reloaded`),
+`shared/contracts/{registry.go, registry_test.go, blockv_test.go}`, пять фикстур и README фикстур. Добавлены
+`shared/contracts/llmrecord_test.go`, раздел T-445 в `tasks.md`, запись в `dev-log.md` и карточка `tasks/T-445.md`.
+Других изменений в рабочей папке нет.
+
+Прочитаны:
+- решения system-architect#1 для T-445 (scratch `rev4_decisions_B.md`);
+- тексты T-444 из рабочей папки `.worktrees/T-444`: в ветке `task/T-444-contracts-revision-4` они ещё не закоммичены.
+  Это C-07 v1.3 (`contracts.md:527-556`), дополнение ADR-001 от 2026-09-13 (п. 3–5) и строка `contracts.md:700` про
+  `providers/fake`;
+- depguard v2.2.1 из кэша модулей: `settings.go:133-159` (`fileMatch`, `importAllowed`), `:215-248`
+  (`strInGlobList`, `strInPrefixList`), `depguard.go:71-79`;
+- карточка исполнителя целиком: таблицы мутантов L/P/D/S, отклонения, открытый вопрос.
+
+Ответ system-architect#1 на открытый вопрос пришёл во время ревью через оркестратора. Выбран вариант (б): исключение
+`_test.go` снимает только запрет `no-testkit-in-production`, и L16 должен падать. Кроме того, собственный пакет в
+правилах контекстов записывается как `internal/<ctx>$` + `internal/<ctx>/`, а в `cmd-multiverse-fake-contexts`
+добавляется запрет `gatewaytest`. Всё это внесено ниже замечаниями Ma-1, Mi-1 и Mi-2.
+
+Мутанты делались в копии дерева в scratch (`git ls-files -co --exclude-standard` без `services/`, `Docs/`, `.claude/`,
+`.qwen/` и `*env`), без `-overlay`. В копии заведены пустые пакеты: `internal/llm` с `prompt`, `guardian`, `filter`,
+`parser`, `providers`, `providers/{fake,fakex,fake/sub,openai_compat}`; `internal/laws`; `internal/swarm` с `runtime`,
+`template`, `template/sub`; `internal/swarmx`; `internal/gateway` с `api`, `client`, `links`, `gatewaytest`;
+`internal/memory`. Контрольный мутант шёл первым. Правка `fake_contexts.go` и `.golangci.yml` в копии возвращалась
+копированием из рабочей папки и сверялась `cmp`. Копия удалена по сохранённому точному пути.
+
+### Вердикт
+
+**ВЕРНУТЬ** — Critical 0, Major 1, Minor 2, Nit 1.
+
+Схемы, реестр, хеши, `EventRef`, тесты и фикстуры сделаны точно по решению и C-07 v1.3. Замечаний к ним нет, кроме
+Nit. Правила depguard 1c, 1d, 1e и сужение `internal-memory` работают: все мутанты решения красные своим правилом,
+законные импорты зелёные. Отклонение шаблона `**_test.go` верное.
+
+Возврат из-за одного места. Расширенное исключение `_test.go` снимает в тестах границы контекстов и слоя `shared`
+для любого импорта `gatewaytest`. Это противоречит дополнению ADR-001 п. 5 (Ma-1). Исполнитель реализовал решение
+буквально и сам вынес это открытым вопросом. Архитектор выбрал (б). Mi-1 и Mi-2 — решения архитектора, принятые в
+ту же итерацию.
+
+### Замечания
+
+#### Critical
+
+Нет.
+
+#### Major
+
+**Ma-1. `.golangci.yml:384-387`: исключение `_test.go` снимает в тестах любую находку depguard про `gatewaytest`, а не
+только запрет `no-testkit-in-production`.**
+
+Регулярка `multiverse-core.io/(shared/testkit|internal/gateway/gatewaytest)` сопоставляется с текстом находки любого
+правила. Поэтому в `_test.go` молчат все правила, которые запрещают `internal/*`. В копии:
+- тест роя импортирует `internal/gateway/gatewaytest` — **0 issues**. Это L16 исполнителя: находку
+  `internal-swarm-tests` скрывает исключение;
+- тест `shared/jsonpath` импортирует `internal/gateway/gatewaytest` — **0 issues**. Правило `shared` («shared/* не
+  импортирует internal/*», ADR-001 п. 3) в тестах для этого пакета тоже снято;
+- регулярка без якоря, так что под исключение попадают и `gatewaytestx`, и `gatewaytest/<что угодно>`.
+
+Для `shared/testkit` такого эффекта не было: ни одно правило `internal-*` не запрещает `shared/*`. Для
+`internal/gateway/gatewaytest` эффект есть, потому что пакет сам лежит в `internal/`. Так нарушается дополнение
+ADR-001 от 2026-09-13, п. 5 (T-444): «запрет стоит рядом с `no-testkit-in-production`, тестам разрешено… e2e, которому
+нужен `FakeGateway`, живёт вне `internal/<контекст>`: правила контекстов действуют и на тестовые файлы». Против этого
+же предостерегает комментарий самого конфига у `internal-swarm-tests` (`:222-226`): «an exclusion by text would open
+every _test.go of swarm to any package whose name merely contains the one allowed».
+
+*Как исправить* (вариант (б), решение system-architect#1): привязать исключение к правилу.
+```yaml
+      - path: _test\.go$
+        linters:
+          - depguard
+        text: "multiverse-core.io/(shared/testkit|internal/gateway/gatewaytest)[^']*' is not allowed from list 'no-testkit-in-production'"
+```
+Проверено в копии именно с этой строкой:
+- тест роя с `gatewaytest` — красный, `internal-swarm-tests`;
+- тест `shared/jsonpath` с `gatewaytest` — красный, `shared`;
+- тест `cmd/mvctl` с `gatewaytest` — зелёный;
+- тест `internal/memory` и тест роя с `shared/testkit/state` — зелёные;
+- `golangci-lint run --enable-only depguard ./...` по всей копии без мутантов — 0 issues.
+
+Комментарий над исключением (`:381-383`) дополнить: снимается ровно запрет `no-testkit-in-production`, правила
+контекстов и `shared` в тестах действуют. L16 перевести в таблице мутантов карточки в «красный».
+
+#### Minor
+
+**Mi-1. `.golangci.yml:93`, `:108-116`: `cmd/multiverse/fake_contexts.go` может импортировать `gatewaytest`.**
+Файл исключён из `no-testkit-in-production` целиком, поэтому новый запрет `gatewaytest` (`:97-98`) на него не
+действует. Правило `cmd-multiverse-fake-contexts` запрещает только `shared/testkit`. В копии в `fake_contexts.go`
+добавлен импорт `internal/gateway/gatewaytest` — **0 issues**. Это production-файл бинарника, то есть ровно то, что
+запрет 1e должен закрыть. Исполнитель назвал случай в «Рисках». Minor, а не Major: файл временный и уходит с T-256.
+*Как исправить* (решение архитектора): в `cmd-multiverse-fake-contexts.deny` добавить
+`multiverse-core.io/internal/gateway/gatewaytest` с `desc` о FakeGateway. Мутант — импорт `gatewaytest` в
+`fake_contexts.go` краснеет этим правилом.
+
+**Mi-2. `.golangci.yml:232`, `:325` (новые правила) и `:183`, `:195`, `:212`, `:262`, `:272`, `:282`, `:313`, `:338`:
+собственный пакет контекста в `allow` записан без `$`, то есть префиксом.**
+В копии production-файл роя импортирует `internal/swarmx` — **0 issues**. Дыра старая (бэклог исполнителя п. 1), но
+T-445 перенёс её в два новых правила, `internal-swarm-tests` и `internal-memory-tests`. Архитектор решил закрыть её в
+этой итерации.
+*Как исправить:* во всех правилах `internal-*` вместо `multiverse-core.io/internal/<ctx>` записать две строки,
+`multiverse-core.io/internal/<ctx>$` и `multiverse-core.io/internal/<ctx>/`. Мутанты: `internal/swarmx` из роя —
+красный; законный `internal/swarm/runtime` и `internal/swarm/template` из роя — зелёный.
+
+Осторожно с одной особенностью depguard (`settings.go:224-247`): `strInPrefixList` сверяет импорт только с
+ближайшей снизу по сортировке записью списка. Префиксная запись и более узкая запись с `$` под тем же префиксом в
+одном `allow` затеняют друг друга. Пример: `internal/swarm/` и `internal/swarm/template$` в одном списке. Тогда
+`internal/swarm/x`, который сортируется после `template`, сверится с `template$` и будет отвергнут. Сегодня таких пар
+нет, но после правки законный импорт подпакета своего контекста стоит проверить мутантом в каждом изменённом правиле.
+
+#### Nit
+
+**N-1. `shared/contracts/blockv_test.go:22-31`: doc-комментарий `blockVExamples` прилип к блоку `const`.**
+Абзац о хешах вставлен между комментарием таблицы и `var blockVExamples`. Весь комментарий теперь документирует
+`const (exampleHashA, exampleHashB)`, а у таблицы его нет. Фраза «so that an example cannot pass by a publisher copying
+one hash into every field» обещает то, чего схема не проверяет: равенство хешей в разных полях ничем не запрещено.
+*Как исправить:* разделить на два комментария (`const` — о форме хешей; `var` — прежний текст) и убрать или
+переформулировать довод про копирование.
+
+### Ответы на пункты постановки
+
+1. **Правила depguard соответствуют решению.**
+   - 1c: `internal-swarm` + `llm/prompt$`, `llm/guardian$`, без `parser$`; `internal-swarm-tests` + `providers/fake$`.
+   - Сужение памяти: `providers$`, `fake$` только в `internal-memory-tests`.
+   - 1d: `shared-testkit-swarm` + `swarm/template$`, листовое `internal-swarm-template`.
+   - 1e: `shared-testkit-gateway` (`client$`, `api$`) и `!**/shared/testkit/gateway/**` в `shared`; листовое
+     `internal-gateway-client`; запрет `gatewaytest` в `no-testkit-in-production`.
+   - Мутанты в копии, контрольный первым:
+
+     | # | Мутант | Результат |
+     |---|---|---|
+     | R0 | контрольный: `internal/memory` (production) → `internal/gateway/links` | красный, `internal-memory` |
+     | R1 | production-файл роя → `llm/providers/fake` | красный, `internal-swarm` |
+     | R2 | `internal/memory` → `llm/providers/openai_compat` | красный, `internal-memory` |
+     | R3 | `shared/testkit/gateway` → `internal/gateway/links` | красный, `shared-testkit-gateway` |
+     | R4 | `shared/testkit/swarm` → `internal/swarm/template/sub` | красный, `shared-testkit-swarm` |
+     | C1 | `internal/gateway/client` → `internal/gateway/links` | красный, `internal-gateway-client` |
+     | C2 | `internal/swarm/template` → `internal/mechanics` | красный, `internal-swarm-template` |
+     | C3 | `internal/memory` (production) → `gatewaytest` | красный |
+     | X4 | `cmd/mvctl` (production) → `gatewaytest` | красный, `no-testkit-in-production` |
+     | G1 | production роя → `llm`, `prompt`, `guardian`, `mechanics`, `laws`, `swarm/template` | зелёный |
+     | G2 | тест в корне `internal/swarm` → `providers/fake` | зелёный |
+     | G3 | тест в `internal/swarm/runtime` → `providers/fake`, `prompt` | зелёный |
+     | G4 / G5 | `shared/testkit/gateway`, файл и тест → `gateway/client`, `gateway/api` | зелёный |
+     | C4 | внешний тест `client_test` → `gateway/client`, `gateway/api` | зелёный |
+     | F3 | тест `internal/memory` → `providers`, `providers/fake` | зелёный |
+     | X1 | тест роя → `gatewaytest` (L16) | **зелёный** — Ma-1 |
+     | X3 | тест `shared/jsonpath` → `gatewaytest` | **зелёный** — Ma-1 |
+     | X2 | production роя → `internal/swarmx` | **зелёный** — Mi-2 |
+     | X5 | `cmd/multiverse/fake_contexts.go` → `gatewaytest` | **зелёный** — Mi-1 |
+
+     Первый прогон C1 и одного из мутантов варианта (б) упал с «parallel golangci-lint is running»: в то же время
+     линтер запускал другой агент. Эти прогоны повторены и засчитаны только по повтору.
+2. **Шаблоны файлов.** depguard компилирует `files` через `gobwas/glob` с разделителем `/` (`settings.go:73`) и
+   сопоставляет с `filepath.ToSlash` полного пути (`depguard.go:71`). `**_test.go` матчит тест в корне пакета (G2) и на
+   любой глубине (G3). Production-файлы с `_test` в середине имени не матчит: `internal/swarm/zz_mut_test_helper.go`
+   → `providers/fake` — красный, `internal-swarm` (F1); `internal/memory/x_test_util.go` → `providers/fake` — красный,
+   `internal-memory` (F2). Отклонение от шаблона решения `**/internal/swarm/**/*_test.go` обосновано: там после `**`
+   обязателен `/`, и тест в корне пакета под шаблон не попадает (D1 исполнителя). Текст дополнения ADR-001 п. 3 в T-444
+   называет прежний шаблон — см. бэклог п. 1.
+3. **Схемы `llm.output` и `llm.output.rejected` реализуют таблицу C-07 v1.3 точно.**
+   - `llm.output`: шесть `if/then` в `allOf` — по одному на строку таблицы, каждое «обязательно» и «запрещено» на
+     месте. Строка 5 — `required error` и оба запрета; строка 6 — `not required error` при статусе, отличном от
+     `error`.
+   - Лишних отказов нет. `invalid` проходит и без `filter` (базовая запись `llmRecord("invalid")`), и с `filter`
+     `pass` (отдельный случай). С `filter` `block`/`error` схема `invalid` тоже пропускает — так и решено: стадия
+     конвейера проверяется в шлюзе (T-211/T-213). Документ без `validation_status` не получает лишних ошибок от
+     веток: `if` с `required` не срабатывает.
+   - `llm.output.rejected`: `if budget_exceeded then {budget, без llm_output} else {llm_output, без budget}` — ровно
+     два пункта решения. `unknown_entity` → `element` + `oneOf[entity, background_ref]`. В C-07 v1.3
+     (`contracts.md:546`) сказано «обязательны `element` и одно из двух». Читаю как «ровно одно»: обоснование в
+     контракте про замену `entity` на ссылку на событие, а не про их сочетание. `oneOf` это и выражает, случай «naming
+     both» закреплён. Разночтения с текстом не вижу. `background_ref` при других причинах не запрещён — контракт
+     называет поле опциональным и не запрещает его.
+   - Тесты `llmrecord_test.go`: по каждой ветке валидный и невалидный случай. Базовая запись для каждого статуса сама
+     проверена как валидная, так что каждый невалидный случай ломает одну вещь. Мутанты S1–S17 исполнителя это
+     подтверждают. Все случаи удалённого `TestQuarantinedRecordKeepsNoText` есть в таблице, включая `filter_error`:
+     прежний пример с `filter.status=block` теперь закономерно невалиден.
+4. **Хеши.** Шаблон `^sha256:[0-9a-f]{64}$` стоит во всех трёх полях: `llm.output.v1.json:27-37`,
+   `agent.spawned.v1.json:18-22`, `agent.blueprint_reloaded.v1.json:11-15`. Фикстуры обновлены. Грэп по
+   `content_hash|prompt_hash|response_hash|9f2c4d|1a2b3c` (Go, JSON, JSONL, YAML; без `services/`, `Docs/`, `.claude/`)
+   хеша старой формы не нашёл. Исключение одно — `agent.spawned.v1.invalid.json:12`, число 17918835045097094771. Это
+   намеренный дефект «не строка», и с новым шаблоном он ломает по-прежнему одно правило: `pattern` к числу не
+   применяется. Go-кода, который пишет эти хеши, в дереве нет. Единственный писатель `sha256:` — `shared/entity/hash.go:63`,
+   форма та же. В рабочих папках EPIC-003/004, T-052, T-206, T-301 старые хеши есть только в тех же общих фикстурах
+   (придут слиянием), Go-кода там нет.
+5. **`gm.created`.** `Publishers` = `legacy`, `core/gateway` (`registry.go:189-191`). `legacyEvent` собирает новый
+   срез через `append([]string{SourceLegacy}, publishers...)`, общего массива между типами нет. `TestLegacyPublishers`
+   закрепляет издателей и потребителей всех легаси-типов. Проверок издателя, которые отвергали бы шлюз для
+   `Deprecated`-типа, в `Validate` нет (`contracts.go:155-157`). `mvctl contracts check` — 65 типов, 8 топиков,
+   58 файлов схем, код 0.
+6. **`EventRef`.** В `_common.json` только добавлен `$defs.EventRef` (`{event:{id, type?}}`, `additionalProperties:
+   false` на обоих уровнях). Других правок форм `event{id,type}` в diff нет, существующие копии не тронуты.
+   `background_ref` ссылается на `$defs.EventRef`.
+7. **Прогоны** (go1.26.8 windows/amd64, golangci-lint 2.13.2) в `.worktrees/T-445`:
+   - `go build ./... && go vet ./...` — 0;
+   - `go run ./cmd/mvctl contracts check` — 65 типов, 8 топиков, 58 файлов схем, код 0;
+   - `go test -short -count=1 ./...` — 0 FAIL;
+   - `golangci-lint run ./...` — 0 issues; `golangci-lint run --build-tags integration ./...` — 0 issues;
+   - `make contracts` — код 0 (contracts check, env check — 67 переменных, `TestSchemasValid` ok);
+   - `-race` недоступен (нет cgo). Docker, `make up/down`, `make test-integration`, стенд `:8888` не трогались, `.env`
+     не открывался.
+
+### Предложения в бэклог
+
+1. system-architect#1, T-444 (до слияния): дополнение ADR-001 от 2026-09-13, п. 3, называет шаблон
+   `**/internal/swarm/**/*_test.go`. Для depguard он не покрывает тесты в корне пакета. В коде верно записан
+   `**/internal/swarm/**_test.go`. Привести текст к коду.
+2. Согласен с п. 2 бэклога исполнителя: свести случаи `llm.output` из `TestBlockVPayloadRejects` и `llmrecord_test.go`
+   в одну таблицу при ближайшей правке.
+3. При следующем исключении depguard по образцу 1c–1e добавлять к набору мутантов «тест другого контекста
+   импортирует новый пакет». L16 поймал именно такой мутант; мутанты решения (8 штук) его не содержали.
+
+### Риски и допущения
+
+- После Ma-1 (вариант (б)) правила контекстов и листовые правила действуют на `_test.go` и для `gatewaytest`. Тогда
+  тесты `internal/gateway/client` (правило `internal-gateway-client`) и тесты любого другого контекста не смогут
+  поднять `FakeGateway`. По дополнению ADR-001 п. 5 это и задумано: e2e живёт вне `internal/<контекст>`. Но EPIC-004
+  (T-301 клиент, T-308 `FakeGateway`) должен знать это заранее: тест клиента против `FakeGateway` пишется в
+  `internal/gateway/gatewaytest` или в `test/`, а не в `client`.
+- Пакетов `internal/swarm`, `internal/llm/*`, `internal/gateway/*`, `internal/memory` в дереве нет, правила проверены
+  на заглушках. Особенность depguard со сравнением по ближайшей записи (Mi-2) может проявиться, когда появятся
+  настоящие подпакеты. Первый `golangci-lint run` в эпиках-владельцах это покажет.
+- Текст C-07 v1.3 и дополнение ADR-001 взяты из незакоммиченной рабочей папки T-444. Если T-444 изменит
+  формулировку до слияния, сверку п. 3 повторить.
+
+## T-444 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-444 «Ревизия контрактов 4 — документы» (M, `contract-change`). Работа не закоммичена и лежит в `.worktrees/T-444`, ветка `task/T-444-contracts-revision-4`. HEAD ветки равен эпику `0fff090`, коммитов в ветке нет, поэтому сравнение шло через `git diff` рабочей копии. Изменены 11 файлов: `contracts.md` v0.11, дополнение ADR-001 2026-09-13, `ownership.md` v0.6, КД роя, шлюза и State, `threat-model.md`, `api-contracts.md` v0.2.2, `.gitleaksignore`, раздел T-444 в `tasks.md`, `dev-log.md`. Новый файл — карточка `tasks/T-444.md`. Кода, схем, `.golangci.yml` и реестра в diff нет.
+
+Сверка с деревом (только чтение): `shared/contracts/{registry,sources,ownership}.go`, `shared/testkit/state/{apply,state,apply_test}.go`, `shared/testkit/swarm`, `shared/testkit/gateway`, `shared/eventbus/{kafka,delivery,registry}.go`, `shared/runtime/http.go`, `cmd/multiverse/serve.go`, `cmd/mvctl/main.go`, `cmd/mvctl/internal/contracts/check.go`, `.golangci.yml`, `internal/mechanics/types.go`, `shared/entity/hash.go`, схемы `schemas/events/` и фикстуры `testdata/fixtures/events/`, `test/e2e/`. Сверка с планами: `c171104:…/EPIC-002-state-mechanics/tasks.md`, `53f1ea2:…/EPIC-004-gateway-bot/tasks.md` (через `git show`) и `EPIC-003-swarm-llm-laws/tasks.md` в дереве.
+
+Не делал: `git add/commit`, `make secrets-scan`, `make up/down`, `make test-integration`, docker. Стенд `:8888` не трогал, `.env` не открывал.
+
+### Что проверено
+
+1. **Сводка v0.11 (`contracts.md:19-40`).** По каждому из пунктов 1a–1f и 2–11 есть строка с колонками «Кто прав», «Совместимость», «Источник». Текст соответствует решениям оркестратора:
+   - 1a — ADR-001 доп. п. 1. Набор методов `guardian.InvariantView` совпадает с `mechanics.StateView` (`internal/mechanics/types.go:214-218`), значит проверка при компиляции из DoD T-235 выполнима.
+   - 1b — C-07 «Заглушка», §17.
+   - 1c — ADR п. 3, C-15 «Заглушка». Довод про префикс `internal/llm/providers` верен (`.golangci.yml:231`).
+   - 1d — C-05 «Заглушка», ADR п. 4.
+   - 1e — C-04 и C-08 «Заглушка», §17, ADR п. 5.
+   - 1f — C-12, ADR п. 6.
+   - 2 — C-06 v1.2 совпадает со схемой `config.cloud_enabled.v1.json` (шаблон `provider`, `additionalProperties: false`) и с `blockv_test.go:140`.
+   - 3 — C-07 v1.3 совпадает с `shared/entity/hash.go:63`.
+   - 4 — таблица C-07 v1.3.
+   - 5 — §0 и C-04 v1.4; `legacyEvent` в `registry.go:270-279`, `check.go:148`.
+   - 6 — C-01 v1.8. `http.go:78` (сейчас 10 с), `serve.go:339` (HTTP останавливается раньше `StopAll`).
+   - 7 — §0.
+   - 8 — `ErrClosed`; восемь копий `EventRef` в схемах (посчитаны); `group_move` есть только в enum `group.{created,joined,left,disbanded}`, в фикстурах и коде его нет; копии `scope` в payload есть только у `tick.*` и `agent.spawned/spawn_rejected`.
+   - 9 — §16 п. 8 и `ownership.md` §3.
+   - 10 — C-02 v1.5: `SourceMvctl` уже есть в издателях обоих типов предложений (`registry.go:53-58`), строка `author` разрешает `init`, `author` (`ownership.go:129-135`).
+   - 11 — C-01 v1.4 (текст), `ownership.md` §1.
+
+   Внутренние противоречия — ниже, Ma-2 и Mi-2.
+2. **Совместимость с кодом.**
+   - C-01 v1.8 не расходится с `shared/eventbus` (`kafka.go:498-499`, `delivery.go:216-217`).
+   - C-02 v1.5 (bootstrap) не требует правки реестра.
+   - Сужение хешей ломает только фикстуры и примеры `blockv_test.go:88,103,108`. Они названы в T-445, издателей хешей в коде нет.
+   - `group_move` не используют ни издатели, ни фикстуры.
+   - Расхождение с `FakeState` по `level_violation` не названо — Ma-1.
+3. **Документы владельцев.**
+   - Правки помечены «(изм. T-444)» и приводят текст к решениям: КД State §4.6 и §4.10, КД роя §9.1/§9.2/§9.4/§10.4/§12.2/§14, КД шлюза §1/§3/§5.1/§15, `threat-model.md` T-22 и §4.7, `api-contracts.md` §2.3.2/§2.3.3/§2.3.7/§2.3.10/§2.3.16.
+   - Записи истории не переписаны. КД роя §20 п. 10 и таблица сведения 3 §14 п. 10 только дополнены пометкой, история C-NN дописана в конец.
+4. **`grep -rna allow_external_players Docs/dev-team/architecture Docs/dev-team/analysis schemas/`** — одно совпадение, `components/swarm-llm-laws.md:992` (§20 п. 10, запись истории). Флаг `-a` нужен: в КД роя есть байт NUL (был и в базе), и без `-a` grep называет файл двоичным и строки не печатает.
+5. **`.gitleaksignore`.**
+   - Строка 514 базы (`git show epic/EPIC-001-foundation:…`) и строка 521 ветки совпадают по md5 после снятия CR. Та же сумма у строки 504 в `be33e93`: это строка таблицы провайдеров `providers/ollama`.
+   - Скан в scratch: копии 11 изменённых файлов, карточки и `.gitleaks.toml` с сохранением относительных путей, `gitleaks dir --redact -c .gitleaks.toml` по каждому файлу.
+   - С `.gitleaksignore` ветки — `no leaks found` у каждого.
+   - Контроль с `.gitleaksignore` базы (отпечаток 514) — `leaks found: 1`, `generic-api-key`, строка 521, отпечаток `Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:521`. Он совпадает с новой строкой файла.
+   - Замечание к методике: `gitleaks dir .` подхватывает `.gitleaksignore` из корня скана даже при `-i` на пустой каталог, поэтому контроль нужно гонять по одному файлу.
+6. **CRLF.** У всех 11 файлов и у карточки число CR равно числу LF, одиночных LF и CR нет, файлы заканчиваются переводом строки. КД роя хранится в блобе с CRLF (двоичный из-за NUL), остальные — LF в индексе при `* text=auto`. Смешения нет.
+7. **Планы эпиков против `ownership.md` v0.6.**
+   - Совпадает: подкоманды (`cmd/mvctl/main.go:74-82` против новых строк §1), `testdata/fixtures/events/**` у владельца типа (EPIC-002 T-052), двойники у поставщика.
+   - Расходится: общий код и переходный порядок (Ma-2), `test/e2e/**` (Ma-3).
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Ma-1 | Major | `Docs/dev-team/architecture/contracts.md:313` (C-02 v1.5 «Причина отказа по связке»); дерево: `shared/testkit/state/apply.go:353-354`, `shared/testkit/state/apply_test.go:205-213`, `state.go:55-65` | C-02 v1.5 называет `level_violation` для пары «путь, причина», не разрешённой нормой, и приводит пример `alive → abandoned` не с `cause=forget`. Двойник State в дереве отвечает на ровно этот пример `invalid_op`, и тест `TestAbandonedNeedsTheCauseOfForget/abandoned with another cause` это закрепляет. Сводка (`:39`) пишет «реестр и схемы без изменений», про двойник — ни слова, DoD T-056 в карточке про него молчит. Это молчаливое расхождение, которое правило приоритета в начале `contracts.md` запрещает: тест закрепляет поведение, которое контракт теперь отвергает. Потребителей не ломает: `FakeEncounter` и `Harness` считают `invalid_op` и `level_violation` одинаково дефектом (`fake_encounter.go:1677`, `harness.go:1076`). Но T-056, заменяя двойник на `state.Applier` («потребители заглушки компилируются без правок»), получит красный тест двойника без объяснения | В C-02 v1.5 абзацем «**Код расходится**» назвать `apply.go:353-354` и тест `apply_test.go:213`, как это сделано для `StatusTransitionAllowed`. Выбрать одно: (а) у двойника нет таблицы владения (design §5), и `invalid_op` на эту пару — принятое отступление v0 до T-056; (б) правка двойника. В карточке добавить к DoD T-056 строку: `TestAbandonedNeedsTheCauseOfForget` меняет ожидание на `level_violation`, `statusRefusal` приводится к C-02 v1.5. В сводке, п. 10, колонка «Совместимость» — упомянуть двойник |
+| Ma-2 | Major | `Docs/dev-team/architecture/contracts.md:725` (§16 п. 8), `Docs/dev-team/plan/ownership.md:81` (§3 п. 4) против `contracts.md:198` (§0), `:232` (C-01 v1.4), `:109` (C-14), `ownership.md:9`, `:12`; планы: `c171104` EPIC-002 `tasks.md:28, 106, 109, 132-134, 165`; `53f1ea2` EPIC-004 `tasks.md:32, 103, 146, 225, 702` | §16 п. 8 и `ownership.md` §3 п. 4 отдают `cmd/multiverse/{main,serve,contexts}.go`, `cmd/mvctl/main.go`, `shared/env/vars.go` и `.env.example` «только задачей EPIC-001 через system-architect». Этому противоречат тексты той же версии: (1) §0 `:198` — «до раскладки правка этих файлов — PR через tech-lead#1»; (2) C-01 v1.4 `:232`, где v0.11 правил текст: T-055 (EPIC-002) правит `cmd/multiverse/serve.go` через tech-lead#1; (3) строки DoD самой карточки: T-060 собирает replay в `serve.go`, T-058 до раскладки идёт PR в `cmd/mvctl/main.go`; (4) строка C-14 `:109` — переменная объявляется тем изменением, которое вводит её чтение; (5) `ownership.md:9` — `serve.go` и `contexts.go` через tech-lead#1, `:12` — правки `env` запросом к tech-lead#1. Закоммиченные планы опираются именно на это: EPIC-002 — T-055 и T-060 правят `serve.go`, T-058 — `main.go`; EPIC-004 — общий DoD п. 32 и T-309/T-305 объявляют `MV_GATEWAY_REPLAY_WAIT`, `MV_GATEWAY_INPUT_FILTER` в `vars.go`, T-303 регистрирует `gateway` в `contexts.go`, проверка владения `:702` разрешает эти файлы. По §3 в редакции ветки эти задачи блокируются до «задачи EPIC-001», у которой нет номера | Свести к одному правилу в §16 п. 8 и `ownership.md` §3 п. 4 — назвать исключения прямо: (а) до задачи «runtime и раскладка `cmd`» регистрация в `contexts.go` и `cmd/mvctl/main.go` — PR через tech-lead#1 в ветке эпика, как в §0; (б) `serve.go` — T-055, T-060 (EPIC-002) через tech-lead#1, как в C-01 v1.4; (в) объявление новой переменной в `shared/env/vars.go` и `.env.example` — тем изменением, которое вводит чтение (C-14), с ревью tech-lead#1; изменение формы манифеста — задачей EPIC-001. Если system-architect хочет именно строгий режим, то вместо этого: отменить C-14 `:109` и прежний порядок в §0, переписать C-01 v1.4 и дать строки DoD на перенос правок T-055, T-058, T-060, T-303, T-305, T-309 в задачи EPIC-001 с номерами. Заодно выровнять перечни: в §16 п. 8 нет `registry.go` и `cmd/mvctl/internal/cli`, которые есть в §3 п. 4 |
+| Ma-3 | Major | `Docs/dev-team/plan/ownership.md:26` (строка `test/e2e/**`); планы: `c171104` EPIC-002 `tasks.md:156, 184, 256`; `53f1ea2` EPIC-004 `tasks.md:295-303, 539`; EPIC-003 `tasks.md:299, 718` | Строка отдаёт сценарии `solo-30`/`death`/`flee-fail` эпику EPIC-003, а S1/S3 — EPIC-002. Но S1 — это и есть `solo-30`: T-061/T-062 EPIC-002 создают `test/e2e/solo30_test.go`. EPIC-004 T-313 — «e2e соло — `solo-30`, `death`, `flee-fail`». `group-3x30` заявлен и в EPIC-002 T-070 (`test/e2e/group3x30_test.go`), и в EPIC-004 T-357. Все файлы попадают в один Go-пакет `test/e2e`. Три ветки создадут одноимённые файлы или тестовые функции и столкнутся на слиянии — ровно то, от чего защищает §3 | Привести строку к планам: сценарий принадлежит задаче, которая его вводит (S1/S3 на State — EPIC-002 T-061/T-062; соло и группа через шлюз — EPIC-004 T-313/T-357; сценарии роя — EPIC-003). Ввести правило имени, исключающее коллизию в одном пакете: префикс владельца в имени файла и тестовой функции (`state_solo30_test.go`/`TestStateSolo30`, `gateway_solo30_test.go`, `swarm_…`) либо подпакеты `test/e2e/<эпик>`. Добавить строки DoD T-061, T-062, T-070, T-313, T-357 |
+| Mi-1 | Minor | `Docs/dev-team/architecture/contracts.md:447` (C-05 «Заглушка»), `:622` (C-11), `:633-639` (C-12), `:700` (C-15 «Заглушка»); истории `:475`, `:629`, `:703`; у C-12 раздела истории нет | Нормативные правки у C-05 (место шаблонов), C-11 (форма `content_hash`), C-12 (новый Go-интерфейс `WorldVersions`, данные стража) и C-15 (`providers/fake` только в тестах роя и памяти) сделаны без версии в заголовке и без записи в истории. Это нарушает DoD 3 карточки («у каждого затронутого контракта — версия в заголовке и запись в истории»). У C-12 интерфейс добавлен при «Версия: 1» без истории вовсе | C-05 v1.7, C-11 v1.2, C-12 v1.1, C-15 v1.2 (или «уточнение v0.11») в заголовках и записи в истории; для C-12 завести раздел «История изменений» |
+| Mi-2 | Minor | `Docs/dev-team/architecture/contracts.md:747` (§17) | Абзац оставляет «Подпакет — **единственное** место в `shared/**`, которому линтер разрешает импорт `internal/mechanics`», а приписка v0.11 в том же абзаце перечисляет `shared/testkit/swarm → internal/mechanics$`. Это правило уже есть в дереве (`.golangci.yml:119-127`, T-219). Абзац противоречит сам себе | Пометить прежнюю фразу устаревшей (с T-219 таких мест два, с T-445 — три пакета-исключения) или переписать её, сохранив исторический довод |
+| Mi-3 | Minor | `Docs/dev-team/architecture/components/swarm-llm-laws.md:524`, `:662` | После 1b в таблице провайдеров осталось «генератор записей через `testkit.RecordingWriter`» (строка `providers/fake`). В §12.2 — «используется `mvctl laws bump` (**EPIC-005**)», хотя `ownership.md` v0.6 и реестр `cmd/mvctl/main.go:76` отдают `laws` EPIC-003. Живой текст расходится с решением, которое T-444 вносит | `:524` — «генератор записей — `providers/recorded.Writer` (изм. T-444)»; `:662` — «(EPIC-003)» с пометкой. Внимание: правка выше строки 521 снова сдвинет отпечаток в `.gitleaksignore`, а правка `:524` — нет |
+| Mi-4 | Minor | `Docs/dev-team/architecture/contracts.md:540-546` (таблица C-07 v1.3); `Docs/dev-team/analysis/api-contracts.md:432` | (1) Схема требует `response_hash` всегда (`llm.output.v1.json:102`), v1.3 сужает его до `sha256:<64 hex>`, но при `validation_status=error` ответа нет: чем заполнять хеш, не сказано. Хеш пустой строки, отсутствие поля или только `quarantined`/`filter_error` с хешем несохранённого ответа — T-211 и T-218 выберут каждый своё. (2) В `api-contracts.md` §2.3.10 перечень обязательных полей по-прежнему говорит «`response_raw` (кроме quarantined/filter_error)», а приписка T-444 в том же абзаце запрещает `response_raw` и при `error` | (1) Строка таблицы C-07 для `response_hash`: при `error` — `sha256` пустой строки (или поле необязательно при `error` — тогда `required` схемы в T-445 условный); при `quarantined`/`filter_error` — хеш полученного ответа. (2) В перечне §2.3.10: «`response_raw` (при `valid|partially_rejected|invalid`)» |
+| Mi-5 | Minor | `Docs/dev-team/epics/EPIC-001-foundation/tasks/T-444.md:65-68` (строки DoD EPIC-004) | C-04 v1.4 закрывает открытый вопрос плана EPIC-004 о `group_move` (`53f1ea2` `tasks.md:456`), но строки DoD есть только для T-301. В T-352 остаётся DoD «одно `group.entered_region {cause: group_move, by}`» (`:464`), в схеме этого события поля `cause` нет. В T-353 — доставка по `entity.updated cause=group_move` (`:479`), а в строке `gateway` таблицы владения причины `group_move` нет (`ownership.go:70`), так что такого факта не будет | Добавить строки DoD: T-352 — `group.entered_region {by, members[]}` без `cause`; T-353 — адресация по `entity.updated` с `cause=move` у группы |
+| N-1 | Nit | `Docs/dev-team/architecture/contracts.md:249` | «`stopped` и `busClosed` в `kafka.go`» — `busClosed` живёт в `shared/eventbus/delivery.go:216` | «`stopped` (`kafka.go`) и `busClosed` (`delivery.go`)» |
+| N-2 | Nit | `Docs/dev-team/epics/EPIC-001-foundation/dev-log.md` (запись T-444, «Проверки»), `tasks/T-444.md:82` | «`grep -rn allow_external_players …` — 1 совпадение»: без `-a` grep на КД роя (NUL в файле) печатает «Binary file … matches», а не строку. Воспроизводимость команды страдает | Записать `grep -rna` |
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 3 · Minor: 5 · Nit: 2.
+
+По существу решения 1–11 записаны верно и совпадают с деревом: схема `config.cloud_enabled`, форма `state_hash`, реестр издателей предложений, depguard, `mechanics.StateView`. Документы владельцев только приведены к решениям, записи истории не переписаны, CRLF и отпечаток gitleaks в порядке. Возврат — за три места, где новые правила противоречат другим текстам той же версии, закоммиченным планам эпиков или двойнику в дереве:
+- Ma-1 — молчаливое расхождение C-02 v1.5 с `FakeState`;
+- Ma-2 — «только EPIC-001» против переходного порядка §0, C-01 v1.4, C-14 и планов EPIC-002/EPIC-004;
+- Ma-3 — владение `test/e2e` против планов трёх эпиков.
+
+Все правки — текстовые, в этой же ветке. Повторное ревью проверит Ma-1…Ma-3, Mi-1…Mi-5 и сдвиг отпечатка `.gitleaksignore`, если правка КД роя придётся выше строки 521.
+
+### Предложения в бэклог
+
+1. `contracts.md` §0 «Легаси-типы реестра» говорит «восемь типов», а в `registry.go:187-195` их девять: есть ещё `time.syncTime`. Расхождение было до T-444, но приписка v0.11 стоит в том же абзаце. Исправить при следующей правке §0.
+2. В `components/swarm-llm-laws.md` есть байт NUL (был и в базе): `git` хранит файл как двоичный (CRLF в блобе, без нормализации), а `grep` без `-a` его не печатает. Найти и убрать байт отдельной правкой владельца КД. Отпечатки gitleaks при этом не сдвигаются, если NUL не стоит на отдельной строке.
+3. T-445: проверить мутантами, как depguard v2 объединяет правила, когда файл `_test.go` роя попадает и под `internal-swarm`, и под новое правило `providers/fake$`. Если списки объединяются, запрет `internal` из `internal-swarm` может перекрыть разрешение тестам.
+4. У задачи EPIC-001 «runtime и раскладка `cmd`» нет номера, а на неё ссылаются C-01 v1.8, §0, §16 п. 8 и строки DoD трёх эпиков. Оркестратору — завести номер до слияния T-444 в develop, чтобы ссылки не остались без адресата.
+
+### Риски и допущения
+
+- Планы EPIC-002 и EPIC-004 сверены по коммитам `c171104` и `53f1ea2`. Ветка EPIC-002 ушла вперёд (`8768980`), её более поздние правки `tasks.md` не читал. План EPIC-003 — версия дерева (`1c2ee7e`), своей сверки плана у EPIC-003 нет.
+- Скан содержимого индекса (`make secrets-scan`) не запускался — по ограничению поручения. Вывод «отпечаток 521 гасит находку» сделан по `gitleaks dir` на копии с теми же относительными путями и подтверждён контролем с отпечатком базы. Допущение, не проверенное здесь: в режиме индекса путь в отпечатке тот же, относительно корня репозитория. На это указывает и сама форма второй записи `.gitleaksignore`.
+- Серьёзность Ma-1 оценена по правилу приоритета `contracts.md`. Поведение потребителей оно не меняет, но тест двойника закрепляет ответ, который контракт теперь отвергает.
+
+## T-444 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Повторное ревью T-444 «Ревизия контрактов 4 — документы» (M, `contract-change`), итерация 2 после ревью #1 с вердиктом «вернуть» (0/3/5/2). Работа по-прежнему не закоммичена: `.worktrees/T-444`, ветка `task/T-444-contracts-revision-4`, HEAD равен эпику `0fff090`. Сравнение шло через `git diff --ignore-cr-at-eol` рабочей копии. Изменены те же 11 файлов, что в итерации 1, и `review.md` (раздел ревью #1); новый файл — карточка `tasks/T-444.md`. Кода, схем, `.golangci.yml` и реестра в diff нет.
+
+Проверялись исправления замечаний ревью #1 и регрессия от них. Решения оркестратора к итерации 2: Ma-2 — мягкий режим; Ma-1 — абзац «Код расходится» и DoD T-056; Ma-3 — привязка сценариев к задачам и правило имён; Minor и Nit закрываются; девять легаси-типов; байт NUL убран; ссылки на T-446.
+
+Сверка с планами — по закоммиченным веткам: `epic/EPIC-002-state-mechanics` (`8768980`), `epic/EPIC-003-swarm-llm-laws` (`6adc650`), `epic/EPIC-004-gateway-bot` (`f7a4f22`), файл `Docs/dev-team/epics/<эпик>/tasks.md` через `git show`. Дерево (только чтение): `test/e2e/*`, `shared/testkit/state/{apply,apply_test,state}.go`, `shared/contracts/ownership.go`, `schemas/events/{llm.output,group.entered_region}.v1.json`, `.gitattributes`, `infrastructure.md` §4.5.
+
+Не делал: `git add/commit`, `make secrets-scan`, `make up/down`, `make test-integration`, docker. Стенд `:8888` не трогал, `.env` не открывал. Временные копии — только в scratch сессии.
+
+### Что проверено
+
+1. **Ma-1 закрыт.** C-02 v1.5, абзац «Код расходится» (`contracts.md:314`), называет `apply.go:353-354` и тест `apply_test.go:213`. Код сверен: `statusRefusal` действительно отвечает `ReasonInvalidOp` на `abandoned` без `forget`. Правка закреплена за поставщиком EPIC-002 в T-056; план EPIC-002 называет T-056 «заменой `FakeState` v0» и включает `shared/testkit/state/**` в файлы. Сводка п. 10 (`:29`) и история C-02 (`:329`) называют двойник. Строка DoD T-056 — в карточке, `:119`.
+2. **Ma-2 закрыт по существу.** Строгий режим «только EPIC-001» заменён мягким с названными исключениями. Тексты между собой согласованы:
+   - §0 `contracts.md:198`;
+   - C-01 v1.4, «Источники конструкторов» `:232`: `serve.go` правится в ветке задачи с приёмкой tech-lead#1;
+   - C-14 `:663`: объявление переменной — в ветке задачи вместе со строкой `.env.example`;
+   - §16 п. 8 `:729-740` с обоснованием мягкого режима;
+   - `ownership.md` — строки `:9`, `:10`, `:12` и §3 п. 4 `:82`.
+
+   Строка сводки C-14 `:109` (v0.6) правилу не противоречит.
+
+   Против закоммиченных планов:
+   - **EPIC-002:** T-055 и T-060 правят `serve.go` в ветке задачи с приёмкой tech-lead#1 (`tasks.md:106`, `:132-134`), T-058 — `cmd/mvctl/main.go` через tech-lead#1 (`:163-165`). Общий DoD п. 7 (`:28`) строже: правки `shared/{eventbus,contracts,clock,runtime,objstore}` — только EPIC-001. Это подмножество мягкого режима, не противоречие.
+   - **EPIC-004:** T-303 регистрирует `gateway` в `contexts.go` с согласованием tech-lead#1 (`:103`). Переменные объявляются вместе с чтением (`:32`, `:225`). Проверка владения `:702` разрешает ровно эти файлы. Всё совпадает.
+   - **EPIC-003:** переменные (`:39`, `:122`, `:146`) совпадают. Схемы и реестр до T-446 план отдаёт EPIC-001 (`:8`, `:38`) — строже контракта, но совместимо. Расхождение — кто принимает правку `cmd/mvctl/main.go`, см. Mi-1 ниже.
+
+   Задачи, которые ревью #1 называло заблокированными (T-055, T-058, T-060, T-303, T-305, T-309), по новому тексту не блокируются. Ссылки на «задачу раскладки» везде с номером T-446: `grep -rn "runtime и раскладка"` без T-446 пуст.
+3. **Ma-3 закрыт по существу.** В строке `test/e2e/**` (`ownership.md:26`) сценарий принадлежит задаче, которая его вводит. Правило имён — `<владелец>_<сценарий>_test.go`, `Test<Владелец>…`, префикс у неэкспортируемых имён уровня пакета. Строки DoD T-061, T-062, T-070, T-242, T-243, T-313, T-314, T-315, T-357 — в карточке, `:120-135`.
+   - Правило выполнимо на дереве. В `test/e2e` ровно шесть файлов: `doc.go`, `empty_world_test.go`, `lifecycle_test.go`, `signal_other_test.go`, `signal_windows_test.go`, `stubs_v0_test.go`. Состав совпадает с перечнем общих файлов EPIC-001 в строке `:26` и одинаков в develop и во всех трёх ветках эпиков.
+   - Ни одно имя уровня пакета в этих файлах не начинается с `state`, `swarm`, `gateway` или `ops`. Тестовые функции — `TestThe…` и `TestStubsV0…`, без префикса владельца. Коллизий с правилом нет.
+   - Префиксы владельцев не являются префиксами друг друга.
+   - Имена файлов из строк DoD не оканчиваются на GOOS/GOARCH, так что ограничение сборки по имени файла не сработает случайно.
+
+   Два пробела правила — Mi-2, Mi-3; неточность в обосновании — N-1.
+4. **Mi-1 закрыт.** Версия в заголовке и запись в истории есть у каждого контракта: C-05 v1.7 (`contracts.md:409`, `:504`), C-11 v1.2 (`:624`, `:632`), C-12 v1.1 (`:636`, заведён раздел «История изменений» `:648-649`), C-15 v1.2 (`:676`, `:709`).
+5. **Mi-2 закрыт.** §17: «первое место» с пометкой и перечнем трёх пакетов-исключений (`contracts.md:759`).
+6. **Mi-3 закрыт.** КД роя: строка `providers/fake` таблицы провайдеров — `providers/recorded.Writer` (`swarm-llm-laws.md:524`), §12.2 — `mvctl laws bump` (EPIC-003) с пометкой (`:662`), попутно §18, строка «фикстуры» (`:962`).
+7. **Mi-4 закрыт.**
+   - C-07 v1.3 (`contracts.md:536`): `response_hash` обязателен всегда, при `error` — `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` и `response_len: 0`.
+   - Значение сверено: `printf '' | sha256sum`.
+   - `response_len` в схеме есть и обязателен (`llm.output.v1.json:34`, `:103`).
+   - При `quarantined`/`filter_error` — хеш полученного ответа.
+   - `api-contracts.md` §2.3.10 (`:432`): `response_raw` — при `valid|partially_rejected|invalid`. Там же разметка сломана, см. N-2.
+   - Строка DoD T-211 — карточка `:125`.
+8. **Mi-5 закрыт.**
+   - T-352 (`:133`): `group.entered_region` без `cause`. Сверено со схемой: `required` — `group, target, position, by, members`, поля `cause` нет.
+   - T-353 (`:134`): адресация по `entity.updated` с `cause=move`. Сверено с `ownership.go:70`, `:79`: строки `gateway` разрешают `move`.
+9. **N-1, N-2 закрыты.**
+   - N-1: `busClosed` в `delivery.go` (`contracts.md:249`).
+   - N-2: `grep -rna` в карточке, в DoD 1 `tasks.md` и в dev-log.
+10. **Бэклог ревью #1.**
+    - П. 1: «девять типов», добавлен `time.syncTime` (`contracts.md:192`).
+    - П. 4: T-446 названа везде.
+    - П. 3 ушёл в T-445.
+    - П. 2 (NUL) — ниже, п. 11.
+11. **NUL в КД роя.**
+    - В HEAD единственный байт `0x00` стоял в строке 615: `SHA-256(system + "\n␀\n" + user)`. В рабочей копии байтов NUL 0.
+    - Формула `prompt_hash` (строка 624) — `SHA-256(system + "\n \n" + user)`, побайтно совпадает с DoD T-218 в плане EPIC-003 (`6adc650` `tasks.md:359`, в дереве `:286`) и со строкой DoD карточки `:60`.
+    - `git diff --numstat` даёт числа, а не «-»: `1024 1015`. Файл для git текстовый (`check-attr`: `text: auto`).
+    - `hash-object --path` (`ee24eb2`) и `--no-filters` (`d71bed7`) различаются. Значит, в коммите блоб нормализуется в LF и файл изменится целиком — это названо в карточке и dev-log.
+    - Во всех ветках эпиков и задач (`develop`, три `epic/*`, девять `task/*`) блоб файла тот же `ba48e59`. Ни одна закоммиченная ветка файл не меняла, и синхронизация develop → epic пройдёт без конфликта нормализации.
+12. **Inline `gitleaks:allow` в таблице провайдеров (`swarm-llm-laws.md:521`).**
+    - **Рендер.** HTML-комментарий стоит в конце третьей ячейки. Внутри комментария нет `|` и нет `--`. У строки таблицы, заголовка и разделителя по 4 вертикальные черты. `markdown-it` (commonmark + table) рендерит все 5 строк таблицы по 3 ячейки. Комментарий остаётся HTML-комментарием и в видимый текст не попадает. Форму допускает `infrastructure.md:632` (§4.5 п. 1).
+    - **Скан `gitleaks dir` (1).** Копии 12 изменённых файлов и карточки, с сохранением относительных путей и с `.gitleaks.toml` ветки, лежат в двух каталогах scratch: с `.gitleaksignore` ветки и без него. `gitleaks dir . -c .gitleaks.toml --redact` — `no leaks found` в обоих.
+    - **Скан `gitleaks dir` (2), контроль.** КД из HEAD без `.gitleaksignore` — `leaks found: 1`, `generic-api-key`, строка 514. Текущий КД с вырезанным комментарием и без `.gitleaksignore` — `leaks found: 1`, `generic-api-key`, строка 521, отпечаток `Docs/dev-team/architecture/components/swarm-llm-laws.md:generic-api-key:521`. Правило живо, находку гасит именно inline-комментарий. Номер строки (521) совпадает с отпечатком в `.gitleaksignore`, так что при снятом комментарии страховка для скана индекса остаётся.
+    - **Скан истории по диапазону ветки** здесь невозможен: коммита нет. Это проверка **после коммита**: `make secrets-scan` на ветке T-444. Ожидание — 0 находок. Коммит покажет весь КД роя добавленным, и строка 521 должна погаситься inline-комментарием.
+13. **Версии и история C-05/C-11/C-12/C-15, `response_hash` при `error`, `api-contracts.md` §2.3.10** — см. пп. 4 и 7.
+14. **CRLF.**
+    - У всех 13 файлов (12 изменённых и карточка) число CRLF равно числу строк. Одиночных LF и CR нет, файлы оканчиваются `\r\n`, байтов NUL нет.
+    - В HEAD 11 файлов лежат с LF (нормализованы индексом), КД роя — с CRLF в блобе (был двоичным). После коммита все будут LF в индексе, смешения нет.
+    - `grep -rna allow_external_players Docs/dev-team/architecture Docs/dev-team/analysis schemas/` — одно совпадение, `components/swarm-llm-laws.md:992`: запись истории §20 п. 10 с пометкой.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `Docs/dev-team/architecture/contracts.md:198` (§0), `:735` (§16 п. 8), `:733`, `:737`; `Docs/dev-team/plan/ownership.md:9`, `:10`, `:82` (§3 п. 4), `:84` (§3 п. 6); план `6adc650` `EPIC-003-swarm-llm-laws/tasks.md:8`, `:38`, `:104`, `:413` | Мягкий режим согласован по существу, но **кто принимает правку** назван по-разному. (1) `cmd/mvctl/main.go` до T-446: контракт и карта требуют приёмки tech-lead#1 (`:735`, `ownership.md:9`, `:82`). План EPIC-003 для T-204 пишет «одна строка в `commands()` с ревью tech-lead#2» (`:104`), и T-221, T-205 идут «по правилу T-204» (`:413`). Шапка плана говорит прямо: «Чужие пути (`cmd/**` …) — не "PR через tech-lead#1"» (`:8`). Строк DoD для EPIC-003 об этом в карточке нет. (2) Строки реестра: §0 `:198` — «с приёмкой tech-lead#1 (строки реестра — ещё и с ревью system-architect)», а §16 п. 8 `:733`, `:737`, `ownership.md:10` и §3 п. 6 `:84` — только ревью system-architect. Работу это не блокирует, но при приёмке T-204 файл EPIC-001 изменят без того, кого называет контракт | Выбрать одну формулу и записать её везде. Например: «приёмка тимлида эпика задачи, правка файла EPIC-001 — с ревью tech-lead#1». Или оставить приёмку tech-lead#1, но тогда добавить в карточку строки DoD EPIC-003: T-204, T-205, T-221 — «до T-446 строка в `commands()` — в ветке задачи, правку `cmd/mvctl/main.go` принимает tech-lead#1 (§16 п. 8)». Строки реестра: убрать «приёмку tech-lead#1» из §0 `:198` или добавить её в §16 п. 8 и §3 п. 6. Для EPIC-003 `:38` — одной фразой в DoD: мягкий режим разрешает строки своих типов в блоке EPIC-003 `registry.go` в ветке задачи с ревью system-architect, а путь через задачу EPIC-001 остаётся допустимым |
+| Mi-2 | Minor | `Docs/dev-team/plan/ownership.md:26` (строка `test/e2e/**`, «Привязка»); `Docs/dev-team/epics/EPIC-001-foundation/tasks/T-444.md:124-127`; план `6adc650` `EPIC-003-swarm-llm-laws/tasks.md:884-888` | Привязка перечисляет `group-3x30` только за EPIC-002 T-070 и EPIC-004 T-357. В плане EPIC-003 есть **T-251** «e2e I2: `group-3x30`, инъекции через память, повтор S6» — третий вариант `group-3x30`, на настоящем рое. Кроме того, T-251 дополняет `injections-10`, который привязка отдаёт T-243. Правило префикса коллизию предотвратит, но перечень выдаёт себя за полный, а строки DoD у T-251 нет — тимлид EPIC-003 не получит имя файла | В строку `:26` добавить: `group-3x30` — ещё EPIC-003 T-251 (`swarm_group3x30_test.go`); инъекции через память — T-251 в `swarm_injections10_test.go` (файл T-243). В карточку — строку DoD T-251 с именами файла и функций `TestSwarmGroup3x30…` |
+| Mi-3 | Minor | `Docs/dev-team/plan/ownership.md:26` (правило имён) | Правило снимает коллизии имён в общем пакете префиксом, но одно имя префиксовать нельзя: `TestMain` в пакете может быть только одна. Сегодня в `test/e2e` его нет. У e2e, которые собирают бинарник (`build(t)` в `empty_world_test.go:72`), естественно вынести сборку в `TestMain`, и две ветки эпиков, сделавшие это независимо, сломают сборку пакета на контрольном слиянии. Это ровно тот класс конфликта, который Ma-3 закрывал | Добавить в правило: «`TestMain` пакета `e2e_test` — только EPIC-001; владелец сценария его не заводит, а общую подготовку (сборка бинарника один раз и т. п.) просит задачей EPIC-001 или делает через `sync.Once` в своём файле с префиксом» |
+| N-1 | Nit | `Docs/dev-team/plan/ownership.md:26` (обоснование «Почему префикс, а не подпакеты») | «общие помощники живут в `_test.go` пакета `e2e`». На деле тестовые файлы — пакет `e2e_test` (`empty_world_test.go:12`, `lifecycle_test.go:6`, `stubs_v0_test.go:16`, `signal_*_test.go:3`), в пакете `e2e` только `doc.go`. Вывод верен — тестовые файлы не импортируются ниоткуда, — но исполнитель, который напишет свой файл как `package e2e`, общих помощников не увидит | «пакета `e2e_test`»; в правило имён — «файлы сценариев — `package e2e_test`» |
+| N-2 | Nit | `Docs/dev-team/analysis/api-contracts.md:432` (§2.3.10) | Вставка итерации 2 «`response_hash (при `error` — хеш пустой строки, C-07 v1.3)`» стоит внутри перечня в обратных кавычках. Внутренние кавычки у `error` закрывают и снова открывают кодовый фрагмент: `markdown-it` показывает `error` обычным текстом между двумя кодовыми фрагментами | Убрать обратные кавычки вокруг `error` внутри перечня (как у соседнего `valid|partially_rejected|invalid`) |
+| N-3 | Nit | `Docs/dev-team/plan/ownership.md:10` против `contracts.md:731-733`, `ownership.md:82` (§3 п. 4 (а)) | Строка `:10`: «сборку `Default()`, `sources.go` и изменение API пакета — только задачей EPIC-001». §16 п. 8 и §3 п. 4 (а) включают `shared/contracts/sources.go` в группу, где точечное дополнение разрешено в ветке задачи с ревью system-architect. Планы сегодня не пользуются этим для `sources.go` (EPIC-003 T-256 отдаёт его EPIC-001, `:836`), так что расхождение пока только в тексте | Либо в §16 п. 8 и §3 п. 4 (а) вынести `sources.go` к «только EPIC-001», либо в `:10` оставить «только EPIC-001» за сборкой `Default()` и API |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 3 · Nit: 3.
+
+Все замечания ревью #1 закрыты по существу, регрессий от исправлений не найдено.
+- Ma-2: мягкий режим согласован с §0, C-01 v1.4, C-14 и планами EPIC-002/EPIC-004. Остаток — кто именно принимает правку (Mi-1).
+- Ma-3: правило имён выполнимо на текущем `test/e2e`.
+- NUL убран, формула совпадает с DoD T-218.
+- Inline `gitleaks:allow` не ломает таблицу и гасит находку, контроль жив.
+
+Minor и Nit не блокируют. Их можно закрыть в этой ветке до коммита одной короткой правкой — оставшиеся строки DoD и две фразы в `ownership.md:26` — или передать тимлидам строками DoD при синхронизации планов.
+
+### Проверка после коммита
+
+- `make secrets-scan` на ветке T-444: 0 находок. КД роя в коммите изменится целиком, строку 521 должен погасить inline-комментарий.
+- `git show --stat` коммита: у `swarm-llm-laws.md` числа строк, а не `Bin`.
+
+### Предложения в бэклог
+
+1. Коммит, нормализующий КД роя в LF, внести в `.git-blame-ignore-revs` (файла в репозитории нет — завести, владелец `.gitattributes`/гигиены — EPIC-001), иначе `git blame` по КД роя будет указывать на T-444 для всех 1024 строк.
+2. Разделитель `prompt_hash`. Байт NUL в HEAD, скорее всего, — след экранирования `"\n\0\n"`, превращённого инструментом в настоящий байт, а не пробела. Решение «пробел» сейчас совпадает с планом T-218 и ничего не ломает: издателя нет. Если EPIC-003 захочет разделитель, который не может встретиться в тексте секций, решать нужно до T-218, а не после первых записей `testdata/recordings`.
+3. `FakeState` не имеет константы `ReasonLevelViolation` (`shared/testkit/state/state.go:60-64`). Правка T-056 по C-02 v1.5 добавит экспортируемую константу двойника. Это расширение, а не смена сигнатуры, но стоит упомянуть его в отчёте T-056 для потребителей (§3 п. 8).
+
+### Риски и допущения
+
+- Планы сверены по закоммиченным веткам эпиков на момент ревью (`8768980`, `6adc650`, `f7a4f22`). Незакоммиченные правки в рабочих папках задач не смотрел. Если в какой-то из них правится КД роя, после коммита T-444 возможен конфликт нормализации LF.
+- Раздела T-446 в `tasks.md` рабочей папки нет, карточка T-446 заведена оркестратором на develop (`state.js`). Ссылки T-444 на T-446 считаю разрешимыми после синхронизации.
+- Проверка рендера — `markdown-it` (commonmark + table). Рендер GitHub/GFM для HTML-комментария в ячейке ведёт себя так же: `|` внутри комментария нет. Отдельно на GitHub не проверял.
+- Скан `gitleaks dir` по копиям не равен скану содержимого индекса. Номера строк при нормализации CRLF → LF не меняются, поэтому отпечаток 521 для скана индекса считаю верным. Подтверждение — `make secrets-scan` после коммита.
+
+## T-453 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ветка `task/T-453-gitleaks-env-example-ci-develop` от эпика `ab6cb1d`, коммитов в ветке нет, всё не закоммичено.
+Изменения: `.env.example`, `.gitleaksignore`, `.github/workflows/go.yml`, `Makefile`, `infrastructure.md` (§2.2, §3.1,
+§4.1 п. 5, §4.2), раздел T-453 в `tasks.md`, карточка `tasks/T-453.md`, `dev-log.md`. В `artifactsDir` правки только
+ожидаемые по составу задачи. Файлы владельца (`.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/`,
+`.github/workflows/qwen-*`) в рабочей папке не изменены. `git diff --check` чисто.
+
+### Что проверено
+
+1. **Ложное срабатывание** (gitleaks v8.30.1 = пин `build/versions.env`). Копии в моём скретче, пути относительные,
+   `--config=.gitleaks.toml`:
+
+   | # | Копия | Итог |
+   |---|---|---|
+   | A | изменённые `infrastructure.md` и `.env.example` (CRLF рабочей копии) + `.gitleaksignore` ветки | no leaks |
+   | B | то же без `.gitleaksignore`, `.env.example` → `env-example.txt` (мимо исключения путём) | no leaks |
+   | C | как B, но LF (как в checkout CI) | no leaks |
+   | D / E | контроль: комментарий `MV_LLM_NUM_CTX` возвращён в строку, CRLF / LF, без `.gitleaksignore` | 2 находки: `env-example.txt:187`, `infrastructure.md:551` |
+   | D2 | мутант D с `.gitleaksignore` ветки | 1 находка `infrastructure.md:551`: построчного отпечатка больше нет, защита держится на правке |
+   | F / G / H | два новых комментария убраны (F), затем имена `MV_MINIO_USE_SSL`/`MV_EMBED_MODEL` заменены на слова вне стоп-листа (G), те же имена с комментариями T-453 (H) | F — 0; G — 1 находка (пара `MV_NEO4J_PASSWORD`); H — 0 |
+
+   Без комментариев защита этих пар действительно держится только на стоп-словах и энтропии. По исходнику правила
+   (`cmd/generate/config/rules/generic.go` v8.30.1) `#` не входит ни в префикс `[\x60'"\s=]{0,5}`, ни в захват, так что
+   строка комментария разрывает совпадение при любом конце строки. Перебор всех пустых `ИМЯ=` с ключевым словом правила
+   в имени, по `.env.example` и по всему `infrastructure.md`: за каждой следующая непустая строка начинается с `#`.
+   Две пары `ИМЯ=` → `ИМЯ=значение` без комментария (`MV_LLM_MODELS_DIR`, `MV_TELEGRAM_ALLOWED_USER_IDS`) ключевых слов
+   не содержат.
+2. **Скан истории.** Добавленные строки диффа, прогнанные через `gitleaks stdin`, — no leaks. Строка
+   `f8759b0…:520` на месте (`.gitleaksignore:24`). `f8759b0` — предок `HEAD` и `develop`, но не `main`: PR `develop` →
+   `main` её увидит, отпечаток нужен. `gitleaks git` с `.gitleaksignore` ветки: `integration/mvp-1..HEAD` (19,7 МБ) —
+   no leaks, `develop..HEAD` — no leaks. **Синхронизация с эпиком** смоделирована `git merge-file` (база `ab6cb1d`,
+   эпик `bde9348`, файл задачи в LF). Конфликт один, ровно в блоке T-399. Правка T-444 (`swarm-llm-laws.md` 514 → 521 и
+   её комментарий) сливается сама. Рецепт «блок берётся из ветки задачи» верен, если брать именно конфликтный фрагмент
+   (N-1).
+3. **Эталон §4.2 против `.env.example`.** Блок кода §4.2 и файл нормализованы: строки `ИМЯ=значение` без инлайн-
+   комментария, пометка `[required]` из блока комментария над переменной. 60 = 60 переменных в том же порядке,
+   `diff` пустой, `[required]` — 7 и 7. Три изменённые строки и комментарии над ними совпадают побайтно (без CR).
+   `bash scripts/compose-lint.sh` — ok (15 сервисов, 8 правил). `--fixtures` — ok (52 bad, 10 good). `.env` в рабочей
+   папке нет. `go run ./cmd/mvctl env check` — 67 переменных, rc=0.
+4. **`go.yml`.** `yaml.safe_load`: `push` — `main`, `develop`, `integration/**`; `pull_request` — те же и `epic/**`.
+   `actionlint` — rc=0. `image` по-прежнему только на `push` в `main`/`integration/mvp-1` (`go.yml:519-521`): на
+   `develop` не запускается. §3.1 (`infrastructure.md:332`) совпадает с `go.yml`, включая фильтр `paths` у `push` и
+   его отсутствие у `pull_request`. Про шапку — Mi-1.
+5. **`Makefile` BASE.** Задания CI вызывают только `make test-race` и `make scripts-parity`, а `security` сканирует
+   сам (`go.yml:370-396`). Замена умолчания на CI не влияет. `make secrets-scan BASE=no-such-branch` — текст отказа,
+   rc=2. `make secrets-scan BASE=develop` — rc=0. `develop` разрешается на любой ветке, отказ `make ci BASE=develop` не
+   ломает. Что на самой `develop` нужен `BASE=main`, написано в `Makefile:85-88` и в §2.2 (`infrastructure.md:163`).
+   Пустой диапазон отказ не ловит (N-2). Это проявилось во время ревью: оркестратор слил эпик в `develop` (`e688416`),
+   и `develop..HEAD` стал пустым.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `.github/workflows/go.yml:8-10` | Шапка утверждает как факт, что `develop` — защищённая ветка с этими обязательными проверками. Защиты пока нет: в бэклоге самой задачи (`tasks.md`, раздел T-453) владелец её только должен настроить, `CODEOWNERS:10-15` называет лишь `main` и `integration/mvp-1`, а на `origin` `develop` ещё нет. Пункт 4 просил, чтобы шапка описывала факт. | «required checks of `main` and `integration/mvp-1`; `develop` joins them once its protection is set (T-453 backlog)». Или оставить как есть и снять оговорку, когда владелец включит защиту. |
+| Mi-2 | Minor | `Docs/dev-team/architecture/infrastructure.md:467`, `:616` | В правиле §4.1 п. 5 и в строке проверки §4.2 перечислены `KEY`, `PASSWORD`, `SECRET`, `TOKEN`, `AUTH`. У `generic-api-key` v8.30.1 идентификаторов больше: `access`, `auth`, `api` (с учётом регистра: `api`/`Api`/`API`), `credential`, `creds`, `key`, `passwd`/`password`, `secret`, `token`. Пустая `MV_X_ACCESS=`, `MV_X_CREDENTIALS=` или `MV_X_API=` перед строкой `ИМЯ=значение` правилу формально не противоречит, но склеится. Сегодня все такие имена содержат ещё и `KEY`, поэтому находки нет. Предложенная в бэклог машинная проверка в правиле 7 унаследует неполный список. | Перечислить идентификаторы правила полностью, со ссылкой на версию gitleaks, в обоих местах. Или сформулировать проще: «за пустой переменной следующая непустая строка — комментарий», без списка. |
+| N-1 | Nit | `Docs/dev-team/epics/EPIC-001-foundation/tasks.md`, раздел T-453, «Состав» п. 3 | Рецепт синхронизации «блок берётся из ветки задачи» верен, но при разрешении целым файлом (`checkout --ours`/`--theirs`) потеряется правка T-444: отпечаток `swarm-llm-laws.md:521` и комментарий к нему. Моделирование показало: конфликт только в блоке T-399. | Дописать: «только конфликтный фрагмент блока T-399; правка T-444 выше сливается сама». |
+| N-2 | Nit | `Makefile:244-251` | Отказ ловит неразрешимый `BASE`, но не пустой диапазон. На `develop` и на ветке, уже слитой в `develop`, `make secrets-scan` пишет «0 commits scanned» и выходит с 0. Это описано, но в `make ci` незаметно. | По желанию: предупреждение в stderr (не отказ), если `git rev-list --count "$(BASE)..HEAD"` равен 0, с подсказкой `BASE=main`. Можно в бэклог. |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 2.
+
+Ложное срабатывание устранено правкой данных, а не отпечатком. Оба контрольных мутанта (CRLF и LF) находку
+возвращают, в том числе с `.gitleaksignore` ветки. Скан истории после коммита не нарушится: добавленные строки чисты,
+коммитный отпечаток на месте и нужен. Эталон и файл совпадают, линтеры зелёные, `image` на `develop` не
+запускается. Mi-1 и Mi-2 касаются только документации. Их можно закрыть в этой же задаче без повторного ревью или
+перенести в бэклог.
+
+### Предложения в бэклог
+
+1. Машинная проверка §4.1 п. 5 в правиле 7 (уже в бэклоге T-453) — с полным списком идентификаторов `generic-api-key`
+   (Mi-2) или без списка.
+2. Предупреждение о пустом диапазоне в `make secrets-scan` (N-2), если его не сделают в задаче.
+3. `infrastructure.md:734` (критерий F-1) до сих пор приводит `--log-opts="integration/mvp-1..HEAD"`. Это историческая
+   запись, но её стоит отметить при решении судьбы `integration/mvp-1` (уже в бэклоге T-453).
+
+### Риски и допущения
+
+- CI на `develop` живьём не проверялся: на `origin` нет `develop`. Триггеры проверены разбором YAML и `actionlint`.
+- Скан истории «после коммита» смоделирован сканом добавленных строк диффа и диапазонов до коммита, а не настоящим
+  коммитом (коммиты запрещены). `gitleaks git` берёт только добавленные строки патча, контекстные строки
+  (`MV_LLM_API_KEY=`) в захват не попадают.
+- Как поведёт себя gitleaks-action на `push` в `develop` при слиянии эпика через `--no-ff` (какой диапазон он возьмёт),
+  не проверялось: задача этого не меняет.
+- Скретч-копии удалены по точному пути своего каталога.
+
+## T-449 · ревью #1 · 2026-09-13 · code-reviewer#2 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-449 «Документы по решениям system-architect (ревизия 4, продолжение)» (M, `contract-change`, только документы). Работа не закоммичена и лежит в `.worktrees/T-449`, ветка `task/T-449-docs-architect-decisions`. HEAD ветки — `bde9348`. Эпик ушёл вперёд до `8613294`, но только в файлах оркестратора (`state.js`, `journal.md`, `dashboard.html`, `.dev-team.json`). Сравнение шло через `git diff` рабочей копии. Изменены 10 файлов: `contracts.md` v0.12, КД State, КД шлюза, `data-model.md`, ADR-001, ADR-005, ADR-012, `ownership.md`, `tasks.md`, `dev-log.md`. Новый файл — карточка `tasks/T-449.md`. Кода, схем и `.golangci.yml` в diff нет, коммитов вне ветки нет.
+
+Сверка с кодом (через `git show`, только чтение):
+- `epic/EPIC-002-state-mechanics` (T-053 слита, `25aa305`; T-050 — `8165273`): `internal/mechanics/{types,changes,actor,rules,resolve,formula}.go`, `shared/entity/{hash,ops,attrs,types,entity_test}.go`.
+- `epic/EPIC-001-foundation`: `schemas/events/llm.output.rejected.v1.json`, `_common.json`, `.golangci.yml`, `shared/entity` (импорт `shared/eventbus`).
+- `epic/EPIC-003-swarm-llm-laws`: `internal/llm/config.go` — действующее правило T-206.
+- `epic/EPIC-004-gateway-bot`: `schemas/events/group.*.v1.json`, `shared/contracts/ownership.go`.
+- Незакоммиченная таблица `.worktrees/T-450/testdata/llm/local-endpoints.tsv`.
+
+Не делал: `git add/commit`, `make up/down`, `make test-integration`, docker. Стенд `:8888` не трогал, `.env` не открывал.
+
+### Что проверено
+
+1. **C-03 v1.3 против `internal/mechanics`.** Совпадает:
+   - поля `Actor.Kind`, `Actor.Version int64`, `Action.At time.Time` (`types.go:53`, `:60`, `:140`);
+   - сигнатура `Rules.FleePosition(worldID, regionID string) string` (`rules.go:717`);
+   - `Stats` ставит `Kind` только NPC, `Version` не ставит (`rules.go:329-345`);
+   - `ActorFromEntity` ставит `Version: e.Version` (`actor.go:30`);
+   - `ExpectedVersion` — версия меняемого актора (`changes.go:208-219`);
+   - пустой `At` у павшего NPC — ошибка (`changes.go:224-227`), `Resolve` `At` не читает;
+   - при `flee` `ChangesFor` возвращает `nil, nil` (`changes.go:76-80`), `last_damager` не пишет.
+
+   Расходится: `Version == 0` против `<= 0` в коде (Ma-2). Не сказано, что NPC без `kind` — ошибка (Mi-6). КД State §5.1 не приведён (Ma-1).
+2. **КД State §3.3 и C-02 против `shared/entity/hash.go`.**
+   - Каноническая форма совпадает с `writeCanonicalOther`, `writeCanonicalNilSlice`, `encodesItself`, `writeCanonicalEncoded`: типизированный `nil` — `null`; `float32` и `[]byte` — через кодировщик; `MarshalJSON`/`MarshalText` — методом; `map` с нестроковыми ключами — через кодировщик.
+   - Исключение трёх контейнеров совпадает: `[]any` и `map[string]any` — ветки `writeCanonical`, `[]map[string]any` — `writeCanonicalNilSlice`.
+   - `TestStateHashOfAGoBuiltWorldMatchesItsWireForm` есть (`hash_test.go:172`).
+3. **§3.2, `append`/`remove`, против `ops.go:223-375`.** Совпадает: объекты сравниваются по `item_id`/`player_id`/`npc_id`, иначе целиком через `sameCanonical`; скаляры при `append` не дедуплицируются, о чём строка и молчит. Строка 165 про no-op не приведена (Mi-2).
+4. **`data-model.md:126`, `flee`, против `Entity.Flee()` (`attrs.go:169-186`).** Совпадает: строка — как есть; целое, в том числе `2.0` с шины, — десятичным текстом; `null` и отсутствие — `("", false)`; иное — канонический текст, на котором формула падает (`formula.go:322-330`, «unknown identifier»).
+5. **C-02, «Исправлено T-050».** `StatusTransitionAllowed` (`types.go:66-71`) и таблица теста (`entity_test.go:220-223`) совпадают: `alive→alive` — `true`, `abandoned→abandoned` — `false`.
+6. **C-02 v1.6.** Заготовка явно помечена как недействующая: «до этого действует v1.5» (`contracts.md:334`). В заголовке C-02 v1.6 нет, в истории — тоже. Верно.
+7. **C-07 v1.4 против схемы T-445.** Сейчас `budget.limit` обязателен, `additionalProperties: false`, `Money{amount: integer, currency: string}`. Текст описывает будущую схему T-250 и честно называет её. Противоречий с действующей схемой нет: издателя облачного бюджета нет. Переменная `MV_LLM_CLOUD_BUDGET_USD_PER_DAY` есть в `.env.example:191`.
+8. **C-15 v1.3 / ADR-005 доп. 2 п. 3 против решения и таблицы T-450.**
+   - Перечень `local`/`invalid`/`cloud` совпадает с решением system-architect по пунктам.
+   - С таблицей T-450 расходится в граничных случаях (Ma-3): числовые записи хоста, отказы формы URL, точка на конце.
+9. **ADR-001 доп. п. 3.** Шаблон `**/internal/swarm/**_test.go` совпадает с `.golangci.yml:222`, `:243` эпика.
+10. **КД шлюза §8.1.** `cause=move` для сущности группы разрешён строкой `gateway`/`group` в `ownership.go:79`. `group_move` в схемах `group.*` EPIC-004 нет. Перемещение группы — одно атомарное предложение «группа и все `alive` участники» (`gateway-and-bot.md:696`), отсюда Mi-5.
+11. **Версии и история.**
+    - Заголовок и запись истории есть у C-03 v1.3, C-07 v1.4, C-14 v1.2a, C-15 v1.3.
+    - Сводка v0.12 с колонкой «Кто прав» есть.
+    - У C-02 нормативные абзацы добавлены без записи истории (Mi-3).
+12. **Записи прошлого.**
+    - Прежний шаблон ADR-001 п. 3 и прежняя формулировка §8.1 сохранены в пометках.
+    - Нарушения: предложение C-07 разорвано вставкой (Mi-1); у записи «Код расходится» изменено время глагола (N-3).
+13. **Пометки «(изм. T-449)».** Есть у всех правок, кроме запятой в `ownership.md:26`. Это редакционная правка по замечанию 4 приёмки T-444, пометка не нужна.
+14. **Гигиена.**
+    - CRLF: у каждого из 11 файлов число CR равно числу строк, байтов NUL нет.
+    - КД роя не менялся: `git diff --quiet`, строка 521 с `gitleaks:allow`.
+    - `gitleaks dir . --redact -c .gitleaks.toml` по копии 11 файлов с `.gitleaks.toml`/`.gitleaksignore` ветки в scratch — `no leaks found`. Копия удалена по точному пути.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Ma-1 | Major | `Docs/dev-team/architecture/components/state-and-mechanics.md:450-460`, `:481`, `:489`; `contracts.md:404` | C-03 «Гарантии» в редакции T-449 говорит: форма совпадает с `internal/mechanics` и с КД State §5.1, «расхождение любого из трёх мест — дефект». §5.1 при этом не тронут. В `Actor` нет `Kind` и `Version`, в `Action` нет `At`, `FleePosition` в списке нет. Строка `:489` по-прежнему утверждает, что «этот раздел и C-03 v1.2 совпадают дословно». Задача сама создала расхождение, которое контракт объявляет дефектом, и EPIC-003, открыв КД, увидит старую форму | В §5.1 добавить `Kind string`, `Version int64` в `Actor`, `At time.Time` в `Action`, `func (r *Rules) FleePosition(worldID, regionID string) string` — с пометкой «(C-03 v1.3; изм. T-449)». В `:489` — «совпадают с C-03 v1.3». Комментарий `Stats` на `:481` — «ставит `Kind` NPC, `Version = 0`» |
+| Ma-2 | Major | `Docs/dev-team/architecture/contracts.md:393`, `:410` (и `:359`) | Текст говорит «`Version == 0` значит «не прочитан»… `ChangesFor` такого актора не меняет», история — «отказывает при `Version == 0`». Код отказывает при `Version <= 0` (`internal/mechanics/changes.go:209`). DoD п. 3 задачи прямо требует «отказ при `Version <= 0`». Отрицательная версия по тексту контракта разрешена, и двойник или вторая реализация, написанные по контракту, её пропустят. Правило приоритета запрещает молча оставлять расхождение | `:393`: «`Version <= 0` (в том числе нулевое значение `Rules.Stats`) — актор без версии, и `ChangesFor` такого актора не меняет». `:410`: «отказывает при `Version <= 0` или пустом `At`…». Комментарий `:359`: «≤ 0 — не прочитан из сущности» |
+| Ma-3 | Major | `Docs/dev-team/architecture/contracts.md:733-735`; `Docs/dev-team/architecture/adr/ADR-005-llm-gateway-providers-models.md:67` | Правило гейта облака (BR-15, SEC-21) сформулировано шире, чем решено в таблице T-450, и в опасную сторону. (1) «однословное имя без точки» — `local`. Буквально под это подпадают `http://2130706433:8080` и `http://0x7f000001:8080`, а значит и `http://134744072:443` или `http://0x08080808:443` — 8.8.8.8 в десятичной и шестнадцатеричной записи. Резолвер с семантикой `inet_aton` пустит такой адрес наружу без облачного флага. Таблица T-450 отвечает `cloud` («a one-word name starts with a letter and holds [a-z0-9_-]»). (2) «`cloud` — всё остальное» относит к облаку `ftp://…`, `http://user:secret@127.0.0.1:8888`, `…?`, `…#`, `%` в хосте, `[127.0.0.1]`, пустой порт `host:`. Таблица и действующий `parseEndpoint` T-206 (`internal/llm/config.go:386-433`) отвечают на них `invalid`. (3) `localhost.` — «имя с точкой», то есть `cloud`, а в таблице — `local` (RFC 6761). При этом `ollama.` в таблице — `cloud`. Контракт называет таблицу единственной, но текст и таблица дают разные ответы, а T-451 пишется по контракту | В C-15 и ADR-005 одинаково: `local` — «однословное имя: метка DNS, первая буква латинская, дальше `[a-z0-9_-]`; числовые записи адреса (одним числом, шестнадцатеричная, восьмеричная, короткая) — `cloud`». `invalid` дополнить: «значение, которое не проходит форму адреса C-15: схема не `http(s)`, данные пользователя, запрос или фрагмент, в том числе пустые, пустой порт, `%` в хосте, скобки не вокруг IPv6». Точка на конце: «у адресов и зарезервированных имён отбрасывается, однословное имя с точкой — `cloud`». Добавить фразу: «граничные случаи, не названные здесь, решает таблица; расхождение текста и таблицы — дефект». Если T-450 закоммитят раньше, достаточно сверить формулировки с её разделом в `tasks.md` |
+| Mi-1 | Minor | `Docs/dev-team/architecture/contracts.md:578-579` | Вставка C-07 v1.4 разорвала прежний пункт `llm.output.rejected`. В HEAD строка `:549` кончалась словами «…а это id событий. Схема `EntityWithName` требует тип, и издатель выдумывал бы тип несуществующей сущности». Теперь второе предложение висит в конце нового пункта «Лимит бюджета», после «Схема — T-250». Обоснование `unknown_entity` оторвано от своего правила, а к бюджету оно отношения не имеет | Вернуть «Схема `EntityWithName` требует тип, и издатель выдумывал бы тип несуществующей сущности.» в конец `:578`, а из `:579` его убрать |
+| Mi-2 | Minor | `Docs/dev-team/architecture/components/state-and-mechanics.md:165` | §3.2 по-прежнему говорит, что no-op в `changed[]` — «равенство `old == new` по `reflect.DeepEqual`». В T-050 сравнение каноническое и учитывает существование пути (`shared/entity/ops.go:449-472`: «compared canonically rather than with reflect.DeepEqual»). Новый абзац C-02 (`contracts.md:333`) говорит «сравнение значений считаются по форме значения». В одном КД и в контракте два разных правила равенства | «no-op (значение не меняет каноническую форму, §3.3, и путь существовал до и после) исключается (изм. T-449, T-050)». Часть про существование пути — ссылкой на C-02 v1.6, если её хотят оставить за T-448 |
+| Mi-3 | Minor | `Docs/dev-team/architecture/contracts.md:319`, `:333`, `:339`, `:345` | В C-02 внесены нормативная «Каноническая форма значений» и закрытие «Код расходится», но ни версии в заголовке, ни записи в истории нет. Приёмка T-444 отметила ровно это у C-14 (замечание 3), и T-449 закрывает его записью v1.2a. Здесь та же ситуация, только с нормой | Добавить в историю C-02 запись вида «v1.5a — 2026-09-13 (T-449): каноническая форма значений и равенство элементов — ссылкой на КД State §3.2–3.3; «статус в то же значение» исправлено T-050; заготовка v1.6 ожидает T-448», в заголовке — «v1.5a». Или явно написать в сводке, почему записи нет |
+| Mi-4 | Minor | `Docs/dev-team/architecture/contracts.md:393` | «Если один пакет несёт несколько ударов по одной цели, вызывающий передаёт цель так, как её оставил предыдущий удар — со здоровьем и версией». Внутри одного пакета версия цели не растёт, а два `ProposedChange` на одну сущность в одном пакете State отвергает целиком (C-02 v1.3, `:331`). Фраза читается как «увеличь версию на следующий удар», и групповой раунд тогда всегда получит `version_conflict` | «…со здоровьем после предыдущего удара и **той же** версией; изменения одной сущности из нескольких вызовов `ChangesFor` вызывающий сливает в один набор (C-02 v1.3)» |
+| Mi-5 | Minor | `Docs/dev-team/architecture/components/gateway-and-bot.md:739` против `:696` и `data-model.md:590` (инвариант 4) | В одной строке таблицы теперь два разных события: `entity.updated` игрока и `entity.updated` группы. Движение группы — одно атомарное предложение на группу **и** всех `alive` участников. Значит, каждый участник получит доставку «сам игрок» по своей сущности и ещё одну «все участники» по сущности группы: два сообщения об одном перемещении, а при N участниках — N+1 у каждого, если читать «все участники» буквально | Разнести на две строки. Для игрока — «сам игрок; при движении группы (есть факт позиции группы с тем же `proposal_id`) не ставится». Для группы — «все участники». Или наоборот, но так, чтобы у перемещения была одна адресация. Это можно передать строкой DoD T-353 |
+| Mi-6 | Minor | `Docs/dev-team/architecture/contracts.md:379`, `:395` | «`ActorFromEntity` читает атрибут `kind`» — но код требует его у NPC и отказывает без него (`internal/mechanics/actor.go:55-63`, `missingAttr`). Для потребителей это новая ошибка v1.3: двойники и фикстуры EPIC-003/EPIC-004, создающие NPC без `kind`, упадут на `ActorFromEntity` | «`ActorFromEntity` читает атрибут `kind`; у NPC он обязателен — без него ошибка, как без `hp`/`def`; `kind` без таблицы трофеев законен» |
+| N-1 | Nit | `contracts.md:733-735` против `ADR-005…:67`; `contracts.md:20` | DoD п. 4 требует «дословно», а совпадает по пунктам: `;` против `,`, «имя сервиса compose:» против «сервис compose,». «Совместимость» в ADR-005 называет ослаблением только однословные имена и `fc00::/7`, без link-local и `*.localhost`. Сводка — без `*.localhost`. Сейчас T-206 признаёт локальными только `localhost`, `host.docker.internal`, loopback и RFC 1918 (`config.go:361-379`) | Скопировать один текст в оба места и перечислить в совместимости всё новое `local`: `*.localhost`, однословные имена, link-local, ULA |
+| N-2 | Nit | `Docs/dev-team/architecture/adr/ADR-001-modular-monolith-topology.md:72` | «ссылка на сущность `EntityRef{ID, Type string}` без `shared/eventbus`», «для `guardian` — ещё и `shared/eventbus`». Но `guardian.InvariantView` работает с `*entity.Entity`, а `shared/entity` импортирует `shared/eventbus` (`attrs.go:10`, `entity.go:26`, `ops.go:11`). Запрет depguard — на прямой импорт, транзитивно страж от шины не свободен | «прямой импорт `shared/eventbus` стражу запрещён; транзитивно через `shared/entity` он остаётся» |
+| N-3 | Nit | `Docs/dev-team/architecture/contracts.md:339` | Запись прошлого переписана в прошедшем времени: «отвечает» стало «отвечал», «закреплено» — «было закреплено». Смысл сохранён, но это уже не текст v1.4 | Оставить исходную фразу как есть под зачёркнутым заголовком, а «Исправлено T-050» дать отдельным предложением перед ней |
+| N-4 | Nit | `Docs/dev-team/architecture/contracts.md:579` | `{amount: центы, currency: "USD"}`, но `Money` в `_common.json` не фиксирует валюту и знак (`currency` — любая непустая строка, `amount` — любое целое). Не сказано, закрепляет ли T-250 в `if/then` `currency: const USD` и `amount ≥ 0` | Одной фразой указать для T-250: «`currency` — `const: "USD"`, `amount` — `minimum: 0`», или что это не проверяется схемой |
+| N-5 | Nit | `Docs/dev-team/architecture/contracts.md:334` (в), `state-and-mechanics.md:178` | «Целое по модулю больше 2^53». Безопасный диапазон I-JSON — ±(2^53−1). Само 2^53 представимо, но 2^53+1 уже неотличимо от него. Граница — решение T-448, и в заготовке её стоит назвать точно | «по модулю больше 2^53−1» или «≥ 2^53», как решит T-448 |
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 3 · Minor: 6 · Nit: 5.
+
+- Ma-1 и Ma-2 — дешёвые правки текста. Без них C-03 v1.3 расходится с кодом T-053 и с КД State §5.1, а контракт сам называет такое расхождение дефектом.
+- Ma-3 — формулировка гейта облака. Текст пропускает числовые записи хоста в `local`, и T-451, написанный по тексту, а не по таблице, ослабит SEC-21.
+
+Остальное — точность и связность. Mi-1 — случайная порча записи прошлого, закрывается одной правкой. Mi-5 можно передать строкой DoD T-353, но тогда нужно явно записать это в карточке.
+
+При ревью #2 проверю только исправления и регрессию от них.
+
+### Предложения в бэклог
+
+1. **КД роя, `swarm-llm-laws.md:533`.** Строка `budget{kind,limit,window}` после C-07 v1.4 неполна для `kind=cloud`. Файл нельзя трогать в T-449 из-за отпечатка gitleaks на строке 521. Править вместе с T-250 или со следующей нормализацией КД роя, с перепроверкой `.gitleaksignore`.
+2. **`infrastructure.md:360`, `:622`.** Определение «локального» — старое: loopback, `host.docker.internal`, RFC1918. Файл в diff T-450, и привести его стоит там же, ссылкой на C-15 v1.3.
+3. **C-03, `contracts.md:400`.** «Состояние реализации на 2026-09-11» говорит, что `Resolve`/`ChangesFor` возвращают `ErrNotImplemented`. В ветке EPIC-002 T-053 уже слита. Добавить датированную строку при слиянии EPIC-002 в эпик-родитель или develop.
+4. **`ChangesFor` ставит ещё и `loot_claimed_by` у павшего NPC** (`changes.go:156`). Ни C-03 v1.3, ни пометка ADR-012 п. 4 его не называют. Стоит перечислить полный набор путей в C-03, чтобы двойник встречи сверялся с одним списком.
+
+### Риски и допущения
+
+- Таблица T-450 не закоммичена, её граничные решения могут ещё поменяться. Ma-3 опирается на то, что расширение `invalid` и правило «имя начинается с буквы» останутся. Если T-450 изменит их, сверять придётся заново.
+- Существование пути в сравнении no-op (Mi-2) частично относится к C-02 v1.6 (T-448). Какую часть вносить сейчас, решает system-architect.
+- `gitleaks dir` по копии не равен скану индекса. Строки КД роя не менялись, поэтому отпечаток 521 считаю неизменным. Подтверждение — `make secrets-scan` после коммита.
+
+## T-449 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ревью #2 задачи T-449, итерация 2 по ревью #1 (0 / 3 / 6 / 5). Проверял только исправления и регрессию от них. Работа не закоммичена: `.worktrees/T-449`, ветка `task/T-449-docs-architect-decisions`, база `bde9348`. В diff 11 изменённых файлов и новая карточка `tasks/T-449.md`. Состав файлов тот же, что в итерации 1, кода и схем нет.
+
+Сверка (только чтение):
+- `epic/EPIC-002-state-mechanics` (кончик `24f1baf`): `internal/mechanics/{changes,actor,types,rules}.go`, `shared/entity/ops.go`;
+- `epic/EPIC-003-swarm-llm-laws`: `internal/llm/config.go` (`isLocalHost`, `parseEndpoint` T-206);
+- `.worktrees/T-448`: карточка `tasks/T-448.md` (изменена в 14:32, `contracts.md` T-449 — в 14:39), `shared/entity/ops.go` (`changes`, `createdAncestor`);
+- `.worktrees/T-450`: `testdata/llm/local-endpoints.tsv` (107 случаев: 36 `local`, 32 `cloud`, 39 `invalid`), `scripts/lib/llm-endpoint.sh`;
+- схемы `entity.create.proposed`, `entity.created` в T-449.
+
+Не делал: `git add/commit`, docker, `make up/down`, стенд `:8888`. `.env` не открывал.
+
+### Закрытие замечаний ревью #1
+
+| # | Итог | Проверка |
+|---|---|---|
+| Ma-1 | закрыто | КД State §5.1 (`state-and-mechanics.md:452-453`, `:463`, `:484-485`): `Actor.Kind`, `Actor.Version`, `Action.At`, `Rules.FleePosition`, комментарий `Stats`. Поля совпадают с C-03 (`contracts.md:376-394`) и с кодом: `types.go:53`, `:60`, `:140`; `rules.go:343-345`, `:717`; `actor.go:30`, `:60-61`. Фраза «совпадают дословно с C-03 v1.2» заменена (`:493`), строка C-03 в §8 — v1.3 (`:755`). Остаток — R2-N-4 |
+| Ma-2 | закрыто | `Version <= 0` в норме (`contracts.md:412`), в комментарии поля (`:378`) и в истории (`:429`). Код: `changes.go:209` — `if who.Version <= 0` |
+| Ma-3 | закрыто | C-15 (`contracts.md:751-759`) и ADR-005 (`:67-75`) сравнил построчно: тексты совпадают, различаются только заголовок абзаца и хвост «Решение и совместимость — ADR-005». Есть принцип, пять пунктов и «при расхождении текста и строки таблицы права таблица». Все 107 строк таблицы T-450 укладываются в классы текста. Числовые записи хоста — `cloud`, однословное имя начинается с буквы, отказы формы — `invalid`, `localhost.` — `local`, `ollama.` — `cloud`. Решение по `127.0.0.1.` (`cloud`) записано однозначно: снятие точки ограничено зарезервированными именами, а IPv4 с точкой назван явно. В таблице T-450 строки на этот случай нет. Шапка таблицы и `llm-endpoint.sh:545` (`bare=${host%.}`) снимают точку и у адресов. Это ожидаемое расхождение до итерации T-450, не дефект T-449 (см. R2-N-6 и риски) |
+| Mi-1 | закрыто | предложение про `EntityWithName` стоит в конце пункта `llm.output.rejected` (`contracts.md:597`), в пункте «Лимит бюджета» его нет |
+| Mi-2 | закрыто | §3.2 (`state-and-mechanics.md:165`): «путь был и до, и после (или не был ни до, ни после), и значение в канонической форме не изменилось». Это `hadOld == hasNew && sameCanonical(old, updated)`, `shared/entity/ops.go:465` в EPIC-002 |
+| Mi-3 | закрыто | в заголовке C-02 есть v1.5a и v1.6 (`contracts.md:319`), история — `:364` (записи v1.5a и v1.6), в сводке — строки `:15`, `:16`. Остаток — R2-N-1 |
+| Mi-4 | закрыто | «со здоровьем после предыдущего удара и **той же** версией… сливает в один набор (C-02 v1.3)» (`contracts.md:412`) |
+| Mi-5 | закрыто | КД шлюза §8.1 разнесён на две строки (`gateway-and-bot.md:739`, `:740`). Признак — scope игрока, а не поиск факта группы. Сверил с §7.4 (`:694-696`): игрок в групповом scope перемещается только пакетом группы, `enter/leave` не от лидера получает `not_leader`. `group.join` меняет позицию под `cause` группы, а не `move`. У одного перемещения одна адресация, двойной доставки нет. Тест — строкой DoD T-353 в карточке |
+| Mi-6 | закрыто | `contracts.md:414`; код `actor.go:56-62` |
+| N-1 | закрыто | один текст в двух местах. «Совместимость» ADR-005 (`:77`) перечисляет всё новое `local` относительно T-206. Остаток — R2-N-2 |
+| N-2 | закрыто | `ADR-001…:72` |
+| N-3 | закрыто | запись v1.4 «Код расходится» совпадает с HEAD, зачёркнут только заголовок (`contracts.md:358`). «Исправлено T-050 (v1.5a)» стоит перед ней отдельным предложением. Рендер `markdown-it` (commonmark, strikethrough) корректен, в том числе курсивная вставка v1.6 |
+| N-4 | закрыто | `contracts.md:598`, история `:608` |
+| N-5 | закрыто | `state-and-mechanics.md:178`, `contracts.md:353` |
+
+### C-02 v1.6
+
+- **Текст против карточки T-448.** Пункты 4–6 карточки («Форма `changed[]` и правило догона», «`proposal_id` в `entity.create.proposed`», «Числа по модулю от 2^53») сравнил `diff`, сняв пометки «(Правка system-architect#1…)». Совпадают дословно, отличие одно — вставка «вступает в силу со слиянием T-448». Пункты 1–3 и 7–9 внесены по смыслу: заголовок, «Вход/Выход State», пример `/forget`, «Гарантии», история. Карточка T-448 старше вставленного текста, поэтому расхождения «карточка новее» нет.
+- **Граница.** Везде `|x| ≤ 2^53−1`, отказ при `|x| ≥ 2^53`: `contracts.md:353`, `:15-16`, `:364`; `state-and-mechanics.md:178`.
+- **`entity.created.proposal_id`** обязателен: `contracts.md:323`, `:352`, история, сводка.
+- **Запрет чисел для `attributes`** создания: `contracts.md:353`, история, сводка. В КД — неполно (R2-N-3).
+- **Правило догона.** Замена промежуточного узла, «`a[n]` за концом — повреждённый факт, `state_divergence`», добавление без дедупликации, удаление отсутствующего пути как no-op — есть (`contracts.md:338`). Порядка элемента предка нет (R2-Mi-2).
+- **Пометки «вступает в силу».** Стоят в заголовке, в трёх новых пунктах, в «Статусе в то же значение», в истории и в сводке. В трёх нормативных местах их нет (R2-Mi-1).
+
+### Новые противоречия между документами
+
+Новых нет:
+- `contracts.md` C-03 v1.3, КД State §5.1/§5.4/§8, ADR-012 п. 4 и `data-model.md` §3.3 согласованы между собой и с кодом EPIC-002.
+- КД State §3.2 (строка `set`: `old` «или `null`») и §8 (строка C-02: «для `append` — `old: null`») описывают действующую форму v1.5. Их меняет T-448 в ветке EPIC-002, при слиянии эпиков будет текстовый конфликт. Автор это записал в карточке («КД State в двух эпиках»).
+
+### Гигиена
+
+- CRLF: у каждого из 12 файлов число CR равно числу строк, файл кончается `0d0a`, байтов NUL нет.
+- `swarm-llm-laws.md` не изменён (`git diff --quiet bde9348`), в строке 521 `gitleaks:allow` на месте.
+- `gitleaks dir . --redact -c .gitleaks.toml` по копии 12 файлов с `.gitleaks.toml` и `.gitleaksignore` ветки (scratch, папка `t449r2-gl.*`) — `no leaks found`. Копия удалена по точному пути.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| R2-Mi-1 | Minor | `Docs/dev-team/architecture/contracts.md:322`, `:323`, `:356` | Три нормы v1.6 написаны как действующие, без пометки «вступает в силу со слиянием T-448». (1) «Вход State»: `proposal_id` «обязателен в обоих типах предложений (v1.6)». (2) «Выход State»: `entity.created {…, proposal_id}`, «обязателен с v1.6». (3) «Гарантии»: дедупликация «для обоих типов предложений (v1.6)» и «применение `changed[]` по правилу догона воспроизводит `StateHash` State (v1.6)». Код и схемы эпика пока другие: у `entity.create.proposed.v1.json:22` и `entity.created.v1.json:13` `proposal_id` не в `required`, а `ApplyOps` пишет `remove` ключа как `new: null`. «Гарантии» — то место, по которому EPIC-003/004 пишут read-model против `FakeState`. Отсылка «(v1.6)» к заголовку расшифровывается, но карточка обещает пометку «у каждого пункта v1.6» | В этих трёх местах писать «(v1.6, вступает в силу со слиянием T-448)» или вынести обе фразы «Гарантий» отдельным предложением с той же пометкой |
+| R2-Mi-2 | Minor | `Docs/dev-team/architecture/contracts.md:336` | Решение system-architect по T-448, п. 3: «Элемент предка идёт **после** элементов путей, и этот порядок — часть формы, потому что догон применяет элементы по порядку». В текст v1.6 это не попало: ни в C-02, ни в «Текст C-02 v1.6» карточки T-448 (п. 4). Сказано только «`changed[]` несёт и элемент предка по той же форме». Код T-448 (`shared/entity/ops.go`, `changes`: `t.touch(ancestor)` после прохода по путям) порядок держит, а вторая реализация State (T-055) по контракту о нём не узнает | Дописать после «…по той же форме»: «элемент предка, которого нет среди затронутых путей, идёт после их элементов (порядок — часть формы)». Если архитектор считает порядок ненормативным (при правиле догона хеш от него не зависит), так и записать, а решение по T-448 п. 3 поправить |
+| R2-N-1 | Nit | `Docs/dev-team/architecture/contracts.md:3` | Строка версии v0.12 дважды называет каноническую форму: «каноническая форма значений и «исправлено T-050» (C-02)» и «…, каноническая форма значений (C-02 v1.5a)» | Оставить одно упоминание: «каноническая форма значений и «исправлено T-050» (C-02 v1.5a)» |
+| R2-N-2 | Nit | `Docs/dev-team/architecture/contracts.md:20` (колонка «Совместимость») | «Числовые записи хоста и IPv4-адрес с точкой на конце — `cloud`» стоят среди ужесточений относительно T-206. Но в T-206 они уже `cloud`: `isLocalHost` принимает только то, что разбирает `netip.ParseAddr` (`internal/llm/config.go`, EPIC-003). Ужесточение они только относительно текста итерации 1. ADR-005 (`:77`) их в совместимости верно не называет | Убрать их из колонки или написать «(как в T-206; уточнение текста итерации 1)» |
+| R2-N-3 | Nit | `Docs/dev-team/architecture/components/state-and-mechanics.md:178` | «С T-448 их отвергает `ApplyOps`». По C-02 v1.6 (`contracts.md:353`) отвергаются и числа в `attributes` создания, а их `ApplyOps` не видит. По решению архитектора это отдельная экспортируемая проверка в создании (итерация 2 T-448, п. 5) | «С T-448 их отвергает State: `ApplyOps` — в значениях операций, проверка создания — в `attributes`» |
+| R2-N-4 | Nit | `Docs/dev-team/architecture/components/state-and-mechanics.md:486` | У `ActorFromEntity` в КД нет пометки v1.3 «`Version = e.Version`, `Kind` — атрибут `kind`», а в C-03 (`contracts.md:398`) она есть. Сигнатуры совпадают, различаются только комментарии | Дописать в комментарий `// C-03 v1.3: Version = e.Version; Kind = атрибут kind (у NPC обязателен)` |
+| R2-N-5 | Nit | `Docs/dev-team/architecture/contracts.md:754`; `Docs/dev-team/architecture/adr/ADR-005-llm-gateway-providers-models.md:70` | Класс `invalid` не называет два вида строк таблицы T-450: IPv6-литерал без скобок (`http://::1:8888`) и символы после `]` (`http://[::1]x:8888`). Их покрывает только «неверный IPv6-литерал». Таблица права, дефекта поведения нет | В оба места одинаково дописать: «IPv6-адрес без скобок, символы после `]`» |
+| R2-N-6 | Nit | `Docs/dev-team/epics/EPIC-001-foundation/tasks/T-449.md:100`, `:103-107` | Строка DoD для T-451 про `127.0.0.1.` в карточке есть, для T-450 — нет. Указание devops-engineer#2 живёт только в отчёте оркестратору: добавить в таблицу строки IPv4 с точкой на конце → `cloud` и не снимать точку у адресов в `llm-endpoint.sh:545` и `LlmEndpoint.psm1`, поправить шапку таблицы. Пока строки нет, тесты паритета зелёные, а скрипты отвечают `local` там, где контракт говорит `cloud` | Добавить в «Строки DoD для тимлидов (итерация 2)» строку «EPIC-001, T-450: …» по образцу строки T-451 |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 2 · Nit: 6.
+
+Все три Major ревью #1 закрыты и сверены с кодом EPIC-002, EPIC-003 и таблицей T-450. Minor и Nit ревью #1 тоже закрыты. Новые замечания — точность пометок v1.6 и один пропущенный пункт решения по T-448. Их можно закрыть правкой текста до коммита или передать в T-448 (итерация 2) и T-450. Блокирующими не считаю: оба Minor касаются нормы, которая по заголовку C-02 ещё не действует.
+
+### Предложения в бэклог
+
+1. При слиянии T-448 в EPIC-002 и EPIC-002 в develop сверить C-02 v1.6 в `contracts.md` с окончательной карточкой T-448 (итерация 2). Снять пометки «вступает в силу», разрешить конфликт КД State §3.2/§8 объединением правок.
+2. Предложения ревью #1 в бэклог (КД роя `:533`, `infrastructure.md:360`, `:622`, C-03 «Состояние реализации на 2026-09-11», `loot_claimed_by` в перечне путей `ChangesFor`) остаются в силе. Итерация 2 их не затрагивала.
+
+### Риски и допущения
+
+- Таблица T-450 и карточка T-448 не закоммичены и сейчас в своих итерациях. Если T-448 в итерации 2 поменяет «Текст C-02 v1.6», вставленный текст устареет. Сверку делать при слиянии (бэклог 1).
+- `127.0.0.1.`: до итерации T-450 скрипты (`local`) и текст C-15 (`cloud`) расходятся, а тесты паритета этого не видят — строки в таблице нет. Сторона Go (T-451) по тексту даст `cloud`, то есть безопасную. Опасной стороной это расхождение станет, только если T-450 добавит строку с ответом `local`.
+- Вывод R2-Mi-2 о том, что при правиле догона порядок элемента предка не влияет на хеш, — мой разбор по тексту правила, не прогон.
+- `gitleaks dir` по копии не равен скану индекса. Строки КД роя не менялись, отпечаток 521 считаю неизменным. Подтверждение — `make secrets-scan` после коммита.
+
+## T-446 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ревью #1 задачи T-446 (размер M, `contract-change`). Работа не закоммичена: папка `.worktrees/T-446`, ветка `task/T-446-runtime-cmd-layout` от `a85d821`.
+
+Изменены:
+- `shared/runtime/http.go`;
+- `cmd/multiverse/{contexts.go, main_test.go}`;
+- `cmd/mvctl/main.go`;
+- `shared/contracts/registry.go`.
+
+Добавлены:
+- `shared/runtime/{shutdown_test.go, http_internal_test.go}`;
+- `cmd/multiverse/contexts_{state,swarm,gateway,memory}.go`, `cmd/multiverse/{contexts_test.go, shutdown_test.go}`;
+- `cmd/mvctl/commands_{state,swarm,ops}.go`, `cmd/mvctl/commands_test.go`;
+- `shared/contracts/registry_{gateway,state,swarm,ops}.go`, `shared/contracts/registry_owners_test.go`;
+- `test/e2e/main_test.go`;
+- из документов — раздел T-446 в `tasks.md`, запись в `dev-log.md`, карточка `tasks/T-446.md`.
+
+Других изменений в папке нет.
+
+Прочитаны:
+- карточка, раздел `tasks.md`, запись dev-log;
+- решения ревизии 4 — по кончику эпика `8613294` и по develop: `contracts.md` (строки 25, 30, 195–197, 235–238, 737–739), `ownership.md` v0.6 (§1, строки 19–26; §3 п. 4, 6, 7), дополнение ADR-001 от 2026-09-13 п. 7, КД шлюза §5.1 п. 8;
+- `net/http/server.go` из toolchain go1.26.8: `startBackgroundRead` и `backgroundRead` (:686–735), сброс дедлайнов в цикле `serve` (:2075, :2092–2111).
+
+**База.** Коммит `a85d821` T-444 **не содержит**: `6de9eb0` влит в эпик позже, слиянием `bde9348`. Поэтому ссылки в комментариях кода пока ведут на тексты, которых в ветке задачи нет: C-01 v1.8, `contracts.md` §16 п. 8, `ownership.md` v0.6 §3 п. 7, ADR-001 доп. п. 7, КД шлюза §5.1 п. 8. Они разрешатся при слиянии с эпиком: на кончике эпика все эти тексты есть, номера сверены.
+
+### Вердикт
+
+**ВЕРНУТЬ** — Critical 0, Major 2, Minor 1, Nit 4.
+
+Что сделано точно:
+- раскладка по файлам владельцев;
+- `All()` реестра совпадает побайтно, включая порядок;
+- вывод `mvctl` не изменился;
+- порядок контекстов не зависит от имён файлов;
+- `ShuttingDown` и таймауты сервера соответствуют C-01 v1.8;
+- тесты дедлайнов под нагрузкой не флакают.
+
+Задача возвращается из-за двух мест:
+- Ma-2: doc-комментарий `SetDeadlines` неверно описывает дедлайн чтения, и по тексту контракта шлюза это ломает long-poll;
+- Ma-1: пример в `test/e2e/main_test.go` расходится с правилом имён владельцев из `ownership.md`.
+
+Обе правки текстовые, к каждой нужен один тест.
+
+### Замечания
+
+#### Critical
+
+Нет.
+
+#### Major
+
+**Ma-1. `test/e2e/main_test.go:10-12` (пример), `:47-67` (`register`): в примере имя владельца `"EPIC-002"`, а по контракту это префикс файла.**
+
+`ownership.md` v0.6 §1 (строка `test/e2e/**`) требует: `func init() { registerPackageSetup("state", stateSetup) }`. Владелец — один из `state`, `swarm`, `gateway`, `ops`, как в префиксах файлов и функций. Подготовки выполняются «в порядке имени владельца».
+
+Пример в заголовке единственного `TestMain` пакета — это инструкция трём эпикам. Там написано `registerPackageSetup("EPIC-002", ...)`, и тесты регистратора тоже используют `EPIC-A`/`EPIC-B`.
+
+Что будет, если один эпик скопирует пример, а другой прочтёт `ownership.md`:
+- порядок подготовок разойдётся с замыслом: по байтам `"EPIC-002" < "gateway"`;
+- проверка «один владелец дважды» перестанет ловить повтор: `"EPIC-002"` и `"state"` — разные ключи.
+
+*Как исправить:*
+- в примере написать `registerPackageSetup("state", stateSetup)` с функцией `stateSetup`, как в `ownership.md`;
+- в тестах регистратора взять имена из набора (`state`, `gateway`);
+- рекомендуется: `register` копит ошибку, если владелец не из `{state, swarm, gateway, ops}`, и в `TestAnInvalidRegistrationFailsThePackage` появляется такой случай. Тогда расхождение упадёт на первом прогоне e2e, а не всплывёт при слиянии.
+
+**Ma-2. `shared/runtime/http.go:144-149`: по doc-комментарию `SetDeadlines` дедлайн чтения «covers what is left of the body», а на деле он ещё и отменяет `r.Context()`.**
+
+Механизм. Когда у запроса нет тела или тело уже дочитано, `net/http` держит фоновое чтение соединения: так сервер замечает, что клиент отключился (`server.go:686-735`). `SetReadDeadline` через `ResponseController` ставит дедлайн на это ожидающее чтение. Когда дедлайн истекает, `backgroundRead` получает timeout. Флаг `aborted` при этом не выставлен, поэтому вызывается `handleReadErrorLocked`, и контекст запроса отменяется.
+
+Проверено пробным тестом в копии дерева на GET:
+- `SetDeadlines(w, 200ms, 0)`: `r.Context()` отменён через 200,5 мс;
+- `SetDeadlines(w, 200ms, 2s)`, обработчик ждёт 600 мс и пишет: запись проходит, клиент получает 200 и тело, но к ответу `r.Context().Err() = context canceled`.
+
+Последствие для потребителя. КД шлюза §5.1 п. 8 (T-444) задаёт «чтение тела — 10 с», а запись long-poll — `wait_ms + 5 с`, до 30 с. Long-poll — GET без тела. Если шлюз поставит ему `read = 10s`, на 10-й секунде `r.Context()` будет отменён, хотя `wait_ms` доходит до 25 с. Обработчик, который слушает `r.Context().Done()` (разрыв клиентом) или передаёт контекст в SQLite или outbox, досрочно закончит ожидание или получит `context canceled`. Код T-446 при этом верен, но описание нового API прямо ведёт к такой ошибке.
+
+*Как исправить:*
+1. Уточнить doc-комментарий. Дедлайн чтения ограничивает не только тело, но и фоновое чтение, которым сервер следит за клиентом: без тела или после дочитанного тела его истечение отменяет `r.Context()`. Поэтому обработчику, который работает дольше обычного, дедлайн чтения ставят не короче всего обработчика (long-poll — `wait_ms + 5 с`) или `0`.
+2. Добавить тест, который закрепляет это поведение: GET, `SetDeadlines(w, 200ms, 0)`, `r.Context()` отменён в окне, как у двух других тестов дедлайнов. Если поведение изменится в новом Go, тест это покажет.
+3. Текст КД шлюза §5.1 п. 8 («чтение тела — 10 с» при long-poll) — вопрос к system-architect. Передан оркестратору; `contracts.md` правит T-449. Код T-446 от ответа не зависит.
+
+#### Minor
+
+**Mi-1. `test/e2e/main_test.go:96-98`: ветка «`teardown == nil`, освобождать нечего» не покрыта тестом.**
+
+Мутант E3 (добавлять в `teardowns` и `nil`) остаётся зелёным: ни один тест не вызывает `run` с подготовкой, которая вернула `nil, nil`. После такой регрессии `release` упадёт с nil-паникой уже после тестов всего пакета e2e. А `nil, nil` — первое, что вернёт подготовка без ресурсов.
+
+*Как исправить:* в `TestPackageSetupsRunInTheOrderOfTheOwners` добавить третьего владельца с `return nil, nil`. Ожидаемый след не меняется, паники нет.
+
+#### Nit
+
+**N-1. `shared/contracts/registry.go:33-40`: порядок `All()` ничем не закреплён.** Мутант G1 (переставить `gatewayDefinitions` и `stateDefinitions`) зелёный и в `shared/contracts`, и в `cmd/mvctl/...`. Пункт 5 DoD проверен однократным сравнением, этого для задачи достаточно. Закрепить порядок тестом — п. 3 бэклога исполнителя, поддерживаю.
+
+**N-2. `shared/runtime/http.go:119`: `Stop`, вызванный до `Start`, закрывает канал навсегда.** Если после этого вызвать `Start`, каждый long-poll ответит сразу. В `serve.go` такого порядка нет, и `HTTP` после `Shutdown` всё равно не перезапускается. Хватит одной фразы в doc-комментарии `Stop`: «a stopped HTTP is not started again».
+
+**N-3. `Makefile:229`:** в комментарии «the name is reserved in cmd/mvctl/main.go»; после раскладки — `cmd/mvctl/commands_swarm.go`.
+
+**N-4. `tasks/T-446.md:94`:** фраза «В `ownership.md` v0.6 названо только `commands_state.go`» неверна. На кончике эпика и в develop `ownership.md` v0.6 называет и `commands_swarm.go` (строка EPIC-003), и `commands_ops.go` (строка EPIC-005). Выбранные имена с контрактом совпадают, поправить нужно только фразу.
+
+### Ответы на пункты постановки
+
+1. **`ShuttingDown` и `SetDeadlines`.**
+   - Канал закрывается первой строкой `Stop` под `sync.Once`, до `Shutdown`. Мутанты R3 (без `Once`) и R4 (закрытие после `Shutdown`) красные.
+   - Гонки между `BaseContext` и `Stop` нет. `BaseContext` вызывается один раз в `Serve` и читает поле `stopping`, которое после `NewHTTP` не меняется. Значений `HTTP{}` в обход `NewHTTP` в модуле нет, так что `close(nil)` невозможен.
+   - Запрос не от сервера процесса получает `nil`-канал; это покрыто тестом.
+   - Long-poll отвечает быстрее 1 с: `TestStopEndsALongPollAtOnce` и `TestServeEndsALongPollWhenItStops`. Контрольный K0 и R1 (без `BaseContext`) красные: `Stop` длится 5 с и возвращает `context deadline exceeded`.
+   - `SetDeadlines` через `clock.Real{}.Now()` forbidigo не нарушает: запрещён литерал `time.Now`, а `clock.Real` — это и есть путь через `shared/clock`. C-01 v1.8 прямо требует `clock.Real`.
+   - Зависимость от `clock.Timers` не нужна: дедлайн — абсолютный момент, его отслеживает netpoller, таймера в коде нет.
+   - На keep-alive соединение дедлайны не протекают: сервер сбрасывает дедлайн записи после каждого запроса (`server.go:2075`), а дедлайн чтения — перед следующим запросом. Оговорка про чтение — Ma-2.
+2. **Флак тестов дедлайнов.**
+   - Нижняя граница окна недостижима: дедлайн отсчитывается от момента после `began`, так что ошибка не раньше 300 мс.
+   - Верхняя граница — 2,3 с, фактическая ошибка около 320 мс.
+   - Нагрузочный прогон: бинарь тестов `shared/runtime`, 6 параллельных процессов × `-test.count=15` × `-test.cpu 1`. Тесты дедлайнов и остановки прошли 90 из 90.
+   - `-race` локально недоступен (нет cgo). В CI `RACE_PKGS` включает `./shared/runtime/...` с тремя повторами; по разбору кода риска флака не вижу.
+3. **Порядок `All()`.**
+   - Дамп в JSON (`definitions` и `Default().All()`) из `git archive a85d821` и из копии рабочей папки — `cmp` без различий: 26 772 байта, 65 типов.
+   - Два списка шлюза оправданы: без них три аналитических типа поднялись бы вверх.
+   - Бинари `mvctl` до и после дают одинаковый результат: `help` (stdout и stderr, код 0), без аргументов (код 2), `trace x` (код 2), `contracts check` («65 types, 8 topics, 58 schema files»). `cli.NewRegistry` сортирует имена, поэтому порядок списков на вывод не влияет.
+4. **`test/e2e/main_test.go`.**
+   - Ошибка регистрации даёт код 1 до подготовок и тестов. Мутант E4 (ошибки игнорируются при непустом реестре) красный.
+   - Завершения идут в обратном порядке. Мутант E2 (нет `release` после тестов) красный.
+   - Упавшая подготовка освобождает только предыдущие. Мутант E1 (освобождать и упавшую) красный.
+   - `TestMain` в модуле один.
+   - Замечания по файлу — Ma-1 и Mi-1.
+5. **Имена файлов и ссылки.** `commands_swarm.go` и `commands_ops.go` совпадают с `ownership.md` v0.6 (строки EPIC-003 и EPIC-005). Ссылки в комментариях ведут на тексты T-444: в базе их нет, на кончике эпика есть (см. «Границы ревью»). Неточность карточки — N-4.
+6. **T-303.** Раскладка это допускает без правки `contexts.go`.
+   - В T-303 `newGateway` и импорт `internal/gateway` переезжают в `contexts_gateway.go`: `var newGatewayContext = newGateway`.
+   - Правки T-303 в `platformContexts` (`gateway.Name` вместо литерала) и в `switch` функции `factoryOf` отбрасываются: литерал `"gateway"` в `contexts.go` остаётся.
+   - `gateway_context_test.go` из T-303 вызывает `factoryOf(gateway.Name)`; функция в T-446 сохранена.
+   - `gateway.New(nil)` без побочных эффектов, так что `TestEveryFactoryBuildsTheContextOfItsName` после слияния безопасно построит настоящий шлюз.
+   - В `contexts.go` будет текстовый конфликт: берётся версия T-446 и в неё переносится фабрика. Хунки двух задач в `main_test.go` соседние, но не пересекаются.
+
+### Прогоны ревьюера (go1.26.8 windows/amd64, golangci-lint 2.13.2)
+
+Рабочая папка:
+- `go build ./...` и `go vet` изменённых пакетов — 0;
+- `go test -short -count=1 ./shared/runtime/ ./cmd/... ./shared/contracts/` — всё ok;
+- `go test -tags e2e -count=1 ./test/e2e/` — ok (14,8 с);
+- `golangci-lint run` по изменённым пакетам и `golangci-lint run --build-tags e2e ./test/e2e/...` — 0 issues;
+- `gofmt -l shared cmd test` и `git diff --check` — пусто; CR в новых файлах нет.
+
+Мутанты делались в копии дерева в scratch: `tar` без `.git`, `Docs`, `services`; для тестов `mvctl env` в копию положен `.env.example`. Без `-overlay`, контрольный мутант первым, после каждого мутанта файлы восстанавливались из снимка. Копия удалена по сохранённому точному пути.
+
+| # | Мутант | Результат |
+|---|---|---|
+| K0 | контрольный: `Stop` не закрывает канал | красный (`Stop` 5 с, `{"waited":"25s"}`) |
+| R1 | `BaseContext` без значения | красный |
+| R2 | `read >= 0` в `SetDeadlines` | красный (`SetDeadlines(recorder, 0, 0)`) |
+| R3 | `close` без `sync.Once` | красный (close of closed channel) |
+| R4 | закрытие канала после `Shutdown` | красный |
+| R5 | без `IdleTimeout` | красный |
+| C1 | фабрика `gateway` — `nil`-переменная | красный (паника с именем в `init`) |
+| C2 | `memory` строит `gateway` | красный |
+| G1 | `stateDefinitions` перед `gatewayDefinitions` | **зелёный** — N-1 |
+| E1 | упавшая подготовка тоже освобождается | красный |
+| E2 | нет `release` после тестов | красный |
+| E3 | `nil`-завершение добавляется в список | **зелёный** — Mi-1 |
+| E4 | ошибки регистрации игнорируются при непустом реестре | красный |
+| P1 | проба: GET, `SetDeadlines(w, 200ms, 0)` | `r.Context()` отменён через 200 мс — Ma-2 |
+| P2 | проба: GET, чтение 200 мс, запись через 600 мс | 200 и тело дошли, контекст отменён — Ma-2 |
+
+### Риски и допущения
+
+- База `a85d821` отстаёт от эпика на слияние T-444 (`bde9348`) и на синхронизацию с develop (`8613294`). Перед слиянием задачи в эпик пересобрать и прогнать тесты на кончике эпика.
+- T-449 правит `contracts.md`. Если нумерация §16 сдвинется, ссылки «§16 p. 8» в комментариях `registry.go`, `cmd/mvctl/main.go` и `commands_*.go` устареют.
+- `-race` не запускался (нет cgo). Вывод, что гонок нет, опирается на разбор кода и на CI-джобу `race`.
+
+## T-446 · ревью #2 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ревью #2 проверяет итерацию 2 (developer#1) по замечаниям ревью #1 и регрессии от этих правок. Работа не закоммичена: папка `.worktrees/T-446`, ветка `task/T-446-runtime-cmd-layout`, база `a85d821`.
+
+Прочитаны:
+- раздел «Итерация 2» карточки `tasks/T-446.md`;
+- запись `<!-- dev-log T-446 iteration 2 -->`;
+- diff итерации: `shared/runtime/http.go`, `shared/runtime/shutdown_test.go`, `test/e2e/main_test.go`, `shared/contracts/registry_owners_test.go`, `Makefile`;
+- `net/http/server.go` go1.26.8: `readRequest` (:976–1041) и `backgroundRead` (:701–735);
+- строка `test/e2e/**` в `ownership.md` v0.6 §1 на кончике эпика `dcdb530`.
+
+Новых файлов и правок вне перечня замечаний нет. Файлы T-454 (`cmd/multiverse/fake_contexts_test.go`, `shared/testkit/state`) в папке T-446 не менялись.
+
+### Вердикт
+
+**ПРИНЯТЬ** — Critical 0, Major 0, Minor 0, Nit 1.
+
+Замечания ревью #1 закрыты: Ma-1, Ma-2, Mi-1, N-1…N-4. Регрессий нет. Единственный Nit относится к шапке карточки, код он не затрагивает.
+
+### Проверка замечаний ревью #1
+
+**Ma-2 — закрыто.** `shared/runtime/http.go:148-167`, `shared/runtime/shutdown_test.go:297-355`.
+
+- Doc-комментарий `SetDeadlines` теперь описывает механизм точно. Когда тело дочитано (у GET — сразу), дедлайн чтения действует и на фоновое чтение. Его истечение отменяет `r.Context()`, а ответ при этом доходит. Отсюда правило: долгому обработчику ставят дедлайн чтения не короче всего обработчика или `0`. Это совпадает с `backgroundRead` → `handleReadErrorLocked` → `cancelCtx`.
+- Утверждение «`0` оставляет соединение без дедлайна чтения, `ReadTimeout` у сервера нет» верно. `readRequest` после чтения заголовков безусловно ставит `SetReadDeadline(wholeReqDeadline)`, а без `ReadTimeout` это нулевое время. Значит, `ReadHeaderTimeout` long-poll не задевает. Тест этого не показывает: отрицательный случай ждёт 1,3 с, меньше 5 с `ReadHeaderTimeout`. Поэтому проверено пробой P1: `ReadHeaderTimeout` уменьшен до 200 мс, случай «no read deadline» остаётся зелёным.
+- Тест закрепляет обе стороны: при 300 мс контекст отменён и ответ дошёл, при `0` контекст жив и ответ дошёл. Мутант A2 (при `read = 0` всё равно ставить дедлайн) красный.
+- **Устойчивость окон.** Нижняя граница (бюджет − 100 мс) недостижима: дедлайн ставится после `began`. Верхняя граница — бюджет + 2 с. Для замера в копии в тесты добавлен `t.Logf` с моментом срабатывания. Прогон: 8 параллельных процессов × `-test.count=10` × `-test.cpu 1` под 64 процессами-нагрузчиками CPU на 32 ядрах. Все 8 процессов с кодом 0. Худшие значения из 80 измерений каждого вида:
+  - отмена контекста — 321,6 мс;
+  - обрыв записи — 309,9 мс;
+  - обрыв тела — 313,8 мс.
+  Запас верхней границы — около 1,7 с при фактическом разбросе около 20 мс.
+- Флаки CI из T-454 — это гонка данных и порядок доставки фактов (стенд пускал игрока раньше, чем фейк узнал мир), а не срабатывание дедлайна. Здесь дедлайн отслеживает netpoller без участия планировщика тестов, и событие, которого ждёт тест, приходит от ядра. Под `-race` растёт стоимость CPU, но не задержка срабатывания дедлайна. Риска флака на 2-секундном запасе не вижу. `-race` локально по-прежнему недоступен (нет cgo), см. «Риски».
+- `Stop` < 1 с (`TestStopEndsALongPollAtOnce`). Реальный запас меньше 1 с: `Shutdown` опрашивает простаивающие соединения с удваивающимся интервалом 1→500 мс, так что тест упадёт, если обработчик и клиент не освободят соединение примерно за 0,5 с. Под той же нагрузкой тест шёл 0,00–0,01 с (80 прогонов). Замечанием не считаю: граница задана DoD.
+
+**Ma-1 — закрыто.** `test/e2e/main_test.go:9-14, 35-41, 64-80`.
+
+- Пример: `registerPackageSetup("state", stateSetup)` и `stateSetup func() (teardown func(), err error)`. Дословно как в `ownership.md` v0.6 §1.
+- Набор `setupOwners = {state, swarm, gateway, ops}` совпадает с правилом имён того же пункта.
+- Имя владельца вне набора, пустое имя, `nil`-подготовка и повторная регистрация копят ошибку. Пакет падает до подготовок и тестов.
+- Тесты регистратора используют только имена владельцев. Случаи `EPIC-002` и `memory` добавлены.
+- Мутант E1 (любое имя принимается) красный в обоих новых случаях.
+
+**Mi-1 — закрыто.** `test/e2e/main_test.go:135-142`. У `ops` подготовка возвращает `nil, nil`, ожидаемый след без `teardown ops`. Мутант E3 (`nil`-завершение попадает в список) красный: nil-паника в `release`, `main_test.go:99`.
+
+**N-1 — закрыто, обоснование принимаю.** `shared/contracts/registry_owners_test.go:39-68`.
+
+- Тест сверяет `Default().All()` со склейкой списков в порядке, записанном в самом тесте, отдельно от `registry.go:33-40`. Перестановка списков в `registry.go` ловится: мутант G1 красный.
+- Золотой список из 65 типов действительно противоречил бы `ownership.md` v0.6 §3 п. 6: каждая строка типа, которую владелец добавляет в свой файл, стала бы правкой теста EPIC-001 в трёх ветках эпиков.
+- Тест не ловит перестановку внутри списка и перенос типа между `gatewayDefinitions` и `gatewayAnalyticsDefinitions`. Обе правки остаются в файле одного владельца. Порядок `All()` важен только для порядка находок `mvctl contracts check`, так что это право владельца, а не дыра.
+
+**N-2 — закрыто в коде.** `shared/runtime/http.go:119-127`.
+
+- Проверка `h.srv == nil` стоит до `stopOnce.Do`, так что `Stop` до `Start` канал не закрывает. Doc-комментарий описывает оба случая.
+- `TestStopBeforeStartLeavesTheServerStartable` проверяет открытый канал через `select`/`default`, без ожидания по времени. Мутант A3 (закрытие до проверки) красный.
+- Регрессии нет:
+  - `Stop` после неудачного `Start` (ошибка `Listen`, `h.srv == nil`) — по-прежнему no-op;
+  - повторный `Stop` — под `sync.Once`, покрыт `TestShuttingDownReachesEveryRequestAndStopIsRepeatable`;
+  - в `serve.go` порядок прежний.
+
+**N-3 — закрыто.** `Makefile:229-231`: ссылка ведёт на `cmd/mvctl/commands_swarm.go`, где `blueprint` действительно зарезервирован.
+
+**N-4 — закрыто.** Карточка, «Решения по ходу»: названы все три файла с их строками в `ownership.md` v0.6, рядом пометка итерации 2.
+
+### Замечания
+
+#### Critical
+
+Нет.
+
+#### Major
+
+Нет.
+
+#### Minor
+
+Нет.
+
+#### Nit
+
+**N-1. `tasks/T-446.md:10`: в шапке карточки осталось «Итераций ревью | 0».** Ревью #1 уже прошло, после этого ревью значение — 2. Поле ведёт оркестратор: поправить при приёмке.
+
+### Прогоны ревьюера (go1.26.8 windows/amd64, golangci-lint 2.13.2)
+
+Рабочая папка:
+- `go build ./... && go vet ./...` — 0;
+- `go test -short -count=1 ./shared/runtime/... ./shared/contracts/... ./cmd/...` — 9 пакетов ok;
+- `go test -tags e2e -count=1 ./test/e2e/...` — ok (13,9 с);
+- `golangci-lint run ./...` и `golangci-lint run --build-tags e2e ./test/e2e/...` — 0 issues;
+- `gofmt -l shared cmd test` и `git diff --check` — пусто.
+
+Мутанты делались в копии дерева в scratch (`t446r2-copy`: `tar` без `.git`, `Docs`, `services`, `bin`), `go build ./...` копии зелёный. Без `-overlay`, контрольный мутант первым. Скрипт точной заменой (`assert` на единственное вхождение), после каждого мутанта файл восстановлен и сверен побайтно. Копия и временные файлы удалены по точным путям.
+
+| # | Мутант или проба | Ожидание | Результат |
+|---|---|---|---|
+| K0 | контрольный: `Stop` не закрывает канал | красный | красный: `Stop = context deadline exceeded`, 5,0 с, `{"waited":"25s"}` |
+| P1 | проба: `ReadHeaderTimeout` 200 мс | зелёный | зелёный: без дедлайна чтения контекст long-poll жив, `ReadHeaderTimeout` его не задевает |
+| A2 | `read >= 0` в `SetDeadlines` | красный | красный: случай «no read deadline» |
+| A3 | закрытие канала до проверки `h.srv == nil` | красный | красный |
+| E1 | любое имя владельца принимается | красный | красный: `EPIC-002` и `memory` |
+| E3 | `nil`-завершение добавляется в список | красный | красный: nil-паника |
+| G1 | `stateDefinitions` перед `gatewayDefinitions` | красный | красный |
+| S1 | нагрузка: 8 процессов × `-test.count=10` × `-test.cpu 1`, 64 нагрузчика CPU на 32 ядрах, тесты дедлайнов и остановки | зелёный | зелёный: 8 из 8 процессов, 0 FAIL; худшие срабатывания 321,6 / 309,9 / 313,8 мс при бюджете 300 мс |
+
+### Риски и допущения
+
+- `-race` не запускался (нет cgo). Вывод об устойчивости окон под детектором опирается на разбор механизма (дедлайн срабатывает в netpoller) и на нагрузочный прогон без детектора. Первое подтверждение даст джоба `race` в CI (`RACE_PKGS` включает `./shared/runtime/...`, `-count=3`).
+- Прежний риск остаётся: база `a85d821` отстаёт от эпика на слияние T-444 и синхронизацию с develop. Перед слиянием задачи пересобрать и прогнать тесты на кончике эпика. Ссылки на тексты T-444 исполнитель сверил с `dcdb530`.
+- Вопрос ревью #1 Ma-2 п. 3 (КД шлюза §5.1 п. 8, «чтение тела — 10 с» для long-poll) у system-architect остаётся открытым. Код T-446 от ответа не зависит; doc-комментарий `SetDeadlines` уже задаёт правильное правило для потребителя.
+
+## T-454 · ревью #1 · 2026-09-13 · code-reviewer#3 (TEAM-1)
+
+### Границы ревью
+
+Ветка `task/T-454-ci-race-testkit-state-fight05` от эпика `dcdb530`, коммитов в ветке нет, всё не закоммичено.
+`git diff --stat dcdb530`: код — только два `_test.go` (`cmd/multiverse/fake_contexts_test.go` +207/−17,
+`shared/testkit/state/consumer_test.go` +25/−3); документы — раздел T-454 в `tasks.md`, запись `<!-- dev-log T-454 -->`
+в `dev-log.md`, новая карточка `tasks/T-454.md`. Production-код, `shared/eventbus`, контракты и схемы не менялись —
+метка не нужна. Файлы T-446 (`cmd/multiverse/contexts*.go`, `main_test.go`, `shared/runtime`) не затронуты. Файлы
+владельца (`.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/`) в рабочей папке не изменены. `git diff --check`
+чисто. Лог CI (run 34754402826, только чтение): 12 отчётов `DATA RACE`, все стеки — `consumer_test.go:55/60/79/80/95/96/98`;
+второе падение — единственное `fake_contexts_test.go:448` fight-05 «nobody resolved the attack of player-A on
+wolf-alpha within 2s». Причины исполнителя с логом совпадают.
+
+### Что проверено
+
+1. **Гонка (1).** `projection` (`consumer_test.go:35-81`): все четыре доступа к `hp`/`refused` — под `p.mu`: запись в
+   `Handle` (`:51`, `:63`, `:68`), чтение — только `seen` (`:78`, копия `slices.Clone`). Прямых `view.hp`/`view.refused`
+   в тесте больше нет (grep). `refused[0]` читается из копии последнего успешного опроса — утверждение «ровно один
+   отказ, `version_conflict`» не ослаблено.
+   **Свои выборочные места** («обработчик пишет — тест читает»):
+   - `shared/testkit/gateway/combat_test.go:849-930` — тестовый `encounter`: `seq`/`plan`/`fight` под `e.mu`. Чисто.
+   - `shared/testkit/gateway/combat_test.go:737-749` — `blows++` в обработчике `answerEveryAction`: одна подписка membus —
+     один цикл `Subscribe`, повторы `Delivery` в той же горутине; тест `blows` не читает. Чисто.
+   - `test/e2e/empty_world_test.go:150-173` — `p.err` пишется до `close(p.exited)`, `strings.Builder` читается после
+     `<-p.exited`, а `cmd.Wait` дожидается копирующих горутин. Чисто.
+   - `cmd/multiverse/serve_test.go:25-40, 105-111` — `recorder` под `r.mu`. Чисто.
+   - Косвенно: задание `unit` гоняло `-race` по всем пакетам `./...`, и отчётов вне `consumer_test.go` в логе нет.
+2. **Передача полей `stand` из `process.run`.** `serve.go:286-303`: `p.openBus` вызывается раньше `runtime.StartAll` и
+   `srv.Start`, поэтому к первому ответу `/health` значение в канале `opened` (буфер 1) уже лежит — `select … default`
+   (`fake_contexts_test.go:462-467`) корректен. `open` вызывается один раз на процесс, повторной отправки нет. При
+   ошибке старта: `bootstrap`/`openBus` возвращают ошибку до отправки → `run` выходит → `health` получает `r.done` и
+   валит тест («the process ended while /health was awaited»); при ошибке `StartAll` значение остаётся в буфере
+   непрочитанным — буфер не блокирует. Дедлока нет. После приёма из канала `stand.bus`, `stand.world`, `stand.created`
+   читаются в горутине теста с явным отношением «произошло раньше»; порядок очистки (LIFO: сначала `r.stop` с приёмом
+   `r.done`, затем `stand.wait()`) тоже после завершения `run`. Объяснение, почему детектор молчал (`ioSync` на сокете),
+   без `-race` не проверял; на вывод не влияет — передача теперь явная.
+3. **Флак (2): `learning`.** Группа `swarm.EncounterGroup+"-"+system_events` совпадает с `FakeEncounter.subscribe`
+   (`fake_encounter.go:545`). `Observe` складывает сущность под `e.mu` до возврата, так что отметка после `h`
+   (`fake_contexts_test.go:915-923`) означает: сущность уже в `e.world`, из которого отвечает `entered`/`freeNPCOf`.
+   Контекст обработчика `Delivery.Deliver` наследует контекст подписки, поэтому удержанный факт отпускается при
+   остановке (`:908-913`), остановка не виснет. Отличие от T-433 реальное: T-433 чинила порядок `world_events` у
+   харнесса (`lateWorld` в `shared/testkit/gateway/stand_test.go`) и ждала старт боя не дольше `standTimeout`; здесь
+   стенд ждёт сигнала «обработчик двойника вернулся на `entity.created` каждой сущности bootstrap», 10 с — только
+   предохранитель.
+   **Если двойник не принял факт** — мои мутанты R5/R6 ниже: падение ровно через 10 с с понятным списком сущностей, без
+   зависания; ожидание процесса и очистка отрабатывают.
+4. **Конец боя по `closed_by_event_id`.** `FakeEncounter.finish` строит `encounter.ended` до пакета и пишет его id в
+   `closed_by_event_id` (`fake_encounter.go:955-1011`, id выводится из причины, ADR-027 п. 2), а публикует только в
+   `announce` по факту этого пакета (`:1324-1331`). Харнесс возвращает шаг только по факту (`harness.go:1086`), значит к
+   возврату `Run` State уже применил закрывающий пакет — чтение `closed_by_event_id` после `Run` корректно.
+   **Не маскирует потерю события:** мутант R8 (двойник не публикует `encounter.ended`) валит
+   `TestTheProcessTellsTheDeathOfACharacter` сообщением «timed out waiting for encounter.ended <id> announced after its
+   fact» — строже прежнего «ended ""». Пустой `closed_by_event_id` = State бой не закрывал, `""` правдив.
+5. **Доказательство исполнителя через `-overlay`.** Файлы в scratch `t454-mut`: ключи `Replace` относительные
+   (`cmd/multiverse/fake_contexts_test.go`), значения — через короткий путь `CD86~1` (ловушка касается ключей, не
+   значений). `m0.go` отличается от итогового файла только `{{{` (и прежней редакцией одного комментария) — контроль
+   `setup failed` означает, что overlay применялся. `m2.go`/`m3.go`/`m4.go` отличаются от итогового файла ровно
+   заявленными строками (плюс тот же комментарий); в M4 отметка добавлена до обработчика, отметка после осталась —
+   `fold` идемпотентен, это и есть «отметить до».
+6. **Мои мутанты** — копия дерева `t454rev-tree` в scratch, без `-overlay`, контрольный первым:
+
+   | # | Мутант | Прогон | Итог |
+   |---|---|---|---|
+   | C0 | `{{{` в заголовке регрессии | `go vet ./cmd/multiverse/` в копии | ошибка компиляции — собирается именно копия |
+   | R2 (= M2) | `watched.ready(t, p)` → `_ = watched` | регрессия, 1 раз | **красный** 2,1 с, текст CI «nobody resolved the attack of player-A on wolf-alpha within 2s» |
+   | R5 | обёртка смотрит не ту группу (двойник «не видит» факты) | регрессия | **красный** 10,1 с: «had not learnt [dark-forest-01 dark-forest-world wolf-alpha] from entity.created within 10s» |
+   | R6 | обработчик двойника отвергает каждый `entity.created` | регрессия | **красный** 10,1 с, тот же текст, что у R5; остановка без зависания |
+   | R8 | `FakeEncounter.announce` не публикует `encounter.ended` | death, 1 раз | **красный**: «timed out waiting for encounter.ended … announced after its fact» |
+   | R1 | `ready` открывает `gate` и сразу возвращается, не ожидая `learnt` | регрессия + IAlpha, `-count=20 -cpu 1,4` | **зелёный** 40/40 и 640 боёв (см. Mi-1) |
+   | R3 (= M4) | отметка до обработчика, после — нет | то же | **зелёный** (заявлен исполнителем) |
+
+7. **Прогоны в рабочей папке** (Windows, `CGO_ENABLED=0`, gcc в PATH нет — `-race` не запускался):
+   - `go build ./... && go vet ./...` — ok;
+   - `go test -short -count=3 ./shared/testkit/state/... ./cmd/multiverse/...` — ok;
+   - `go test -short -count=10 -cpu 1,4 -run 'TestTheProcessRunsTheFightsOfIAlpha|TestAConsumerBuildsItsProjectionFromTheStub' ./cmd/multiverse/ ./shared/testkit/state/` — ok (11,0 с / 0,9 с);
+   - `go test -short -count=100 -cpu 1,4 -run 'TestTheProcessTellsTheDeathOfACharacter$|TestTheStandWaitsUntilTheFakeHasLearntTheWorld$' ./cmd/multiverse/` — ok (400 прогонов);
+   - `go test -v` — регрессия действительно выполняется под `-short`;
+   - `golangci-lint run ./cmd/... ./shared/testkit/...` — 0 issues.
+8. **Пересечение с T-446** (`.worktrees/T-446`, HEAD `a85d821` — предок `dcdb530`, правки не закоммичены). T-446 меняет
+   `contexts.go`, `main_test.go`, `shared/runtime/http.go`, добавляет `contexts_{gateway,memory,state,swarm}.go`,
+   `contexts_test.go`, `shutdown_test.go`, `shared/runtime/*_test.go`, `test/e2e/main_test.go`. Файлов T-454 среди них
+   нет — **текстовых конфликтов не будет**. Новые имена T-454 в пакете `main` (`learning`, `newLearning`, `factsOrder`,
+   `factsAsTheyCome`, `factsHeldUntilAwaited`) в файлах T-446 не объявлены. Смысловые зависимости
+   `fake_contexts_test.go` от T-446: `swarmContext`, `platformContexts` (у T-446 остаются в `contexts.go:33-36`),
+   `clearVar` (`main_test.go:20`), `flagged`/`newSwarm` (`fake_contexts.go`), порядок `openBus` → `StartAll` →
+   `srv.Start` в `serve.go` (T-446 его не трогает). Перенос `swarmContext`/`stub` в `contexts_swarm.go` сборку не сломает
+   (тот же пакет). Риск — только если правка `runtime/http.go` в T-446 изменит момент ответа `/health` 200: на
+   `select … default` по `opened` и на `ready` это не влияет. После слияния второй из задач — прогнать
+   `go vet ./cmd/multiverse/` и тесты боёв.
+
+### Замечания
+
+| # | Уровень | Где | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/multiverse/fake_contexts_test.go:390-392`, `:888-899` | Суть исправления — **ждать `learnt`**, а не только открыть `gate` — не закреплена ни одним тестом. Мутант R1 («`ready` открывает `gate` и возвращается») зелёный 40/40 на регрессии и 640/640 на IAlpha. Регрессия ловит только отсутствие вызова `ready` (R2), и то косвенно: факты тогда не отпускаются вовсе. Исполнитель это честно назвал в док-комментарии, но итог — сам механизм ожидания (`select` на `learnt`) охраняется только ревью; удаление его при будущей правке вернёт fight-05 на медленном раннере CI без локального красного теста. | Детерминированный unit-тест `learning` без процесса: `newLearning` над membus с `pending={a,b}`; `ready` в горутине не возвращается, пока не обработаны оба факта (проверка `select … default` после публикации и обработки одного); обработчик, вернувший ошибку, отметки не даёт; пока обработчик двойника заблокирован, `learnt` не закрыт (ловит и R3). Альтернатива — в `factsHeldUntilAwaited` после открытия `gate` держать факт ещё ~200 мс (только для заметности мутанта): исправный стенд детерминированно зелёный, R1 краснеет. В этой задаче без повторного ревью или в бэклог до T-256. |
+| N-1 | Nit | `cmd/multiverse/fake_contexts_test.go:497-498` | После `ready` множество `pending` всегда пусто, так что `watched.missing()` в сообщении «no encounter was opened» всегда печатает `[]`: «the fake had not learnt [] from entity.created when player-A entered» читается как ложная подсказка. | Сказать прямо: «the fake had learnt all of %v before %s entered: the cause is the entry or the fake», без `missing()`. |
+| N-2 | Nit | `cmd/multiverse/fake_contexts_test.go:896-897`, `:915-917` | Предохранитель не различает «двойник не получил факт» (R5) и «двойник отверг факт» (R6) — текст одинаковый. И «узнал» — это «обработчик вернул nil», а `Observe` возвращает nil и на факт, который не смог прочитать или который другого мира (`fake_encounter.go:1582-1597`). | Запоминать в `learning` последнюю ошибку обработчика по `entity.created` и выводить её в сообщении `ready`; семантику «вернул nil» назвать в комментарии к `fold`. |
+| N-3 | Nit | `cmd/multiverse/fake_contexts_test.go:566-568` | Комментарий переносится неровно после вставки «under -cpu 1» (строка 567 заметно длиннее соседних). | Переформатировать абзац. |
+
+### Вердикт
+
+**Принять.** Critical: 0 · Major: 0 · Minor: 1 · Nit: 3.
+
+Обе причины красного CI устранены по существу: гонка проекции закрыта мьютексом со всеми доступами; стенд ждёт сигнала
+готовности двойника, а не срока, и корректно завершает тест при смерти процесса или отсутствии сигнала; попутный флак
+конца боя исправлен по данным и не маскирует потерю `encounter.ended` (R8). Правки только в `_test.go`, с T-446 не
+конфликтуют. Mi-1 не блокирует — механизм ожидания верен, не хватает теста, который его охраняет; закрыть можно в этой
+же задаче без повторного ревью или бэклогом.
+
+### Предложения в бэклог
+
+1. Unit-тест `learning` (Mi-1), если не сделают в задаче; уходит вместе с хуком в T-256.
+2. Готовность `FakeContext` в `/health` только после догоняния журнала (предложение исполнителя; решение tech-lead#2) —
+   тогда `learning` не нужна.
+3. Проверка гонок только в CI, пока у разработчиков нет cgo — зафиксировать в runbook (предложение исполнителя).
+
+### Риски и допущения
+
+- `-race` локально не запускался (нет gcc): отсутствие гонок в новых `learning`/`opened`/`stand.created` — по разбору
+  доступов, не по детектору. Окончательно подтвердит только задание `unit`/`race` CI.
+- `loopbackAddr` (резерв-и-освобождение порта) по-прежнему даёт TOCTOU-окно: чужой процесс на порту даст падение «never
+  opened its bus» — не новое, сообщение понятнее прежнего.
+- Скретч-копия дерева и логи удалены по точному пути своего каталога.
+
 ## T-450 · ревью #1 · 2026-09-13 · code-reviewer#1 (TEAM-1)
 
 Ветка `task/T-450-local-endpoint-table`, база `ab6cb1d`, изменения не закоммичены: 14 изменённых файлов и 7 новых. Прочитаны карточка, раздел T-450 в `tasks.md`, запись dev-log, `infrastructure.md` §3.1.1, §3.1.2 и §6.3.1, `runbook.md` §3, а также `IsLocalEndpoint`/`canonicalHost` в `internal/llm/config.go` ветки EPIC-003. Во время ревью пришло решение system-architect#1 по пяти уточнениям. Оно учтено: расхождения с ним вынесены в замечания к итерации 2.

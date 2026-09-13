@@ -159,10 +159,10 @@ func Clone(e *Entity) *Entity
 |---|---|---|
 | `set` | записать `value` по `path` (создаёт промежуточные map); `changed` с `old` (или `null`) | путь зарезервирован; `value` — не JSON-совместимое значение |
 | `inc` | целочисленный `value` прибавить к текущему (отсутствующее = 0); для путей `hp` — clamp в `[0, hp_max]` (§6.4) | текущее значение не число; `value` не целое |
-| `append` | добавить `value` в список по `path` (создаёт список); элементы-объекты с полем `item_id`/`player_id`/`npc_id` не дублируются по этому ключу (повтор = no-op, `changed` пуст) | по пути не список |
-| `remove` | с `value`: удалить из списка элементы, равные `value` (по `item_id`/`player_id`/`npc_id` для объектов, по равенству для скаляров); без `value`: удалить ключ | по пути нет ключа/списка |
+| `append` | добавить `value` в список по `path` (создаёт список); элементы-объекты с полем `item_id`/`player_id`/`npc_id` не дублируются по этому ключу (повтор = no-op, `changed` пуст); объект без такого поля — повтор, только если равен элементу целиком; равенство — в канонической JSON-форме (§3.3; изм. T-449, T-050) | по пути не список |
+| `remove` | с `value`: удалить из списка элементы, равные `value` (по `item_id`/`player_id`/`npc_id` для объектов, по равенству для скаляров; равенство — в канонической JSON-форме, §3.3; изм. T-449, T-050); без `value`: удалить ключ | по пути нет ключа/списка |
 
-Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` (равенство `old == new` по `reflect.DeepEqual`) исключается; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется.
+Пути — грамматика `shared/jsonpath` (`a.b[0].c`); запись через `jsonpath.Accessor.Set/Delete` (уже реализованы). Зарезервированные пути (`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`, любой путь с ведущим `_`) → `invalid_op`. `changed[]` строится **после** применения всех ops сущности: один элемент на конечный путь (первый `old`, последний `new`), `no-op` исключается: путь был и до, и после (или не был ни до, ни после), и значение в канонической форме (§3.3) не изменилось *(итерация 2 T-449, ревью #1 Mi-2; T-050 — сравнение каноническое и учитывает наличие пути; прежде «равенство `old == new` по `reflect.DeepEqual`»)*; если `changed` пуст — версия **не** увеличивается, факт `entity.updated` публикуется с `changed: []` (UC-011 E2 «HP уже max — ход засчитан»), `version` не меняется.
 
 ### 3.3. Хэш
 
@@ -174,6 +174,8 @@ func StateHash(es []*Entity) string
 ```
 
 Хэш исключает `updated_at`, `history`, `last_change`, `last_event_id` — они не влияют на игровое состояние и позволяют `mvctl report --audit` (EPIC-005) пересчитать хэш из снапшота + `entity.updated.changed[]`. Метрика `recovery_state_identical` (metrics.md) сравнивает именно этот хэш.
+
+**Каноническая форма значения (изм. T-449; T-050, подтверждено system-architect).** Значение пишется в форме после `json.Marshal` → `Unmarshal`: типизированный `nil` — `null`; `float32` — десятичная запись кодировщика, а не ближайший `float64`; `[]byte` — строка base64; `json.RawMessage`, `time.Time` и тип со своим `MarshalJSON`/`MarshalText` — тем, что пишет метод; `map` с целыми ключами — объектом со строковыми ключами; структура — объектом с отсортированными ключами. Исключение — три `nil`-контейнера `jsonpath`: `nil` у `[]any`, `map[string]any` и `[]map[string]any` пишется `[]`/`{}`, потому что `jsonpath.Clone` пересобирает их пустыми и после `Commit` сущность держит пустые. *Почему:* значение, пришедшее с шины, этими ветками не проходит, поэтому хэши данных с шины не изменились; а сущность, собранная в Go (bootstrap, `append` структуры `Item`), хэшируется так же, как после снапшота. Доказательство — `TestStateHashOfAGoBuiltWorldMatchesItsWireForm` и дифференциальный тест приёмки T-050 на 60 120 значениях. Числа по модулю от 2^53 JSON без потерь не переносит — с T-448 их отвергает `ApplyOps`, допустимый диапазон ±(2^53−1) (C-02 v1.6, вступает в силу со слиянием T-448; итерация 2 T-449, N-5).
 
 ---
 
@@ -203,7 +205,7 @@ type Rejection struct { Reason Reason; Ref *entity.Ref; ExpectedVersion, ActualV
 type Reason string // version_conflict|unknown_entity|level_violation|law_violation|invalid_op|dead_entity|duplicate_entity
 ```
 
-`Proposer` выводится рантаймом: `meta.agent != nil` → `agent` с `Level = meta.agent.level`; иначе `source` события: `gateway` → `gateway`; `mvctl` → `author`; `core/state` (bootstrap) → `system`. Отдельно `actor_kind` не участвует в проверке владения (он про сессию, не про право писать).
+`Proposer` выводится рантаймом: `meta.agent != nil` → `agent` с `Level = meta.agent.level`; иначе `source` события: `gateway` → `gateway`; `mvctl` → `author` (включая bootstrap, §4.10); ~~`core/state` (bootstrap) → `system`~~ *(изм. T-444, C-02 v1.5: предложения bootstrap публикуются с `source=mvctl` — `core/state` нет в `Spec.Publishers` типов предложений, и при `--bus kafka` публикует процесс `mvctl`, а не `core`; строка `system` в `ownership.go` остаётся без издателя в MVP-1, решение о ней — за EPIC-002)*. Отдельно `actor_kind` не участвует в проверке владения (он про сессию, не про право писать).
 
 ### 4.2. Рабочий набор мира
 
@@ -421,8 +423,8 @@ sequenceDiagram
 
 ```go
 package state
-// Bootstrap читает fixtures и публикует entity.create.proposed (proposer system, cause=init, meta.actor_kind=system,
-// source="core/state", proposal_id = "bootstrap:{world}:{type}/{id}") в порядке world → region → npc → players;
+// Bootstrap читает fixtures и публикует entity.create.proposed (proposer author, cause=init, meta.actor_kind=system,
+// source="mvctl" — изм. T-444, C-02 v1.5; было proposer system, source="core/state"; proposal_id = "bootstrap:{world}:{type}/{id}") в порядке world → region → npc → players;
 // ждёт entity.created по каждому (таймаут 10 с) через Journal.Tail; повтор идемпотентен (duplicate_entity с тем же
 // proposal_id = дедуп → тихий пропуск). Возвращает число созданных/пропущенных.
 func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir string) (BootstrapResult, error)
@@ -447,6 +449,8 @@ func LoadBytes(b []byte) (*Rules, error)
 
 type Actor struct {
     ID, Type string          // player | npc
+    Kind string              // C-03 v1.3: вид NPC ("wolf") — ключ таблицы трофеев; у NPC обязателен, у персонажа пусто (изм. итерация 2 T-449)
+    Version int64            // C-03 v1.3: версия сущности, из которой прочитан актор; ≤ 0 — не прочитан, ChangesFor такого актора не меняет (изм. итерация 2 T-449)
     HP, HPMax, Atk, Def int
     Dmg, Flee string         // dice-выражения ("d6"); Flee "" — не бежит
     Status string            // alive | dead | abandoned | ascended_final (три терминальных — одинаково, C-02 v1.2)
@@ -455,7 +459,8 @@ type Actor struct {
 }
 func (a Actor) Alive() bool  // Status == alive
 func (a Actor) Attr(name string) (int, bool)   // atk|def|hp|hp_max|flee — то, что читают формулы §5.3
-type Action struct { Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int }
+type Action struct { Kind string /* attack|flee|npc_attack|rest|free_attack */; Actor, Target string; LivingEnemies int
+                     At time.Time /* C-03 v1.3: timestamp события-причины; читает только ChangesFor (изм. итерация 2 T-449) */ }
 type Outcome struct {
     Hit, Critical, Fumble, TargetDead bool
     Natural, Damage, Threshold int
@@ -476,7 +481,8 @@ func (r *Rules) RollCheck(causeEventID string, rollIndex int, c CheckExpr, purpo
 func Seed(eventID string, rollIndex int) uint64
 func NewRNG(seed uint64) *rand.Rand
 func (r *Rules) Invariants() []Invariant
-func (r *Rules) Stats(kind string) (Actor, bool)                 // базовые статы из entities{} (для создания сущностей)
+func (r *Rules) Stats(kind string) (Actor, bool)                 // базовые статы из entities{} (для создания сущностей); C-03 v1.3: ставит Kind (только NPC), Version не ставит — 0
+func (r *Rules) FleePosition(worldID, regionID string) string    // C-03 v1.3: куда успешный побег ставит персонажа; зовёт вызывающий (изм. итерация 2 T-449)
 func ActorFromEntity(e *entity.Entity, enc *entity.Entity) (*Actor, error)   // enc — сущность встречи; nil = вне боя
 func ChangesFor(a Action, o Outcome, attacker, target *Actor, factEventID string) ([]ProposedChange, error)   // ops для entity.update.proposed
 func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any                                  // payload dice.rolled (схема EPIC-002)
@@ -484,7 +490,7 @@ func DiceRolledPayload(roll Roll, roller entity.Ref) map[string]any             
 
 Гарантии: без I/O, без часов, без глобального состояния; `Resolve` — чистая функция от `(rules, causeEventID, rollIndexStart, action, actors)`; `actors` не мутируются (результат — в `Outcome`).
 
-**Этот раздел и C-03 v1.2 совпадают дословно (сведение волны 0).** Четыре сигнатуры, по которым документы расходились, приведены к формам **этого** раздела — их и реализовал T-015: `Roll` и `ActorFromEntity` возвращают ошибку, `ActorFromEntity` принимает сущность встречи, `DiceRolledPayload` принимает `entity.Ref`. Две правки внесены **в оба** документа: `ChangesFor` возвращает `([]ProposedChange, error)` (канал ошибки нужен и после T-053: функция может получить исход, несовместимый с действием), а `NPCTarget` получает канал ошибки, потому что иначе `nil` неотличим от «целей нет» (UC-008 A2). Обоснование каждой формы — C-03 v1.2 и ADR-024; **`NPCTarget` — единственная правка, требующая изменения кода (T-053)**, остальные уже реализованы.
+**Формы, общие с C-03, совпадают с C-03 v1.3; `Attr`, `RollCheck` и `Item` — дополнения КД сверх контракта** *(итерация 2 T-449, ревью #1 Ma-1; прежде — «этот раздел и C-03 v1.2 совпадают дословно (сведение волны 0)»)*. При сведении волны 0 четыре сигнатуры, по которым документы расходились, приведены к формам **этого** раздела — их и реализовал T-015: `Roll` и `ActorFromEntity` возвращают ошибку, `ActorFromEntity` принимает сущность встречи, `DiceRolledPayload` принимает `entity.Ref`. Две правки внесены **в оба** документа: `ChangesFor` возвращает `([]ProposedChange, error)` (канал ошибки нужен и после T-053: функция может получить исход, несовместимый с действием), а `NPCTarget` получает канал ошибки, потому что иначе `nil` неотличим от «целей нет» (UC-008 A2). Обоснование каждой формы — C-03 v1.2 и ADR-024; **`NPCTarget` — единственная правка, требующая изменения кода (T-053)**, остальные уже реализованы.
 
 ### 5.2. Формат `rules/dark-forest.yaml` (RulesDocument, data-model §6.3)
 
@@ -555,7 +561,7 @@ term    := IDENT | INT
 |---|---|---|---|
 | `attack` (player → npc) | `hit` (d20) → idx; `damage` (dmg атакующего) → idx+1 только при попадании | `natural == fumble` → промах; иначе `hit := natural == crit ∨ natural + atk ≥ def`; `damage := dmg × (crit ? multiplier : 1)`; `hp_after := max(0, hp_before − damage)` | `Hit, Critical, Fumble, Natural, Damage, HPBefore/After, TargetDead = hp_after==0`, `Loot` при смерти npc |
 | `npc_attack` / `free_attack` (npc → player) | `npc_hit`, `npc_damage` | как `attack`; `FreeAttack=true` для free_attack; `actors[target].Status == dead` или `Participation ∈ exclude` → ошибка `ErrInvalidTarget` (вызывающий обязан выбрать цель через `NPCTarget`) | как выше |
-| `flee` | `flee` (d20) → idx | `success := natural + flee ≥ 10 + LivingEnemies`; `Threshold = 10 + LivingEnemies` | `Success`, `Natural`, `Threshold`; при провале вызывающий делает `free_attack` с `rollIndexStart = idx+1` |
+| `flee` | `flee` (d20) → idx | `success := natural + flee ≥ 10 + LivingEnemies`; `Threshold = 10 + LivingEnemies` | `Success`, `Natural`, `Threshold`; при провале вызывающий делает `free_attack` с `rollIndexStart = idx+1`; при успехе позицию побега предлагает агент встречи — `set position` из `Rules.FleePosition(world, region)` с `cause=flee`, `ChangesFor` её не выдаёт (C-03 v1.3; изм. T-449) |
 | `rest` | — | `allowed_in_encounter=false` — проверка на стороне gateway/State; `HPAfter = HPMax` | `HPBefore/After` |
 
 `NPCTarget`: фильтр `Status != dead ∧ Participation ∉ exclude` (терминальные `dead|abandoned|ascended_final` — одинаково, C-02 v1.2) → если `npc.LastDamager` среди кандидатов — он; иначе минимальный `HP`; при равенстве — `ID` по возрастанию; кандидатов не осталось → **`(nil, nil)`** — это законный ответ «некого кусать» (UC-008 A2), а не ошибка. Ошибка — это `npc == nil`, не-NPC в роли кусающего и прочие дефекты вызывающего; до реализации (T-053) заглушка возвращает `ErrNotImplemented`, и именно ради этого различия C-03 v1.2 добавил второй результат.
@@ -746,7 +752,7 @@ sequenceDiagram
 | C-02 (выход) | `entity.created`, `entity.updated`, `entity.update.rejected` | `facts.go`; `entity.updated.changed[]` = `entity.Change` (для `append` — `old: null, new: <элемент>` по пути `inventory[<n>]`; для списка целиком — путь списка); `applied_at = timestamp предложения`; причины отказа: `version_conflict, unknown_entity, level_violation, law_violation, invalid_op, dead_entity, duplicate_entity` |
 | C-02 (read-model) | `snapshots-{world}/state/latest.json` (указатель) + объект | §4.4; чтение через `shared/objstore` только на старте потребителя |
 | C-02 (заглушка) | `testkit.FakeState` | `shared/testkit/state`: `memstore` + `Applier` без `Store` I/O; `WithInvariants()` включает `mechanics.Invariants()`; без опции — только версии и ops |
-| C-03 v1.2 | Go-API §5.1 (совпадает с C-03 дословно); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
+| C-03 v1.3 | Go-API §5.1 (формы, общие с C-03, совпадают с C-03 v1.3; итерация 2 T-449); `rules/dark-forest.yaml` в первой волне | до готовности `Resolve` — `testkit.FixedMechanics` из **`shared/testkit/mechanics`** (EPIC-002 пишет вместе с YAML: табличные исходы по seed для 20 первых ходов золотого набора) |
 | C-13 | резерв уровня `object` | `OwnershipRules` содержит пустые строки `object`/`monitor`; State отклоняет `level_violation` до включения флага `MV_SWARM_OBJECT_AGENTS_ENABLED` (флаг читает Swarm; State — только таблицу; Дополнение после G2: префикс `MV_`) |
 | C-14 | формат `snapshot.created`, объекты снапшота, `latest.json`, порядок старта | §4.4, §4.8, §4.9; `component ∈ state|swarm|gateway` (значения C-14; `api-contracts.md` §2.3.12 использует старые имена — правка system-analyst) |
 | C-01 (потребление) | `Bus`, `Journal`, `contracts.Validate` | State публикует через `Bus.Publish` (валидация схем), читает через `Journal.ReadRange/Tail` со своим курсором (§14 — запрос на `Journal` и позицию в ctx) |

@@ -82,7 +82,11 @@ COMPOSE_FILES += $(if $(wildcard docker-compose.override.yml),-f docker-compose.
 COMPOSE := docker compose $(COMPOSE_FILES) $(PROFILE_ARGS)
 
 # gitleaks scans the range of the branch until the history is rewritten (§3.1).
-BASE ?= integration/mvp-1
+# The range starts at the gitflow trunk (T-453). integration/mvp-1 stayed at
+# F-0, so its range held every commit since and grew with each task; a task or
+# an epic branch is measured against develop, and develop itself against
+# BASE=main. CI never calls this target: its security job scans on its own.
+BASE ?= develop
 
 # Backups live outside the repository and outside the Docker volumes (§5.6).
 BACKUP_DIR ?= $(HOME)/multiverse-backups
@@ -226,9 +230,9 @@ test-race: ## Race detector, repeated, over the concurrent packages and e2e (CI 
 	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...
 
 # `mvctl blueprint validate blueprints/` joins this target together with the
-# command itself, in EPIC-003: the name is reserved in cmd/mvctl/main.go and
-# exits with the usage code until then, which would fail the target for a
-# command that was never written.
+# command itself, in EPIC-003: the name is reserved in
+# cmd/mvctl/commands_swarm.go and exits with the usage code until then, which
+# would fail the target for a command that was never written.
 .PHONY: contracts
 contracts: ## Schemas and the env manifest agree with the code
 	@go run ./cmd/mvctl contracts check
@@ -237,7 +241,18 @@ contracts: ## Schemas and the env manifest agree with the code
 
 .PHONY: secrets-scan
 secrets-scan: ## gitleaks over the branch range and the content of the index
-	@gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .
+	@if ! git rev-parse --verify --quiet "$(BASE)^{commit}" >/dev/null; then
+		echo "secrets-scan: BASE=$(BASE) is not a commit of this repository; pass BASE=<trunk of the branch>" >&2
+		exit 1
+	fi
+	# gitleaks reports "0 commits scanned" and exits 0 for a range it cannot
+	# resolve, so a BASE missing from a clone used to pass the history half
+	# without looking at a single commit (T-453). An empty range is only a
+	# warning: on develop itself, or on a branch already merged into BASE.
+	if [ "$$(git rev-list --count "$(BASE)..HEAD")" -eq 0 ]; then
+		echo "secrets-scan: warning: $(BASE)..HEAD holds no commits, the history half scans nothing; on develop itself pass BASE=main" >&2
+	fi
+	gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .
 	# The second scan reads the content of the index, not the work tree: the
 	# untracked .env of the owner, build/.legacy-src/ and the worktrees of the
 	# agents are not what CI checks out, and they keep the target red for files
