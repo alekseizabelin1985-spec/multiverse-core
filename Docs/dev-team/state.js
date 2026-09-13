@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T11:59:08+03:00",
+  "updatedAt": "2026-09-13T16:20:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -1095,14 +1095,51 @@ window.DEVTEAM_STATE =
         {
           "id": "T-405",
           "title": "Стенд паритета двух реализаций скриптов — в репозиторий и в CI",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-13T10:43:38+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:17:50+03:00",
+          "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 154,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 10:43",
+              "to": "13.09 11:39",
+              "duration": "56m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 11:39",
+              "to": "13.09 11:55",
+              "duration": "16m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 11:55",
+              "to": "13.09 12:31",
+              "duration": "36m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 12:31",
+              "to": "13.09 12:50",
+              "duration": "19m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "13.09 12:50",
+              "to": "13.09 13:02",
+              "duration": "11m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:02",
+              "to": "13.09 13:17",
+              "duration": "15m"
+            }
+          ],
           "card": "epics/EPIC-001-foundation/tasks/T-405.md"
         },
         {
@@ -2104,19 +2141,6 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks.md"
         },
         {
-          "id": "T-439",
-          "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
-          "status": "todo",
-          "assignee": "architect#2",
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
-          "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
-          "card": "epics/EPIC-001-foundation/tasks.md"
-        },
-        {
           "id": "T-440",
           "title": "Редакционно: overview.md §18.1 — порядок E → Qwen3.6 → C → A и правило выбора (доп. 3 ADR-005); владение infrastructure.md в ownership.md привести к факту",
           "status": "done",
@@ -2269,6 +2293,272 @@ window.DEVTEAM_STATE =
           "card": "epics/EPIC-001-foundation/tasks/T-443.md",
           "branch": "task/T-443-kafka-close-dead-letter-race",
           "worktree": ".worktrees/T-443"
+        },
+        {
+          "id": "T-444",
+          "title": "Ревизия контрактов 4 — документы (contract-change)",
+          "status": "done",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T12:34:45+03:00",
+          "finishedAt": "2026-09-13T13:47:28+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 72,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:39",
+              "duration": "5m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:39",
+              "to": "13.09 12:55",
+              "duration": "16m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:55",
+              "to": "13.09 13:12",
+              "duration": "16m"
+            },
+            {
+              "stage": "Ревью 2",
+              "from": "13.09 13:12",
+              "to": "13.09 13:30",
+              "duration": "18m"
+            },
+            {
+              "stage": "Разработка 3",
+              "from": "13.09 13:30",
+              "to": "13.09 13:34",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:34",
+              "to": "13.09 13:47",
+              "duration": "13m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-444.md",
+          "branch": "task/T-444-contracts-revision-4",
+          "worktree": ".worktrees/T-444"
+        },
+        {
+          "id": "T-445",
+          "title": "Ревизия контрактов 4 — линтер, реестр, схемы (contract-change)",
+          "status": "done",
+          "assignee": "TEAM-1/developer#3",
+          "startedAt": "2026-09-13T12:34:45+03:00",
+          "finishedAt": "2026-09-13T13:42:09+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 67,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:45",
+              "duration": "10m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:45",
+              "to": "13.09 13:15",
+              "duration": "30m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:15",
+              "to": "13.09 13:30",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:30",
+              "to": "13.09 13:42",
+              "duration": "11m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-445.md",
+          "branch": "task/T-445-depguard-registry-schemas",
+          "worktree": ".worktrees/T-445"
+        },
+        {
+          "id": "T-446",
+          "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
+          "status": "done",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T13:46:40+03:00",
+          "finishedAt": "2026-09-13T16:20:10+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 141,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-446.md",
+          "branch": "task/T-446-runtime-cmd-layout",
+          "worktree": ".worktrees/T-446"
+        },
+        {
+          "id": "T-449",
+          "title": "Документы по решениям system-architect: C-03 v1.3 (T-053), тексты T-050, правило «локальный адрес» (ADR-005/C-15), направление зависимостей internal/llm (ADR-001), limit_money (C-07)",
+          "status": "done",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T13:49:33+03:00",
+          "finishedAt": "2026-09-13T15:36:06+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 101,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:49",
+              "to": "13.09 14:00",
+              "duration": "11m"
+            },
+            {
+              "stage": "Ревью #1",
+              "from": "13.09 14:00",
+              "to": "13.09 14:16",
+              "duration": "16m"
+            },
+            {
+              "stage": "Итерация 2",
+              "from": "13.09 14:16",
+              "to": "13.09 14:45",
+              "duration": "29m"
+            },
+            {
+              "stage": "Ревью #2",
+              "from": "13.09 14:45",
+              "to": "13.09 15:01",
+              "duration": "16m"
+            },
+            {
+              "stage": "Приёмка (прервана)",
+              "from": "13.09 15:01",
+              "to": "13.09 15:22",
+              "duration": "21m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 15:26",
+              "to": "13.09 15:34",
+              "duration": "8m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-449.md",
+          "branch": "task/T-449-docs-architect-decisions",
+          "worktree": ".worktrees/T-449"
+        },
+        {
+          "id": "T-450",
+          "title": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.tsv, llm-endpoint.sh/.psm1 и compose-lint.sh по ней, тесты паритета в CI (devops)",
+          "status": "in-progress",
+          "assignee": "TEAM-1/devops-engineer#2",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": null,
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-450.md",
+          "branch": "task/T-450-local-endpoint-table",
+          "worktree": ".worktrees/T-450"
+        },
+        {
+          "id": "T-453",
+          "title": "Ложное срабатывание gitleaks в эталоне .env.example без построчного отпечатка; go.yml запускается на develop (devops, XS)",
+          "status": "done",
+          "assignee": "TEAM-1/devops-engineer#1",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": "2026-09-13T14:22:33+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 48,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:31",
+              "to": "13.09 13:48",
+              "duration": "17m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:48",
+              "to": "13.09 14:02",
+              "duration": "14m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 14:02",
+              "to": "13.09 14:19",
+              "duration": "17m"
+            }
+          ],
+          "card": "epics/EPIC-001-foundation/tasks/T-453.md",
+          "branch": "task/T-453-gitleaks-env-example-ci-develop",
+          "worktree": ".worktrees/T-453"
+        },
+        {
+          "id": "T-454",
+          "title": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race) и флак fight-05 в TestTheProcessRunsTheFightsOfIAlpha",
+          "status": "review",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T14:36:44+03:00",
+          "finishedAt": null,
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-454.md",
+          "branch": "task/T-454-ci-race-testkit-state-fight05",
+          "worktree": ".worktrees/T-454"
+        },
+        {
+          "id": "T-455",
+          "title": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (профиль legacy)",
+          "status": "review",
+          "assignee": "TEAM-1/devops-engineer#1",
+          "startedAt": "2026-09-13T14:36:44+03:00",
+          "finishedAt": null,
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-455.md",
+          "branch": "task/T-455-ci-compose-lint-chroma-image",
+          "worktree": ".worktrees/T-455"
+        },
+        {
+          "id": "T-456",
+          "title": "C-08 (следующая версия): 503 forget_incomplete, api-contracts §1.6, КД шлюза по коду T-303, дедлайн чтения long-poll, замечания ревью #2 T-449 (system-architect, после T-449)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-456.md"
+        },
+        {
+          "id": "T-457",
+          "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
+          "status": "review",
+          "assignee": "system-architect#1",
+          "startedAt": "2026-09-13T15:48:01+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-001-foundation/tasks/T-457.md",
+          "branch": "task/T-457-architect-decisions-queue",
+          "worktree": ".worktrees/T-457"
         }
       ],
       "defects": [],
@@ -2281,14 +2571,14 @@ window.DEVTEAM_STATE =
       "type": "epic",
       "size": "L",
       "team": "TEAM-1",
-      "wave": 0,
+      "wave": 1,
       "status": "active",
-      "stage": "planning",
+      "stage": "development",
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-002-state",
-      "next": "design.md → tasks.md (волны) → G3",
+      "branch": "epic/EPIC-002-state-mechanics",
+      "next": "T-051 ∥ T-050, затем T-052, T-053",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -2303,8 +2593,496 @@ window.DEVTEAM_STATE =
           "note": "без замечаний; 2-й developer на независимых задачах; T-254 снята; I1-α остаётся"
         }
       },
-      "tasks": [],
-      "defects": []
+      "tasks": [
+        {
+          "id": "T-051",
+          "title": "RNG и формулы — сверка и добор (воспроизводимость 1000×4, χ² d20, корреляция)",
+          "status": "done",
+          "assignee": "TEAM-1/developer#1",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": "2026-09-13T12:28:41+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 19,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:18",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:18",
+              "to": "13.09 12:24",
+              "duration": "6m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 12:24",
+              "to": "13.09 12:28",
+              "duration": "3m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-051.md",
+          "branch": "task/T-051-rng-statistics",
+          "worktree": ".worktrees/T-051"
+        },
+        {
+          "id": "T-050",
+          "title": "shared/entity — сверка и добор, StatusTransitionAllowed(x,x) по C-02 v1.4",
+          "status": "done",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": "2026-09-13T13:21:23+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 62,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:28",
+              "duration": "18m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:28",
+              "to": "13.09 12:40",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:40",
+              "to": "13.09 12:57",
+              "duration": "16m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 12:57",
+              "to": "13.09 13:12",
+              "duration": "15m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-050.md",
+          "branch": "task/T-050-entity-reconcile",
+          "worktree": ".worktrees/T-050"
+        },
+        {
+          "id": "T-052",
+          "title": "Схемы EPIC-002 — ревизия, примеры и фикстуры valid/invalid",
+          "status": "done",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T12:32:53+03:00",
+          "finishedAt": "2026-09-13T13:12:59+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "subwave": "1.2",
+          "spentMinutes": 39,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:32",
+              "to": "13.09 12:48",
+              "duration": "15m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:48",
+              "to": "13.09 13:01",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:01",
+              "to": "13.09 13:04",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:04",
+              "to": "13.09 13:12",
+              "duration": "8m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-052.md",
+          "branch": "task/T-052-schemas-fixtures",
+          "worktree": ".worktrees/T-052"
+        },
+        {
+          "id": "T-053",
+          "title": "mechanics — Resolve, NPCTarget (*Actor, error), ChangesFor, dice.rolled",
+          "status": "done",
+          "assignee": "TEAM-1/developer#1",
+          "startedAt": "2026-09-13T12:32:53+03:00",
+          "finishedAt": "2026-09-13T13:55:20+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "subwave": "1.2",
+          "spentMinutes": 82,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:32",
+              "to": "13.09 13:07",
+              "duration": "34m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:07",
+              "to": "13.09 13:30",
+              "duration": "23m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:30",
+              "to": "13.09 13:45",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:45",
+              "to": "13.09 13:55",
+              "duration": "9m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-053.md",
+          "branch": "task/T-053-resolve-npctarget-changes",
+          "worktree": ".worktrees/T-053"
+        },
+        {
+          "id": "T-054",
+          "title": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
+          "status": "done",
+          "assignee": "TEAM-1/developer#1",
+          "startedAt": "2026-09-13T14:03:36+03:00",
+          "finishedAt": "2026-09-13T15:48:01+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "subwave": "1.3",
+          "spentMinutes": 92,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 14:03",
+              "to": "13.09 14:39",
+              "duration": "36m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 14:39",
+              "to": "13.09 14:56",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка (прервана)",
+              "from": "13.09 14:56",
+              "to": "13.09 15:22",
+              "duration": "26m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 15:26",
+              "to": "13.09 15:39",
+              "duration": "13m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-054.md",
+          "branch": "task/T-054-solo-invariants",
+          "worktree": ".worktrees/T-054"
+        },
+        {
+          "id": "T-055",
+          "title": "state — конвейер предложение → факт, источники в serve.go",
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#3",
+          "startedAt": "2026-09-13T16:20:10+03:00",
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.3",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-055.md",
+          "branch": "task/T-055-state-pipeline",
+          "worktree": ".worktrees/T-055"
+        },
+        {
+          "id": "T-056",
+          "title": "state — владение, инварианты, дедуп, матрица отказов; замена FakeState v0",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.4",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-056.md"
+        },
+        {
+          "id": "T-060",
+          "title": "internal/replay — EventClock, NullTimers, Recording, сборка в serve.go",
+          "status": "done",
+          "assignee": "TEAM-1/developer#2",
+          "startedAt": "2026-09-13T13:16:34+03:00",
+          "finishedAt": "2026-09-13T14:28:14+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "subwave": "1.4",
+          "spentMinutes": 67,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:16",
+              "to": "13.09 13:38",
+              "duration": "22m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:38",
+              "to": "13.09 13:52",
+              "duration": "14m"
+            },
+            {
+              "stage": "Итерация 2",
+              "from": "13.09 13:52",
+              "to": "13.09 14:07",
+              "duration": "15m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 14:07",
+              "to": "13.09 14:16",
+              "duration": "9m"
+            },
+            {
+              "stage": "Отметка владельца",
+              "from": "13.09 14:16",
+              "to": "13.09 14:23",
+              "duration": "7m"
+            }
+          ],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-060.md",
+          "branch": "task/T-060-replay-eventclock",
+          "worktree": ".worktrees/T-060"
+        },
+        {
+          "id": "T-057",
+          "title": "state — objStore, интенты, снапшоты, latest.json",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.5",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-057.md"
+        },
+        {
+          "id": "T-061",
+          "title": "e2e-харнесс solo-30",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.5",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-061.md"
+        },
+        {
+          "id": "T-058",
+          "title": "bootstrap.go + mvctl world init/status",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.6",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-058.md"
+        },
+        {
+          "id": "T-059",
+          "title": "state — recovery, /health, admin-маршруты",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.6",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-059.md"
+        },
+        {
+          "id": "T-062",
+          "title": "e2e S1/S3 на реальных state+mechanics, покрытие",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.7",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-062.md"
+        },
+        {
+          "id": "T-063",
+          "title": "I1-α — стендовый прогон через бота",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.9",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-063.md"
+        },
+        {
+          "id": "T-064",
+          "title": "Архив as-is entity-manager, rule-engine, shared/rules",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.10",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-064.md"
+        },
+        {
+          "id": "T-065",
+          "title": "Atomic-пакеты группы",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.8",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-065.md"
+        },
+        {
+          "id": "T-066",
+          "title": "Инварианты группы inv-04/05/06",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.9",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-066.md"
+        },
+        {
+          "id": "T-067",
+          "title": "Participation в механике",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.10",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-067.md"
+        },
+        {
+          "id": "T-068",
+          "title": "Снапшот по analytics.session.ended",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.11",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-068.md"
+        },
+        {
+          "id": "T-069",
+          "title": "internal/state/audit — Recompute, Compare",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.12",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-069.md"
+        },
+        {
+          "id": "T-070",
+          "title": "e2e group-3x30",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.13",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-070.md"
+        },
+        {
+          "id": "T-071",
+          "title": "Замер латентности atomic-пакета группы, стенд",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.14",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-071.md"
+        },
+        {
+          "id": "T-448",
+          "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
+          "status": "done",
+          "assignee": "TEAM-1/developer#3",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": "2026-09-13T16:20:10+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "subwave": "1.3",
+          "spentMinutes": 160,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md",
+          "branch": "task/T-448-changed-form-proposal-id",
+          "worktree": ".worktrees/T-448"
+        }
+      ],
+      "defects": [],
+      "worktree": ".worktrees/EPIC-002"
     },
     {
       "id": "EPIC-003",
@@ -2318,8 +3096,8 @@ window.DEVTEAM_STATE =
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-003-swarm",
-      "next": "Ревью пары T-219/T-400 → T-220 рассказчик (3 из 6 видов нарратива) → T-255 хук",
+      "branch": "epic/EPIC-003-swarm-llm-laws",
+      "next": "решения system-architect по depguard → T-201, T-206, T-216; T-439; итерация T-215",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -2338,28 +3116,34 @@ window.DEVTEAM_STATE =
         {
           "id": "T-201",
           "title": "A1 · shared/agent v2: типы блупринта, парсер, плейсхолдеры, чистка пакета",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "TEAM-2/developer#1",
+          "startedAt": "2026-09-13T12:52:40+03:00",
+          "finishedAt": "2026-09-13T15:56:06+03:00",
+          "reviewIterations": 3,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 175,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-201.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-201.md",
+          "subwave": "A",
+          "branch": "task/T-201-agent-blueprint-v2",
+          "worktree": ".worktrees/T-201"
         },
         {
           "id": "T-202",
           "title": "A2 · Реестр уровней levels.go и валидатор блупринтов",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#1",
+          "startedAt": "2026-09-13T16:03:58+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md",
+          "subwave": "B",
+          "branch": "task/T-202-levels-validator",
+          "worktree": ".worktrees/T-202"
         },
         {
           "id": "T-203",
@@ -2372,7 +3156,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-203.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-203.md",
+          "subwave": "C"
         },
         {
           "id": "T-204",
@@ -2385,7 +3170,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-204.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-204.md",
+          "subwave": "G"
         },
         {
           "id": "T-205",
@@ -2398,33 +3184,65 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md",
+          "subwave": "B"
         },
         {
           "id": "T-206",
           "title": "B1 · Типы шлюза, конфигурация, реестр провайдеров, таблица цен",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "status": "done",
+          "assignee": "TEAM-2/developer#2",
+          "startedAt": "2026-09-13T12:34:45+03:00",
+          "finishedAt": "2026-09-13T13:26:57+03:00",
+          "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
-          "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-206.md"
+          "spentMinutes": 52,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:34",
+              "to": "13.09 12:43",
+              "duration": "9m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:43",
+              "to": "13.09 12:58",
+              "duration": "14m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:58",
+              "to": "13.09 13:15",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:15",
+              "to": "13.09 13:26",
+              "duration": "11m"
+            }
+          ],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-206.md",
+          "branch": "task/T-206-llm-gateway-types",
+          "worktree": ".worktrees/T-206",
+          "subwave": "A"
         },
         {
           "id": "T-207",
           "title": "B2 · Провайдеры fake и recorded — **ранний merge в integration/mvp-1",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#2",
+          "startedAt": "2026-09-13T16:10:55+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md",
+          "subwave": "B",
+          "branch": "task/T-207-fake-recorded-providers",
+          "worktree": ".worktrees/T-207"
         },
         {
           "id": "T-208",
@@ -2437,7 +3255,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-208.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-208.md",
+          "subwave": "C"
         },
         {
           "id": "T-209",
@@ -2450,7 +3269,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-209.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-209.md",
+          "subwave": "D"
         },
         {
           "id": "T-210",
@@ -2463,7 +3283,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md",
+          "subwave": "C"
         },
         {
           "id": "T-211",
@@ -2476,7 +3297,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-211.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-211.md",
+          "subwave": "E"
         },
         {
           "id": "T-212",
@@ -2489,7 +3311,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-212.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-212.md",
+          "subwave": "F"
         },
         {
           "id": "T-213",
@@ -2502,16 +3325,17 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-213.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-213.md",
+          "subwave": "G"
         },
         {
           "id": "T-214",
           "title": "Схемы событий части 1: рой, тики, мир, регион, NPC, законы",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-10T22:49:35+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:39:39+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 103,
           "timeLog": [
@@ -2527,11 +3351,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-215",
           "title": "Схемы событий части 2: LLM и нарратив",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-10T22:49:35+03:00",
-          "finishedAt": "2026-09-11T01:32:58+03:00",
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T14:39:39+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 59,
           "timeLog": [
@@ -2555,7 +3379,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-216.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-216.md",
+          "subwave": "A"
         },
         {
           "id": "T-217",
@@ -2568,7 +3393,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-217.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-217.md",
+          "subwave": "F"
         },
         {
           "id": "T-218",
@@ -2581,7 +3407,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-218.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-218.md",
+          "subwave": "D"
         },
         {
           "id": "T-219",
@@ -2700,7 +3527,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-221.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-221.md",
+          "subwave": "L"
         },
         {
           "id": "T-222",
@@ -2713,7 +3541,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-222.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-222.md",
+          "subwave": "D"
         },
         {
           "id": "T-223",
@@ -2726,7 +3555,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-223.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-223.md",
+          "subwave": "E"
         },
         {
           "id": "T-224",
@@ -2739,7 +3569,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-224.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-224.md",
+          "subwave": "F"
         },
         {
           "id": "T-225",
@@ -2752,7 +3583,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-225.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-225.md",
+          "subwave": "G"
         },
         {
           "id": "T-226",
@@ -2765,7 +3597,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-226.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-226.md",
+          "subwave": "H"
         },
         {
           "id": "T-227",
@@ -2778,7 +3611,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-227.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-227.md",
+          "subwave": "I"
         },
         {
           "id": "T-228",
@@ -2791,7 +3625,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-228.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-228.md",
+          "subwave": "J"
         },
         {
           "id": "T-229",
@@ -2804,7 +3639,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-229.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-229.md",
+          "subwave": "H"
         },
         {
           "id": "T-230",
@@ -2817,7 +3653,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-230.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-230.md",
+          "subwave": "I"
         },
         {
           "id": "T-231",
@@ -2830,7 +3667,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-231.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-231.md",
+          "subwave": "J"
         },
         {
           "id": "T-232",
@@ -2843,7 +3681,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-232.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-232.md",
+          "subwave": "K"
         },
         {
           "id": "T-233",
@@ -2856,7 +3695,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-233.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-233.md",
+          "subwave": "I"
         },
         {
           "id": "T-234",
@@ -2869,7 +3709,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-234.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-234.md",
+          "subwave": "E"
         },
         {
           "id": "T-235",
@@ -2882,7 +3723,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-235.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-235.md",
+          "subwave": "G"
         },
         {
           "id": "T-236",
@@ -2895,7 +3737,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-236.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-236.md",
+          "subwave": "H"
         },
         {
           "id": "T-237",
@@ -2908,7 +3751,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-237.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-237.md",
+          "subwave": "K"
         },
         {
           "id": "T-238",
@@ -2921,7 +3765,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-238.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-238.md",
+          "subwave": "N"
         },
         {
           "id": "T-239",
@@ -2934,7 +3779,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-239.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-239.md",
+          "subwave": "M"
         },
         {
           "id": "T-240",
@@ -2947,7 +3793,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-240.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-240.md",
+          "subwave": "M"
         },
         {
           "id": "T-241",
@@ -2960,7 +3807,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-241.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-241.md",
+          "subwave": "L"
         },
         {
           "id": "T-242",
@@ -2973,7 +3821,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-242.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-242.md",
+          "subwave": "M"
         },
         {
           "id": "T-243",
@@ -2986,7 +3835,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-243.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-243.md",
+          "subwave": "N"
         },
         {
           "id": "T-244",
@@ -2999,7 +3849,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-244.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-244.md",
+          "subwave": "N"
         },
         {
           "id": "T-245",
@@ -3012,7 +3863,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-245.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-245.md",
+          "subwave": "N"
         },
         {
           "id": "T-246",
@@ -3025,7 +3877,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-246.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-246.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-247",
@@ -3038,7 +3891,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-247.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-247.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-248",
@@ -3051,7 +3905,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-248.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-248.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-249",
@@ -3064,7 +3919,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-249.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-249.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-250",
@@ -3077,7 +3933,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-250.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-250.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-251",
@@ -3090,7 +3947,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-251.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-251.md",
+          "subwave": "2.3"
         },
         {
           "id": "T-252",
@@ -3103,7 +3961,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-252.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-252.md",
+          "subwave": "2.4"
         },
         {
           "id": "T-253",
@@ -3116,7 +3975,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-253.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-253.md",
+          "subwave": "2.3"
         },
         {
           "id": "T-254",
@@ -3129,7 +3989,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-254.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-254.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-255",
@@ -3192,7 +4053,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-256.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-256.md",
+          "subwave": "N"
         },
         {
           "id": "T-419",
@@ -3255,7 +4117,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-421.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-421.md",
+          "subwave": "J"
         },
         {
           "id": "T-422",
@@ -3268,7 +4131,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-422.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-422.md",
+          "subwave": "K"
         },
         {
           "id": "T-423",
@@ -3281,7 +4145,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-423.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-423.md",
+          "subwave": "L"
         },
         {
           "id": "T-424",
@@ -3294,12 +4159,13 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-424.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-424.md",
+          "subwave": "M"
         },
         {
           "id": "T-427",
           "title": "Действие до encounter.started: окно до подъёма агента встречи",
-          "status": "todo",
+          "status": "review",
           "assignee": null,
           "startedAt": null,
           "finishedAt": null,
@@ -3308,10 +4174,88 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-427.md"
+        },
+        {
+          "id": "T-439",
+          "title": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую конфигурацию (из T-435; КД swarm-llm-laws §13.3–13.4)",
+          "status": "done",
+          "assignee": "TEAM-2/architect#2",
+          "startedAt": "2026-09-13T14:03:36+03:00",
+          "finishedAt": "2026-09-13T16:03:58+03:00",
+          "reviewIterations": 2,
+          "wave": 1,
+          "spentMinutes": 115,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md",
+          "subwave": "A",
+          "branch": "task/T-439-narrative-length-cap",
+          "worktree": ".worktrees/T-439"
+        },
+        {
+          "id": "T-447",
+          "title": "Подключение llm, laws, swarm в cmd/multiverse — один ленивый стек (решение 7 ревизии 4)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "L",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-447.md"
+        },
+        {
+          "id": "T-451",
+          "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-451.md"
+        },
+        {
+          "id": "T-452",
+          "title": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие комментарии T-053, remove без value при отсутствующем new (XS, до T-062)",
+          "status": "done",
+          "assignee": "TEAM-2/developer#2",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": "2026-09-13T14:04:30+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 33,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 13:31",
+              "to": "13.09 13:45",
+              "duration": "13m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 13:45",
+              "to": "13.09 13:53",
+              "duration": "8m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:53",
+              "to": "13.09 14:04",
+              "duration": "10m"
+            }
+          ],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-452.md",
+          "branch": "task/T-452-fake-encounter-fallen-character",
+          "worktree": ".worktrees/T-452"
         }
       ],
       "defects": [],
-      "epic": "EPIC-003"
+      "epic": "EPIC-003",
+      "worktree": ".worktrees/EPIC-003"
     },
     {
       "id": "EPIC-004",
@@ -3319,14 +4263,14 @@ window.DEVTEAM_STATE =
       "type": "epic",
       "size": "L",
       "team": "TEAM-3",
-      "wave": 0,
+      "wave": 1,
       "status": "active",
-      "stage": "planning",
+      "stage": "development",
       "stageStartedAt": "2026-09-09T14:10:00+03:00",
       "startedAt": "2026-09-09T08:15:00+03:00",
       "finishedAt": null,
-      "branch": "epic/EPIC-004-gateway",
-      "next": "design.md → tasks.md (волны) → G3",
+      "branch": "epic/EPIC-004-gateway-bot",
+      "next": "T-301 ∥ T-302",
       "gates": {
         "G1": {
           "status": "n/a"
@@ -3341,8 +4285,512 @@ window.DEVTEAM_STATE =
           "note": "без замечаний; 2-й developer на независимых задачах; T-254 снята; I1-α остаётся"
         }
       },
-      "tasks": [],
-      "defects": []
+      "tasks": [
+        {
+          "id": "T-301",
+          "title": "OpenAPI, DTO, таблица кодов, клиент gateway",
+          "status": "done",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": "2026-09-13T13:23:28+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 74,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:37",
+              "duration": "28m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:37",
+              "to": "13.09 12:54",
+              "duration": "17m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:54",
+              "to": "13.09 13:12",
+              "duration": "17m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:12",
+              "to": "13.09 13:23",
+              "duration": "11m"
+            }
+          ],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-301.md",
+          "branch": "task/T-301-openapi-dto-client",
+          "worktree": ".worktrees/T-301"
+        },
+        {
+          "id": "T-302",
+          "title": "Хранилище gateway: SQLite, миграции goose",
+          "status": "done",
+          "assignee": "TEAM-3/developer#2",
+          "startedAt": "2026-09-13T12:09:07+03:00",
+          "finishedAt": "2026-09-13T13:09:07+03:00",
+          "reviewIterations": 1,
+          "wave": 1,
+          "spentMinutes": 60,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:33",
+              "duration": "24m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:33",
+              "to": "13.09 12:48",
+              "duration": "14m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:48",
+              "to": "13.09 12:56",
+              "duration": "7m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 12:56",
+              "to": "13.09 13:09",
+              "duration": "12m"
+            }
+          ],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-302.md",
+          "branch": "task/T-302-store-migrations",
+          "worktree": ".worktrees/T-302"
+        },
+        {
+          "id": "T-303",
+          "title": "links и каркас HTTP-слоя, регистрация контекста gateway",
+          "status": "review",
+          "assignee": "TEAM-3/developer#1",
+          "startedAt": "2026-09-13T13:31:28+03:00",
+          "finishedAt": null,
+          "reviewIterations": 2,
+          "wave": 1,
+          "subwave": "1.3",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-303.md",
+          "branch": "task/T-303-links-http-layer",
+          "worktree": ".worktrees/T-303"
+        },
+        {
+          "id": "T-304",
+          "title": "readmodel и consumer (entity.*, encounter.*)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.4",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-304.md"
+        },
+        {
+          "id": "T-305",
+          "title": "actions: валидация, идемпотентность, лимит, InputFilter",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.5",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-305.md"
+        },
+        {
+          "id": "T-306",
+          "title": "characters, worlds/players, session/turns, C-10",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.6",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-306.md"
+        },
+        {
+          "id": "T-307",
+          "title": "outbox, long-poll доставок, consumer боя и нарратива",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.7",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-307.md"
+        },
+        {
+          "id": "T-308",
+          "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.8",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-308.md"
+        },
+        {
+          "id": "T-309",
+          "title": "Снапшот gateway, live/replay, полный /health",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.10",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-309.md"
+        },
+        {
+          "id": "T-310",
+          "title": "Бот: config, access, updates, sender, commands, privacy",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.4",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-310.md"
+        },
+        {
+          "id": "T-311",
+          "title": "Бот: flow и render",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.5",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-311.md"
+        },
+        {
+          "id": "T-312",
+          "title": "Бот: deliver, main, подкоманда health",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.6",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-312.md"
+        },
+        {
+          "id": "T-313",
+          "title": "e2e соло: solo-30, death, flee-fail",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.9",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-313.md"
+        },
+        {
+          "id": "T-314",
+          "title": "e2e: forget, privacy-scan, recovery",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.11",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-314.md"
+        },
+        {
+          "id": "T-315",
+          "title": "e2e бота на фейках",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.9",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-315.md"
+        },
+        {
+          "id": "T-316",
+          "title": "Integration-тесты consumer на Redpanda",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.10",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-316.md"
+        },
+        {
+          "id": "T-317",
+          "title": "README gateway и бота, runbook §6, .env.example",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.7",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-317.md"
+        },
+        {
+          "id": "T-318",
+          "title": "Текст уведомления FR-009 (BA + tech-writer)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.5",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-318.md"
+        },
+        {
+          "id": "T-319",
+          "title": "Архивация services/game-service",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "стенд I1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-319.md"
+        },
+        {
+          "id": "T-320",
+          "title": "Уведомление об облачном провайдере в боте",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.11",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-320.md"
+        },
+        {
+          "id": "T-350",
+          "title": "Координатор раундов — ядро",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-350.md"
+        },
+        {
+          "id": "T-351",
+          "title": "Раунды: Restore, replay, idle, OnParticipantsChanged",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.2",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-351.md"
+        },
+        {
+          "id": "T-352",
+          "title": "groups, лидер, GET /v1/groups/{id}",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-352.md"
+        },
+        {
+          "id": "T-353",
+          "title": "Групповая доставка и /group в боте",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.2",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-353.md"
+        },
+        {
+          "id": "T-354",
+          "title": "rounds/close (ci) и CloseRound",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.3",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-354.md"
+        },
+        {
+          "id": "T-355",
+          "title": "/forget-каскад группы",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.3",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-355.md"
+        },
+        {
+          "id": "T-356",
+          "title": "Прокси /v1/admin/*, actor_kind ci/sim",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.4",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-356.md"
+        },
+        {
+          "id": "T-357",
+          "title": "e2e группы group-3x30 и forget в группе",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "2.4",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-357.md"
+        },
+        {
+          "id": "T-390",
+          "title": "Стенд: токен, allowlist, том данных",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "стенд I1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-390.md"
+        },
+        {
+          "id": "T-391",
+          "title": "Живой прогон I1-α через Telegram",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "стенд I1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-391.md"
+        },
+        {
+          "id": "T-392",
+          "title": "Чек-лист I1 на стенде",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "стенд I1",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-392.md"
+        },
+        {
+          "id": "T-393",
+          "title": "Живой прогон I2, группа из трёх аккаунтов",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 2,
+          "subwave": "стенд I2",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-393.md"
+        }
+      ],
+      "defects": [],
+      "worktree": ".worktrees/EPIC-004"
     },
     {
       "id": "EPIC-005",
@@ -6357,7 +7805,7 @@ window.DEVTEAM_STATE =
       "task": "EPIC-002",
       "action": "сверка EPIC-002 и чек-лист точки A",
       "startedAt": "2026-09-13T11:41:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:27:29+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -6377,7 +7825,7 @@ window.DEVTEAM_STATE =
       "task": "T-405",
       "action": "итерация 2 T-405: M-1, Mi-1–Mi-3, Nit",
       "startedAt": "2026-09-13T11:55:51+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:31:56+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -6387,6 +7835,1166 @@ window.DEVTEAM_STATE =
       "task": "PROJECT",
       "action": "решения по контрактам и depguard перед волнами трёх команд",
       "startedAt": "2026-09-13T11:59:08+03:00",
+      "finishedAt": "2026-09-13T12:34:45+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-051",
+      "action": "T-051 RNG: сверка и добор",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:18:37+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "T-050 entity: сверка и добор",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:28:02+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "T-301 OpenAPI/DTO/клиент",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:37:12+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "T-302 хранилище и миграции",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:33:57+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "EPIC-002",
+      "action": "индекс и DoD EPIC-002 под v0.10",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:27:29+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "EPIC-004",
+      "action": "индекс и DoD EPIC-004 под дерево и gitflow",
+      "startedAt": "2026-09-13T12:09:07+03:00",
+      "finishedAt": "2026-09-13T12:31:56+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-051",
+      "action": "ревью #1 T-051 (TEAM-1)",
+      "startedAt": "2026-09-13T12:18:37+03:00",
+      "finishedAt": "2026-09-13T12:24:44+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-051",
+      "action": "приёмка T-051 (TEAM-1)",
+      "startedAt": "2026-09-13T12:24:44+03:00",
+      "finishedAt": "2026-09-13T12:28:41+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "ревью #1 T-050 (TEAM-1)",
+      "startedAt": "2026-09-13T12:28:02+03:00",
+      "finishedAt": "2026-09-13T12:40:50+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "ревью #2 T-405 (TEAM-1)",
+      "startedAt": "2026-09-13T12:31:56+03:00",
+      "finishedAt": "2026-09-13T12:50:58+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "mechanics — Resolve, NPCTarget (*Actor, error), ChangesFor, dice.rolle",
+      "startedAt": "2026-09-13T12:32:53+03:00",
+      "finishedAt": "2026-09-13T13:07:30+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "Схемы EPIC-002 — ревизия, примеры и фикстуры valid/invalid",
+      "startedAt": "2026-09-13T12:32:53+03:00",
+      "finishedAt": "2026-09-13T12:48:06+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "ревью #1 T-302 (TEAM-3)",
+      "startedAt": "2026-09-13T12:33:57+03:00",
+      "finishedAt": "2026-09-13T12:48:45+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "PROJECT",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "T-444 ревизия контрактов 4 — документы",
+      "startedAt": "2026-09-13T12:34:45+03:00",
+      "finishedAt": "2026-09-13T12:39:45+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "T-445 линтер, реестр, схемы",
+      "startedAt": "2026-09-13T12:34:45+03:00",
+      "finishedAt": "2026-09-13T12:45:24+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "T-206 типы и конфиг LLM-шлюза",
+      "startedAt": "2026-09-13T12:34:45+03:00",
+      "finishedAt": "2026-09-13T12:43:57+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "EPIC-003",
+      "action": "индекс и DoD EPIC-003 под v0.10 и ревизию 4",
+      "startedAt": "2026-09-13T12:34:45+03:00",
+      "finishedAt": "2026-09-13T12:52:20+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "ревью #1 T-301 (TEAM-3)",
+      "startedAt": "2026-09-13T12:37:12+03:00",
+      "finishedAt": "2026-09-13T12:54:46+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "ревью #1 T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T12:39:45+03:00",
+      "finishedAt": "2026-09-13T12:55:52+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "итерация 2 T-050: Mi-1–Mi-3, Nit",
+      "startedAt": "2026-09-13T12:40:50+03:00",
+      "finishedAt": "2026-09-13T12:57:03+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "ревью #1 T-206 (TEAM-2)",
+      "startedAt": "2026-09-13T12:43:57+03:00",
+      "finishedAt": "2026-09-13T12:58:16+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "ревью #1 T-445 (TEAM-1)",
+      "startedAt": "2026-09-13T12:45:24+03:00",
+      "finishedAt": "2026-09-13T13:15:30+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "итерация 2 T-302: Mi-1, Nit",
+      "startedAt": "2026-09-13T12:48:45+03:00",
+      "finishedAt": "2026-09-13T12:56:26+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "ревью #1 T-052 (TEAM-3 в помощь TEAM-1)",
+      "startedAt": "2026-09-13T12:48:45+03:00",
+      "finishedAt": "2026-09-13T13:01:23+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "итерация 3 T-405: Mi-1, Mi-2",
+      "startedAt": "2026-09-13T12:50:58+03:00",
+      "finishedAt": "2026-09-13T13:02:37+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "T-201 shared/agent v2",
+      "startedAt": "2026-09-13T12:52:40+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "итерация 2 T-301: Mi-1–Mi-7, group_move",
+      "startedAt": "2026-09-13T12:54:46+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "итерация 2 T-444: Ma-1–Ma-3, Minor",
+      "startedAt": "2026-09-13T12:55:52+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "приёмка T-302 (TEAM-3)",
+      "startedAt": "2026-09-13T12:56:26+03:00",
+      "finishedAt": "2026-09-13T13:09:07+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "приёмка T-050 (TEAM-1)",
+      "startedAt": "2026-09-13T12:57:03+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "итерация 2 T-206: Secret, гейт, цены",
+      "startedAt": "2026-09-13T12:58:16+03:00",
+      "finishedAt": "2026-09-13T13:15:53+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "итерация 2 T-052: фикстуры replay, EPIC-005",
+      "startedAt": "2026-09-13T13:01:23+03:00",
+      "finishedAt": "2026-09-13T13:04:44+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "приёмка T-405 (TEAM-1)",
+      "startedAt": "2026-09-13T13:02:37+03:00",
+      "finishedAt": "2026-09-13T13:17:50+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "приёмка T-052 (TEAM-1)",
+      "startedAt": "2026-09-13T13:04:44+03:00",
+      "finishedAt": "2026-09-13T13:12:59+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "ревью #1 T-053 (TEAM-1)",
+      "startedAt": "2026-09-13T13:07:30+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "приёмка T-301 (TEAM-3)",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": "2026-09-13T13:23:28+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "ревью #2 T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "PROJECT",
+      "task": "PROJECT",
+      "action": "пакет решений: T-050, T-053, T-206, T-448",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "итерация 2 T-445: depguard (б), $ в правилах",
+      "startedAt": "2026-09-13T13:15:30+03:00",
+      "finishedAt": "2026-09-13T13:30:46+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "приёмка T-206 (TEAM-2)",
+      "startedAt": "2026-09-13T13:15:53+03:00",
+      "finishedAt": "2026-09-13T13:26:57+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "T-060 internal/replay: EventClock, NullTimers, Recording",
+      "startedAt": "2026-09-13T13:16:34+03:00",
+      "finishedAt": "2026-09-13T13:38:43+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "итерация 3 T-444: Minor/Nit",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": "2026-09-13T13:34:03+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "ревью #1 T-201 (TEAM-2)",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": "2026-09-13T13:45:18+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "приёмка T-445",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": "2026-09-13T13:42:09+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "итерация 2 T-053: C-03 v1.3",
+      "startedAt": "2026-09-13T13:30:46+03:00",
+      "finishedAt": "2026-09-13T13:45:56+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "Ложное срабатывание gitleaks в эталоне .env.example без построчного от",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": "2026-09-13T13:48:51+03:00"
+    },
+    {
+      "instance": "devops-engineer#2",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Правило «локальный адрес»: одна таблица testdata/llm/local-endpoints.t",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": "2026-09-13T14:28:14+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "FakeEncounter: павшему персонажу только hp и status (Р3), устаревшие к",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": "2026-09-13T13:45:18+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Форма changed[] для append и remove, согласованная с правилом догона §",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": "2026-09-13T14:16:04+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "links и каркас HTTP-слоя, регистрация контекста gateway",
+      "startedAt": "2026-09-13T13:31:28+03:00",
+      "finishedAt": "2026-09-13T14:16:53+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "приёмка T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T13:34:03+03:00",
+      "finishedAt": "2026-09-13T13:47:28+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "ревью #1 T-060 (TEAM-1)",
+      "startedAt": "2026-09-13T13:38:43+03:00",
+      "finishedAt": "2026-09-13T13:52:03+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "итерация 2 T-201: ContentHash, fence, плейсхолдеры",
+      "startedAt": "2026-09-13T13:45:18+03:00",
+      "finishedAt": "2026-09-13T14:08:27+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "ревью #1 T-452 (TEAM-2)",
+      "startedAt": "2026-09-13T13:45:18+03:00",
+      "finishedAt": "2026-09-13T13:53:41+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "приёмка T-053 (TEAM-1)",
+      "startedAt": "2026-09-13T13:45:56+03:00",
+      "finishedAt": "2026-09-13T13:55:20+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "T-446 runtime (таймауты, SetDeadlines, ShuttingDown) и раскладка cmd",
+      "startedAt": "2026-09-13T13:46:40+03:00",
+      "finishedAt": "2026-09-13T14:16:27+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "ревью #1 T-453 (TEAM-1)",
+      "startedAt": "2026-09-13T13:48:51+03:00",
+      "finishedAt": "2026-09-13T14:02:45+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "PROJECT",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "T-449 документы по решениям: C-03 v1.3, T-050, локальный адрес, llm, limit_money",
+      "startedAt": "2026-09-13T13:49:33+03:00",
+      "finishedAt": "2026-09-13T14:00:01+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "итерация 2 T-060: проводка Bus, Derive replay",
+      "startedAt": "2026-09-13T13:52:03+03:00",
+      "finishedAt": "2026-09-13T14:07:40+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-452",
+      "action": "приёмка T-452 (TEAM-2)",
+      "startedAt": "2026-09-13T13:53:41+03:00",
+      "finishedAt": "2026-09-13T14:04:30+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "ревью #1 T-449 (TEAM-1)",
+      "startedAt": "2026-09-13T14:00:01+03:00",
+      "finishedAt": "2026-09-13T14:16:04+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-453",
+      "action": "приёмка T-453 с правкой Minor/Nit",
+      "startedAt": "2026-09-13T14:02:45+03:00",
+      "finishedAt": "2026-09-13T14:22:33+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "mechanics — инварианты соло inv-01, 02, 03, 09, 10",
+      "startedAt": "2026-09-13T14:03:36+03:00",
+      "finishedAt": "2026-09-13T14:39:15+03:00"
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "EPIC-003: потолок длины нарратива (max_tokens, maxLength) под целевую ",
+      "startedAt": "2026-09-13T14:03:36+03:00",
+      "finishedAt": "2026-09-13T14:23:44+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "приёмка T-060 (TEAM-1)",
+      "startedAt": "2026-09-13T14:07:40+03:00",
+      "finishedAt": "2026-09-13T14:16:04+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "ревью #2 T-201 (TEAM-2)",
+      "startedAt": "2026-09-13T14:08:27+03:00",
+      "finishedAt": "2026-09-13T14:22:33+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Ревью #1: форма changed[], proposal_id, ±2^53",
+      "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": "2026-09-13T14:35:11+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Итерация 2 T-449 и подтверждение решений T-448",
+      "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": "2026-09-13T14:45:09+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "Отметка владельца cmd/multiverse по serve.go",
+      "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": "2026-09-13T14:28:14+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #1: runtime и раскладка cmd по владельцам",
+      "startedAt": "2026-09-13T14:16:27+03:00",
+      "finishedAt": "2026-09-13T14:41:31+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Ревью #1: links и HTTP-слой gateway",
+      "startedAt": "2026-09-13T14:16:53+03:00",
+      "finishedAt": "2026-09-13T14:39:15+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Итерация 3: хеш дат и ключей, кириллица в плейсхолдерах",
+      "startedAt": "2026-09-13T14:22:33+03:00",
+      "finishedAt": "2026-09-13T14:39:15+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Ревью #1: потолок длины нарратива, ярлыки eK/bK",
+      "startedAt": "2026-09-13T14:23:44+03:00",
+      "finishedAt": "2026-09-13T14:40:05+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Ревью #1: таблица «локальный адрес» и скрипты",
+      "startedAt": "2026-09-13T14:28:14+03:00",
+      "finishedAt": "2026-09-13T15:02:59+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Итерация 2: граница 2^53−1, тесты решений, форма Change",
+      "startedAt": "2026-09-13T14:35:11+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-214",
+      "action": "Приёмка T-214 и T-215 (схемы EPIC-003)",
+      "startedAt": "2026-09-13T14:35:11+03:00",
+      "finishedAt": "2026-09-13T14:39:39+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "CI на Linux: гонка данных в shared/testkit/state consumer_test (-race)",
+      "startedAt": "2026-09-13T14:36:44+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "CI на Linux: compose-lint падает на пустом CHROMA_IMAGE без .env (проф",
+      "startedAt": "2026-09-13T14:36:44+03:00",
+      "finishedAt": "2026-09-13T14:52:42+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Ревью #1: инварианты соло",
+      "startedAt": "2026-09-13T14:39:15+03:00",
+      "finishedAt": "2026-09-13T14:56:38+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Ревью #3: итерация 3 shared/agent",
+      "startedAt": "2026-09-13T14:39:15+03:00",
+      "finishedAt": "2026-09-13T14:52:04+03:00"
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Итерация 2: ADR-029 ярлыки вызова, замечания ревью",
+      "startedAt": "2026-09-13T14:40:05+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Итерация 2: SetDeadlines и long-poll, имена владельцев e2e",
+      "startedAt": "2026-09-13T14:41:31+03:00",
+      "finishedAt": "2026-09-13T15:00:18+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Ревью #2: документы по пакету решений",
+      "startedAt": "2026-09-13T14:45:09+03:00",
+      "finishedAt": "2026-09-13T15:01:32+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Итерация 2: /data в образе, 503 с условиями, замечания ревью",
+      "startedAt": "2026-09-13T14:45:09+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Приёмка T-201 shared/agent v2",
+      "startedAt": "2026-09-13T14:52:04+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Приёмка T-054 инварианты соло",
+      "startedAt": "2026-09-13T14:56:38+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Ревью #1: compose-lint без окружения CI",
+      "startedAt": "2026-09-13T14:56:38+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Приёмка T-449 документы пакета решений",
+      "startedAt": "2026-09-13T15:01:32+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #2: итерация 2 runtime/раскладка",
+      "startedAt": "2026-09-13T15:01:32+03:00",
+      "finishedAt": "2026-09-13T15:22:08+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "CI: гонка testkit/state и флак fight-05 (возобновление)",
+      "startedAt": "2026-09-13T15:25:54+03:00",
+      "finishedAt": "2026-09-13T15:56:06+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Итерация 2 (возобновление): /data, 503 с условиями",
+      "startedAt": "2026-09-13T15:25:54+03:00",
+      "finishedAt": "2026-09-13T15:38:28+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Приёмка T-449 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T15:36:06+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Приёмка T-054 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T15:48:01+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Приёмка T-201 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T15:39:15+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Ревью #2: итерация 2 T-448",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T16:00:54+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #2 T-446 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T15:56:06+03:00"
+    },
+    {
+      "instance": "devops-engineer#2",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Итерация 2: точка у IPv4, строки таблицы",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Итерация 2: ADR-029 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": "2026-09-13T15:37:02+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Ревью #1: compose-lint без окружения CI",
+      "startedAt": "2026-09-13T15:36:06+03:00",
+      "finishedAt": "2026-09-13T16:00:54+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Ревью #2: ADR-029 и потолок нарратива",
+      "startedAt": "2026-09-13T15:37:02+03:00",
+      "finishedAt": "2026-09-13T15:50:50+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Ревью #2: итерация 2 links/HTTP",
+      "startedAt": "2026-09-13T15:38:28+03:00",
+      "finishedAt": "2026-09-13T16:02:07+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Отметка владельца: .golangci.yml и архив",
+      "startedAt": "2026-09-13T15:39:15+03:00",
+      "finishedAt": "2026-09-13T15:56:06+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Решения: ADR-029/C-07 ref, В1–В4 T-054, вопросы T-060",
+      "startedAt": "2026-09-13T15:48:01+03:00",
+      "finishedAt": "2026-09-13T16:20:10+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Приёмка T-439 ADR-029 и потолок нарратива",
+      "startedAt": "2026-09-13T15:50:50+03:00",
+      "finishedAt": "2026-09-13T16:03:58+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Приёмка T-446 на слитом с эпиком дереве",
+      "startedAt": "2026-09-13T15:56:06+03:00",
+      "finishedAt": "2026-09-13T16:20:10+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "Ревью #1: гонка testkit/state, флак fight-05",
+      "startedAt": "2026-09-13T15:56:06+03:00",
+      "finishedAt": "2026-09-13T16:12:01+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Приёмка T-448 на слитом дереве эпика",
+      "startedAt": "2026-09-13T16:00:54+03:00",
+      "finishedAt": "2026-09-13T16:20:10+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-455",
+      "action": "Приёмка T-455 compose-lint без окружения CI",
+      "startedAt": "2026-09-13T16:00:54+03:00",
+      "finishedAt": "2026-09-13T16:12:20+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Приёмка T-303 links и HTTP",
+      "startedAt": "2026-09-13T16:02:07+03:00",
+      "finishedAt": "2026-09-13T16:20:50+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Отметка владельца EPIC-001: Dockerfile, cmd, runbook",
+      "startedAt": "2026-09-13T16:02:07+03:00",
+      "finishedAt": "2026-09-13T16:10:33+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-202",
+      "action": "levels.go и валидатор блупринтов",
+      "startedAt": "2026-09-13T16:03:58+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-207",
+      "action": "Провайдеры fake и recorded",
+      "startedAt": "2026-09-13T16:10:55+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-454",
+      "action": "Приёмка T-454 гонка и флак CI",
+      "startedAt": "2026-09-13T16:12:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "state: конвейер предложение → факт",
+      "startedAt": "2026-09-13T16:20:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Ревью #1: решения архитектора C-01/C-05/C-07",
+      "startedAt": "2026-09-13T16:20:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-303",
+      "action": "Повторная отметка владельца: В-1, В-2",
+      "startedAt": "2026-09-13T16:20:50+03:00",
       "finishedAt": null
     }
   ],
@@ -8976,6 +11584,366 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Параллельность 2 → 6 (указание пользователя до 50 % недельного лимита). Начаты T-399 (architect#1), T-398 (tech-writer#1), T-441 (developer#1); T-405 — после слияния T-437"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Push выполнен по разрешению пользователя: develop (9c93764) и epic/EPIC-001…004 созданы на origin; gitleaks по 154 коммитам, которых нет на origin, — 0 находок. CI Go не запустился — это не сбой: в go.yml push-триггер только main и integration/**, ветки эпиков по замыслу проверяются через PR; тригге"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение пользователя по защите develop: «только проверки пока» — required status checks без обязательного одобрения PR. Настройку в GitHub выполняет владелец репозитория; оркестратор настройки безопасности не меняет. Состав обязательных проверок — после первого зелёного прогона go.yml на develop (T-"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 выполнена TEAM-1/developer#3: (а) entity.Change с флагами HasOld/HasNew и JSON по наличию ключей, схема entity.updated — required [path] + anyOf, правило догона в КД §4.8; (б) proposal_id обязателен у entity.create.proposed, двойник пропускает create/update без него с Warn; (в) числа за ±2^53 "
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/3/6/5. Ma-1 КД State §5.1 не приведён к C-03 v1.3; Ma-2 контракт пишет Version == 0, код и DoD — <= 0; Ma-3 текст правила «локальный адрес» шире таблицы T-450 (числовые записи хоста, отказы формы URL, точка на конце). Итерация 2 — system-archite"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-060 принята TEAM-1/tech-lead#2: DoD выполнен, итерация 2 проверена, мутанты M0/M3/M4 красные. При приёмке добавлено WARN «replay without a recording» для --mode=replay без --recording (тест и мутанты M5/M6). make test — 0, internal/replay 96,8 %. До слияния — отметка tech-lead#1 по cmd/multiverse/"
+    },
+    {
+      "at": "2026-09-13T14:16:27+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "2026-09-13 · EPIC-001 · T-446 выполнена TEAM-1/developer#2: runtime.SetDeadlines/ShuttingDown (long-poll отвечает < 1 с после Stop), ReadHeaderTimeout 5s/IdleTimeout 120s; фабрики контекстов по файлам владельцев contexts_{state,swarm,gateway,memory}.go, mvctl — commands_{state,swarm,ops}.go, реест"
+    },
+    {
+      "at": "2026-09-13T14:16:53+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "2026-09-13 · EPIC-004 · T-303 выполнена TEAM-3/developer#1: internal/gateway/links (resolve/consent/forget с хуками до DELETE и CompactLinks до ответа; байтов внешнего ID нет в -wal/-shm), обработчики в новом пакете internal/gateway/handlers (api импортирует бот — без драйвера SQLite), цепочка mid"
+    },
+    {
+      "at": "2026-09-13T14:22:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-453 принята tech-lead#1: Mi-1/Mi-2/N-1/N-2 закрыты при приёмке (шапка go.yml — обязательные проверки только main и integration/mvp-1, CI на develop; полный список слов generic-api-key по исходнику gitleaks v8.30.1 в §4.1 п. 5; рецепт слияния .gitleaksignore; предупреждение make secrets-scan о пуст"
+    },
+    {
+      "at": "2026-09-13T14:22:33+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · ревью #2 (TEAM-2/code-reviewer#1): вернуть — 0/1/2/2. Ma-1 закрыт, но хеш через reflect пишет time.Time как {} — разные даты YAML дают один content_hash (обход контроля подмены блупринта T-26). Mi-5 нестроковый ключ совпадает со строковым «int:1»; Mi-6 SuspiciousPlaceholders не видит кирилли"
+    },
+    {
+      "at": "2026-09-13T14:23:44+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 выполнена TEAM-2/architect#2: потолок нарратива E — max_tokens 160 (player-gm и group-narrator), text.maxLength 210, mentions ≤ 4, background_refs ≤ 2; Qwen3.6 предварительно 220→345 и 410→775 до T-438; формула КД §13.4.1 с проверкой 66 + ⌈maxLength/2,5⌉ ≤ N; temperature 0.7 (профиль всех поро"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние C (постоянное разрешение): epic/EPIC-001-foundation → develop (447b892), состав — T-453. make ci BASE=develop на эпике — rc=0, secrets-scan чист, пересечений с незакоммиченными файлами владельца нет, ветка эпика сохранена. Push develop и epic/EPIC-001 (gitleaks по 5 новым коммита"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-060: отметка владельца cmd/multiverse (tech-lead#1) — согласовано: режимы live/memory и порядок StartAll → srv.Start → srv.Stop → StopAll не сломаны, WARN вместо отказа старта обоснован. Решение оркестратора: Н-1 (clock_start в WARN читается после StartAll) и Н-2 (справка флага --recording) — в T-"
+    },
+    {
+      "at": "2026-09-13T14:28:14+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 выполнена TEAM-1/devops-engineer#2: таблица testdata/llm/local-endpoints.tsv (107 случаев: 36 local, 32 cloud, 39 invalid), общий судья bash/pwsh с ручным разбором IPv4/IPv6, compose-lint правило 6 через bash-функцию, проверки T01/T02 и сценарии D07/D08, мутанты M18–M23 и C1–C4 убиты, make ci "
+    },
+    {
+      "at": "2026-09-13T14:35:11+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/1/2/3. Ma-1 граница ±2^53 включительна и проверяется после декодирования во float64: 2^53+1 с шины молча записывается как 2^53 (подтверждено зондом через двойник). Mi-1 нет отдельных тестов на три решения; Mi-2 две проверки наличия old/new. Реше"
+    },
+    {
+      "at": "2026-09-13T14:36:44+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Первый прогон CI go на develop (447b892, run 34754402826) — failure. unit/race/integration: DATA RACE в shared/testkit/state/consumer_test.go (projection.Handle пишет, waitFor читает без синхронизации) — локально -race недоступен (нет cgo), поэтому не виден; unit: флак fight-05 в TestTheProcessRunsT"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 выполнена TEAM-1/developer#1: Check у inv-01/02/03/09/10 в internal/mechanics/invariants.go; законы записаны как свойства мира «после» от затронутых id (touched — id по КД §4.5 п. 8); inv-01 только со стороны встречи (ради /forget и чужой смерти NPC), inv-09 — died_at/killed_by у нетерминально"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · ревью #1 (TEAM-3/code-reviewer#1): вернуть — 0/1/6/7. Ma-1 контекст gateway в compose открывает SQLite в /data, каталога нет в образе, nonroot + том root 0755 → gateway не стартует, make up красный (известно с T-302, T-303 делает действующим). Mi-1 гонка /forget с AttachPlayer (DELETE без ус"
+    },
+    {
+      "at": "2026-09-13T14:39:15+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · итерация 3 (TEAM-2/developer#1): Ma-2 даты с меткой time:<RFC3339> (одна дата в разной записи — один хеш; отступление: другое смещение — другой хеш), неэкспортируемые поля внутри any — ошибка; Mi-5 ключи с меткой типа; Mi-6 кириллица и комбинируемые знаки; N-1 числа по значению; N-2 fence. 2"
+    },
+    {
+      "at": "2026-09-13T14:39:39+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-214 и T-215 приняты tech-lead#2 в дереве эпика (fd52e31): contracts check 65/8/58, тесты contracts и fixtures, golangci-lint — зелёные. T-215 Ma-1/Mi-1 закрыты T-445 (условная обязательность llm.output/llm.output.rejected с тестами); открытые Minor/Nit разнесены в DoD T-211/T-217/T-230 и новый §13"
+    },
+    {
+      "at": "2026-09-13T14:40:05+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · ревью #1 (TEAM-2/code-reviewer#2): вернуть — 0/1/8/5. Числа E (160/210/4/2), формула, группа и temperature 0.7 верны — T-203 может брать их. Ma-1 решение о ярлыках eK/bK меняет ADR-017 (правило 3: unknown_entity → schema_invalid на весь ответ, выпадение из NFR-021), ADR-016 (компиляция схемы"
+    },
+    {
+      "at": "2026-09-13T14:41:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/2/1/4. Раскладка по владельцам, реестр (65 типов, порядок), вывод mvctl, ShuttingDown без гонки — верны; 90 параллельных прогонов дедлайнов зелёные. Ma-2 doc SetDeadlines неверен: у запроса без тела истечение дедлайна чтения отменяет r.Context()"
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · итерация 2 (system-architect#1): закрыты Ma-1…Ma-3, Mi-1…Mi-6, N-1…N-5 — C-02 v1.5a/v1.6 (текст из карточки T-448 с пометками «вступает в силу со слиянием T-448»), C-03 Version <= 0 и kind NPC обязателен, КД State §5.1/§3.2/§3.3, C-15 = ADR-005 (принцип, пять пунктов, «права таблица»), C-07 "
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения system-architect#1: (1) T-448 — см. карточку (граница |x| ≤ 2^53−1 и др.); (2) 503 forget_incomplete принят с условиями: любой /forget → 503 пока сжатие отложено, Retry-After, безусловное CompactLinks в Start, бот не говорит «удалено» до 200 (T-311); (3) уточнения T-450 подтверждены, кроме I"
+    },
+    {
+      "at": "2026-09-13T14:45:09+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена T-456 (system-architect#1, contract-change, S–M, после T-449): C-08 v1.4 — 503 forget_incomplete с условиями, api-contracts.md §1.6, КД шлюза §3/§5.1/§6/§7.5/§9 по коду T-303, ADR-019 доп.; дедлайн чтения для long-poll (≥ wait_ms + 5 с или 0, вопрос из ревью T-446); строки DoD T-303/T-311/T"
+    },
+    {
+      "at": "2026-09-13T14:52:04+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 · ревью #3 (TEAM-2/code-reviewer#1): принять — 0/0/0/2. Ma-2/Mi-5/Mi-6/N-1/N-2 закрыты; отступление «смещение даты не переводится в UTC» принято (безопаснее для контроля подмены T-26; хеш не зависит от пояса машины — 11 значений в 6 поясах). Nit: N-3 тест ключа null, N-4 флаг untyped. Приёмка "
+    },
+    {
+      "at": "2026-09-13T14:52:42+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 выполнена TEAM-1/devops-engineer#1: причина не .env, а шаг «Read the pinned versions» — build/versions.env уходит в $GITHUB_ENV, пустой CHROMA_IMAGE из окружения сильнее --env-file и скрывает заглушку .github/ci.env. compose-lint.sh теперь снимает из своего окружения имена, объявленные в своих"
+    },
+    {
+      "at": "2026-09-13T14:56:38+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 · ревью #1 (TEAM-1/code-reviewer#2): принять — 0/0/3/3. Пять проверок детерминированы, законные пути соло не отвергаются, реестр десяти законов закреплён. Minor-1 inv-01 по участникам отвергает гонку «/forget раньше пакета промаха» (соло) и погибшего участника группы (I2); Minor-2 сторона NPC "
+    },
+    {
+      "at": "2026-09-13T15:00:18+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · итерация 2 (TEAM-1/developer#1): Ma-2 doc SetDeadlines исправлен + тест отмены r.Context() дедлайном чтения у GET (и 0 — жив); Ma-1 владельцы e2e из набора {state, swarm, gateway, ops}; Mi-1 nil-завершение; N-1 порядок All() закреплён по спискам владельцев (без золотого списка типов — иначе "
+    },
+    {
+      "at": "2026-09-13T15:01:32+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · ревью #2 (TEAM-1/code-reviewer#3): принять — 0/0/2/6. Все замечания ревью #1 закрыты (сверено с кодом EPIC-002 24f1baf, internal/llm/config.go EPIC-003, таблицей T-450). R2-Mi-1 нормы v1.6 без пометки «вступает в силу» в «Вход/Выход State»/«Гарантиях»; R2-Mi-2 порядок элемента предка не попа"
+    },
+    {
+      "at": "2026-09-13T15:02:28+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пауза по указанию пользователя: новые агенты не запускаются, слияния и push не выполняются. Незавершённые агенты на момент паузы: T-448 итерация 2, T-439 итерация 2 (ADR-029), T-303 итерация 2, T-454 (CI гонка/флак), ревью T-450, T-455, T-446 #2, приёмки T-201, T-054, T-449. Их правки остаются незак"
+    },
+    {
+      "at": "2026-09-13T15:02:59+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-450 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/5/5. Паритет bash/pwsh на 198 URL побайтно, облачный гейт устойчив к враждебным входам. Ma-1 точка снимается до проверки октетов: 127.0.0.1. и 10.0.0.1. — local вопреки решению архитектора (cloud). Mi-1 нет строк числовых записей хоста; Mi-2 \\"
+    },
+    {
+      "at": "2026-09-13T15:22:08+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · итерация 2 (TEAM-1/developer#3): Ma-1 граница |x| ≤ 2^53−1 (включая 2^53+1 через JSON → invalid_op), Mi-1 три именованных теста решений, Mi-2 только HasOld/HasNew и ошибка MarshalJSON, N-1…N-3, пп. 1–6 решения system-architect (entity.created.proposal_id обязателен, JSONCompatible для attrib"
+    },
+    {
+      "at": "2026-09-13T15:22:08+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Лимит сессии API (HTTP 429, сброс 15:20 МСК): восемь агентов прерваны — приёмки T-201, T-054, T-449; итерации T-303 и T-439 (ADR-029); T-454; ревью T-455 и T-446 #2. Незаконченные правки остаются незакоммиченными в .worktrees/T-303, T-439, T-454 (и, возможно, записи приёмок в T-201/T-054/T-449) — пр"
+    },
+    {
+      "at": "2026-09-13T15:25:54+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пауза снята пользователем («Возобновляем»). Работа идёт при parallelism 2/2/2: TEAM-1 — T-454 (CI: гонка testkit/state и флак fight-05, возобновление), TEAM-3 — T-303 итерация 2 (возобновление). Очередь TEAM-1: приёмки T-449 и T-054, ревью #2 T-448, ревью T-455 и #2 T-446, итерация 2 T-450; TEAM-2 ("
+    },
+    {
+      "at": "2026-09-13T15:26:24+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пользователь: «Лимит 5 часовой обновился», «Агентов возвращаем». Parallelism 3/3/9 (не 12: при 12 одновременных лимит сессии прервал восемь агентов разом). Запускаются: приёмки T-449 (tech-lead#1), T-054 (TEAM-1/tech-lead#2), T-201 (TEAM-2/tech-lead#2); ревью #2 T-448 (code-reviewer#2) и #2 T-446 (c"
+    },
+    {
+      "at": "2026-09-13T15:36:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 принята tech-lead#1 (возобновлённая приёмка): DoD 1–5 выполнен, C-03 v1.3 сверен с кодом EPIC-002 24f1baf, правило C-15 = ADR-005 побайтно; R2-Mi-1/R2-Mi-2/Nit ревью #2 внесены в новый раздел T-456 tasks.md (номер записи C-08, ожидаемо v1.5, выбирает system-architect: v1.4 уже занят T-444). Ко"
+    },
+    {
+      "at": "2026-09-13T15:37:02+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · итерация 2 (TEAM-2/architect#2, возобновление): ADR-029 «ярлыки вызова нарратива» (предложено; поправки ADR-016 п. 4 и ADR-017 п. 5 — на подтверждение system-architect). Решение итерации 1 пересмотрено: схема narrative.json статична (pattern ^e[1-9][0-9]?$/^b…$), выдуманный ярлык страж отбра"
+    },
+    {
+      "at": "2026-09-13T15:37:02+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Заведена T-457 (system-architect#1, EPIC-001, contract-change, S): очередь решений архитектора — (1) подтверждение поправок ADR-016/ADR-017 по ADR-029 и C-07 v1.4 поле ref у unknown_entity (или reason=other насовсем); (2) T-054: touched — id, players_present вне инварианта, выход погибшего из участи"
+    },
+    {
+      "at": "2026-09-13T15:38:28+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · итерация 2 (TEAM-3/developer#1, возобновление): M-1 /data (nonroot, 0700) в build/Dockerfile и абзац runbook о пересоздании тома gateway-data (не выполнялось; на стенде нужно make image && make up && make health — это стек владельца); 503 forget_incomplete по условиям архитектора (Retry-Afte"
+    },
+    {
+      "at": "2026-09-13T15:39:15+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201 принята TEAM-2/tech-lead#2 (возобновлённая приёмка): DoD 5/5 и общий DoD §1, make test — ok, shared/agent 93,3 %; N-3/N-4 закрыты тестами (мутанты M16/M9/M10 убиты); пробы слияния с кончиком эпика — .golangci.yml и tasks.md без конфликта, dev-log/review — appendtail. Бэклог разнесён в T-202, T"
+    },
+    {
+      "at": "2026-09-13T15:48:01+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-054 принята TEAM-1/tech-lead#2 (возобновлённая приёмка): Minor-3 (player/npc без hp — нарушение inv-02) и Nit-2 (все терминальные статусы inv-09) закрыты при приёмке, 7 мутантов красные; Minor-1/Minor-2 — вопросы В1–В4 к system-architect (T-457), строки DoD в T-056 (dead_entity для dead/abandoned/"
+    },
+    {
+      "at": "2026-09-13T15:48:01+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Начата T-457 (system-architect#1): очередь решений — ADR-029 (поправки ADR-016/017, C-07 поле ref), В1–В4 из T-054, три вопроса T-060 (replay), N Qwen3.6 в ADR-005."
+    },
+    {
+      "at": "2026-09-13T15:50:50+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 · ревью #2 (TEAM-2/code-reviewer#2): принять — 0/0/3/6. ADR-029 девять пунктов, статичная схема и поэлементный отброс; арифметика E 160/185/140, Qwen3.6 210/285/220 и 400/665/530, тест T-203 краснеет на прежних 210. Mi-9 для background_refs пробел C-07 создали ярлыки (US-018 крит. 2, ADR-017 д"
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-201: отметка владельца EPIC-001 (tech-lead#1) — согласовано: .golangci.yml один блок, проба слияния с T-445 без конфликта, forbidigo действует (мутанты time.Now/time.Since ловятся); дописывание индексов архива в задаче допустимо (прецеденты T-003, волна 0), 16 переименований R100. Коммит 0f3b7b9, "
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · ревью #2 (TEAM-1/code-reviewer#3): принять — 0/0/0/1. Ma-1/Ma-2/Mi-1/N-1…N-4 закрыты; окна дедлайнов под нагрузкой (8×10×cpu1 при 64 занятых процессах) — зелёные, запас ≈1,7 с; ReadHeaderTimeout не задевает long-poll (проба). Приёмка — tech-lead#1 со сборкой на слитом с кончиком эпика дереве"
+    },
+    {
+      "at": "2026-09-13T15:56:06+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 выполнена TEAM-1/developer#2 (возобновление): гонка — проекция под мьютексом; скрытая передача полей стенда из горутины process.run — через канал; флак fight-05 — обёртка транспорта learning, персонаж входит после того, как двойник усвоил весь начальный мир (сигнал, не срок); попутный флак enc"
+    },
+    {
+      "at": "2026-09-13T16:00:54+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 · ревью #1 (TEAM-1/code-reviewer#1, возобновление): принять — 0/0/1/2. Диагноз подтверждён по логу и воспроизведён без .env; D-3 не ослаблено; проба слияния T-450 → T-455 без текстовых конфликтов, объединённое дерево в окружении CI проходит. Mi-1 declared_names не понимает форму KEY: value; N-"
+    },
+    {
+      "at": "2026-09-13T16:00:54+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 · ревью #2 (TEAM-1/code-reviewer#2): принять — 0/0/3/2. Ma-1 и пп. 1–6 решения архитектора закрыты; строгий MarshalJSON не задевает другие эпики (никто не собирает Change вручную); симуляции синхронизации EPIC-003/004 зелёные. Mi-3 тест null в changedPayload двойника, Mi-4 устаревшая строка ка"
+    },
+    {
+      "at": "2026-09-13T16:02:07+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 · ревью #2 (TEAM-3/code-reviewer#1): принять — 0/0/1/3. M-1 (чтением: /data nonroot 0700, наследование пустым томом; runbook), все условия архитектора по 503, Mi-1…Mi-6, K1–K4 закрыты. R2-Mi-1 повтор каскада по link_id без теста (мутант R1 зелёный); R2-N-2 общий ответ Unavailable в OpenAPI (→ "
+    },
+    {
+      "at": "2026-09-13T16:03:58+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-439 принята TEAM-2/tech-lead#2: DoD сверен (числа E пересчитаны: 160/185/140), Mi-8 подтверждён; при приёмке закрыты Mi-9 (запись о background_refs и US-018/ADR-017 доп. 1 п. 4), Mi-10 (стенд меряет пороги пересмотра), Mi-11 (перезапись записей нарратива при смене L; живая память в replay), N-6…N-"
+    },
+    {
+      "at": "2026-09-13T16:03:58+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-202 (TEAM-2/developer#1, подволна B): levels.go и валидатор блупринтов — зависимости T-201 и T-006 слиты."
+    },
+    {
+      "at": "2026-09-13T16:10:33+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303: отметка владельца EPIC-001 (tech-lead#1) — вернуть. В-1 (блокирует): startProcess в cmd/multiverse/fake_contexts_test.go не задаёт MV_GATEWAY_DATA_DIR — четыре теста процесса открывают SQLite в /data (CI Linux упадёт на mkdir /data; на Windows созданы C:\\data\\gateway.db и links.db). В-2: runb"
+    },
+    {
+      "at": "2026-09-13T16:10:55+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "Начата T-207 (TEAM-2/developer#2, подволна B): провайдеры fake и recorded internal/llm/providers — зависимость T-206 слита."
+    },
+    {
+      "at": "2026-09-13T16:12:01+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-454 · ревью #1 (TEAM-1/code-reviewer#3): принять — 0/0/1/3. Все 12 отчётов DATA RACE CI — consumer_test.go, исправлено; канал opened без дедлока; обёртка learning верна (мутанты R2/R5/R6/R8 красные, предохранитель 10 с с понятной диагностикой); с T-446 текстовых конфликтов нет. Mi-1 ожидание learn"
+    },
+    {
+      "at": "2026-09-13T16:12:20+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-455 принята tech-lead#1: Mi-1 (форма KEY: value в declared_names, проверено пробой и мутантом), N-1 (тексты приведены к факту), N-2 (одна переменная default_env_files) закрыты при приёмке; прогоны в окружении как в CI — ok. Слияние ждёт T-450 (итерация 2); после слияния T-450 синхронизировать T-45"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 принята tech-lead#1: DoD 1–9, слитое дерево (кончик 647c5d8 + T-446) зелёное — build/vet/27 пакетов/e2e/lint/contracts check; вывод mvctl help побайтно тот же; отметка владельца cmd/* (мягкий режим) — сам владелец. Коммит edf7692; при finish конфликт хвоста tasks.md (T-453/T-449/T-456 выше T-4"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 принята TEAM-1/tech-lead#2: Mi-3 (тест null в changedPayload, мутанты R5/R6/R6b), N-4 (проверка attributes до мира) закрыты при приёмке; лишний \r в review.md исправлен; слитое с кончиком 1fc6480 дерево зелёное (28 пакетов). Строки DoD в T-055, T-056, T-059. Коммит 3162aa0, слита в epic/EPIC-00"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 выполнена system-architect#1: ADR-016/017 поправки по ADR-029 подтверждены; C-07 v1.5 (ref в unknown_entity вариант A, временная форма other отменена; labels_hash для нарратива); C-05 v1.8 п. 9 (В1 — участник-нарушение только при затронутом тем же пакетом погибшем), В2 законный мёртвый NPC, C-"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Начата T-055 (TEAM-1/developer#3): internal/state конвейер предложение → факт — зависимости T-050/T-052/T-054/T-060/T-448 слиты."
+    },
+    {
+      "at": "2026-09-13T16:20:50+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-303 принята TEAM-3/tech-lead#3: DoD сверен; R2-Mi-1 (два теста повтора каскада, мутант R1 красный) и R2-N-1 (тест часового сжатия) закрыты; В-1 (startProcess с временным MV_GATEWAY_DATA_DIR, проверка файлом-заглушкой — C:\\data не меняется) и В-2 (runbook: проверка тома :ro, chown/chmod вместо удал"
     }
   ],
   "blockers": [],

@@ -34,7 +34,15 @@
 
 # llm_trim strips leading and trailing whitespace, and nothing else: a Windows
 # path in MV_LLM_BIN may legitimately contain spaces in the middle.
+#
+# ASCII whitespace only — space, TAB, LF, VT, FF, CR — which is what LC_ALL=C
+# makes of [:space:]. In a UTF-8 locale the class follows the locale, and .NET's
+# String.Trim() strips every Unicode space: MV_LLM_URL ending in a no-break space
+# U+00A0 was refused here as "outside printable ASCII" while the PowerShell twin
+# trimmed it away and reported 200 (found by the parity stand, T-405). Anything
+# beyond ASCII is left in place for the printable-ASCII refusal of llm_parse_url.
 llm_trim() {
+  local LC_ALL=C
   local s=${1-}
   s=${s#"${s%%[![:space:]]*}"}
   s=${s%"${s##*[![:space:]]}"}

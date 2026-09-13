@@ -17,8 +17,8 @@
     "lod": { "type": "string", "enum": ["disabled", "rule-only", "basic", "full"] },
     "content_hash": {
       "type": "string",
-      "minLength": 1,
-      "description": "SHA-256 of the normalised blueprint (ADR-015 p. 1), carried as a string and never as a number: the bus decodes a payload into map[string]any, where a JSON number becomes a float64, and 256 bits of hash would come back a different value — the same trap dice.rolled.roll.seed was measured falling into on T-015."
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "SHA-256 of the normalised blueprint (ADR-015 p. 1) in the form sha256:<64 lowercase hex> (contracts.md C-07 v1.3), carried as a string and never as a number: the bus decodes a payload into map[string]any, where a JSON number becomes a float64, and 256 bits of hash would come back a different value — the same trap dice.rolled.roll.seed was measured falling into on T-015."
     }
   },
   "required": ["agent"],

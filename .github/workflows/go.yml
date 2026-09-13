@@ -3,12 +3,18 @@
 # Source: Docs/dev-team/architecture/infrastructure.md v0.3 §3.1, §3.1.1, §3.2;
 # ADR-010 (+ additions 1, 3, 5); threat-model T-15, T-35, T-36 / SEC-25.
 # =============================================================================
-# Seven blocking jobs — unit, integration, e2e, race, contracts, security,
-# compose-lint — plus `image`, which builds and does not push. They are the
-# required checks of `main` and `integration/mvp-1`, so a job is renamed only
-# together with the branch protection rules of the repository. `race` arrived
-# with T-401: until the owner adds it to those rules, it reports but does not
-# block.
+# Eight blocking jobs — unit, integration, e2e, race, contracts, security,
+# compose-lint, scripts-parity — plus `image`, which builds and does not push.
+# They are the required checks of `main` and `integration/mvp-1`, so a job is
+# renamed only together with the branch protection rules of the repository.
+# `race` arrived with T-401 and `scripts-parity` with T-405: until the owner
+# adds them to those rules, they report but do not block.
+#
+# CI runs on `develop` since T-453: under gitflow (2026-09-11) the epics merge
+# into it. Whether `develop` gets a protection rule, and with which required
+# checks, is the owner's decision (backlog of T-453). The triggers come first
+# because a protected branch whose pull requests never get their required
+# checks reported could never take a pull request at all.
 #
 # The race detector runs in three jobs, each over what only it can reach:
 # `unit` — every short test once; `integration` — the adapters and the
@@ -35,13 +41,15 @@ name: go
 
 on:
   push:
-    # Only the trunk and the integration branches: a branch of an epic reaches
-    # CI through its pull request, and a push trigger on it would spend the
-    # budget twice on the same commit — the concurrency group of a push
-    # (refs/heads/...) and the one of a pull request (refs/pull/N/merge) are
-    # different by construction, so neither run cancels the other.
+    # Only the trunks (`main`, `develop`) and the integration branches: a branch
+    # of an epic reaches CI through its pull request, and a push trigger on it
+    # would spend the budget twice on the same commit — the concurrency group
+    # of a push (refs/heads/...) and the one of a pull request
+    # (refs/pull/N/merge) are different by construction, so neither run
+    # cancels the other.
     branches:
       - main
+      - develop
       - 'integration/**'
     # `paths` with negations rather than `paths-ignore`: documentation must not
     # spend the budget, but blueprints/**/*.md are data the `contracts` job
@@ -59,6 +67,7 @@ on:
   pull_request:
     branches:
       - main
+      - develop
       - 'integration/**'
       - 'epic/**'
 
@@ -453,6 +462,51 @@ jobs:
         with:
           dockerfile: build/minio.Dockerfile
           failure-threshold: error
+
+  # ---------------------------------------------------------------------------
+  # scripts-parity — the two implementations of the LLM scripts say and do the
+  # same thing on the same input (T-405): scripts/llm-server.{sh,ps1},
+  # scripts/llm-bench.{sh,ps1} and their modules in scripts/lib. The property
+  # broke twice inside one task (T-404) and was held by nothing between tasks
+  # until the stand moved into the repository (testdata/script-parity).
+  #
+  # The job calls `make scripts-parity`, the call the owner makes on Windows. A
+  # double stands in for llama-server: no Docker, no network beyond loopback.
+  # ubuntu-latest carries pwsh 7, and both halves run and are compared. The job
+  # requires it: without pwsh on the runner the stand refuses to start rather
+  # than fall back to the bash half, which is what `make ci` does on a machine
+  # without PowerShell.
+  # ---------------------------------------------------------------------------
+  scripts-parity:
+    name: scripts-parity
+    runs-on: ubuntu-latest
+    # About a minute and a half of scenarios on four cores, plus setup-go and the
+    # compile of the stand.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Read the pinned versions
+        run: grep -E '^[A-Z][A-Z0-9_]*=' build/versions.env >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: The tools of the two halves
+        run: |
+          bash --version | head -n 1
+          curl --version | head -n 1
+          python3 --version
+          pwsh -NoLogo -NoProfile -Command '"pwsh " + $PSVersionTable.PSVersion.ToString()'
+
+      - name: make scripts-parity
+        # -pwsh=require (review #1 of T-405, Mi-2): this job is the only place the
+        # PowerShell half runs on Linux, so a runner image without pwsh fails it
+        # instead of quietly running the bash half. `make ci` on the owner's
+        # machine keeps the default, auto.
+        run: make scripts-parity PARITY_ARGS='-pwsh=require'
 
   # ---------------------------------------------------------------------------
   # image — the platform image builds. It does not push: the images of a

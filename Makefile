@@ -82,7 +82,11 @@ COMPOSE_FILES += $(if $(wildcard docker-compose.override.yml),-f docker-compose.
 COMPOSE := docker compose $(COMPOSE_FILES) $(PROFILE_ARGS)
 
 # gitleaks scans the range of the branch until the history is rewritten (§3.1).
-BASE ?= integration/mvp-1
+# The range starts at the gitflow trunk (T-453). integration/mvp-1 stayed at
+# F-0, so its range held every commit since and grew with each task; a task or
+# an epic branch is measured against develop, and develop itself against
+# BASE=main. CI never calls this target: its security job scans on its own.
+BASE ?= develop
 
 # Backups live outside the repository and outside the Docker volumes (§5.6).
 BACKUP_DIR ?= $(HOME)/multiverse-backups
@@ -226,9 +230,9 @@ test-race: ## Race detector, repeated, over the concurrent packages and e2e (CI 
 	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...
 
 # `mvctl blueprint validate blueprints/` joins this target together with the
-# command itself, in EPIC-003: the name is reserved in cmd/mvctl/main.go and
-# exits with the usage code until then, which would fail the target for a
-# command that was never written.
+# command itself, in EPIC-003: the name is reserved in
+# cmd/mvctl/commands_swarm.go and exits with the usage code until then, which
+# would fail the target for a command that was never written.
 .PHONY: contracts
 contracts: ## Schemas and the env manifest agree with the code
 	@go run ./cmd/mvctl contracts check
@@ -237,7 +241,18 @@ contracts: ## Schemas and the env manifest agree with the code
 
 .PHONY: secrets-scan
 secrets-scan: ## gitleaks over the branch range and the content of the index
-	@gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .
+	@if ! git rev-parse --verify --quiet "$(BASE)^{commit}" >/dev/null; then
+		echo "secrets-scan: BASE=$(BASE) is not a commit of this repository; pass BASE=<trunk of the branch>" >&2
+		exit 1
+	fi
+	# gitleaks reports "0 commits scanned" and exits 0 for a range it cannot
+	# resolve, so a BASE missing from a clone used to pass the history half
+	# without looking at a single commit (T-453). An empty range is only a
+	# warning: on develop itself, or on a branch already merged into BASE.
+	if [ "$$(git rev-list --count "$(BASE)..HEAD")" -eq 0 ]; then
+		echo "secrets-scan: warning: $(BASE)..HEAD holds no commits, the history half scans nothing; on develop itself pass BASE=main" >&2
+	fi
+	gitleaks git --no-banner --redact --log-opts="$(BASE)..HEAD" .
 	# The second scan reads the content of the index, not the work tree: the
 	# untracked .env of the owner, build/.legacy-src/ and the worktrees of the
 	# agents are not what CI checks out, and they keep the target red for files
@@ -266,8 +281,35 @@ compose-lint: ## The eight house rules of the compose files (§3.1.1), then the 
 	# must pass (testdata/compose-lint, T-413). The same call runs in CI.
 	scripts/compose-lint.sh --fixtures
 
+# The parity stand of the two implementations of the LLM scripts (T-405):
+# scripts/llm-server.{sh,ps1} and scripts/llm-bench.{sh,ps1} with their modules
+# in scripts/lib get the same inputs, and their exit codes, messages, the argv
+# they hand to llama-server, the requests they send, the CSV and the fields of
+# the JSON report must agree. A double stands in for llama-server; no Docker, no
+# network beyond loopback, no real server, and nothing on 8888 is touched. Without
+# pwsh on PATH the stand runs the bash half against the expectations of every
+# scenario and compares the message texts of the two files statically — its
+# first lines say which of the two runs happened. The stand lives in
+# testdata/script-parity (outside every ./... pattern, see its package comment);
+# PARITY_ARGS passes flags through, e.g. PARITY_ARGS='-run U0 -v'.
+PARITY_ARGS ?=
+
+.PHONY: scripts-parity
+scripts-parity: ## Same input, same output from the .sh and .ps1 LLM scripts (both halves with pwsh, the bash half without)
+	@# The linter does not see testdata/; vet at least keeps the stand honest (T-405 review #1, N-1).
+	go vet ./testdata/script-parity
+	go run ./testdata/script-parity $(PARITY_ARGS)
+
+# Every control mutant must turn the stand red: the scripts are broken one
+# defect at a time in a scratch copy, the control (a syntax error) first and the
+# identity mutant (no change, must stay green) second. Not part of ci: it is the
+# check of the stand itself, run when the stand or its scenarios change.
+.PHONY: parity-mutants
+parity-mutants: ## The control mutants of scripts-parity: each must turn the stand red
+	@go run ./testdata/script-parity -mutants $(PARITY_ARGS)
+
 .PHONY: ci
-ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint test-e2e ## Everything CI runs without Docker
+ci: lint test test-race contracts secrets-scan privacy-scan vuln compose-lint scripts-parity test-e2e ## Everything CI runs without Docker
 
 # `make ci` is the owner's check on Windows, where -race cannot run: there
 # test-race prints SKIPPED and steps aside instead of failing the whole run
@@ -530,4 +572,4 @@ help: ## This list
 		sort |
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 	echo
-	echo "Variables: PROFILES=memory,bot  SERVICE=core  FILE=  RECORDING=  ROUTER=1  BASE=$(BASE)"
+	echo "Variables: PROFILES=memory,bot  SERVICE=core  FILE=  RECORDING=  ROUTER=1  BASE=$(BASE)  PARITY_ARGS='-run U0 -v'"
