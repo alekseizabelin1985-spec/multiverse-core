@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:18:49+03:00",
+  "updatedAt": "2026-09-13T19:24:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2578,7 +2578,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-461",
           "title": "Правило depguard cmd-telegram-bot в .golangci.yml по тексту отметки T-310 (предусловие T-311)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
@@ -9699,7 +9699,7 @@ window.DEVTEAM_STATE =
       "task": "T-461",
       "action": "Правило depguard cmd-telegram-bot",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:24:03+03:00"
     },
     {
       "instance": "developer#2",
@@ -9709,6 +9709,16 @@ window.DEVTEAM_STATE =
       "task": "T-208",
       "action": "Провайдер openai_compat",
       "startedAt": "2026-09-13T19:18:49+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-461",
+      "action": "Ревью #1 правила depguard бота",
+      "startedAt": "2026-09-13T19:24:03+03:00",
       "finishedAt": null
     }
   ],
@@ -13162,6 +13172,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Очередь вопросов system-architect: C-15 — «@ в пути» (http://admin:2024/pw@10.0.0.5:8080) → invalid?; ReadJournal поверх middleware T-060 (сдвиг EventClock, 409 clock_behind); где живёт e2e бота на FakeGateway/membus (depguard cmd-telegram-bot запрещает их в тестах); единица response_len в C-07 (бай"
+    },
+    {
+      "at": "2026-09-13T19:24:03+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-461 выполнена TEAM-1/developer#1: правило depguard cmd-telegram-bot и исключение в internal-unlisted внесены в .golangci.yml байт в байт по отметке T-310; на EPIC-001 0 issues; на копии кончика EPIC-004 код бота — 0, мутанты shared/eventbus и gateway/links — находка cmd-telegram-bot, контроль gate"
     }
   ],
   "blockers": [],
