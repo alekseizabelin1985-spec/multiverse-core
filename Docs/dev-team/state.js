@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:10:39+03:00",
+  "updatedAt": "2026-09-13T18:15:25+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3204,13 +3204,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-205",
           "title": "A7 · internal/laws, laws/dark-forest-world.v1.yaml, mvctl laws bump|show",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-2/developer#3",
           "startedAt": "2026-09-13T17:08:19+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T18:15:25+03:00",
           "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 63,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md",
           "subwave": "B",
@@ -4240,11 +4240,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-451",
           "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4289,11 +4289,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-459",
           "title": "Документы EPIC-003 под C-07 v1.5 и решения T-457: ADR-029 принято, КД роя §9.1/§9.2/§13.4, DoD T-203/T-211/T-212/T-213, ответы по валидатору T-202 (architect#2)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-2/architect#2",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -4520,7 +4520,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-310",
           "title": "Бот: config, access, updates, sender, commands, privacy",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
@@ -9328,7 +9328,7 @@ window.DEVTEAM_STATE =
       "task": "T-310",
       "action": "Итерация 2: потеря обновлений, флуд отказами, 401",
       "startedAt": "2026-09-13T17:49:43+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:15:25+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9348,7 +9348,7 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Ревью #1: Go-гейт локального адреса",
       "startedAt": "2026-09-13T17:53:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:15:25+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9358,7 +9358,7 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Ревью #1: документы EPIC-003 под C-07 v1.5",
       "startedAt": "2026-09-13T17:58:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:15:25+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -9368,7 +9368,7 @@ window.DEVTEAM_STATE =
       "task": "T-205",
       "action": "Отметка владельца: vars.go, .env.example, mvctl",
       "startedAt": "2026-09-13T18:04:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:15:25+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -9388,6 +9388,36 @@ window.DEVTEAM_STATE =
       "task": "T-456",
       "action": "Ревью #1: contracts v0.14, C-08, КД шлюза",
       "startedAt": "2026-09-13T18:10:39+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-459",
+      "action": "Итерация 2: Call.Guard и порядок T-211/T-212/T-213",
+      "startedAt": "2026-09-13T18:15:25+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-451",
+      "action": "Итерация 2: утечка хоста, не-ASCII, якоря",
+      "startedAt": "2026-09-13T18:15:25+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-310",
+      "action": "Ревью #2: ядро бота",
+      "startedAt": "2026-09-13T18:15:25+03:00",
       "finishedAt": null
     }
   ],
@@ -12601,6 +12631,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Заведена T-460 (EPIC-001, contract-change, XS–S, после приёмки T-456): eventbus.Permanent (окончательная ошибка обработчика — сразу в dead_letters) и Policy.World (WorldRequired при Publish) в shared/eventbus + contract-тест на membus и kafka; строки реестра для типов предложений — T-056 после неё. "
+    },
+    {
+      "at": "2026-09-13T18:15:25+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-205: отметка владельца EPIC-001 (tech-lead#1) — согласовано (MV_LAWS_DIR, .env.example, cmd/mvctl/main_test.go; env check 73, compose-lint ok). Коммит d3c54df; конфликт changelog tasks.md (0.3.4/0.3.5 эпика + 0.3.6 T-205, шапка 0.3.6). Слита в epic/EPIC-003-swarm-llm-laws (95507f0). Итераций ревью"
+    },
+    {
+      "at": "2026-09-13T18:15:25+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-459 · ревью #1 (TEAM-2/code-reviewer#3): вернуть — 0/1/3/5. Ma-1: DoD T-211/T-212 опираются на Call.Guard, который появляется только в T-213 (подволна G). Mi-1 зависимость T-212 от T-458 противоречит открытому выбору; Mi-2 удалена оговорка T-248; Mi-3 Rejection.Ref вне файлов T-217. Решения оркест"
+    },
+    {
+      "at": "2026-09-13T18:15:25+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-451 · ревью #1 (TEAM-2/code-reviewer#1): вернуть — 0/1/3/1. Go-зонд 158 входов против bash: ни один не стал local сверх скриптов. Ma-1 отказ по query/fragment печатает хост (FAKEPW123 из http://FAKEPW123?x@127.0.0.1:8888); Mi-1 не-ASCII и Unicode-пробелы: Go cloud/local, bash invalid; Mi-2 canonic"
+    },
+    {
+      "at": "2026-09-13T18:15:25+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-310 · итерация 2 (TEAM-3/developer#2): M-1 WithUpdatesChannelCap(0) и отказ обработки при отменённом ctx (окно потери — одно обновление); M-2 отказы раз в 60 с на чат без ожидания 429 (BestEffortPolicy), таблица ≤1024; группа — молчание; Mi-1 ErrUnauthorized и остановка опроса на 401; Mi-3 тело от"
     }
   ],
   "blockers": [],
