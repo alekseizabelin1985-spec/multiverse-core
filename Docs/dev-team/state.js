@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T15:25:54+03:00",
+  "updatedAt": "2026-09-13T15:26:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -8663,6 +8663,76 @@ window.DEVTEAM_STATE =
       "action": "Итерация 2 (возобновление): /data, 503 с условиями",
       "startedAt": "2026-09-13T15:25:54+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Приёмка T-449 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-054",
+      "action": "Приёмка T-054 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "Приёмка T-201 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Ревью #2: итерация 2 T-448",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Ревью #2 T-446 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#2",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-450",
+      "action": "Итерация 2: точка у IPv4, строки таблицы",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#2",
+      "role": "architect",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-439",
+      "action": "Итерация 2: ADR-029 (возобновление)",
+      "startedAt": "2026-09-13T15:26:24+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -11455,6 +11525,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Пауза снята пользователем («Возобновляем»). Работа идёт при parallelism 2/2/2: TEAM-1 — T-454 (CI: гонка testkit/state и флак fight-05, возобновление), TEAM-3 — T-303 итерация 2 (возобновление). Очередь TEAM-1: приёмки T-449 и T-054, ревью #2 T-448, ревью T-455 и #2 T-446, итерация 2 T-450; TEAM-2 ("
+    },
+    {
+      "at": "2026-09-13T15:26:24+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пользователь: «Лимит 5 часовой обновился», «Агентов возвращаем». Parallelism 3/3/9 (не 12: при 12 одновременных лимит сессии прервал восемь агентов разом). Запускаются: приёмки T-449 (tech-lead#1), T-054 (TEAM-1/tech-lead#2), T-201 (TEAM-2/tech-lead#2); ревью #2 T-448 (code-reviewer#2) и #2 T-446 (c"
     }
   ],
   "blockers": [],
