@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T21:01:18+03:00",
+  "updatedAt": "2026-09-13T21:19:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3163,13 +3163,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-458",
           "title": "Запись сессии: shared/recording (перенос из internal/replay), ReadJournal, Deps.Recording в serve.go, маршрут часов replay, EventClock.Advance (после T-457 и T-055)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:02:27+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T21:19:59+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 133,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-458.md"
         }
@@ -3356,7 +3356,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-209",
           "title": "B4 · Парсер ответа, компиляция схем, проверка языка",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-13T19:54:53+03:00",
           "finishedAt": null,
@@ -4603,9 +4603,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-311",
           "title": "Бот: flow и render",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-13T21:19:59+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10011,7 +10011,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Приёмка T-458 и индекс EPIC-002",
       "startedAt": "2026-09-13T20:50:52+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:19:59+03:00"
     },
     {
       "instance": "developer#3",
@@ -10021,7 +10021,7 @@ window.DEVTEAM_STATE =
       "task": "T-209",
       "action": "Итерация 2: обрезанный ответ не восстанавливается",
       "startedAt": "2026-09-13T20:52:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:19:59+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10031,7 +10031,7 @@ window.DEVTEAM_STATE =
       "task": "T-222",
       "action": "Приёмка реестра блупринтов",
       "startedAt": "2026-09-13T20:52:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:19:59+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10041,7 +10041,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Приёмка T-305 и индекс EPIC-004",
       "startedAt": "2026-09-13T20:56:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T21:19:59+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -10051,6 +10051,36 @@ window.DEVTEAM_STATE =
       "task": "T-463",
       "action": "Итерация 2: маски отказов, проверка --dir",
       "startedAt": "2026-09-13T21:01:18+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-311",
+      "action": "flow и render бота",
+      "startedAt": "2026-09-13T21:19:59+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "Отметки владельца T-305, T-222, T-209",
+      "startedAt": "2026-09-13T21:19:59+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-209",
+      "action": "Ревью #2 парсера",
+      "startedAt": "2026-09-13T21:19:59+03:00",
       "finishedAt": null
     }
   ],
@@ -13756,6 +13786,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-463 · ревью #1 (TEAM-1/code-reviewer#1): вернуть — 0/1/5/6. Удаление безопасно (точные имена, полный путь, без обхода ссылок; кириллица и пробелы в пути; атомарный SHA256SUMS). Ma-1: облачный отказ правила 6 compose-lint и отказ «second server» llm-server при @ всё ещё называют хост (C-15 v1.5). M"
+    },
+    {
+      "at": "2026-09-13T21:19:59+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 принята TEAM-1/tech-lead#2: Н-1 (replayOptions(path)), N2-1 (префиксы ошибок Writer, закрытие файла) с тестами, 7 мутантов красные; индекс EPIC-002 v0.1.4 — T-061 зависит от T-458 (клиент маршрута часов, терпимый разбор тела, ReadJournal), T-066 строки T-457, статусы по state.js. Итераций ревь"
+    },
+    {
+      "at": "2026-09-13T21:19:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние I (постоянное разрешение): epic/EPIC-002-state-mechanics → develop, состав — T-050…T-054, T-060, T-448, T-055 (конвейер State), T-458 (shared/recording). make ci BASE=develop — rc=0, secrets-scan чист, пересечений с файлами владельца нет. Синхронизация: EPIC-001, EPIC-003 — без к"
+    },
+    {
+      "at": "2026-09-13T21:19:59+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-305 принята TEAM-3/tech-lead#3: Mi-6 (Accepted и ключ на WithoutCancel, тест P4), N-6 (счётчик блокировок, N3 красный), N-7; replayClock в OpenAPI приведён к C-01 v1.11 (400/409 Error, 405 добавлен, 404/405 без схемы), GatewayRouter его не монтирует. Индекс 0.1.4: T-320 У-9, T-314 У-8, T-306 (3 ст"
+    },
+    {
+      "at": "2026-09-13T21:19:59+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-209 · итерация 2 (developer#3): Ma-1 — объект из незакрытого массива и незакрытый <think> не восстанавливаются (корпус 25–27), Mi-1 </think> в строке JSON, Mi-2 шаблон id сужен + LanguagePolicy.Identifiers (state-of-the-art остаётся неразличим — вопрос T-212), Mi-4 маска пути ошибки, N-1, N-3; 28 "
+    },
+    {
+      "at": "2026-09-13T21:19:59+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-311 начата (TEAM-3/developer#2): flow (FSM онбординга, /forget) и render (тексты FR-009 из T-318, клавиатуры, ошибки); предусловие depguard cmd-telegram-bot выполнено синхронизацией develop. Отметки tech-lead#1 по T-305, T-222, T-209 — одним агентом."
     }
   ],
   "blockers": [],
