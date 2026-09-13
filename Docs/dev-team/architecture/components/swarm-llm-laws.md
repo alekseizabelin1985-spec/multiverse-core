@@ -122,14 +122,14 @@ internal/llm/
   types.go            # Provider, Request, Response, Params, Phase, Call, Result, Rejection, ValidationStatus (C-15)
   config.go           # MV_LLM_PROVIDER, таймауты фаз, MV_LLM_CLOUD_*, MV_LLM_STORE_PROMPTS, таблица цен (env через shared/env.Declare — изм. G2)
   budget.go           # Budget: окна (world, level, phase, provider); облачный денежный лимит
-  record.go           # Recorder: llm.output / llm.output.rejected / content.incident.recorded (Derive от cause)
+  record.go           # Recorder: llm.output / llm.output.rejected / content.incident.recorded (Derive от cause); вход записи: Labels *LabelTable (nil — не нарратив), CalledAt; labels.go — LabelTable, LabelsHash, ErrLabelTable (C-07 v1.5, T-211; изм. T-459)
   usage.go            # агрегаты для mvctl llm usage и /v1/admin/llm/usage (маршрут монтируется на mux shared/runtime — изм. G2)
   providers/
     registry.go       # providers.Registry: Register(name, factory); New(name, cfg)
     ollama/client.go  # native /api/chat, /api/embed; format=schema, think, keep_alive, options.num_ctx; токены из eval_count
     openai_compat/    # ПРОВАЙДЕР ПО УМОЛЧАНИЮ (C-15 v1.1, U-8): llama-server и любой OpenAI-совместимый сервер, облако — тот же адаптер с другим MV_LLM_URL за гейтом MV_LLM_CLOUD_ENABLED; /v1/chat/completions + response_format json_schema, enable_thinking=false. Прежняя пометка «E-H, включается флагом» устарела (T-409)
-    recorded/         # RecordedProvider: ключ (correlation_id, agent.id, phase, attempt); промах = ошибка; (изм. T-444) Writer того же формата + фильтр SEC-23 — для mvctl record
-    fake/             # FakeProvider: табличные ответы для unit/e2e; счётчик вызовов
+    recorded/         # recorded.Provider: ключ (correlation_id, agent.id, phase, attempt) — recording.LLMOutputKey из полей llm.Request (C-15 v1.4, без WithCall), источник — события shared/recording (C-01 v1.9; изм. T-459); промах = ошибка; (изм. T-444) Writer того же формата + фильтр SEC-23 — для mvctl record
+    fake/             # fake.Provider: табличные ответы для unit/e2e; счётчик вызовов
   parser/
     parser.go         # Parse(raw) (json.RawMessage, Strategy, error) — восстановление (ADR-016)
     schema.go         # компилированные схемы schemas/agent/*.json (jsonschema/v6, draft 2020-12)
@@ -164,8 +164,8 @@ shared/agent/        # ЦЕЛЕВАЯ раскладка. На 2026-09-11 (T-409
   types.go            # AgentLevel, LODLevel, AgentLifecycleState (из agent_types.go, без изменений)
   blueprint.go        # AgentBlueprint v2 (§13.1) + вложенные типы
   parser.go           # ParseFile/ParseBytes: frontmatter + секции ## system/phase1/phase2/tick/canon/description; чистый YAML
-  validator.go        # Validate(bp, Env) []Issue{File, Field, Reason, Severity} — правила §3.2 (ADR-015)
-  levels.go           # реестр уровней: AllowedEventTypes(level, role); OwnedEntityTypes(level, role) — ПРОИЗВОДНАЯ от contracts.OwnershipRules, которую вызывающий передаёт в ValidationEnv (ADR-025); своей таблицы владения файл не держит; monitor/object зарезервированы
+  validator.go        # Validate(bp, env ValidationEnv) []Issue{File, Field, Reason, Severity, Code} — правила §3.2 api-contracts и КД §13.2 (ADR-015); EnvFromProject(root, eventTypes, ownedEntityTypes, invariants, models) (изм. T-459)
+  levels.go           # реестр уровней: AllowedEventTypes(level, role) — белые списки api-contracts.md §2.4, у city-gm пусто (§13.2; изм. T-459); OwnedEntityTypes(level, role) — ПРОИЗВОДНАЯ от contracts.OwnershipRules, которую вызывающий передаёт в ValidationEnv (ADR-025); своей таблицы владения файл не держит; monitor/object зарезервированы
   placeholders.go     # словарь плейсхолдеров промптов
   lod.go              # без изменений (E-G)
   tools/registry.go   # без изменений (MVP-1 не использует; tools/*_tool.go удаляются)
@@ -261,7 +261,7 @@ type Provider interface {
     Embed(ctx context.Context, model string, texts []string) ([][]float32, error)
     Health(ctx context.Context) Status
 }
-type Request struct { Phase Phase; Model, System string; Messages []Message; Schema json.RawMessage; Params Params; Timeout time.Duration; CorrelationID string }
+type Request struct { Phase Phase; Model, System string; Messages []Message; Schema json.RawMessage; Params Params; Timeout time.Duration; CorrelationID string; AgentID string; Attempt int } // (изм. T-459, C-15 v1.4) AgentID, Attempt — части ключа записи llm.output, шлюз заполняет перед каждой попыткой
 type Params struct { Temperature float64; MaxTokens int; Think bool; NumCtx int; Seed *int64 }
 type Response struct { Content string; Thinking string; Tokens Tokens; Model string; Latency time.Duration; Done bool }
 
@@ -286,7 +286,7 @@ type Result struct {
     Status        ValidationStatus; Rejected []Rejection; Attempts int
     Tokens        Tokens; LatencyMS int
 }
-var ErrUnavailable, ErrBudget, ErrQuarantined, ErrInvalidAfterRetries, ErrFilter error
+var ErrUnavailable, ErrBudget, ErrQuarantined, ErrInvalidAfterRetries, ErrFilter, ErrLabelTable error // (изм. T-459, C-07 v1.5) internal/llm/labels.go (T-211): type LabelTable struct { Mentions, Absence map[string]string }; func LabelsHash(t LabelTable) (string, error); ErrLabelTable — ключ вне формы eK/bK, вызов отвергается на входе Generate (T-213)
 
 // internal/llm/guardian (ADR-017)
 // (изм. T-444, ADR-001 доп. 2026-09-13 п. 1) страж не импортирует internal/laws и internal/mechanics: вместо laws.LawsVersion
@@ -295,7 +295,7 @@ type Input struct { Level agent.AgentLevel; Role string; Scope eventbus.ScopeRef
 type StateView interface { Entity(id string) (Entity, bool); InScope(id string, scope eventbus.ScopeRef) bool; Position(id string) string }
 type InvariantView interface { Get(id string) (*entity.Entity, bool); ByType(t string) []*entity.Entity; WorldID() string } // набор методов mechanics.StateView; страж строит его сам: View + ops на копии (§10.4)
 type InvariantFunc func(v InvariantView, touched []string) []Violation // Violation{InvariantID, EntityID, Message}
-func Evaluate(value json.RawMessage, in Input) Verdict // Verdict{Value json.RawMessage; Rejected []Rejection; Status ValidationStatus}
+func Evaluate(value json.RawMessage, in Input) Verdict // Verdict{Value json.RawMessage; Rejected []Rejection; Status ValidationStatus}; Rejection (internal/llm/types.go){Reason, Element, Entity, EntityName, Category, Budget, Ref} — Ref: ссылка ответа, как её написала модель, для поля ref (C-07 v1.5, T-217; изм. T-459)
 
 // internal/llm/filter
 type NarrativeFilter interface { Check(ctx context.Context, text string) (Decision, error); Version() string } // Decision: Pass | Block{Category}
@@ -316,8 +316,8 @@ type Law struct { ID, Kind /* invariant|declarative */, Text, Check, Source stri
 // shared/agent (C-11)
 func ParseFile(path string) (*AgentBlueprint, error)
 func ParseBytes(name string, data []byte) (*AgentBlueprint, error)
-func Validate(bp *AgentBlueprint, env ValidationEnv) []Issue // env: известные типы событий, блупринты, файлы rules/laws, инструменты, схемы
-type Issue struct { File, Field, Reason string; Severity Severity /* error|warning */ }
+func Validate(bp *AgentBlueprint, env ValidationEnv) []Issue // env — §13.2: EventTypes, OwnedEntityTypes, Blueprints, FileExists, Tools, Schemas, Invariants, Models (изм. T-459)
+type Issue struct { File, Field, Reason string; Severity Severity /* error|warning|info */; Code string /* стабильный код находки, §13.2 решение 1 (изм. T-459) */ }
 func ContentHash(bp *AgentBlueprint) string
 ```
 
@@ -520,8 +520,8 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 |---|---|---|
 | `providers/ollama` | `POST {OLLAMA_URL}/api/chat` (native), `POST /api/embed` | `format` = JSON-схема фазы (объект), `think: false` (Phase tick/narrative MVP-1; поле блупринта `thinking`), `keep_alive: -1` (`LLM_KEEP_ALIVE`), `options{temperature, num_predict=max_tokens, num_ctx=LLM_NUM_CTX (8192), seed?}`, `stream: false`; токены из `prompt_eval_count`/`eval_count` (NFR-052); таймаут фазы через `context`; `Health` = `GET /api/tags` + `GET /api/ps` (модели резидентны). Клиент — `net/http` без зависимости от модуля `ollama` <!-- gitleaks:allow: ложное срабатывание generic-api-key на параметрах генерации (.gitleaksignore); изм. T-444 --> |
 | `providers/openai_compat` | `/v1/chat/completions`, `response_format: {type: json_schema}` | **провайдер по умолчанию** (C-15 v1.1, U-8, T-208): llama-server и любой OpenAI-совместимый сервер; адрес — только `MV_LLM_URL` (обязателен, без значения по умолчанию, `/v1` на конце допустим — T-404); облако — тот же адаптер с внешним адресом, `MV_LLM_API_KEY` и гейтом `MV_LLM_CLOUD_ENABLED=true`. Имена провайдера `openai`/`deepseek` выведены (ADR-005 доп. 2). Прежняя строка «компилируется, включается флагом (E-H)» устарела (T-409) |
-| `providers/recorded` | чтение `testdata/recordings/*.jsonl` или журнала `llm_records` | ключ `(meta.correlation_id, meta.agent.id, phase, attempt)`; промах → `ErrIncompleteRecord` (в `mode=replay` тест падает, в recovery — шаблон с пометкой) |
-| `providers/fake` | in-memory таблица `(phase, matcher) → Response` | счётчик вызовов для NFR-014/NFR-053; генератор записей — `providers/recorded.Writer` *(изм. T-444, C-07 v1.3; прежде `testkit.RecordingWriter`)* |
+| `providers/recorded` (`recorded.Provider`) | события `llm.output` записи из `shared/recording` (C-01 v1.9): `--mode=replay` с `--recording` — `runtime.Deps.Recording`; replay без записи — `recording.ReadJournal(ctx, Deps.Journal, llm_records, 0)`; догон после рестарта в live — `ReadJournal` от курсора `llm_records` снапшота роя (§4.3). Провайдер строится над `recorded.Events(rec.Events(recording.TypeLLMOutput))`; своего разбора JSONL и чтения журнала нет | ключ `(meta.correlation_id, meta.agent.id, phase, attempt)` — `recording.LLMOutputKey` из полей `llm.Request` (`CorrelationID`, `AgentID`, `Phase`, `Attempt`; C-15 v1.4), индекс — `recording.LLMOutputKeyOf`; контекстного `recorded.WithCall` нет (удаляет T-212); пустая часть ключа → `ErrNoCallKey`; запись без ключа → `ErrMalformedRecord` на весь источник; промах → `ErrIncompleteRecord` (в `mode=replay` тест падает, в recovery — шаблон с пометкой) *(изм. T-459; T-457, T-207)* |
+| `providers/fake` (`fake.Provider`) | in-memory правила `Rule{Phase, Match, Replies}` (`fake.New(fake.WithRules(…))`); повтор — следующий `Reply` правила | счётчики `Calls()`/`CallsFor(phase)` для NFR-014/NFR-053 и тестов «отказ бюджета не зовёт провайдер» (T-212); генератор записей — `providers/recorded.Writer` *(изм. T-444, C-07 v1.3; прежде `testkit.RecordingWriter`; имена типов — изм. T-459)* |
 
 `providers.Registry`: `Register("ollama", factory)`; выбор `MV_LLM_PROVIDER` (по умолчанию `openai_compat` — C-15 v1.1, манифест `shared/env/vars.go`; прежнее «по умолчанию `ollama`» устарело, T-409); модель — из `Call.Model` (блупринт на фазу), не из env. (изм. G2) `Provider.Models(ctx) []string` (C-15) — список доступных моделей: `ollama` → `GET /api/tags`, `fake`/`recorded` → модели из таблицы/записи; используется валидатором блупринтов (§13.2 п. 7а) и `/health.llm` (`model_not_resident`). Контекст `llm` публикует `config.cloud_enabled {enabled, provider, external_players_ack}` при каждом старте `core` и при изменении флага, без URL, ключей и их фрагментов *(изм. T-444, C-06 v1.1–v1.2; прежде — только при `MV_LLM_CLOUD_ENABLED=true` и с полем `by`; подробности — §9.4)*.
 
@@ -530,33 +530,40 @@ Match — по `trigger.type=event`: `event_name` совпадает с `ev.Type
 ```
 Generate(call):
   0. replay-режим: provider = recorded (шаги 2–5 читают запись; запись llm.output не издаётся, meta.replay=true при пробросе)
-  1. budget.Allow(world, level, phase, provider) → нет → publish llm.output.rejected{reason: budget_exceeded, budget{kind,limit,window}} → ErrBudget (без вызова)
+  1. (изм. T-459; приёмка T-210, ревью T-210 Mi-2) бюджет проверяется перед КАЖДОЙ попыткой — шаг 3a, а не один раз до цикла
   2. prompt.Build(call.Prompt) → system, user, prompt_hash (SHA-256); по флагу MV_LLM_STORE_PROMPTS=true → prompts-{world}/{cid}/{agent}/{phase}-{attempt}.txt
-     (изм. T-439, ADR-029 п. 8; под шагом 2 — приёмка T-439, ревью #2 N-11) replay-режим: prompt_hash шага 2 ≠ prompt_hash записи → warn llm_replay_prompt_drift; нарратив с непустыми mentions/background_refs — ярлыки не разрешаются (массивы пусты), text используется
+     (изм. T-439, ADR-029 п. 8; под шагом 2 — приёмка T-439, ревью #2 N-11) replay-режим: prompt_hash шага 2 ≠ prompt_hash записи → warn llm_replay_prompt_drift
+     (изм. T-459, C-07 v1.5; распределение — ревью #1 T-459 Ma-1) replay, запись с labels_hash: LabelsHash(таблица из call.Guard) = labels_hash записи → ярлыки разрешаются и при расхождении prompt_hash; ≠ → warn llm_replay_labels_drift при любых массивах, непустые массивы пусты, text используется (T-213); запись без labels_hash (до v1.5) → при расхождении prompt_hash массивы нарратива пусты (T-213); warn prompt_drift и labels_hash записи из recorded — T-212
   3. for attempt := 1; attempt <= 1+retries; attempt++ :
+       a. budget.Allow(world, level, phase, provider) → нет → publish llm.output.rejected{reason: budget_exceeded, budget{kind,limit,window}, attempt} без llm_output → ErrBudget (провайдер не вызывается; llm.output прежних попыток остаются)
+       req := Request{…, CorrelationID, AgentID: call.Agent.ID, Phase, Attempt: attempt}   # (изм. T-459, C-15 v1.4) ключ записи — в запросе, recorded.WithCall нет
+       calledAt := clock.Now()                                        # (C-07 v1.6, T-456; действует после её слияния) момент попытки после Allow → llm.output.called_at; окно бюджета — от него (T-250)
        resp, err := provider.Generate(ctx(timeout фазы), req)        # ошибка/таймаут → status=error, повтор при временной ошибке, иначе → ErrUnavailable
        value, strategy, perr := parser.Parse(resp.Content, schema)   # ADR-016; perr → status=invalid(schema_invalid) → retry
        (изм. T-439, ADR-029 п. 4) Kind=narrative: ярлык eK/bK в text → status=invalid + rejected{reason: schema_invalid} без element → retry с подсказкой
        lerr := parser.CheckLanguage(texts(value, call.TextPaths))    # 0 CJK, латиница ≤ LLM_LATIN_MAX_RATIO (0.10) → status=invalid + rejected{reason: language} → retry   (изм. T-444: статуса rejected_language нет — C-07 v1.2, ADR-017 доп. 1)
        fdec, ferr := filter.Check(texts)                              # error → status=filter_error (raw НЕ сохраняется — изм. T-444, C-07 v1.2, ОВ-33); block → status=quarantined (raw НЕ сохраняется) + content.incident.recorded; без повтора
        verdict := guardian.Evaluate(value, call.Guard)               # чистая функция; даёт итоговый status valid|partially_rejected|invalid и rejected[]
-       ev := record.LLMOutput(call, attempt, resp, status, hashes, parse{strategy}, filter{…}, tokens, latency)   # ЗАПИСЬ ДО ИСПОЛЬЗОВАНИЯ
-       for r in verdict.Rejected: publish llm.output.rejected{llm_output{event{id: ev.ID}}, reason, element, entity}   # (изм. T-439, ADR-029 п. 6) выдуманная ссылка: до C-07 v1.4 reason=other + element, после — unknown_entity + ref
+       ev := record.LLMOutput(call, attempt, resp, status, hashes, labels_hash (Kind=narrative, C-07 v1.5), called_at (C-07 v1.6), parse{strategy}, filter{…}, tokens, latency)   # ЗАПИСЬ ДО ИСПОЛЬЗОВАНИЯ
+       budget.Observe(ev)                                             # (изм. T-459; приёмка T-210 Mi-3) синхронно, и при ошибке публикации (провайдер уже вызван), до следующей попытки или возврата
+       for r in verdict.Rejected: publish llm.output.rejected{llm_output{event{id: ev.ID}}, reason, element, entity | background_ref | ref}   # (изм. T-439, T-459; ADR-029 п. 6) выдуманная ссылка — unknown_entity + element + ref (C-07 v1.5)
        if status ∈ {valid, partially_rejected}: return Result{Value: verdict.Value, OutputEventID: ev.ID}
        if status ∈ {quarantined, filter_error}: return ErrQuarantined/ErrFilter
        if status == invalid && verdict.Reason == law_violation(stale laws): обновить laws_version в промпте, retry
-  4. исчерпание попыток → ErrInvalidAfterRetries (или ErrUnavailable, если все попытки — ошибки провайдера)
+  4. исчерпание попыток → ErrInvalidAfterRetries (или ErrUnavailable, если все попытки — ошибки провайдера); отказ бюджета на повторе — ErrBudget (шаг 3a), рой пишет fallback_reason=budget
 ```
 
 *(изм. T-444, C-07 v1.3)* Какие поля записи обязательны при каком статусе, проверяет схема `llm.output` (`response_raw` при `valid|partially_rejected|invalid`; `filter` со статусом `pass|block|error` при `valid|partially_rejected`, `quarantined`, `filter_error`; `error{}` — ровно при `error`). То, что зависит от стадии, проверяет свойство-тест шлюза: `filter` при `invalid` есть, только если шаг `filter.Check` наступил (при `schema_invalid` и `language` его нет), а `reasons[]` равно множеству `reason` опубликованных `rejected`. Хеши `prompt_hash` и `response_hash` — `sha256:<64 hex>`. Устаревшие ветки двух строк выше (`rejected_language`, «raw сохраняется» при `filter_error`) приведены к ADR-017 «Дополнение 1»; пометка об устаревании в самом ADR-016 п. 2–3 уже есть (T-409).
 
 Уточнения к ADR-005 (не меняют наблюдаемый порядок эффектов): оценка стража — чистая функция и выполняется **до** записи, чтобы `validation_status` в `llm.output` был окончательным (`partially_rejected` и т. п. из `data-model.md` §7.2); публикация `llm.output.rejected` — после записи со ссылкой на `llm_output.event.id`. Кэш ответов в шлюзе **не вводится**: кэшированный ответ не имел бы собственного `llm.output`, что ломает record-replay; в replay роль «кэша» выполняет `providers/recorded`.
 
+*(изм. T-459; приёмка T-210, ревью T-210 Mi-2 и Mi-3)* **Бюджет — перед каждой попыткой.** Каждая попытка — отдельный вызов провайдера и отдельное `llm.output`. При одной проверке до цикла окно с одним свободным местом пропустило бы вызов с повтором, и фоновых вызовов за час стало бы `B + 1` — против критерия 4 US-012 «≤ B» (Must). Отказ на повторе — `llm.output.rejected reason=budget_exceeded` с `budget{}` и номером несостоявшейся попытки, без `llm_output`; `Generate` возвращает `ErrBudget`, а не `ErrInvalidAfterRetries`, чтобы рой записал `fallback_reason=budget`. Учёт без гонки держат синхронный `Observe` своей записи и один воркер LLM (`MV_SWARM_LLM_WORKERS=1`, T-226); резерва в `Budget` нет. Порядок ADR-005 п. 2 внутри попытки не меняется.
+
 Таймауты фаз (ориентиры ADR-005, уточняются замером): `LLM_TIMEOUT_NARRATIVE=20s`, `LLM_TIMEOUT_TICK=30s`, `LLM_TIMEOUT_DECISION=5s`. Повторы `retries` из блупринта (по умолчанию 2 для narrative, 1 для tick); повтор при `schema_invalid`/`language` добавляет в `user`-сообщение короткую подсказку «Ответ должен быть валидным JSON по схеме, на русском» (не меняет `system`, чтобы кэш промпта Ollama сохранялся).
 
 ### 9.3. Бюджеты и учёт (FR-071, FR-072, NFR-050…053)
 
-`Budget` — скользящие окна по ключу `(world, level, phase, provider)`: фон `(world, {global,domain}, tick)` cap B/1h (Must); интерактив `(world, task, narrative)` cap `LLM_TURN_CALLS_PER_MIN` (Should, по умолчанию 0 = выключено); облако — `LLM_CLOUD_BUDGET_USD_PER_DAY`. Окна наполняются собственными записями и восстанавливаются из `llm_records` при догоне. `Usage` агрегирует `calls, tokens{prompt, completion}, cost_usd, latency p50/p95` по `(phase, level, provider, model)` для `mvctl llm usage` и `GET /v1/admin/llm/usage` (Should). `cost_usd` по таблице `config/llm-prices.yaml` (0 для Ollama).
+`Budget` — скользящие окна по ключу `(world, level, phase, provider)`: фон `(world, {global,domain}, tick)` cap B/1h (Must); интерактив `(world, task, narrative)` cap `LLM_TURN_CALLS_PER_MIN` (Should, по умолчанию 0 = выключено); облако — `LLM_CLOUD_BUDGET_USD_PER_DAY`. Окна наполняются собственными записями и восстанавливаются из `llm_records` при догоне — вызов ложится в окно по `called_at` записи, запись без поля — по `timestamp` *(изм. T-459; C-07 v1.6, T-456 — действует после её слияния; T-250)*. `Usage` агрегирует `calls, tokens{prompt, completion}, cost_usd, latency p50/p95` по `(phase, level, provider, model)` для `mvctl llm usage` и `GET /v1/admin/llm/usage` (Should). `cost_usd` по таблице `config/llm-prices.yaml` (0 для Ollama).
 
 ### 9.4. Облако (BR-15, ADR-005 п. 6, ADR-009 п. 7)
 
@@ -578,12 +585,12 @@ Generate(call):
 
 | Правило | `narrative.json` (`{text, background_refs[], mentions[], tone?}`) | `tick-*.json` (`{events[]{type, summary, ops[]{path, value}, affects[]?, entity?}}`) |
 |---|---|---|
-| 3 `unknown_entity` | `mentions[i]` ∉ `View`/не видима → элемент удаляется из `mentions` (текст остаётся); `background_refs[i]` ∉ `AbsenceEventIDs` → удаляется. *(изм. T-439, ADR-029 п. 5–6)* Элементы — ярлыки вызова: `mentions[i]` разрешается через `Input.Mentions` в id сущности, `background_refs[i]` — через `AbsenceEventIDs` в id события. Ярлыка нет в таблице (выдуман) → элемент отброшен, текст остаётся; событие — до C-07 v1.4 `reason=other` с `element`, после — `unknown_entity` с `ref`. Ярлык в таблице, сущность не видима → `unknown_entity`, `entity` — id и тип из `View`. Таблица не передана — непустой `mentions` при `Mentions == nil` или непустой `background_refs` при `AbsenceEventIDs == nil` — ошибка программы: весь ответ `invalid`, `reason=other` без `element`, лог `error` *(условие по массиву — приёмка T-439, ревью #2 N-6; ADR-029 п. 5 пока формулирует его для обеих карт сразу)* | `events[i].entity`/`affects[]` ∉ View или не видимы → `events[i]` отброшен |
+| 3 `unknown_entity` | `mentions[i]` ∉ `View`/не видима → элемент удаляется из `mentions` (текст остаётся); `background_refs[i]` ∉ `AbsenceEventIDs` → удаляется. *(изм. T-439, ADR-029 п. 5–6)* Элементы — ярлыки вызова: `mentions[i]` разрешается через `Input.Mentions` в id сущности, `background_refs[i]` — через `AbsenceEventIDs` в id события. Ярлыка нет в таблице (выдуман) → элемент отброшен, текст остаётся; событие — `unknown_entity` с `element` и `ref` (C-07 v1.5). Ярлык в таблице, сущность не видима → `unknown_entity`, `entity` — id и тип из `View`. Таблица не передана — непустой `mentions` при `Mentions == nil` или непустой `background_refs` при `AbsenceEventIDs == nil` — ошибка программы: весь ответ `invalid`, `reason=other` без `element`, лог `error` *(условие по массиву — ревью #2 T-439 N-6, ADR-029 п. 5, подтверждено T-457)* | `events[i].entity`/`affects[]` ∉ View или не видимы → `events[i]` отброшен; *(изм. T-459, C-07 v1.5)* id вне `View` — `unknown_entity` с `ref` (id как написан), существующая невидимая сущность — `entity` из `View`; id длиннее 128 символов отвергает парсер (`schema_invalid`, §13.4) |
 | 4 `player_agency` | текст не проверяется (нет структурных полей действий) | `events[i].type` начинается с `player.` или `ops[].path` меняет сущность типа `player` → отброшен |
 | 5 `level_violation` | — (allowed = `[narrative.output]`, страж не применяется; Emitter — §5.4) | `events[i].type` ∉ `Allowed`; `ops[]` меняют сущность типа ∉ `Owned` или вне scope агента (регион GM — только свой регион/NPC) → отброшен |
 | 6 `law_violation` | `LawsVersion` вызова ≠ `Laws.Current` → весь ответ `invalid`, повтор с новой версией | инварианты по `check`-ключам к гипотетическому состоянию `View + ops` (см. 10.4): провал → `events[i]` отброшен с `details{invariant_id}`; stale laws → `invalid` |
 
-Итог: `valid` (ничего не отброшено), `partially_rejected` (≥ 1 элемент отброшен, ≥ 1 остался), `invalid` (ничего не осталось или stale laws). Для `tick` c `invalid` роль переходит в `rule-only`. Каждый отброшенный элемент → `llm.output.rejected {reason, element{index, type}, entity?, details?}`.
+Итог: `valid` (ничего не отброшено), `partially_rejected` (≥ 1 элемент отброшен, ≥ 1 остался), `invalid` (ничего не осталось или stale laws). Для `tick` c `invalid` роль переходит в `rule-only`. Каждый отброшенный элемент → `llm.output.rejected {reason, element{index, type}, entity? | background_ref? | ref?, details?}` (при `unknown_entity` — ровно одно из трёх, C-07 v1.5).
 
 ### 10.3. Видимость (`visibility.go`)
 
@@ -714,7 +721,7 @@ type AgentBlueprint struct {
 
 ### 13.2. Валидатор (правила §3.2 + уровневые)
 
-`Validate(bp, env)` возвращает `[]Issue{File, Field, Reason, Severity}`; тот же код — в рантайме (`BlueprintRegistry.LoadDir`) и в `mvctl blueprint validate` (EPIC-005 вызывает `agent.Validate`). `ValidationEnv{EventTypes set, Blueprints set, FileExists func, Tools set, Schemas set, Invariants set}` — рантайм заполняет из `contracts`, файловой системы и `mechanics.Invariants()`; CLI — из тех же источников.
+`Validate(bp, env)` возвращает `[]Issue{File, Field, Reason, Severity, Code}`; тот же код — в рантайме (`BlueprintRegistry.LoadDir`) и в `mvctl blueprint validate` (EPIC-005 вызывает `agent.Validate`). *(изм. T-459, по коду T-202)* `ValidationEnv{EventTypes, OwnedEntityTypes, Blueprints, FileExists, Tools, Schemas, Invariants, Models}`: пустая часть окружения читается как пустая — проверка отказывает; исключение — `Models == nil`, «модели не проверять» (п. 7а). Окружение собирает вызывающий: типы событий и `OwnedEntityTypes` — из `shared/contracts` (строки `contracts.OwnershipRules` по уровню, ADR-025; `shared/agent` не импортирует `shared/contracts`), файлы и схемы — из файловой системы, инварианты — из `mechanics.Invariants()`, модели — из `Provider.Models()`. CLI (T-204) и рантайм (T-222) собирают `OwnedEntityTypes` одним построителем. Хелпер — `agent.EnvFromProject(root, eventTypes, ownedEntityTypes, invariants, models)` (ADR-015 п. 3).
 
 | # | Правило | Severity |
 |---|---|---|
@@ -722,19 +729,33 @@ type AgentBlueprint struct {
 | 2 | `scope_binding.type` ⊂ `{world, region, solo, group}` и согласован с ролью (§3.1); `global/domain` — `id` обязателен; `task` — `pattern` или `type` список | error |
 | 3 | `parent` обязателен кроме `global`; `parent.name` ∈ `env.Blueprints` либо `instance: dynamic` для `personal-gm`/`group-narrator` | error |
 | 4 | `trigger.type=timer` → `intervals.idle` обязателен (для `domain` — и `active`); `trigger.type=event` → `event_name` матчит ≥ 1 тип из `env.EventTypes` (glob) | error |
-| 5 | `ttl` у `global/domain` | warning |
-| 6 | `constraints.max_instances == 1` для `global/domain/personal-gm/group-narrator` | error |
+| 5 | `ttl` у `global/domain`; *(изм. T-459, приёмка T-202 Mi-1)* у `task` `ttl` обязателен — положительная длительность `time.ParseDuration`; у резервного `monitor` не требуется | warning (`global/domain`) / error (`task`) |
+| 6 | `constraints.max_instances == 1` для `global/domain/personal-gm/group-narrator`; *(изм. T-459, Mi-1 T-202)* `max_instances ≥ 1` у всех уровней | error |
 | 7 | `llm`: фазы, используемые ролью, имеют `model` (кроме `phase1.mode=rules`); `schema_ref` ∈ `env.Schemas`; `temperature ∈ [0,2]`; `max_tokens > 0`; `fallback` задан; модель не из списка `qwen:7b|qwen:72b` (NFR-071) | error |
-| 7а (изм. G2) | модель ∈ `env.Models` (список `Provider.Models()` выбранного `MV_LLM_PROVIDER`, C-11 v1.1/SEC-21); блупринт не содержит поля провайдера (неизвестный ключ `provider` → error по `KnownFields`). Если `env.Models == nil` (провайдер недоступен, CLI `--offline`) — проверка пропускается с `info: models not checked` | error (CLI с доступным провайдером) / **warning** в рантайме: агент активируется, `/health degraded {llm: model_missing}`, вызовы уходят в шаблон до появления модели |
-| 8 | `allowed_event_types` ⊂ `env.EventTypes` ∩ `levels.AllowedEventTypes(level, role)`; `owned_entity_types` ⊂ `levels.OwnedEntityTypes(level, role)` | error |
+| 7а (изм. G2) | модель ∈ `env.Models` (список `Provider.Models()` выбранного `MV_LLM_PROVIDER`, C-11 v1.1/SEC-21); блупринт не содержит поля провайдера (неизвестный ключ `provider` → error по `KnownFields`). Если `env.Models == nil` (провайдер недоступен, CLI `--offline`) — проверка пропускается с `info: models not checked` (код `models_not_checked`; только у блупринта, который называет модель) | error (CLI с доступным провайдером) / **warning** в рантайме: находка несёт код `model_missing`, `LoadDir` понижает её по коду; агент активируется, `/health degraded {llm: model_missing}`, вызовы фазы уходят в шаблон до появления модели *(изм. T-459 — решение 1 ниже)* |
+| 8 | `allowed_event_types` ⊂ `env.EventTypes` ∩ `levels.AllowedEventTypes(level, role)` — белые списки `api-contracts.md` §2.4; `owned_entity_types` ⊂ `env.OwnedEntityTypes(level, role)` — строка уровня `contracts.OwnershipRules`, её собирает вызывающий (ADR-025) *(изм. T-459; прежде `levels.OwnedEntityTypes` — таблицы владения в `levels.go` нет)*; роль, в белом списке которой нет `entity.*.proposed`, сущностями не владеет: любой `owned_entity_types` — error (приёмка T-202 Mi-2; решение 3 ниже) | error |
 | 9 | `tools[].name` ∈ `env.Tools` (MVP-1: пусто → любой `tools` — error) | error |
-| 10 | `laws_ref` (global/domain) и `rules_ref` (domain/encounter) существуют (`env.FileExists`); `absolute_limits_ref` (personal-gm/group-narrator/encounter) существует | error |
-| 11 | `domain`: `npc_table` непуст, `respawn_ttl`, `encounter.child_blueprint` ∈ `env.Blueprints`, `background_events` непуст, `## description` непуст | error |
-| 12 | `global`: `budget.background_calls_per_hour_world > 0`, `invariants[].check` ∈ `env.Invariants` | error |
+| 10 | `laws_ref` (global/domain) — ссылка на версию законов формы `laws/<мир>@vN`; существует файл `laws/<мир>.vN.yaml` (`env.FileExists`); другая форма — error *(изм. T-459, по T-202: ссылка на версию — не путь)*. `rules_ref` (domain/encounter) и `absolute_limits_ref` (personal-gm/group-narrator/encounter) — пути, существуют (`env.FileExists`, лексически внутри корня проекта) | error |
+| 11 | `domain`: `npc_table` непуст, `respawn_ttl`, `encounter.child_blueprint` ∈ `env.Blueprints`, `background_events` непуст, `## description` непуст; *(изм. T-459, Mi-1 T-202)* роль `encounter`: `round` обязателен; `round.timeout`, если задан, — положительная длительность | error |
+| 12 | `global`: `budget.background_calls_per_hour_world > 0`, `invariants[].check` ∈ `env.Invariants`; *(изм. T-459, Mi-1 T-202)* `background_events` непуст | error |
 | 13 | плейсхолдеры в секциях — только из словаря; `## system` обязателен для ролей с LLM | error |
-| 14 | `monitor`/`object` — валидны, но помечаются `info: reserved level, spawn disabled` | info |
+| 14 | `monitor`/`object` — валидны, но помечаются `info: reserved level, spawn disabled`; *(изм. T-459 — решение 2 ниже)* роль `city-gm` — `info: reserved role, spawn disabled` | info |
 
 Невалидный блупринт не активируется, остальные загружаются; `/health degraded {blueprints: [file]}` (UC-029 E1).
+
+**Решения по вопросам приёмки T-202 (architect#2, T-459).**
+1. **Серьёзность 7а в рантайме — стабильный код находки, а не поле окружения.** `Issue.Code` — строковый код, стабильный между версиями пакета: `model_missing` (модель фазы вне `env.Models`) и `models_not_checked` (`env.Models == nil`). У остальных находок код пока пуст. Потребители и тесты сравнивают `Code`, а не текст `Reason`.
+   - Валидатор выдаёт 7а всегда одинаково — `error`. Рантайм (`LoadDir`, T-222) понижает находки `model_missing` до `warning`, активирует агента, отдаёт блупринт и фазу для `/health degraded {llm: model_missing}` и отправляет вызовы этой фазы в шаблон. CLI (T-204) оставляет `error` и печатает код.
+   - *Почему код:* рантайму всё равно нужно узнать, у какого блупринта и какой фазы нет модели, — для `/health` и для шаблона. Поле окружения (например, `ModelMissingSeverity`) сменило бы только серьёзность, а находку рантайм искал бы по тексту `Reason`. Получились бы два механизма на одно правило.
+   - *Отвергнуто:* поле окружения — выше; сравнение `Reason` как текста — ломается правкой сообщения.
+   - Кто делает: `Issue.Code` и константы добавляет T-222 (подволна D, раньше T-204); T-204 ими пользуется.
+2. **`city-gm` — пустой белый список и резервная роль.** В MVP-1 нет ни блупринта города, ни типа scope `city` (правило 2), а сервис города заморожен (EPIC-006…EPIC-010).
+   - Список `domain` дал бы роли города права GM региона (`region.*`, `npc.*`, `encounter.started`) без решения о её полномочиях — расширение BR-16 данными.
+   - Поэтому `AllowedEventTypes(domain, city-gm)` пуст, а блупринт с `role: city-gm` получает `info: reserved role, spawn disabled` (как `monitor`/`object`, правило 14) и не поднимается. Иначе таймер-агент без разрешённых событий тратил бы бюджет фона `B` на тики, которые страж целиком отвергнет.
+   - Правила уровня `domain`, в том числе 10 и 11, к резервной роли применяются: блупринт города остаётся валидным блупринтом `domain`, и включение роли не потребует его правки. Резервность меняет только спавн — как у `monitor`/`object`, к которым правила своего уровня тоже применяются *(итерация 2, ревью #1 T-459 N-4)*.
+   - Список роли города задаёт эпик городов вместе с типом scope `city`. *Отвергнуто:* список как у `region-gm` — полномочия без решения и без scope.
+3. **Владение — по уровню, как сейчас (приёмка T-202, Mi-2; бэклог исполнителя п. 5 — оставить).** `owned_entity_types` сверяется со строкой уровня `contracts.OwnershipRules` (ADR-025). Роль сужает её только выводом из белого списка событий: роль без `entity.*.proposed` сущностями не владеет (правило 8). В MVP-1 этого достаточно: у `task` сущности предлагает только `encounter`, у `domain` — только `region-gm`. Строки ролей в C-02 не вводятся.
+   - *Условие пересмотра:* у одного уровня появляются две роли с предложениями сущностей и разными правами (например, `city-gm` рядом с `region-gm`). Тогда — запрос к C-02 о строках ролей (system-architect#1), а не правка валидатора.
 
 ### 13.3. Пять блупринтов MVP-1 (файлы в `blueprints/`)
 
@@ -756,7 +777,7 @@ type AgentBlueprint struct {
 
 - `narrative.json` *(изм. T-439; прежде `text.maxLength: 1500`, массивы без `maxItems`, элементы — id)*: `{ "$comment": "narrative cap: config=E; c=2.5; c_min=2.0; overhead=66; ops/metrics/baseline.md §5, КД §13.4.1, ADR-029", "type":"object", "required":["text","mentions","background_refs"], "properties": { "text": {"type":"string","minLength":1,"maxLength":185}, "mentions": {"type":"array","maxItems":4,"items":{"type":"string","pattern":"^e[1-9][0-9]?$"}}, "background_refs": {"type":"array","maxItems":2,"items":{"type":"string","pattern":"^b[1-9][0-9]?$"}}, "tone": {"enum":["calm","tense","grim","hopeful"]} }, "additionalProperties": false }`. Числа — строка E таблицы §13.4.1 (итерация 2: `maxLength` 185 вместо 210 — c_min, ревью #1 Mi-2); элементы массивов — ярлыки вызова, а не id; схема статична и на вызов не сужается (§13.4.2, ADR-029 п. 3). Один файл на `player-gm` и `group-narrator`, пока порог группы не зафиксирован (§13.4.1, «Группа»).
 - `tick-global.json`: `{ events: [ { type: enum[world.weather_changed, world.time_advanced, world.event_occurred], summary: string ≤ 300, ops: [ { path: enum[weather, time_of_day, day], value } ] } ] }`, `maxItems: 2`.
-- `tick-region.json`: `{ events: [ { type: enum[region.event_occurred, npc.moved, npc.spawned], summary, entity?: {id}, affects?: [{id}], ops: [ { path, value } ] } ] }`, `maxItems: 3`.
+- `tick-region.json`: `{ events: [ { type: enum[region.event_occurred, npc.moved, npc.spawned], summary, entity?: {id}, affects?: [{id}], ops: [ { path, value } ] } ] }`, `maxItems: 3`. *(изм. T-459, C-07 v1.5; T-457 Mi-5)* Каждый id ответа тика (`entity.id`, `affects[].id`) — `maxLength: 128`: предел общий с `llm.output.rejected.ref`, id длиннее отвергает парсер (`schema_invalid`) до стража (T-203).
 - `breach.json` — заглушка `{ "$comment": "reserved E-B" }`.
 
 Схемы компилируются при старте (`jsonschema/v6`), передаются провайдеру как `format`, валидируются парсером; `enum` типов в схемах тика = пересечение `allowed_event_types` блупринта (схема генерируется из шаблона на блупринт: `schema_ref` + подстановка enum).
@@ -822,7 +843,7 @@ type AgentBlueprint struct {
   - **упор в потолок:** доля ответов с длиной `text` ≥ `maxLength` − 5 — не выше 5 %. Выше — грамматика режет фразы: L снижается или `maxLength` пересматривается;
   - **конец фразы:** `text` оканчивается знаком конца предложения (`.`, `!`, `?`, `…`; после него допустима закрывающая кавычка или скобка) — не меньше 95 % ответов;
   - **ярлык в `text`** (ADR-029 п. 4): доля **попыток**, отвергнутых за ярлык в `text`, — не выше 2 %. «Ни одного в принятых ответах» — свойство парсера T-209, а не проверка стенда: такой ответ принятым не бывает *(приёмка T-439, ревью #2 Mi-10)*;
-  - **выдуманные ярлыки** — ярлык ответа вне таблицы промпта (в платформе — отброс стражем, ADR-029 п. 5–6) — не больше 5 на 100 вызовов. Оба порога — условия пересмотра ADR-029: превышение — вопрос о пересмотре решения, а не правка чисел;
+  - **выдуманные ярлыки** — ярлык ответа вне таблицы промпта (в платформе — отброс стражем, ADR-029 п. 5–6; считаются по `llm.output.rejected` `unknown_entity` с `ref` у `Kind=narrative`, C-07 v1.5) — не больше 5 на 100 вызовов. Оба порога — условия пересмотра ADR-029: превышение — вопрос о пересмотре решения, а не правка чисел;
   - калибровка: c — медиана, c_min — 5-й процентиль символов на токен по `text` ответов длиной ≥ L/2 (`/tokenize`); при c_min ≠ 2,0 — пересчёт `maxLength` и L одним PR;
   - для Qwen3.6 — на её числах.
 
@@ -834,10 +855,10 @@ type AgentBlueprint struct {
 - **Выдача** (`context/builder.go`, T-235). Сущности `<state>` — `e1…eN` по id (байтовое сравнение), события `<absence>` — `b1…bM` по `at`, затем по id. N ≤ 99: сверх — без ярлыка и с `warn`, по NFR-080 недостижимо. M ≤ 20. N = 0 или M = 0 — пустая, но не `nil` карта: `nil` значит «таблицу не передали» (§10.2). Форма в промпте — `Имя [eK]`; id в промпт нарратива не попадает; ярлыки — только в `user` (§11.4). Одинаковый контекст даёт одинаковые ярлыки и `prompt_hash`.
 - **Схема** `narrative.json` статична: `pattern` `^e[1-9][0-9]?$` и `^b[1-9][0-9]?$`, на вызов не сужается, компилируется при старте (ADR-016 п. 1 без изменений). `<format>` — статичное правило ярлыков (T-218).
 - **Ярлык в `text`** проверяет парсер после схемы выражением `(^|[^0-9A-Za-z_])[eb][1-9][0-9]?([^0-9A-Za-z_]|$)`: совпадение → `invalid`, `schema_invalid` без `element`, повтор с подсказкой (ADR-029 п. 4, T-209).
-- **Страж.** Таблица — в `guardian.Input` (`Mentions`, `AbsenceEventIDs`, §3), правило 3 по элементу — §10.2. Ярлык вне таблицы отбрасывается элементом, текст остаётся. Событие отброса до C-07 v1.4 — `reason=other` с `element`, после — `unknown_entity` с `ref` (ADR-029 п. 5–6, T-217, T-213).
+- **Страж.** Таблица — в `guardian.Input` (`Mentions`, `AbsenceEventIDs`, §3), правило 3 по элементу — §10.2. Ярлык вне таблицы отбрасывается элементом, текст остаётся. Событие отброса — `unknown_entity` с `element` и `ref` (C-07 v1.5; ADR-029 п. 5–6, T-217, T-213). Условие «таблицу не передали» — по каждому массиву (§10.2).
 - **Роль** пишет в `narrative.output.background_refs` id событий из таблицы и схлопывает повторы (T-233, T-247). Во внешних событиях ярлыков нет.
-- **`llm.output.response_raw`** хранит ответ с ярлыками, таблица в запись не пишется. Аудит читает её из сохранённого промпта (`MV_LLM_STORE_PROMPTS`) или восстанавливает правилом выдачи, сверяя `prompt_hash` (ADR-029 п. 7).
-- **Replay и нарратив из записи** (§8.4). `prompt_hash` пересобранного промпта ≠ записи → `warn llm_replay_prompt_drift`; у нарратива с непустыми массивами ярлыки не разрешаются, `text` используется (ADR-029 п. 8, T-212). Оговорка I2 с `NopMemory` (§11.3, T-248) — частный случай, но не редкий: запись, снятая с живой памятью, в replay с `NopMemory` расходится всегда, и ссылки её нарратива теряются — T-248 это принимает. Сверка по `prompt_hash` грубее таблицы ярлыков: расхождение даёт и правка промпта вне `<state>`/`<absence>`, например смена L в `## phase2` при переходе конфигурации (§13.4.1). Поэтому смена L или текста `## phase2` идёт одним PR с перезаписью записей с нарративом (T-260, T-261, T-262), иначе e2e, сверяющие `background_refs`, краснеют. Точная сверка по хешу таблицы — вопрос C-07 к system-architect#1 (T-457) *(приёмка T-439, ревью #2 Mi-11)*.
+- **`llm.output.response_raw`** хранит ответ с ярлыками; таблица в запись не пишется — только её хеш `labels_hash` у `Kind=narrative` (C-07 v1.5, T-211). Аудит читает таблицу из сохранённого промпта (`MV_LLM_STORE_PROMPTS`) или восстанавливает правилом выдачи и подтверждает `labels_hash` записи (ADR-029 п. 7; у записи до v1.5 — `prompt_hash`). *(изм. T-459)*
+- **Replay и нарратив из записи** (§8.4; ADR-029 п. 8, C-07 v1.5; `prompt_hash` — T-212, ярлыки — T-213). `prompt_hash` пересобранного промпта ≠ записи → `warn llm_replay_prompt_drift`. Ярлыки нарратива с непустыми массивами разрешаются по `labels_hash`: хеш пересобранной таблицы совпал с записью — ярлыки разрешаются и при расхождении `prompt_hash`; не совпал — `warn llm_replay_labels_drift` (при любых массивах, в том числе пустых), непустые массивы пусты, `text` используется; запись без `labels_hash` (до v1.5) — прежнее правило по `prompt_hash`. Поэтому смена L или текста `## phase2` при переходе конфигурации (§13.4.1) и `<facts source="memory">` в I2 ссылок записей не гасят: перезапись записей с нарративом нужна, только если меняется правило выдачи ярлыков (T-260, T-262). Оговорка I2 с `NopMemory` (§11.3, T-248): запись, снятая с живой памятью, теряет ссылки в replay, только если различается сама таблица — список `<absence>`. Но `AbsenceSummary` памяти заменяет список журнала (§11.3), поэтому у такой записи таблица обычно различается, и e2e на записях с памятью `background_refs` не сверяют (T-248). *(изм. T-459; прежде — сверка только по `prompt_hash`, приёмка T-439, ревью #2 Mi-11; хеш таблицы принят в T-457)*
 
 Отклонено (подробно — ADR-029, «Рассмотренные варианты»):
 - id как есть;
@@ -1057,7 +1078,7 @@ sequenceDiagram
 ## 19. Трассировка и допущения
 
 - FR-010/012/013/016/037/120…128 → §4, §5, §7, §8; FR-014 → §17; FR-015 → §8.4; FR-018/BR-05 → схема `narrative.json` без действий + Emitter; FR-032/034 → §9.2, §10; FR-040/045/BR-02 → §12; FR-050/051/055/056 → §9.2, §11.4, §13.5 (`InputFilter` — gateway, EPIC-004); FR-070…072 → §9.1, §9.3; FR-090…092 → §13, §11.4 (`prompt_hash` в `llm.output`), `mvctl blueprint validate` (валидатор — здесь, команда — EPIC-005).
-- Допущения: (1) `Journal` C-01 v1.1 даёт чтение по офсетам, не по времени — сводка фона строится из индекса роя в снапшоте (принято к сведению, W-6); (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) *(изм. T-439)* модели в блупринтах — базовая E по `baseline.md` §5, целевая нарратива Qwen3.6-35B-A3B, запасные C и A (§13.3); потолки Qwen3.6 предварительны до T-438; до калибровки символов на токен c = 2,5 и нижняя граница c_min = 2,0 (§13.4.1, ADR-029 п. 9); выдуманный ярлык нарратива публикуется как `other` с `element` до C-07 v1.4 (ADR-029 п. 6); (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
+- Допущения: (1) `Journal` C-01 v1.1 даёт чтение по офсетам, не по времени — сводка фона строится из индекса роя в снапшоте (принято к сведению, W-6); (2) число внешних игроков для облака `core` не знает — флаг оператора; (3) *(изм. T-439)* модели в блупринтах — базовая E по `baseline.md` §5, целевая нарратива Qwen3.6-35B-A3B, запасные C и A (§13.3); потолки Qwen3.6 предварительны до T-438; до калибровки символов на токен c = 2,5 и нижняя граница c_min = 2,0 (§13.4.1, ADR-029 п. 9); выдуманный ярлык нарратива публикуется как `unknown_entity` с `element` и `ref` (C-07 v1.5, ADR-029 п. 6; изм. T-459); (4) `laws@v1` декларативные законы — уточняет автор мира; (5) `strain` в памяти до E-B.
 
 ---
 
@@ -1114,11 +1135,29 @@ sequenceDiagram
 
 ## Дополнение 2026-09-13 (architect#2, T-439): потолок длины нарратива
 
-Решения уровня реализации по ADR-005 доп. 3 и «Уточнению исполнения» п. 4, `ops/metrics/baseline.md` §5; решение о ярлыках — **ADR-029** (итерация 2 по ревью #1). Схемы событий не меняются; для отброса выдуманной ссылки — запрос C-07 v1.4 к system-architect#1 (ADR-029 п. 6). В основном тексте изменённые места помечены «(изм. T-439)».
+Решения уровня реализации по ADR-005 доп. 3 и «Уточнению исполнения» п. 4, `ops/metrics/baseline.md` §5; решение о ярлыках — **ADR-029** (итерация 2 по ревью #1). Схемы событий этой задачей не менялись; отброс выдуманной ссылки и хеш таблицы ярлыков — C-07 v1.5 (принят, T-457; ADR-029 п. 6, 8). В основном тексте изменённые места помечены «(изм. T-439)».
 
 | Раздел | Что изменилось | Основание |
 |---|---|---|
 | **§13.3** (`player-gm`, `group-narrator`, модели, семплинг) | модель — базовая E по `baseline.md` §5, запасные по `decision_order` (Qwen3.6-35B-A3B, C, A); `temperature: 0.7` вместо 0.8; `max_tokens` — потолок конфигурации (E — 160), у группы свой | ADR-005 доп. 2 п. 1, доп. 3; `bench-matrix.json` `request.sampling_non_thinking`; T-203 |
 | **§13.4**, **§13.4.1** | `narrative.json`: `text.maxLength` 185, `mentions.maxItems` 4, `background_refs.maxItems` 2; таблица E / Qwen3.6 (210 → 285, 400 → 665, предварительно); N вниз до десятков; формула с c и c_min; длина L в `## phase2`; потолок группы и `mentions` группы; инварианты теста; проверки CI и стенда — упор в потолок, конец фразы, ярлыки в тексте (T-260 в сессии T-438). *Итерация 2:* прежде 210, 220 → 345, 410 → 775 | ADR-005 УИ п. 4; ADR-029 п. 9; ревью #1 T-439 Mi-1…Mi-3, N-4; T-203, T-260, T-438 |
-| **§13.4.2**, §3 (`guardian.Input`), §9.2, §10.2, §11.2, §11.4 | ярлыки `eK`/`bK` вместо id в промпте и ответе нарратива; статическая схема с `pattern`; ярлык в `text` — `schema_invalid`; выдуманный ярлык — отброс элемента стражем (до C-07 v1.4 — `other`); `Input.Mentions`, `AbsenceEventIDs` — ярлык → id; сверка `prompt_hash` в replay. *Итерация 2:* сужение схемы на вызов отменено | **ADR-029**; T-203, T-209, T-212, T-213, T-217, T-218, T-233, T-235, T-247 |
+| **§13.4.2**, §3 (`guardian.Input`), §9.2, §10.2, §11.2, §11.4 | ярлыки `eK`/`bK` вместо id в промпте и ответе нарратива; статическая схема с `pattern`; ярлык в `text` — `schema_invalid`; выдуманный ярлык — отброс элемента стражем (`unknown_entity` с `ref`, C-07 v1.5); `Input.Mentions`, `AbsenceEventIDs` — ярлык → id; сверка replay (с T-459 — по `labels_hash`, C-07 v1.5). *Итерация 2:* сужение схемы на вызов отменено | **ADR-029**; T-203, T-209, T-212, T-213, T-217, T-218, T-233, T-235, T-247 |
 | §16 (NFR-002), §19 (допущение 3), §20 (строка 4) | потолок на конфигурацию; модели по доп. 3 | ADR-005 доп. 3 |
+
+---
+
+## Дополнение 2026-09-13 (architect#2, T-459): решения T-457 и приёмок T-210, T-202
+
+Основание: T-457 (EPIC-001, system-architect#1) — ADR-029 принят, C-07 v1.5 (`llm.output.rejected.ref`, `llm.output.labels_hash`), C-15 v1.4 (`llm.Request.AgentID`/`Attempt`), C-01 v1.9 (`shared/recording`); приёмка T-210 (tech-lead#2) — `Allow` перед каждой попыткой; приёмка T-202 (tech-lead#2) — вопросы по валидатору. Изменённые места помечены «(изм. T-459)».
+
+| Раздел | Что изменилось | Основание |
+|---|---|---|
+| §2 (`recorded/`, `fake/`, `validator.go`, `levels.go`), §3 (`llm.Request`, `Validate`, `Issue`) | `recorded.Provider` строит ключ из полей `Request` и читает события `shared/recording`; `Request.AgentID`, `Request.Attempt`; `Rejection.Ref`; `Issue.Code`; `EnvFromProject` с `ownedEntityTypes`; источник белых списков — `api-contracts.md` §2.4 | C-15 v1.4, C-01 v1.9; T-202; T-211, T-212, T-222 |
+| §9.1 (`providers/recorded`, `providers/fake`) | источники записей для replay и догона; ключ `recording.LLMOutputKey` без `WithCall`; `ErrNoCallKey`, `ErrMalformedRecord`; имена `recorded.Provider`, `fake.Provider` | C-01 v1.9, C-15 v1.4; T-207, T-212 |
+| §9.2 | `budget.Allow` — перед каждой попыткой (шаг 3a); отказ на повторе — `rejected budget_exceeded` без `llm_output` и `ErrBudget`; синхронный `Observe`; `labels_hash` в записи (T-211) и сверка replay по нему (T-213); отброс с `ref`; `called_at` (C-07 v1.6, после слияния T-456) | приёмка T-210 Mi-2, Mi-3; C-07 v1.5; T-212, T-213 |
+| §10.2 | правило 3: выдуманная ссылка нарратива и тика — `unknown_entity` с `ref` (`Rejection.Ref`, T-217); условие «таблицу не передали» по массиву подтверждено | C-07 v1.5, ADR-029 п. 5–6; T-213, T-217 |
+| §13.2 | состав `ValidationEnv`; правила 5, 6, 7а, 8, 10, 11, 12, 14 — по коду и приёмке T-202; решения: код находки 7а, `city-gm` — резервная роль, владение по уровню | приёмка T-202; T-204, T-222 |
+| §13.4, §13.4.1, §13.4.2 | `maxLength: 128` у id схем тика; стендовый порог выдуманных ярлыков — по `unknown_entity` с `ref`; replay и аудит — по `labels_hash`, перезапись записей при смене L не нужна | C-07 v1.5, T-457 Mi-5, Mi-11; T-203, T-260, T-262 |
+| §19 (допущение 3), «Дополнение T-439» | прежний номер запроса и временная форма `other` заменены на C-07 v1.5 | T-457 |
+
+*Итерация 2 (ревью #1 T-459).* Таблица для `labels_hash` приходит в `Recorder` явным входом (T-211); из `Call.Guard` его заполняет T-213, она же сверяет ярлыки в replay — `Call.Guard` вводит только она. `llm_replay_labels_drift` пишется при любых массивах (C-07 v1.5). Правила уровня к резервной роли `city-gm` применяются. `round.timeout` проверяется, только если задан. Оговорка e2e на записях с памятью восстановлена. `called_at` — по C-07 v1.6 после слияния T-456.
