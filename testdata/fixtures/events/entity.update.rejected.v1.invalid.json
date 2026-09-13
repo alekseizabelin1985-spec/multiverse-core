@@ -1,0 +1,6 @@
+{
+  "proposal_id": "01JG0000000000000000000040",
+  "reason": "invariant",
+  "entity": { "entity": { "id": "player-A", "type": "player" } },
+  "details": { "expected_version": 24, "actual_version": 24, "invariant_id": "inv-02" }
+}

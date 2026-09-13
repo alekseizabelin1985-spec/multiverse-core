@@ -1,0 +1,13 @@
+{
+  "component": "state",
+  "snapshot": {
+    "id": "state:dark-forest-world:000000",
+    "seq": 0,
+    "taken_at": "2026-01-01T00:00:00Z",
+    "cursor": { "system_events": 0 },
+    "laws_version": "v1",
+    "state_hash": "sha256:0046b8a738ddec9996ad73e31df7e73534b4bad9cf75e501dd4985a0fbe7c29e",
+    "size_bytes": 4531,
+    "key": "state/20260101T000000Z-000000.json"
+  }
+}

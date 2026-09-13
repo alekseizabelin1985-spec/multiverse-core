@@ -1,0 +1,5 @@
+{
+  "proposal_id": "01JG0000000000000000000020",
+  "entity": { "entity": { "id": "player-A", "type": "player" }, "name": "Вася" },
+  "cause": "create"
+}

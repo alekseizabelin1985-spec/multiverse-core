@@ -3,12 +3,17 @@ package entity_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"reflect"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/jsonpath"
 )
 
@@ -90,8 +95,8 @@ func TestApplySet(t *testing.T) {
 		t.Fatalf("banner.colour = %q, %v; want green: set creates intermediate maps", nested, ok)
 	}
 	want := []entity.Change{
-		{Path: entity.AttrPosition, Old: "outside:dark-forest-world", New: "dark-forest-01"},
-		{Path: "banner.colour", Old: nil, New: "green"},
+		{Path: entity.AttrPosition, Old: "outside:dark-forest-world", New: "dark-forest-01", HasOld: true, HasNew: true},
+		{Path: "banner.colour", New: "green", HasNew: true},
 	}
 	if !reflect.DeepEqual(changed, want) {
 		t.Fatalf("changed = %+v, want %+v", changed, want)
@@ -171,8 +176,8 @@ func TestApplyIncOnAMissingPathStartsAtZero(t *testing.T) {
 	if !reflect.DeepEqual(attrs["kills"], int64(1)) {
 		t.Fatalf("kills = %#v, want 1", attrs["kills"])
 	}
-	if len(changed) != 1 || changed[0].Old != nil {
-		t.Fatalf("changed = %+v, want one entry with a null old", changed)
+	if len(changed) != 1 || changed[0].HasOld || !changed[0].HasNew {
+		t.Fatalf("changed = %+v, want one entry with no old and a new", changed)
 	}
 }
 
@@ -200,8 +205,8 @@ func TestApplyAppend(t *testing.T) {
 	if len(changed) != 1 || changed[0].Path != "inventory[0]" {
 		t.Fatalf("changed = %+v, want the path of the element (C-02 v1.1)", changed)
 	}
-	if changed[0].Old != nil {
-		t.Fatalf("changed[0].Old = %v, want null: the element did not exist", changed[0].Old)
+	if changed[0].HasOld || !changed[0].HasNew {
+		t.Fatalf("changed[0] = %+v, want no old: the element did not exist (C-02 v1.6)", changed[0])
 	}
 }
 
@@ -297,8 +302,8 @@ func TestApplyRemoveWithoutAValueDropsTheKey(t *testing.T) {
 	if _, present := attrs[entity.AttrEncounterID]; present {
 		t.Fatalf("attributes = %+v, want encounter_id gone", attrs)
 	}
-	if len(changed) != 1 || changed[0].Old != "enc-1" || changed[0].New != nil {
-		t.Fatalf("changed = %+v, want enc-1 -> null", changed)
+	if len(changed) != 1 || changed[0].Old != "enc-1" || !changed[0].HasOld || changed[0].HasNew {
+		t.Fatalf("changed = %+v, want old enc-1 and no new (C-02 v1.6)", changed)
 	}
 }
 
@@ -714,9 +719,13 @@ func TestChangedListAndStateHashMoveTogether(t *testing.T) {
 			after := entity.Clone(e)
 			after.Attributes = attrs
 
-			hashMoved := entity.StateHash([]*entity.Entity{after}) != before
+			hashAfter := entity.StateHash([]*entity.Entity{after})
+			hashMoved := hashAfter != before
 			if hashMoved != (len(changed) > 0) {
 				t.Fatalf("state hash moved = %v, changed = %+v; want the two to agree", hashMoved, changed)
+			}
+			if replayChanged(t, e, changed) != hashAfter {
+				t.Fatalf("catching up on changed = %+v does not reproduce the state (C-02 v1.6)", changed)
 			}
 		})
 	}
@@ -803,24 +812,116 @@ func TestApplyRemoveByIndexReportsTheList(t *testing.T) {
 	}
 }
 
-// replayChanged is the read-model of C-02: it writes every new value at its
-// path and drops what became null, and hashes what it ends up with. The version
-// is carried over so that the hash answers for the attributes alone.
+// replayChanged is the read-model of C-02 v1.6, the rule State catches up by
+// (state-and-mechanics.md §4.8). changed[] first travels over the wire, so that
+// what is replayed is what a consumer reads, and a fact the rule calls corrupt
+// fails the test instead of being written somehow.
 func replayChanged(t *testing.T, base *entity.Entity, changed []entity.Change) string {
 	t.Helper()
+	hash, err := catchUp(base, overTheWire(t, changed))
+	if err != nil {
+		t.Fatalf("catching up on %+v: %v", changed, err)
+	}
+	return hash
+}
+
+// errCorruptFact is an entry of changed[] that no fact of State carries: State
+// meeting one while catching up stops the world with state_divergence (§4.8).
+var errCorruptFact = errors.New("corrupt fact")
+
+// catchUp applies changed[] entry by entry: new present is written at its path,
+// replacing a missing or scalar node on the way with an object, as set does,
+// and appended when the path is the element one past the end of its list; new
+// absent deletes the path. The version is carried over so that the hash answers for the
+// attributes alone.
+//
+// The append of catching up is a plain append, not the op: the fact already
+// carries the outcome of deduplication, and an element that shares an item_id
+// with another one — a set after the append made it so — is still an element.
+// And the delete of catching up deletes what is there: an earlier entry may
+// already have written the container without the path (inventory[0] = {}
+// before inventory[0].kind with no new), and that is the state asked for.
+func catchUp(base *entity.Entity, changed []entity.Change) (string, error) {
 	out := entity.Clone(base)
 	for _, change := range changed {
-		op := entity.Op{Op: entity.OpSet, Path: change.Path, Value: change.New}
-		if change.New == nil {
-			op = entity.Op{Op: entity.OpRemove, Path: change.Path}
-		}
-		attrs, _, err := entity.ApplyOps(out, []entity.Op{op})
+		op, err := catchUpOp(out.Attributes, change)
 		if err != nil {
-			t.Fatalf("replaying %+v: %v", change, err)
+			return "", err
+		}
+		if op == nil {
+			continue
+		}
+		attrs, _, err := entity.ApplyOps(out, []entity.Op{*op})
+		if err != nil {
+			return "", fmt.Errorf("replaying %+v: %w", change, err)
 		}
 		out.Attributes = attrs
 	}
-	return entity.StateHash([]*entity.Entity{out})
+	return entity.StateHash([]*entity.Entity{out}), nil
+}
+
+// catchUpOp is the operation one entry of changed[] comes down to, or nil when
+// there is nothing to do.
+func catchUpOp(attrs map[string]any, change entity.Change) (*entity.Op, error) {
+	if !change.HasNew {
+		if _, exists := jsonpath.New(attrs).GetAny(change.Path); !exists {
+			return nil, nil
+		}
+		return &entity.Op{Op: entity.OpRemove, Path: change.Path}, nil
+	}
+	set := &entity.Op{Op: entity.OpSet, Path: change.Path, Value: change.New}
+	parent, n, isElement := elementPath(change.Path)
+	if !isElement {
+		return set, nil
+	}
+	current, _ := jsonpath.New(attrs).GetAny(parent)
+	var list []any
+	switch held := current.(type) {
+	case nil:
+		// A list that is not there and a null where it would be are the same
+		// absent list: the append that creates a list takes either.
+	case []any:
+		list = held
+	default:
+		// An index into something that is not a list: set refuses it.
+		return set, nil
+	}
+	switch {
+	case n < len(list):
+		return set, nil
+	case n == len(list):
+		return &entity.Op{Op: entity.OpSet, Path: parent, Value: append(slices.Clone(list), change.New)}, nil
+	default:
+		return nil, fmt.Errorf("%w: %s past the end of a list of %d", errCorruptFact, change.Path, len(list))
+	}
+}
+
+// elementPath answers whether path is an element a[n] and names a and n.
+func elementPath(path string) (string, int, bool) {
+	open := strings.LastIndexByte(path, '[')
+	if open <= 0 || !strings.HasSuffix(path, "]") {
+		return "", 0, false
+	}
+	n, err := strconv.Atoi(path[open+1 : len(path)-1])
+	if err != nil {
+		return "", 0, false
+	}
+	return path[:open], n, true
+}
+
+// overTheWire is changed[] as a consumer of entity.updated holds it: encoded by
+// the publisher and decoded on the other side.
+func overTheWire(t *testing.T, changed []entity.Change) []entity.Change {
+	t.Helper()
+	encoded, err := json.Marshal(changed)
+	if err != nil {
+		t.Fatalf("marshal changed: %v", err)
+	}
+	var decoded []entity.Change
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal changed %s: %v", encoded, err)
+	}
+	return decoded
 }
 
 // Mi-1. An append undone by a remove in the same proposal is not a change: the
@@ -845,5 +946,205 @@ func TestApplyAppendThenRemoveOfTheSameItemIsANoOp(t *testing.T) {
 	e.Commit(attrs, changed, entity.LastChange{ProposalID: "p-1", AppliedAt: proposedAt})
 	if e.Version != 1 {
 		t.Fatalf("version = %d, want it to stay at 1", e.Version)
+	}
+}
+
+// pelt is the trophy of state-and-mechanics.md §3.2 as a proposer builds it in
+// Go: a struct, not the map the same item becomes on the wire.
+func pelt() entity.Item {
+	return entity.Item{
+		ItemID: "dec-7:wolf-pelt",
+		Kind:   "wolf-pelt",
+		Name:   "волчья шкура",
+		Source: entity.ItemSource{
+			Entity:  eventbus.EntityRef{ID: "wolf-alpha", Type: entity.TypeNPC},
+			EventID: "dec-7",
+		},
+		AcquiredAt: proposedAt,
+	}
+}
+
+// T-050. append deduplicates by item_id (§3.2, inv-03), and it did so only for
+// a map: the entity.Item a proposer appends in Go was compared with
+// reflect.DeepEqual, and a redelivered decision handed the trophy out twice.
+// The rule is about the item, not about the Go type that happens to carry it,
+// so the repeat is a no-op whether the item already in the list came from the
+// same Go code or off the wire.
+func TestApplyAppendOfAnItemBuiltInGoIsIdempotent(t *testing.T) {
+	t.Run("the same struct twice", func(t *testing.T) {
+		e := player(t)
+		attrs, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpAppend, Path: entity.AttrInventory, Value: pelt()},
+			entity.Op{Op: entity.OpAppend, Path: entity.AttrInventory, Value: pelt()})
+
+		if list, _ := jsonpath.New(attrs).GetSlice(entity.AttrInventory); len(list) != 1 {
+			t.Fatalf("inventory = %+v, want one trophy (inv-03)", list)
+		}
+		if len(changed) != 1 {
+			t.Fatalf("changed = %+v, want one entry", changed)
+		}
+	})
+
+	t.Run("a struct over the same item read off the wire", func(t *testing.T) {
+		e := player(t)
+		e.Attributes[entity.AttrInventory] = []any{wireForm(t, pelt())}
+
+		_, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpAppend, Path: entity.AttrInventory, Value: pelt()})
+		if len(changed) != 0 {
+			t.Fatalf("changed = %+v, want the repeat to be a no-op", changed)
+		}
+	})
+
+	t.Run("a different item is still appended", func(t *testing.T) {
+		e := player(t)
+		other := pelt()
+		other.ItemID = "dec-8:wolf-pelt"
+		attrs, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpAppend, Path: entity.AttrInventory, Value: pelt()},
+			entity.Op{Op: entity.OpAppend, Path: entity.AttrInventory, Value: other})
+		if list, _ := jsonpath.New(attrs).GetSlice(entity.AttrInventory); len(list) != 2 || len(changed) != 2 {
+			t.Fatalf("inventory = %+v, changed = %+v; want two trophies of two decisions", list, changed)
+		}
+	})
+}
+
+// wireForm is what a value becomes after a trip through encoding/json: the
+// shape every consumer of the bus and every reader of a snapshot holds.
+func wireForm(t *testing.T, v any) any {
+	t.Helper()
+	encoded, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("marshal %T: %v", v, err)
+	}
+	var decoded any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal %T: %v", v, err)
+	}
+	return decoded
+}
+
+// T-050. remove compares the way append does: an item built in Go takes out
+// the same item read off the wire, and a number built in Go takes out the same
+// number decoded as float64. Before, both were silently nothing — a remove that
+// changed nothing and said so with an empty changed[].
+func TestApplyRemoveComparesTheWireForm(t *testing.T) {
+	t.Run("an item built in Go", func(t *testing.T) {
+		e := player(t)
+		e.Attributes[entity.AttrInventory] = []any{
+			map[string]any{"item_id": "dec-7:wolf-pelt", "kind": "wolf-pelt"},
+			map[string]any{"item_id": "item-2", "kind": "rope"},
+		}
+		attrs, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpRemove, Path: entity.AttrInventory, Value: pelt()})
+		if list, _ := jsonpath.New(attrs).GetSlice(entity.AttrInventory); len(list) != 1 || len(changed) != 1 {
+			t.Fatalf("inventory = %+v, changed = %+v; want the pelt taken out by item_id", list, changed)
+		}
+	})
+
+	t.Run("a number built in Go", func(t *testing.T) {
+		e := player(t)
+		e.Attributes["marked_rounds"] = []any{float64(3), float64(5)}
+		attrs, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpRemove, Path: "marked_rounds", Value: 3})
+		list, _ := jsonpath.New(attrs).GetSlice("marked_rounds")
+		if len(list) != 1 || len(changed) != 1 {
+			t.Fatalf("list = %+v, changed = %+v; want 3 taken out of [3 5]", list, changed)
+		}
+	})
+
+	t.Run("an object without an id is compared whole", func(t *testing.T) {
+		e := player(t)
+		e.Attributes["marks"] = []any{
+			map[string]any{"by": "player-A", "at": float64(2)},
+			map[string]any{"by": "player-B", "at": float64(2)},
+		}
+		attrs, _ := applyOK(t, e,
+			entity.Op{Op: entity.OpRemove, Path: "marks", Value: map[string]any{"by": "player-A", "at": 2}})
+		if list, _ := jsonpath.New(attrs).GetSlice("marks"); len(list) != 1 {
+			t.Fatalf("marks = %+v, want only the mark of player-B left", list)
+		}
+		_, changed := applyOK(t, e,
+			entity.Op{Op: entity.OpRemove, Path: "marks", Value: map[string]any{"by": "player-A"}})
+		if len(changed) != 0 {
+			t.Fatalf("changed = %+v, want nothing: a part of an object is not the object", changed)
+		}
+	})
+}
+
+// T-050. inc takes a whole number in every shape one reaches ApplyOps in: the
+// integer widths of Go code, the float64 of encoding/json and the json.Number
+// of a decoder with UseNumber. A fraction in any of them is not a whole number.
+func TestApplyIncAcceptsEveryWholeNumber(t *testing.T) {
+	tests := []struct {
+		delta any
+		want  int64
+	}{
+		{int8(-1), 4}, {int16(-1), 4}, {int32(-1), 4}, {int64(-1), 4}, {int(-1), 4},
+		{uint(1), 6}, {uint8(1), 6}, {uint16(1), 6}, {uint32(1), 6}, {uint64(1), 6},
+		{float32(-1), 4}, {float64(-1), 4}, {json.Number("-1"), 4},
+	}
+	for _, test := range tests {
+		t.Run(reflect.TypeOf(test.delta).String(), func(t *testing.T) {
+			e := player(t)
+			e.Attributes["kills"] = float64(5)
+			attrs, changed := applyOK(t, e, entity.Op{Op: entity.OpInc, Path: "kills", Value: test.delta})
+			if !reflect.DeepEqual(attrs["kills"], test.want) {
+				t.Fatalf("kills = %#v, want %d", attrs["kills"], test.want)
+			}
+			if len(changed) != 1 {
+				t.Fatalf("changed = %+v, want one entry", changed)
+			}
+		})
+	}
+
+	// Iteration 2: a number past the range of int64 is not a whole number of
+	// int64 either. Converted, it wrapped into another number — the largest
+	// uint64 into -1 — and an inc healed or hurt by an amount nobody proposed.
+	notWhole := []any{
+		float32(0.5), json.Number("1.5"), json.Number("many"),
+		uint64(math.MaxUint64), uint64(math.MaxInt64) + 1, uint(math.MaxUint64),
+		float64(1 << 63), -float64(1<<63) * 2, json.Number("9223372036854775808"),
+	}
+	for _, fraction := range notWhole {
+		t.Run("not whole "+fmt.Sprint(fraction), func(t *testing.T) {
+			invalid := applyErr(t, player(t), entity.Op{Op: entity.OpInc, Path: "kills", Value: fraction})
+			if invalid.Reason != entity.ReasonNotInteger {
+				t.Fatalf("reason = %q, want %q", invalid.Reason, entity.ReasonNotInteger)
+			}
+		})
+	}
+}
+
+// T-050. remove without a value inside an element of a list: the key goes, the
+// list keeps its length, and the change is reported where the key was — no
+// element shifted, so there is no list to report.
+func TestApplyRemoveOfAKeyInsideAListElement(t *testing.T) {
+	e := player(t)
+	e.Attributes[entity.AttrParticipants] = []any{
+		map[string]any{"player_id": "player-A", "last_hit_at": "2026-09-09T10:15:00Z"},
+	}
+	attrs, changed := applyOK(t, e, entity.Op{Op: entity.OpRemove, Path: "participants[0].last_hit_at"})
+
+	list, _ := jsonpath.New(attrs).GetSlice(entity.AttrParticipants)
+	if len(list) != 1 {
+		t.Fatalf("participants = %+v, want the element kept", list)
+	}
+	if element, ok := list[0].(map[string]any); !ok || len(element) != 1 {
+		t.Fatalf("participants[0] = %#v, want only player_id left", list[0])
+	}
+	if len(changed) != 1 || changed[0].Path != "participants[0].last_hit_at" || changed[0].HasNew {
+		t.Fatalf("changed = %+v, want the removed key with no new", changed)
+	}
+
+	applied := entity.Clone(e)
+	applied.Attributes = attrs
+	if replayChanged(t, e, changed) != entity.StateHash([]*entity.Entity{applied}) {
+		t.Fatal("replaying changed[] literally does not reproduce the state")
+	}
+
+	invalid := applyErr(t, e, entity.Op{Op: entity.OpRemove, Path: "participants[3].last_hit_at"})
+	if invalid.Reason != entity.ReasonMissingPath {
+		t.Fatalf("reason = %q, want %q for an element that is not there", invalid.Reason, entity.ReasonMissingPath)
 	}
 }

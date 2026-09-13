@@ -64,7 +64,7 @@ type updateProposal struct {
 }
 
 // createProposal is the payload of entity.create.proposed. proposal_id is
-// optional there, unlike in an update.
+// required there as in an update (C-02 v1.6).
 type createProposal struct {
 	ProposalID string          `json:"proposal_id"`
 	Entity     eventbus.Entity `json:"entity"`
@@ -85,7 +85,9 @@ func decodePayload(payload map[string]any, dst any) error {
 }
 
 // applyCreate answers entity.create.proposed with entity.created or with
-// entity.update.rejected reason=duplicate_entity (§4.5).
+// entity.update.rejected reason=duplicate_entity (§4.5), or invalid_op for a
+// create that names no entity or carries attributes no reader of the bus could
+// hold.
 //
 // What the real State does here and the stub does not: the attributes required
 // by the type are not checked, ownership is not checked and no invariant runs.
@@ -94,37 +96,44 @@ func decodePayload(payload map[string]any, dst any) error {
 func (s *FakeState) applyCreate(ctx context.Context, ev eventbus.Event) error {
 	var p createProposal
 	if err := decodePayload(ev.Payload, &p); err != nil {
-		return s.reject(ctx, ev, proposalIDOf(p.ProposalID, ev), ReasonInvalidOp, nil, nil)
+		return s.refuseMalformed(ctx, ev, p.ProposalID)
+	}
+	if p.ProposalID == "" {
+		return s.refuseMalformed(ctx, ev, "")
 	}
 	ref := entity.RefFrom(p.Entity.Entity)
 	if ref.ID == "" || ref.Type == "" {
-		return s.reject(ctx, ev, proposalIDOf(p.ProposalID, ev), ReasonInvalidOp, nil, nil)
+		return s.reject(ctx, ev, p.ProposalID, ReasonInvalidOp, nil, nil)
+	}
+	if !entity.JSONCompatible(p.Attributes) {
+		// The attributes of a create are held to the rule of the value of an
+		// operation (C-02 v1.6): a number of magnitude 2^53 or more would be
+		// stored as one number and read back from the fact and the snapshot as
+		// another.
+		return s.reject(ctx, ev, p.ProposalID, ReasonInvalidOp, &ref, nil)
 	}
 
 	s.mu.Lock()
-	if p.ProposalID != "" && s.seen(p.ProposalID) {
+	if s.seen(p.ProposalID) {
 		s.mu.Unlock()
 		s.log.Debug("proposal already applied", "proposal_id", p.ProposalID)
 		return nil
 	}
 	if _, exists := s.entities[ref.ID]; exists {
 		s.mu.Unlock()
-		return s.reject(ctx, ev, proposalIDOf(p.ProposalID, ev), ReasonDuplicateEntity, &ref, nil)
+		return s.reject(ctx, ev, p.ProposalID, ReasonDuplicateEntity, &ref, nil)
 	}
 	created := entity.New(ref, s.worldID, p.Entity.Name, p.Attributes, ev.Timestamp)
 	s.entities[ref.ID] = created
 	s.remember(p.ProposalID)
 	s.mu.Unlock()
 
-	payload := map[string]any{
-		"entity":     entityRefPayload(created),
-		"version":    created.Version,
-		"attributes": created.Attributes,
-	}
-	if p.ProposalID != "" {
-		payload["proposal_id"] = p.ProposalID
-	}
-	fact := eventbus.Derive(ev, TypeCreated, Source, payload)
+	fact := eventbus.Derive(ev, TypeCreated, Source, map[string]any{
+		"entity":      entityRefPayload(created),
+		"version":     created.Version,
+		"attributes":  created.Attributes,
+		"proposal_id": p.ProposalID,
+	})
 	if err := s.bus.Publish(ctx, fact); err != nil {
 		return fmt.Errorf("testkit/state: publish %s for %s: %w", TypeCreated, ref, err)
 	}
@@ -157,10 +166,13 @@ type refusal struct {
 func (s *FakeState) applyUpdate(ctx context.Context, ev eventbus.Event) error {
 	var p updateProposal
 	if err := decodePayload(ev.Payload, &p); err != nil {
-		return s.reject(ctx, ev, proposalIDOf(p.ProposalID, ev), ReasonInvalidOp, nil, nil)
+		return s.refuseMalformed(ctx, ev, p.ProposalID)
 	}
-	if p.ProposalID == "" || len(p.Changes) == 0 {
-		return s.reject(ctx, ev, proposalIDOf(p.ProposalID, ev), ReasonInvalidOp, nil, nil)
+	if p.ProposalID == "" {
+		return s.refuseMalformed(ctx, ev, "")
+	}
+	if len(p.Changes) == 0 {
+		return s.reject(ctx, ev, p.ProposalID, ReasonInvalidOp, nil, nil)
 	}
 	// One entity, one change set. A package that names an entity twice has no
 	// answer C-02 allows: applied one after the other the two sets publish two
@@ -398,16 +410,22 @@ func (s *FakeState) reject(ctx context.Context, cause eventbus.Event, proposalID
 	return nil
 }
 
-// proposalIDOf falls back to the identifier of the proposal event.
+// refuseMalformed answers a proposal that could not be read. With a
+// proposal_id it is refused as invalid_op like any other malformed proposal.
 //
-// entity.create.proposed may carry no proposal_id, and entity.update.rejected
-// requires one: without the fallback a malformed create could not be refused
-// at all, and silence is the one answer a consumer cannot act on.
-func proposalIDOf(proposalID string, ev eventbus.Event) string {
-	if proposalID != "" {
-		return proposalID
+// Without one there is nothing to refuse: entity.update.rejected requires the
+// proposal_id, both proposal schemas require it too (C-02 v1.6), and the stub
+// no longer makes one up from the event id — T-055 would have no rule to
+// repeat it by. A bus that validates on read parks such an event in
+// dead_letters before it reaches the stub, so this branch is reached only past
+// a lenient bus or by a direct call, and it says so in the log.
+func (s *FakeState) refuseMalformed(ctx context.Context, ev eventbus.Event, proposalID string) error {
+	if proposalID == "" {
+		s.log.Warn("proposal without proposal_id passed over: nothing to refuse it by",
+			"event_id", ev.ID, "type", ev.Type)
+		return nil
 	}
-	return ev.ID
+	return s.reject(ctx, ev, proposalID, ReasonInvalidOp, nil, nil)
 }
 
 // entityRefPayload is an entity as _common.json#/$defs/EntityWithName carries
@@ -425,10 +443,21 @@ func entityRefPayload(e *entity.Entity) map[string]any {
 // changedPayload is the changed list of entity.updated. It is always an array,
 // never null: an empty list means the turn counted and the version did not
 // move, and the schema requires the field either way (C-02).
+//
+// old is written only when the path existed before and new only when it exists
+// after (C-02 v1.6): an append carries no old and a remove of a key no new, so
+// a consumer that catches up deletes the key instead of writing a null into it.
 func changedPayload(changes []entity.Change) []map[string]any {
 	out := make([]map[string]any, 0, len(changes))
 	for _, c := range changes {
-		out = append(out, map[string]any{"path": c.Path, "old": c.Old, "new": c.New})
+		entry := map[string]any{"path": c.Path}
+		if c.HasOld {
+			entry["old"] = c.Old
+		}
+		if c.HasNew {
+			entry["new"] = c.New
+		}
+		out = append(out, entry)
 	}
 	return out
 }

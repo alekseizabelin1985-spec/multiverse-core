@@ -2,6 +2,7 @@ package state_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"multiverse-core.io/shared/contracts"
@@ -477,6 +478,260 @@ func TestFactsOfTheStubAreIgnored(t *testing.T) {
 	if have := len(factsOf(t, bus)); have != 1 {
 		t.Errorf("%d facts after the stub was handed its own: it answers itself", have)
 	}
+}
+
+// --- the form of changed[] and the proposal_id of a create (C-02 v1.6, T-448) ---
+
+// TestChangedCarriesOldAndNewByPresence publishes the three shapes of an entry
+// of changed[]: an append has no old, a remove of a key has no new, and a set of
+// an existing path has both. A null in place of a missing key is the defect the
+// form closes: a consumer that catches up would write it.
+func TestChangedCarriesOldAndNewByPresence(t *testing.T) {
+	fake, bus, _ := world(t)
+	apply(t, fake, proposal("prop-mark", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: "mark", Value: "fox"},
+			entity.Op{Op: entity.OpAppend, Path: "tags", Value: "hunted"})))
+	apply(t, fake, proposal("prop-unmark", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpRemove, Path: "mark"})))
+	apply(t, fake, proposal("prop-move", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID})))
+
+	facts := factsOf(t, bus)
+	if len(facts) != 3 {
+		t.Fatalf("%d facts, want 3", len(facts))
+	}
+	want := []map[string][2]bool{ // path -> {old present, new present}
+		{"mark": {false, true}, "tags[0]": {false, true}},
+		{"mark": {true, false}},
+		{entity.AttrPosition: {true, true}},
+	}
+	for i, fact := range facts {
+		if err := contracts.Validate(fact); err != nil {
+			t.Fatalf("fact %d is not valid: %v", i, err)
+		}
+		changed, _ := fact.Path().GetSlice("changed")
+		if len(changed) != len(want[i]) {
+			t.Fatalf("fact %d: changed %v, want %d entries", i, changed, len(want[i]))
+		}
+		for _, raw := range changed {
+			entry, _ := raw.(map[string]any)
+			path, _ := entry["path"].(string)
+			presence, known := want[i][path]
+			if !known {
+				t.Fatalf("fact %d: unexpected entry %v", i, entry)
+			}
+			_, hasOld := entry["old"]
+			_, hasNew := entry["new"]
+			if hasOld != presence[0] || hasNew != presence[1] {
+				t.Errorf("fact %d: %v has old = %v, new = %v; want %v, %v",
+					i, entry, hasOld, hasNew, presence[0], presence[1])
+			}
+		}
+	}
+}
+
+// TestChangedCarriesAPresentNull is the same form where the value is null: a
+// null is a value, so presence is decided by the path and not by the value. A
+// set of a missing path to null carries new: null, a set of an existing path to
+// null carries both, and a remove of a key that held null carries old: null and
+// no new. Written as "new only when the value is not nil", the stub would publish
+// a set to null as a remove, and a consumer that catches up would delete the key
+// State kept (C-02 v1.6).
+func TestChangedCarriesAPresentNull(t *testing.T) {
+	fake, bus, _ := world(t)
+	apply(t, fake, proposal("prop-null-new", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: "nul", Value: nil},
+			entity.Op{Op: entity.OpSet, Path: "mark", Value: "fox"})))
+	apply(t, fake, proposal("prop-null-over", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: "mark", Value: nil})))
+	apply(t, fake, proposal("prop-null-gone", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpRemove, Path: "nul"})))
+
+	facts := factsOf(t, bus)
+	if len(facts) != 3 {
+		t.Fatalf("%d facts, want 3", len(facts))
+	}
+	type presence struct{ old, new bool }
+	want := []map[string]presence{
+		{"nul": {old: false, new: true}, "mark": {old: false, new: true}},
+		{"mark": {old: true, new: true}},
+		{"nul": {old: true, new: false}},
+	}
+	for i, fact := range facts {
+		if err := contracts.Validate(fact); err != nil {
+			t.Fatalf("fact %d is not valid: %v", i, err)
+		}
+		changed, _ := fact.Path().GetSlice("changed")
+		if len(changed) != len(want[i]) {
+			t.Fatalf("fact %d: changed %v, want %d entries", i, changed, len(want[i]))
+		}
+		for _, raw := range changed {
+			entry, _ := raw.(map[string]any)
+			path, _ := entry["path"].(string)
+			expected, known := want[i][path]
+			if !known {
+				t.Fatalf("fact %d: unexpected entry %v", i, entry)
+			}
+			oldValue, hasOld := entry["old"]
+			newValue, hasNew := entry["new"]
+			if hasOld != expected.old || hasNew != expected.new {
+				t.Errorf("fact %d: %v has old = %v, new = %v; want %v, %v",
+					i, entry, hasOld, hasNew, expected.old, expected.new)
+			}
+			if path == "nul" && (oldValue != nil || newValue != nil) {
+				t.Errorf("fact %d: %v, want null on the side that is present", i, entry)
+			}
+		}
+	}
+}
+
+// TestCreateWithoutProposalIDIsPassedOver: proposal_id is required in
+// entity.create.proposed (C-02 v1.6), so the stub no longer makes one up from
+// the event id. There is nothing to refuse such a proposal by — the refusal
+// requires the proposal_id too — and nothing is created.
+func TestCreateWithoutProposalIDIsPassedOver(t *testing.T) {
+	fake, bus, _ := world(t)
+	before := len(events(t, bus, eventbus.TopicSystemEvents))
+
+	ev := createProposal("", "player-Q", "Кью")
+	delete(ev.Payload, "proposal_id")
+	apply(t, fake, ev)
+
+	if _, ok := fake.Get("player-Q"); ok {
+		t.Error("an entity was created from a proposal without proposal_id")
+	}
+	if after := len(events(t, bus, eventbus.TopicSystemEvents)); after != before {
+		t.Errorf("%d events published, want none", after-before)
+	}
+
+	apply(t, fake, createProposal("prop-q", "player-Q", "Кью"))
+	created := ofType(events(t, bus, eventbus.TopicSystemEvents), state.TypeCreated)
+	if len(created) != 1 {
+		t.Fatalf("%d entity.created, want one for the proposal with an id", len(created))
+	}
+	if id, _ := created[0].Path().GetString("proposal_id"); id != "prop-q" {
+		t.Errorf("entity.created proposal_id %q, want prop-q", id)
+	}
+}
+
+// TestUpdateWithoutProposalIDIsPassedOver is the same rule for an update, which
+// the stub used to refuse under the id of the event.
+func TestUpdateWithoutProposalIDIsPassedOver(t *testing.T) {
+	fake, bus, _ := world(t)
+	before := len(events(t, bus, eventbus.TopicSystemEvents))
+
+	apply(t, fake, proposal("", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: regionID})))
+
+	if after := len(events(t, bus, eventbus.TopicSystemEvents)); after != before {
+		t.Errorf("%d events published, want none", after-before)
+	}
+}
+
+// TestNumberPastTwoToTheFiftyThirdIsInvalidOp: a value no reader of the bus
+// can hold is refused rather than stored (C-02 v1.6). The proposal travels the
+// way a proposal on the bus does — encoded and decoded — so the literal
+// 2^53+1 reaches the stub as the float64 2^53. That is why the bound excludes
+// 2^53: a bound that let 2^53 in would apply 2^53+1 as a different number.
+func TestNumberPastTwoToTheFiftyThirdIsInvalidOp(t *testing.T) {
+	fake, bus, _ := world(t)
+	ev := overTheBus(t, proposal("prop-big", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: "seed", Value: json.Number("9007199254740993")})))
+	if value, _ := ev.Path().GetAny("changes[0].ops[0].value"); value != float64(1<<53) {
+		t.Fatalf("value after the bus = %#v, want the float64 2^53", value)
+	}
+
+	apply(t, fake, ev)
+
+	assertRefusal(t, bus, "prop-big", state.ReasonInvalidOp, playerA, nil)
+	if _, has := mustGet(t, fake, playerA).Attributes["seed"]; has {
+		t.Error("the refused value was stored")
+	}
+	if facts := factsOf(t, bus); len(facts) != 0 {
+		t.Errorf("%d facts from a refused proposal", len(facts))
+	}
+}
+
+// TestTheLargestSafeNumberIsApplied is the other side of the bound: 2^53-1 comes
+// through the bus as itself and is stored.
+func TestTheLargestSafeNumberIsApplied(t *testing.T) {
+	fake, bus, _ := world(t)
+	apply(t, fake, overTheBus(t, proposal("prop-safe", "move", true,
+		changeSet(playerRef(playerA), "Вася", nil,
+			entity.Op{Op: entity.OpSet, Path: "seed", Value: json.Number("-9007199254740991")}))))
+
+	if refusals := refusalsOf(t, bus); len(refusals) != 0 {
+		t.Fatalf("%d refusals, want -(2^53-1) applied", len(refusals))
+	}
+	if seed := mustGet(t, fake, playerA).Attributes["seed"]; seed != float64(-(1<<53 - 1)) {
+		t.Errorf("seed = %#v, want -(2^53-1)", seed)
+	}
+}
+
+// TestCreateWithANumberPastTheRangeIsInvalidOp: the attributes of a create are
+// held to the same rule as the value of an operation (C-02 v1.6), or a create
+// would store what an update may not.
+func TestCreateWithANumberPastTheRangeIsInvalidOp(t *testing.T) {
+	fake, bus, _ := world(t)
+	ev := createProposal("prop-seed", "player-Q", "Кью")
+	ev.Payload["attributes"] = map[string]any{
+		entity.AttrStatus: entity.StatusAlive,
+		"rolls":           map[string]any{"seed": float64(1 << 53)},
+	}
+
+	apply(t, fake, ev)
+
+	assertRefusal(t, bus, "prop-seed", state.ReasonInvalidOp, "player-Q", nil)
+	if _, ok := fake.Get("player-Q"); ok {
+		t.Error("an entity was created with a number past the range")
+	}
+	if created := ofType(events(t, bus, eventbus.TopicSystemEvents), state.TypeCreated); len(created) != 0 {
+		t.Errorf("%d entity.created for a refused create", len(created))
+	}
+}
+
+// TestTheAttributesOfACreateAreCheckedBeforeTheWorld: a number past the range is
+// a defect of the form of the proposal (§4.5 p. 1), so it is refused as
+// invalid_op before the stub looks at the world — even for an entity that is
+// already there, where the world alone would answer duplicate_entity.
+func TestTheAttributesOfACreateAreCheckedBeforeTheWorld(t *testing.T) {
+	fake, bus, _ := world(t)
+	ev := createProposal("prop-seed-dup", playerA, "Вася")
+	ev.Payload["attributes"] = map[string]any{
+		entity.AttrStatus: entity.StatusAlive,
+		"seed":            float64(-(1 << 53)),
+	}
+
+	apply(t, fake, ev)
+
+	assertRefusal(t, bus, "prop-seed-dup", state.ReasonInvalidOp, playerA, nil)
+	if _, has := mustGet(t, fake, playerA).Attributes["seed"]; has {
+		t.Error("the refused attributes reached the entity")
+	}
+}
+
+// overTheBus is an event as a subscriber of the bus holds it: the payload
+// encoded by the publisher and decoded, every number a float64.
+func overTheBus(t *testing.T, ev eventbus.Event) eventbus.Event {
+	t.Helper()
+	encoded, err := json.Marshal(ev.Payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal payload %s: %v", encoded, err)
+	}
+	ev.Payload = decoded
+	return ev
 }
 
 // TestWithInvariantsIsANoOp states the gap out loud (design.md §5): the flag

@@ -1203,6 +1203,7 @@ func created(id, name string, hp, hpMax int) eventbus.Event {
 				entity.AttrHP: hp, entity.AttrHPMax: hpMax,
 				entity.AttrStatus: entity.StatusAlive,
 			},
+			"proposal_id": "create-" + id, // required since C-02 v1.6 (T-448)
 		})
 }
 

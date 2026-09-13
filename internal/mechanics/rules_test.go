@@ -47,7 +47,7 @@ func TestLoadGoldenNumbers(t *testing.T) {
 
 	want := map[string]Actor{
 		"player": {Type: entity.TypePlayer, HP: 10, HPMax: 10, Atk: 2, Def: 12, Dmg: "d6", Flee: "2", Status: entity.StatusAlive},
-		"wolf":   {Type: entity.TypeNPC, HP: 10, HPMax: 10, Atk: 3, Def: 11, Dmg: "d4", Flee: "", Status: entity.StatusAlive},
+		"wolf":   {Type: entity.TypeNPC, Kind: "wolf", HP: 10, HPMax: 10, Atk: 3, Def: 11, Dmg: "d4", Flee: "", Status: entity.StatusAlive},
 	}
 	for kind, expected := range want {
 		got, ok := r.Stats(kind)
@@ -157,9 +157,11 @@ func TestLootAndDocumentAreCopies(t *testing.T) {
 	}
 }
 
-// TestInvariantsRegister pins what the foundation promises about the laws: ten
-// identifiers, in order, every one of them nameable from a rules file, and no
-// check implemented yet (T-054).
+// TestInvariantsRegister pins what the register promises about the laws: ten
+// identifiers, in order, every one of them nameable from a rules file, and a
+// check exactly where one is written (T-054): the five laws of a solo fight
+// have one, the three laws of a group wait for I2 (T-066), and the two laws of
+// the journal never get one.
 func TestInvariantsRegister(t *testing.T) {
 	r := load(t)
 
@@ -167,15 +169,36 @@ func TestInvariantsRegister(t *testing.T) {
 	if len(ids) != 10 {
 		t.Fatalf("%d invariants in the register, want 10", len(ids))
 	}
-	for i, inv := range r.Invariants() {
+	withCheck := map[string]bool{
+		InvDeadDoesNotAct:     true,
+		InvHPInRange:          true,
+		InvOneTrophyPerNPC:    true,
+		InvGroupPosition:      false, // I2, T-066
+		InvGroupSize:          false, // I2, T-066
+		InvOneScope:           false, // I2, T-066
+		InvHPMatchesDecision:  false, // the journal, for good
+		InvNoDecisionsUnasked: false, // the journal, for good
+		InvRespawnTTL:         true,
+		InvOnePosition:        true,
+	}
+	inForce := r.Invariants()
+	if len(inForce) != len(withCheck) {
+		t.Fatalf("%d invariants in force, want %d", len(inForce), len(withCheck))
+	}
+	for i, inv := range inForce {
 		if inv.ID != ids[i] {
 			t.Errorf("invariant %d is %s, want %s: the order of the register is the order in force", i, inv.ID, ids[i])
 		}
 		if len(inv.Where) == 0 {
 			t.Errorf("%s says nowhere it is enforced", inv.ID)
 		}
-		if inv.Check != nil {
-			t.Errorf("%s has a check: the logic belongs to EPIC-002 T-054", inv.ID)
+		want, known := withCheck[inv.ID]
+		if !known {
+			t.Errorf("%s is not one of the ten laws of MVP-1", inv.ID)
+			continue
+		}
+		if have := inv.Check != nil; have != want {
+			t.Errorf("%s has a check: %v, want %v", inv.ID, have, want)
 		}
 	}
 }
@@ -267,6 +290,11 @@ func TestLoadRejects(t *testing.T) {
 		},
 		"rest restores nothing readable": {
 			old: "restore: hp_max", new: "restore: everything", path: "rest.restore",
+		},
+		// dice.rolled has no purpose for a rest roll, so a rest by dice would
+		// be a chance nobody could audit (T-053, Nit-5 of review #1).
+		"rest restores by dice": {
+			old: "restore: hp_max", new: "restore: d4", path: "rest.restore",
 		},
 		"unknown target order": {
 			old: "order: [last_damager, min_hp, player_id_asc]", new: "order: [random]", path: "npc_target.order[0]",
