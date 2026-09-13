@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T20:52:06+03:00",
+  "updatedAt": "2026-09-13T20:56:49+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3342,13 +3342,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-208",
           "title": "B3a · Провайдер openai_compat (llama-server) — **провайдер по умолчанию",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T20:56:49+03:00",
           "reviewIterations": 1,
           "wave": null,
-          "spentMinutes": 0,
+          "spentMinutes": 94,
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-208.md",
           "subwave": "C"
@@ -4519,7 +4519,7 @@ window.DEVTEAM_STATE =
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T18:25:18+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.5",
           "spentMinutes": 0,
@@ -9931,7 +9931,7 @@ window.DEVTEAM_STATE =
       "task": "T-305",
       "action": "Ревью #2",
       "startedAt": "2026-09-13T20:39:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:56:49+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -10001,7 +10001,7 @@ window.DEVTEAM_STATE =
       "task": "T-458",
       "action": "Отметка владельца runtime/serve/.golangci.yml",
       "startedAt": "2026-09-13T20:44:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T20:56:49+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10031,6 +10031,16 @@ window.DEVTEAM_STATE =
       "task": "T-222",
       "action": "Приёмка реестра блупринтов",
       "startedAt": "2026-09-13T20:52:06+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-305",
+      "action": "Приёмка T-305 и индекс EPIC-004",
+      "startedAt": "2026-09-13T20:56:49+03:00",
       "finishedAt": null
     }
   ],
@@ -13712,6 +13722,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-209 · ревью #1 (TEAM-2/code-reviewer#1): вернуть — 0/1/4/3. Ma-1: объект из незакрытой обёртки массива или из незакрытого <think> вырезается, и обрезанный ответ проходит как валидный. Mi-1 </think> внутри строки JSON; Mi-2 шаблон id пропускает Wi-Fi/Hello-World; Mi-4 ключ ответа в InstanceLocation"
+    },
+    {
+      "at": "2026-09-13T20:56:49+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-208 · отметка tech-lead#1 по go.mod: есть (goleak v1.3.0 только в тесте, последняя версия, MIT; при встрече EPIC-003 и EPIC-004 в develop — механический конфликт go.sum). Коммит 99e947c; ветка task/T-208-openai-compat-provider запушена; конфликт tasks.md (шапка 0.3.10, changelog 0.3.9/0.3.10) разр"
+    },
+    {
+      "at": "2026-09-13T20:56:49+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-305 · ревью #2 (TEAM-3/code-reviewer#2): принять — 0/0/1/2. Ma-1 закрыт (пакет с теми же id и байтами, P1–P3 тесты). Mi-6: Turns.Accepted и Keys.Save на контексте со сроком — зонд P4 даёт 202 без ключа и дубль при повторе; N-6 утечка записи блокировки не ловится тестом; N-7 оценка памяти. Решение "
+    },
+    {
+      "at": "2026-09-13T20:56:49+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-458 · отметка tech-lead#1 подтверждена повторно (единый отчёт с отметкой T-208); приёмка идёт у tech-lead#2."
     }
   ],
   "blockers": [],
