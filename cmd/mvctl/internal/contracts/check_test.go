@@ -297,6 +297,34 @@ func TestPolicyFixtures(t *testing.T) {
 		}
 	})
 
+	// C-01 v1.10: WorldRequired is a rule of the type, not of its topic. A
+	// type that adds it to the policy of player_events or llm_records keeps
+	// the policy of the topic and must not be reported; the fixtures name a
+	// world so that the rule leaves them alone (review #1 of T-460, Mi-1).
+	t.Run("a type that requires a world keeps the policy of its topic", func(t *testing.T) {
+		in := synthetic()
+		player := eventbus.PlayerEventsPolicy()
+		player.World = eventbus.WorldRequired
+		in.Specs[0].Policy = player
+		swarm := eventbus.SwarmPolicy()
+		swarm.World = eventbus.WorldRequired
+		in.Specs[1].Policy = swarm
+		if got := findingsOn(t, in); len(got) != 0 {
+			t.Errorf("a policy that requires a world was reported: %v", got)
+		}
+	})
+
+	// The world on the fixtures does not blind the rule: a type that requires
+	// a world and drops the policy of its topic is still caught.
+	t.Run("a type that requires a world and drops the policy of its topic", func(t *testing.T) {
+		in := synthetic()
+		in.Specs[0].Policy = eventbus.Policy{World: eventbus.WorldRequired}
+		got := findingsOn(t, in)
+		if !containsAll(got, "player.attacked: policy accepts actor_kind=system without meta.agent") {
+			t.Errorf("a player type open to system events was accepted: %v", got)
+		}
+	})
+
 	t.Run("a policy naming an actor kind that does not exist", func(t *testing.T) {
 		in := synthetic()
 		in.Specs[0].Policy = eventbus.Policy{ActorKinds: []string{"operator"}}
