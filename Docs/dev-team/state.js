@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:29:43+03:00",
+  "updatedAt": "2026-09-13T18:31:48+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4240,7 +4240,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-451",
           "title": "Go-реализация правила «локальный адрес» по общей таблице (internal/llm), после T-450",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-2/developer#1",
           "startedAt": "2026-09-13T17:34:53+03:00",
           "finishedAt": null,
@@ -9410,7 +9410,7 @@ window.DEVTEAM_STATE =
       "task": "T-451",
       "action": "Итерация 2: утечка хоста, не-ASCII, якоря",
       "startedAt": "2026-09-13T18:15:25+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:31:48+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -9480,6 +9480,16 @@ window.DEVTEAM_STATE =
       "task": "T-459",
       "action": "Приёмка T-459 документы EPIC-003",
       "startedAt": "2026-09-13T18:29:43+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-451",
+      "action": "Ревью #2 T-451",
+      "startedAt": "2026-09-13T18:31:48+03:00",
       "finishedAt": null
     }
   ],
@@ -12759,6 +12769,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-459 · ревью #2 (TEAM-2/code-reviewer#3): принять — 0/0/2/3. Распределение T-211 (E) ← T-212 (F) ← T-213 (G) без циклов; called_at согласован с C-07 v1.6 и replay C-01 v1.9. Mi-4 «Файлы» T-212/T-213 неполны; Mi-5 нулевой called_at проходит схему и выпадает из окна бюджета; N-6 C-07 называет T-211 в"
+    },
+    {
+      "at": "2026-09-13T18:31:48+03:00",
+      "initiative": "EPIC-003",
+      "role": "orchestrator",
+      "text": "T-451 · итерация 2 (TEAM-2/developer#1): Ma-1 — при @ в значении ни одна фраза не называет хост; Mi-1 — вне печатаемого ASCII и Unicode-пробелы → ошибка конфигурации, % в сыром authority; Mi-2 — canonicalHost идемпотентна (localhost.. → cloud); Mi-3 — якоря cloud; N-1 — текст. Мутанты Q1–Q6, U1–U4, "
+    },
+    {
+      "at": "2026-09-13T18:31:48+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение оркестратора по вопросу T-451: addressFrom оставить до правки shared/env; в бэклог EPIC-001 — rawFrom снимает по краям только ASCII-пробелы, затем addressFrom заменить на StringFrom. Строки таблицы local-endpoints.tsv и класс invalid «вне печатаемого ASCII» переданы system-architect в T-456 "
     }
   ],
   "blockers": [],
