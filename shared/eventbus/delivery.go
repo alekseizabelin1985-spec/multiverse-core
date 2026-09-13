@@ -210,7 +210,9 @@ func (d Delivery) deadLetter(ctx context.Context, pos Position, ev Event, cause 
 // Close and called after it refuses with io.ErrClosedPipe, which Kafka.write
 // wraps — hence errors.Is. A write already inside WriteMessages when Close
 // comes is waited for and does not fail this way. Only the error of the sink
-// is looked at: the cause is never in the chain (C-01 v1.6).
+// is looked at: the cause is never in the chain (C-01 v1.6). stopped, on which
+// the read loops of the kafka adapter end, includes this test, so
+// bus_closed=true in the log always leads to a nil return of the loop (T-443).
 func busClosed(err error) bool {
 	return errors.Is(err, ErrClosed) || errors.Is(err, io.ErrClosedPipe)
 }

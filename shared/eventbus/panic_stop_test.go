@@ -12,12 +12,12 @@ import (
 
 // The reason the cause of a dead letter that could not be written is printed
 // with %v and not wrapped with %w (reviews #1 and #2 of T-426; T-415). stopped
-// takes any io.EOF or io.ErrClosedPipe in the chain of an error for the end of
-// the reader, and panicError keeps the panic value matchable, so with %w a
-// handler that panicked with one of them — or returned an error wrapping one —
-// would turn a failed dead letter into a silent nil return of the kafka
-// Subscribe while its context is alive. The event would stay uncommitted and
-// the consumer would simply stop.
+// takes any io.EOF, io.ErrClosedPipe or ErrClosed (T-443) in the chain of an
+// error for the end of the reader or of the bus, and panicError keeps the panic
+// value matchable, so with %w a handler that panicked with one of them — or
+// returned an error wrapping one — would turn a failed dead letter into a
+// silent nil return of the kafka Subscribe while its context is alive. The
+// event would stay uncommitted and the consumer would simply stop.
 //
 // The same holds for a Delivery without a dead letter sink (T-430, C-01 v1.6).
 // Both buses always set one, so the branch is unreachable today, but a change
@@ -33,6 +33,11 @@ func TestAFailedDeadLetterIsNeverTakenForTheEndOfTheReader(t *testing.T) {
 		"a panic with io.ErrClosedPipe":        func() error { panic(io.ErrClosedPipe) },
 		"a panic with an error wrapping EOF":   func() error { panic(fmt.Errorf("read: %w", io.EOF)) },
 		"an error wrapping EOF, retries spent": func() error { return fmt.Errorf("read: %w", io.EOF) },
+		// T-443: stopped takes ErrClosed for the end as well. A handler that
+		// publishes to a closed bus of its own must not hide a failed dead
+		// letter on a bus that is still running.
+		"a panic with ErrClosed":                     func() error { panic(ErrClosed) },
+		"an error wrapping ErrClosed, retries spent": func() error { return fmt.Errorf("publish: %w", ErrClosed) },
 	}
 	sinks := map[string]struct {
 		sink DeadLetterSink

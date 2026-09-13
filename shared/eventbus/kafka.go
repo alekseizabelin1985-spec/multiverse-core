@@ -198,9 +198,10 @@ func (k *Kafka) Subscribe(ctx context.Context, topic, group string, h Handler) e
 	// cancellation was added for the commit and reached further than that.
 	//
 	// Whether the subscription stopped is therefore read from loopCtx and not
-	// from ctx: on a closed bus a retry or a dead letter fails with ErrClosed,
-	// and on a stopped subscription that is the shutdown, not a failure of
-	// Subscribe.
+	// from ctx, and from the error as well: on a closed bus a dead letter fails
+	// with ErrClosed, and that is the shutdown, not a failure of Subscribe —
+	// also in the moment Close has marked the bus closed but loopCtx is not
+	// cancelled yet (see stopped).
 	loopCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stopWatchingClose := context.AfterFunc(k.closing, cancel)
@@ -480,11 +481,22 @@ func (k *Kafka) readerError(ctx context.Context, topic string, err error) error 
 	return fmt.Errorf("eventbus: read %s: %w", topic, err)
 }
 
-// stopped reports whether err ends the loop because the caller asked it to.
-// Every exit of a read loop goes through it, so that a shutdown looks the same
-// whether it interrupted the fetch, the handler or the commit.
+// stopped reports whether err ends the loop because the caller or Close asked
+// it to. Every exit of a read loop goes through it, so that a shutdown looks
+// the same whether it interrupted the fetch, the handler or the commit.
+//
+// A closed bus is read from the error and not only from ctx. Close sets closed
+// before it cancels the loop — the cancellation runs after the lock is
+// released, and in the goroutine of context.AfterFunc — so a dead letter
+// refused with ErrClosed inside that window finds loopCtx still alive, and
+// Subscribe returned the refusal instead of nil (T-443). stopped includes
+// busClosed, the test the log uses for bus_closed, so a Warn that calls the
+// refusal an orderly stop always leads to a nil return; a nil return does not
+// imply such a Warn. The cause of a dead letter is never in the chain (C-01
+// v1.6), so a handler that itself failed with ErrClosed cannot pass for the
+// end of the bus.
 func stopped(ctx context.Context, err error) bool {
-	return ctx.Err() != nil || errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe)
+	return ctx.Err() != nil || errors.Is(err, io.EOF) || busClosed(err)
 }
 
 // kafkaDeadLetters parks failed events in dead_letters. The wrapper is written
