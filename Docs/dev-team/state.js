@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T17:18:30+03:00",
+  "updatedAt": "2026-09-13T17:19:56+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4402,7 +4402,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-304",
           "title": "readmodel и consumer (entity.*, encounter.*)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-3/developer#1",
           "startedAt": "2026-09-13T16:39:05+03:00",
           "finishedAt": null,
@@ -9066,7 +9066,7 @@ window.DEVTEAM_STATE =
       "task": "T-304",
       "action": "readmodel и consumer gateway",
       "startedAt": "2026-09-13T16:39:05+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T17:19:56+03:00"
     },
     {
       "instance": "developer#2",
@@ -9186,6 +9186,16 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Итерация 2: фантомный факт, Stop/Start, тесты создания",
       "startedAt": "2026-09-13T17:18:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-304",
+      "action": "Ревью #1: readmodel и consumer",
+      "startedAt": "2026-09-13T17:19:56+03:00",
       "finishedAt": null
     }
   ],
@@ -12279,6 +12289,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-055 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/1/4/3. Ma-1 фантомный факт: после 4-й попытки предложение уходит в dead_letters, опубликованные факты остаются, мир не изменён, следующий ответ публикует другой факт той же версии (подтверждено зондом). Mi-1 предложение без world молча (Debug), "
+    },
+    {
+      "at": "2026-09-13T17:19:56+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-304 выполнена TEAM-3/developer#1: internal/gateway/readmodel (проекция по версиям, stale при разрыве, обе формы changed[] C-02 v1.5/v1.6 со сверкой хеша по entity.ApplyOps, конец встречи по первому из пары, bootstrap снапшота, Expect/Wait/AwaitFact на shared/clock) и consumer (догон журнала от кур"
     }
   ],
   "blockers": [],
