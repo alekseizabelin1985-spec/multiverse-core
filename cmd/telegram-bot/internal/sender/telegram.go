@@ -43,6 +43,15 @@ var DefaultPolicy = Policy{Attempts: 3, Pause: time.Second, RateLimitWaits: 5, M
 // behind a refusal to a stranger.
 var BestEffortPolicy = Policy{Attempts: 1}
 
+// ReplyPolicy is the policy of the answers of the flow, which runs in the one
+// handler of all updates (review #1 of T-310, M-2): a network error or a 5xx
+// is tried once more after a second, and a 429 is waited out once, only when
+// retry_after is at most 3 s. A longer ban is not waited for — the answer is
+// lost, and the commands of the other players go on. The delivery loop, which
+// runs in a goroutine of its own, keeps DefaultPolicy. The one try still lasts
+// up to the Timeout of the HTTP client of the sender.
+var ReplyPolicy = Policy{Attempts: 2, Pause: time.Second, RateLimitWaits: 1, MaxRetryAfter: 3 * time.Second}
+
 // DefaultHTTPTimeout bounds one sendMessage.
 const DefaultHTTPTimeout = 30 * time.Second
 

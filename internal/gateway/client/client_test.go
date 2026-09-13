@@ -506,6 +506,53 @@ func TestForgetReportsARepeat(t *testing.T) {
 	})
 }
 
+// 503 forget_incomplete is returned at once with its Retry-After: a repeat
+// under the reader that blocks the wipe would hold the only connection of
+// links.db for another 5 s (C-08 v1.5). The other 503 of /forget is still
+// repeated.
+func TestForgetIncompleteIsNotRepeatedAndCarriesRetryAfter(t *testing.T) {
+	g := newFakeGateway(t, reply{
+		status: http.StatusServiceUnavailable,
+		body:   errorBody(api.CodeForgetIncomplete, "Удаление не завершено, повторите /forget."),
+		header: map[string]string{api.HeaderRetryAfter: "5"},
+	})
+	c, timers := newClient(g)
+	_, err := c.Forget(context.Background(), "telegram", "42")
+	var apiErr *client.APIError
+	if !errors.As(err, &apiErr) || apiErr.Code != api.CodeForgetIncomplete || apiErr.RetryAfter != 5*time.Second {
+		t.Fatalf("Forget = %v (%+v), want forget_incomplete with RetryAfter 5s", err, apiErr)
+	}
+	if n := len(g.Seen()); n != 1 || len(timers.Pauses()) != 0 {
+		t.Errorf("requests %d, pauses %v; want 1 and none", n, timers.Pauses())
+	}
+
+	busy := newFakeGateway(t, reply{status: http.StatusServiceUnavailable, body: errorBody(api.CodeBusUnavailable, "")})
+	c, _ = newClient(busy)
+	if _, err := c.Forget(context.Background(), "telegram", "42"); err == nil {
+		t.Fatal("Forget under bus_unavailable: want an error")
+	}
+	if n := len(busy.Seen()); n != 4 {
+		t.Errorf("bus_unavailable of /forget: requests %d, want 4", n)
+	}
+}
+
+func TestRetryAfterIsReadInWholeSeconds(t *testing.T) {
+	for value, want := range map[string]time.Duration{
+		"30": 30 * time.Second, "": 0, "0": 0, "-3": 0, "soon": 0, "Wed, 21 Oct 2026 07:28:00 GMT": 0,
+		// N-3 of review #1 of T-311: a huge value does not overflow the duration.
+		"86400": client.MaxRetryAfter, "86401": client.MaxRetryAfter, "99999999999999999": client.MaxRetryAfter,
+	} {
+		g := newFakeGateway(t, reply{status: http.StatusTooManyRequests, body: errorBody(api.CodeRateLimited, ""),
+			header: map[string]string{api.HeaderRetryAfter: value}})
+		c, _ := newClient(g)
+		_, err := c.Action(context.Background(), "player-A", attack)
+		var apiErr *client.APIError
+		if !errors.As(err, &apiErr) || apiErr.RetryAfter != want {
+			t.Errorf("Retry-After %q: err %v, RetryAfter %v; want %v", value, err, apiErr, want)
+		}
+	}
+}
+
 func TestAcceptedWithUnknownStatusIsAnError(t *testing.T) {
 	g := newFakeGateway(t, reply{status: http.StatusAccepted, body: `{"status":"queued","correlation_id":"ev-1"}`})
 	c, _ := newClient(g)

@@ -122,10 +122,11 @@ func TestAMalformedFlagRefusesToStart(t *testing.T) {
 }
 
 // A fake that cannot start says which setting asked for it. From a directory
-// without rules/ — which is where the process stands inside the image of the
-// platform — the refusal begins with the flag and says what the fake looked
-// for and where, instead of a bare "open rules/dark-forest.yaml" (review #1 of
-// T-255, Mi-1).
+// without rules/ — a process started by hand outside the root of the tree; the
+// image of the platform carries rules/ in its working directory since T-471 —
+// the refusal begins with the flag and says what the fake looked for and
+// where, instead of a bare "open rules/dark-forest.yaml" (review #1 of T-255,
+// Mi-1).
 func TestAFakeWithoutRulesNamesTheFlag(t *testing.T) {
 	onLoopback(t)
 	t.Chdir(t.TempDir())
@@ -144,7 +145,7 @@ func TestAFakeWithoutRulesNamesTheFlag(t *testing.T) {
 	if !strings.HasPrefix(err.Error(), prefix) {
 		t.Errorf("refusal %q does not begin with %q", err, prefix)
 	}
-	for _, want := range []string{"working directory", "rules/dark-forest.yaml"} {
+	for _, want := range []string{"working directory", "rules/dark-forest.yaml", env.RulesPath.Name()} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("refusal %q does not say %q", err, want)
 		}

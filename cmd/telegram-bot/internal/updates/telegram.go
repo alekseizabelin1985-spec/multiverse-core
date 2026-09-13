@@ -39,6 +39,10 @@ type TelegramOptions struct {
 	ServerURL string
 	// HTTPClient replaces the client built from PollTimeout.
 	HTTPClient *http.Client
+	// OnReady, when set, is called once Telegram took the token at getMe and
+	// before the first getUpdates. It is not called when Start fails before
+	// polling, a rejected token included.
+	OnReady func()
 }
 
 // Telegram is the long polling Source over github.com/go-telegram/bot.
@@ -58,8 +62,8 @@ func NewTelegram(opts TelegramOptions) *Telegram {
 	return &Telegram{opts: opts}
 }
 
-// Start checks the token with getMe, then polls getUpdates and hands every
-// update to h, one at a time, until ctx ends. A 409 Conflict of getUpdates
+// Start checks the token with getMe, calls OnReady, then polls getUpdates and
+// hands every update to h, one at a time, until ctx ends. A 409 Conflict of getUpdates
 // stops polling and returns ErrConflict (ADR-018 p. 6); a 401 stops it and
 // returns ErrUnauthorized.
 func (t *Telegram) Start(ctx context.Context, h Handler) error {
@@ -98,6 +102,9 @@ func (t *Telegram) Start(ctx context.Context, h Handler) error {
 	b, err := bot.New(t.opts.Token, t.options(h, onError)...)
 	if err != nil {
 		return t.startError(err)
+	}
+	if t.opts.OnReady != nil {
+		t.opts.OnReady()
 	}
 	b.Start(runCtx)
 	if reason := stopped.Load(); reason != nil {

@@ -428,6 +428,12 @@ func checkExpect(e Expect, r *implRun, sr *stepRun, v stepView) []string {
 			out = append(out, fmt.Sprintf("output contains %q, which must never be printed", bad))
 		}
 	}
+	folded := strings.ToLower(v.raw)
+	for _, bad := range e.AbsentFold {
+		if strings.Contains(folded, strings.ToLower(bad)) {
+			out = append(out, fmt.Sprintf("output contains %q in some letter case, which must never be printed", bad))
+		}
+	}
 	starts := nonVersion(v.argv)
 	if e.NoLaunch && len(starts) > 0 {
 		out = append(out, fmt.Sprintf("llama-server was started: %q", starts[0]))

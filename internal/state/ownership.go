@@ -127,6 +127,9 @@ func (o ownership) mayChange(p Proposer, typ, cause string, ops []entity.Op) boo
 
 // normAllows holds the pairs of path and cause C-02 and §4.6 narrow the table
 // to:
+//   - a rest of the gateway writes hp of a character and nothing else (C-02
+//     v1.8 p. 3): it is the first check of the norm of rest, before the
+//     encounter and the value restRefusal reads;
 //   - the gateway writes status of a character only with cause=forget, and hp
 //     only with cause=rest (C-02 v1.4, v1.5);
 //   - the gateway writes everything of a group except encounter_id, which is
@@ -139,6 +142,8 @@ func (o ownership) mayChange(p Proposer, typ, cause string, ops []entity.Op) boo
 func normAllows(p Proposer, typ, cause, path string) bool {
 	root := rootOf(path)
 	switch {
+	case p.isGateway() && typ == entity.TypePlayer && cause == CauseRest:
+		return root == entity.AttrHP
 	case p.isGateway() && typ == entity.TypePlayer && root == entity.AttrStatus:
 		return cause == CauseForget
 	case p.isGateway() && typ == entity.TypePlayer && root == entity.AttrHP:
@@ -225,17 +230,28 @@ func statusRefusal(p Proposer, cause string, set entity.ChangeSet, before, after
 	return ""
 }
 
-// restRefusal holds the part of the norm on hp that reads the world: the
-// gateway restores a character only outside an encounter and not above hp_max
-// (C-02 v1.4). Both are conditions on the state of the world, so both are
-// law_violation (C-02 v1.5): hp out of [0, hp_max] under inv-02, the law that
-// holds hp in range; rest inside an encounter has no law of its own and goes
-// out without invariant_id (dev-log T-056).
+// restRefusal holds the part of the norm of rest that reads the world and the
+// value (C-02 v1.8 p. 3, КД §4.6): a rest restores a character outside an
+// encounter to exactly hp_max. The first part of the norm — a rest writes hp
+// and nothing else — is step 6 (normAllows), so the checks run in the order
+// C-02 gives: the path, the encounter, the kind of hp, the value.
+//
+//   - Inside an encounter: law_violation without invariant_id. It is a
+//     condition of the world with no law of its own — a legitimate race, the
+//     gateway checked its read-model before the encounter reached State — and
+//     the report of NFR-020 does not count it.
+//   - hp that is not a whole number: invalid_op.
+//   - hp above hp_max, or no whole hp_max to bound it: law_violation {inv-02},
+//     the ceiling breaks whoever proposes it.
+//   - hp below hp_max: level_violation. The same value is legal from the
+//     encounter agent, so the refusal says "not you": a rest that lowers or
+//     only partly restores hp would be damage outside the mechanics.
 //
 // "Inside an encounter" is read on before, the character as the rest found it
-// (КД §4.6: encounter_id == "" of the entity rested): the same change set may
-// write encounter_id too, and read after the operations it would take the
-// character out of the fight it is resting in (review #1 of T-056, Mi-1).
+// (КД §4.6: encounter_id of the entity before the operations). Since the rest
+// writes nothing but hp this is also where the world stands after it; the
+// reading stays on before so that the norm does not depend on step 6 having
+// run (review #1 of T-056, Mi-1).
 //
 // The hit points are read on after, as an entity holds them, not by the path
 // the operation named: hp after the rest has to be a whole number, or the
@@ -255,8 +271,11 @@ func restRefusal(p Proposer, set entity.ChangeSet, before, after *entity.Entity)
 		return ReasonInvalidOp, ""
 	}
 	hpMax, bounded := after.HPMax()
-	if !bounded || hp < 0 || hp > hpMax {
+	switch {
+	case !bounded || hp > hpMax:
 		return ReasonLawViolation, invHPInRange
+	case hp < hpMax:
+		return ReasonLevelViolation, ""
 	}
 	return "", ""
 }

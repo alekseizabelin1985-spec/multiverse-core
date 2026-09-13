@@ -281,6 +281,60 @@ func TestTheMatrixOfRefusals(t *testing.T) {
 				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10)))
 			}},
 
+		// --- the norm of rest (C-02 v1.8 p. 3): only hp, and hp equal to hp_max ---
+		{name: "gateway: rest that writes position beside hp", want: state.ReasonLevelViolation, entity: "player-A",
+			arrange: wounded,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10), setOp("position", forestRegion)))
+			}},
+		{name: "gateway: rest that writes position alone", want: state.ReasonLevelViolation, entity: "player-A",
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("position", forestRegion)))
+			}},
+		{name: "gateway: rest to hp_max - 1", want: state.ReasonLevelViolation, entity: "player-A",
+			arrange: wounded,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 9)))
+			}},
+		{name: "gateway: rest below zero", want: state.ReasonLevelViolation, entity: "player-A",
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", -1)))
+			}},
+		{name: "gateway: rest inside an encounter that writes position: the path is checked first", want: state.ReasonLevelViolation, entity: "player-A",
+			arrange: inTheFight,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10), setOp("position", outside)))
+			}},
+		{name: "gateway: rest inside an encounter that erases encounter_id in the same set", want: state.ReasonLevelViolation, entity: "player-A",
+			arrange: inTheFight,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10), setOp("encounter_id", "")))
+			}},
+		{name: "gateway: rest writes hp as a text", want: state.ReasonInvalidOp, entity: "player-A",
+			arrange: wounded,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", "10")))
+			}},
+		{name: "gateway: rest writes hp as a fraction", want: state.ReasonInvalidOp, entity: "player-A",
+			arrange: wounded,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 5.5)))
+			}},
+		{name: "gateway: rest inside an encounter writes hp as a text: the encounter is checked before the kind", want: state.ReasonLawViolation, entity: "player-A",
+			arrange: inTheFight,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", "10")))
+			}},
+		{name: "gateway: rest of a character without hp_max", want: state.ReasonLawViolation, entity: "player-A", law: "inv-02",
+			arrange: func(t *testing.T, f *fixture) {
+				attrs := merge(character(entity.StatusAlive, outside), entity.AttrHP, 3)
+				delete(attrs, entity.AttrHPMax)
+				f.seed(t, "player-A", entity.TypePlayer, 1, attrs)
+			},
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10)))
+			}},
+
 		// --- invalid_op: a path not in its canonical form (review #1, Ma-2) ---
 		{name: "task: status. with a dot at the end, into abandoned", want: state.ReasonInvalidOp, entity: "player-A",
 			proposal: func(t *testing.T) eventbus.Event {
@@ -398,20 +452,9 @@ func TestTheMatrixOfRefusals(t *testing.T) {
 
 		// --- law_violation: the norm of rest reads the world ---
 		{name: "gateway: rest inside an encounter", want: state.ReasonLawViolation, entity: "player-A",
-			arrange: func(t *testing.T, f *fixture) {
-				f.seed(t, "player-A", entity.TypePlayer, 1, merge(character(entity.StatusAlive, forestRegion),
-					entity.AttrHP, 3, entity.AttrEncounterID, "enc-1"))
-			},
+			arrange: inTheFight,
 			proposal: func(t *testing.T) eventbus.Event {
 				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10)))
-			}},
-		{name: "gateway: rest inside an encounter that erases encounter_id in the same set", want: state.ReasonLawViolation, entity: "player-A",
-			arrange: func(t *testing.T, f *fixture) {
-				f.seed(t, "player-A", entity.TypePlayer, 1, merge(character(entity.StatusAlive, forestRegion),
-					entity.AttrHP, 3, entity.AttrEncounterID, "enc-1"))
-			},
-			proposal: func(t *testing.T) eventbus.Event {
-				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 10), setOp("encounter_id", "")))
 			}},
 		{name: "gateway: rest above hp_max", want: state.ReasonLawViolation, entity: "player-A", law: "inv-02",
 			proposal: func(t *testing.T) eventbus.Event {
@@ -714,8 +757,8 @@ func TestADeathThatLeavesTheCharacterInTheFightIsRefused(t *testing.T) {
 }
 
 // TestTheNormsOfRestHoldWithoutTheLaws: State holds rest to hp_max even where no
-// rule set gives it the laws of the world — the process of I1 runs State
-// without them — and names inv-02, the law of the condition (C-02 v1.5).
+// rule set gives it the laws of the world — an Applier built without them — and
+// names inv-02, the law of the condition (C-02 v1.5, v1.8 p. 3).
 func TestTheNormsOfRestHoldWithoutTheLaws(t *testing.T) {
 	f := newOwnedFixture(t)
 	f.seed(t, "player-A", entity.TypePlayer, 1, character(entity.StatusAlive, outside))
@@ -726,6 +769,65 @@ func TestTheNormsOfRestHoldWithoutTheLaws(t *testing.T) {
 	assertRejected(t, answer, "p", state.ReasonLawViolation, "player-A")
 	if law, _ := answer.Path().GetString("details.invariant_id"); law != "inv-02" {
 		t.Errorf("details.invariant_id %q, want inv-02", law)
+	}
+}
+
+// TestNobodyProposesUnderTheRowSystem is answer 7 of system-architect on T-056
+// (C-02 v1.8 p. 6): the bootstrap of a world proposes as the author, and no
+// envelope reaches the reserved row system — not an agent that names it as its
+// level, not core/state, not meta.actor_kind=system. The emptiness of the row
+// itself is TestOwnershipRulesCoverEveryProposer (shared/contracts).
+func TestNobodyProposesUnderTheRowSystem(t *testing.T) {
+	bySystem := func(ev eventbus.Event) eventbus.Event {
+		ev.Meta.ActorKind = eventbus.ActorSystem
+		return ev
+	}
+	t.Run("the bootstrap creates the world as the author", func(t *testing.T) {
+		f := newOwnedFixture(t, laws(t)...)
+		f.apply(t, bySystem(create("bootstrap:"+world+":world/"+world, ref(world, entity.TypeWorld), "",
+			map[string]any{entity.AttrLawsVersion: "v1"})))
+		answer := f.answer(t)
+		if answer.Type != state.TypeCreated {
+			reason, _ := answer.Path().GetString("reason")
+			t.Fatalf("the bootstrap was answered %s %s, want %s: %s", answer.Type, reason, state.TypeCreated, f.log)
+		}
+		if actor := answer.Meta.ActorKind; actor != eventbus.ActorSystem {
+			t.Errorf("the fact carries actor_kind %q, want the system of the bootstrap", actor)
+		}
+	})
+	npc := map[string]any{
+		entity.AttrHP: 5, entity.AttrHPMax: 5, entity.AttrStatus: entity.StatusAlive, entity.AttrPosition: forestRegion,
+	}
+	for name, proposal := range map[string]func(t *testing.T) eventbus.Event{
+		"an agent of the level system changes a character": func(t *testing.T) eventbus.Event {
+			return bySystem(proposed(t, agentOf(contracts.ProposerSystem), "p", "init", true, one(playerA, setOp("hp", 5))))
+		},
+		"an agent of the level system creates an NPC": func(*testing.T) eventbus.Event {
+			return bySystem(createdBy(agentOf(contracts.ProposerSystem), "p", "init", ref("wolf-beta", entity.TypeNPC), "", npc))
+		},
+		"core/state without an agent creates an NPC with cause=init": func(*testing.T) eventbus.Event {
+			return bySystem(createdBy(proposer{source: contracts.SourceState}, "p", "init", ref("wolf-beta", entity.TypeNPC), "", npc))
+		},
+		"core/state without an agent changes a character with cause=init": func(t *testing.T) eventbus.Event {
+			return bySystem(proposed(t, proposer{source: contracts.SourceState}, "p", "init", true, one(playerA, setOp("hp", 5))))
+		},
+		"actor_kind=system from the swarm without an agent changes a character": func(t *testing.T) eventbus.Event {
+			return bySystem(proposed(t, proposer{source: contracts.SourceSwarm}, "p", "init", true, one(playerA, setOp("hp", 5))))
+		},
+		"actor_kind=system from the swarm without an agent creates an NPC": func(*testing.T) eventbus.Event {
+			return bySystem(createdBy(proposer{source: contracts.SourceSwarm}, "p", "init", ref("wolf-beta", entity.TypeNPC), "", npc))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := forest(t)
+			ev := proposal(t)
+			f.apply(t, ev)
+			want := "player-A"
+			if ev.Type == state.TypeCreateProposed {
+				want = "wolf-beta"
+			}
+			assertRejected(t, f.answer(t), "p", state.ReasonLevelViolation, want)
+		})
 	}
 }
 
@@ -796,6 +898,19 @@ func TestALawOutsideALoosePackageRefusesEachRemainingSet(t *testing.T) {
 	if f.get(t, "enc-2").Version != 1 || f.get(t, "player-A").Version != 1 {
 		t.Error("a change set was applied under a broken law")
 	}
+}
+
+// wounded leaves player-A outside the forest with 3 of its 10 hit points.
+func wounded(t *testing.T, f *fixture) {
+	t.Helper()
+	f.seed(t, "player-A", entity.TypePlayer, 1, merge(character(entity.StatusAlive, outside), entity.AttrHP, 3))
+}
+
+// inTheFight puts a wounded player-A into the encounter enc-1 in the forest.
+func inTheFight(t *testing.T, f *fixture) {
+	t.Helper()
+	f.seed(t, "player-A", entity.TypePlayer, 1, merge(character(entity.StatusAlive, forestRegion),
+		entity.AttrHP, 3, entity.AttrEncounterID, "enc-1"))
 }
 
 // twoItems puts two items into the inventory of player-A.

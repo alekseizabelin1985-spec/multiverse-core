@@ -585,7 +585,14 @@ switch ($Action) {
       # the owner's stand llama-server is started by hand and ops/llm-server.pid
       # does not exist, so `make llm-up` used to start a SECOND server on a taken
       # port and then report the stranger's 200 as its own success (review M-6).
-      Write-LlmFail "llm: $($ep.Probe)$($health.Via) already answers $($health.Code) and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it"
+      # An @ anywhere in the value may end a password with a bare / in it, and
+      # the probe carries the host and the path of the value: then the refusal
+      # names the variable, not the address (C-15 v1.5, T-463 review #1 Ma-1).
+      if ($ep.Raw.Contains('@', [StringComparison]::Ordinal)) {
+        Write-LlmFail "llm: the address of $($ep.Var) ($($ep.Scheme)://…) already answers $($health.Code) at $($health.Via) and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it (the rest of the value and its host are not printed: the value holds an @, and what stands in front of it may be a key)"
+      } else {
+        Write-LlmFail "llm: $($ep.Probe)$($health.Via) already answers $($health.Code) and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address. It is already usable (make llm-health); stop it by hand if you need to replace it"
+      }
       exit 1
     }
 
