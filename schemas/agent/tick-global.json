@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/agent/tick-global.json",
+  "$comment": "Answer of the tick phase of a global GM (swarm-llm-laws.md §13.4). The enum of type is the full set of level global in MVP-1; the runtime narrows it to allowed_event_types of the blueprint when it compiles the schema (TL2-7).",
+  "type": "object",
+  "required": ["events"],
+  "properties": {
+    "events": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["type", "summary", "ops"],
+        "properties": {
+          "type": { "type": "string", "enum": ["world.weather_changed", "world.time_advanced", "world.event_occurred"] },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "ops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "value"],
+              "properties": {
+                "path": { "type": "string", "enum": ["weather", "time_of_day", "day"] },
+                "value": {}
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

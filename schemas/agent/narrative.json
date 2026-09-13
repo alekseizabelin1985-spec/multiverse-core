@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://multiverse-core.io/schemas/agent/narrative.json",
+  "$comment": "narrative cap: config=E; c=2.5; c_min=2.0; overhead=66; ops/metrics/baseline.md §5, swarm-llm-laws.md §13.4.1, ADR-029",
+  "type": "object",
+  "required": ["text", "mentions", "background_refs"],
+  "properties": {
+    "text": { "type": "string", "minLength": 1, "maxLength": 185 },
+    "mentions": {
+      "type": "array",
+      "maxItems": 4,
+      "items": { "type": "string", "pattern": "^e[1-9][0-9]?$" }
+    },
+    "background_refs": {
+      "type": "array",
+      "maxItems": 2,
+      "items": { "type": "string", "pattern": "^b[1-9][0-9]?$" }
+    },
+    "tone": { "enum": ["calm", "tense", "grim", "hopeful"] }
+  },
+  "additionalProperties": false
+}

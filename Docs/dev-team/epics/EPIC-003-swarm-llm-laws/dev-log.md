@@ -2857,3 +2857,56 @@ fence (принят незакрытый, потеряна строка откр
 - `mvctl env check` — ok;
 - `make test` — exit 0, `internal/llm` 99,4 %;
 - `make scripts-parity` — exit 0, T01/T02 по 123 случая.
+
+<!-- dev-log T-203 -->
+## developer#1 · T-203 · A3 «Пять блупринтов MVP-1 и схемы `schemas/agent/`» · 2026-09-13
+
+Ветка `task/T-203-mvp1-blueprints` от `7a8c100` (кончик эпика с T-459), папка `.worktrees/T-203`. Коммитов нет, файлы не в индексе. Карточка — `tasks/T-203.md`, раздел «Выполнение (developer)».
+
+### Что сделано
+- `blueprints/{global-dark-forest-world,domain-dark-forest,encounter-wolf,player-gm,group-narrator}.md` по КД §13.3 и скелетам `api-contracts.md` §3.3. Все фазы с моделью — конфигурация E (`Qwen3.8-27B-UD-Q3_K_XL`, `temperature: 0.7`, `thinking: false`) с указателем на `ops/metrics/baseline.md` §5. Нарраторы: `max_tokens: 160` (у группы — своё число), `## phase2` — «1–2 предложения, до ~140 символов».
+- `schemas/agent/{narrative,tick-global,tick-region,breach}.json` — JSON Schema 2020-12. `narrative.json` — строка E КД §13.4.1 и ярлыки ADR-029 п. 3; id схем тика — `maxLength: 128` (C-07 v1.5).
+- Фикстуры `llm.output.v1.{valid,invalid}.json` — `response_raw` по `narrative.json`, `params.max_tokens: 160`, `response_len` (байты) и `response_hash` пересчитаны.
+- `blueprints/blueprints_test.go` — 13 тестов: валидатор T-202 с окружением проекта (модели `{E}` и `nil`), ключи и значения фаз, отказ разбора на `top_p/top_k/min_p/presence_penalty/provider`, компиляция схем `jsonschema/v6`, экземпляры схем (границы 185/186, 4/5, 2/3, 128/129, форма ярлыков), `enum` тика против белых списков, потолок нарратива (строка E и три инварианта по c и c_min из `$comment`), инварианты глобального блупринта против файла законов, фикстуры `llm.output` против `narrative.json`.
+
+### Решения по ходу
+- Тест лежит в `blueprints/`: ему нужны `internal/mechanics` и `internal/laws`, а `shared/agent` их видеть не может (depguard). Альтернатива `test/blueprints/` — на ревью.
+- `config/absolute-limits.yaml` (T-216) в дереве нет. Правило 10 даёт `error` у трёх блупринтов. Тест допускает ровно эту находку и только пока файла нет; вопрос передан оркестратору.
+- `invariants` глобального блупринта — `inv-01…inv-10` (ключи `mechanics.InvariantIDs()`), `inv-11` — у стража.
+- `enum` тика = белый список роли без `entity.*.proposed` и `encounter.started`, `enum ⊆ allowed_event_types` (уточнение TL2-7 для региона).
+- `allowed_event_types` и `max_tokens` тиков (512) — как в скелетах.
+
+### Отклонения от дизайна
+- DoD «0 `error`» выполнен, кроме `absolute_limits_ref` до T-216.
+- Буквальное «валидатор проверяет `allowed ⊆ enum`» (TL2-7) заменено проверкой `enum ⊆ allowed` в тесте. Причина — `encounter.started` у региона. Валидатор T-202 не менялся.
+
+### Как тестировал
+- `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `golangci-lint run ./...` (0 issues), `go run ./cmd/mvctl contracts check` (65/8/58), `make test` (exit 0) — зелёные; `gitleaks dir` по новым файлам и фикстурам — no leaks found.
+- Мутанты в копии дерева `t203-mutants` (scratch, без `-overlay`), контрольный первым: 8 из 8 убиты, в том числе мутант DoD `text.maxLength: 210` (инвариант 1: 171 > 160). Копия удалена по точному пути.
+
+<!-- dev-log T-203 iteration 2 -->
+## developer#1 · T-203 · итерация 2 (ревью #1 code-reviewer#3) · 2026-09-13
+
+Ветка `task/T-203-mvp1-blueprints`, папка `.worktrees/T-203`. Коммитов нет, файлы не в индексе. Подробно — карточка `tasks/T-203.md`, раздел «Итерация 2 (developer)».
+
+### Что сделано
+- **Ma-1, вариант (а) по решению оркестратора.** В `allowed_event_types` добавлены публикации ролей по дизайну: `encounter-wolf` — `dice.rolled`, `entity.update.proposed` (КД §15.1, C-05 п. 1–2); `domain-dark-forest` — `entity.create.proposed` (ADR-028 п. 1, C-05 п. 4) и `entity.update.proposed` (КД §15.2); `global-dark-forest-world` — `entity.update.proposed` (`api-contracts.md` §2.4). Каждый тип сверен с белым списком роли `levels.go` и строкой владения `contracts.OwnershipRules`. Правило 8 валидатора зелёное, `enum` схем тика не менялся.
+- **Новый тест `TestBlueprintsListWhatTheirRolesPublish`.** Статическая таблица публикаций пяти блупринтов, выписанная из КД, со ссылками на разделы. Тест проверяет, что таблица ⊆ белого списка роли и ⊆ `allowed_event_types` блупринта, а при непустых `owned_entity_types` в списке есть `entity.*.proposed`.
+- **N-2.** Добавлены случаи «лишнее поле» для события, `ops[]` и ответа в обеих схемах тика; «`affects[]` с `type`» — в региональной.
+- **N-3.** Тест отказа разбора сверяет `ParseError.Field` с путём ключа и `Reason` с `unknown field`.
+- **N-1.** Комментарий у `pendingFiles`: карту вместе с `pendingReference` удаляет T-216.
+- **Mi-1…Mi-3** не менялись по решениям оркестратора 2–4. Вопросы к architect#2 и риск Mi-3 записаны в карточке.
+
+### Отклонения от дизайна
+- `allowed_event_types` трёх блупринтов шире скелетов `api-contracts.md` §3.3, на которые ссылается КД §13.3. Основание — КД §5.4: `Emitter` сверяет каждую публикацию со списком блупринта. КД и `api-contracts.md` не менялись, уведомление architect#2 — через оркестратора.
+- Комментарий правила 8 в `shared/agent/validator.go` («встреча не перечисляет `entity.update.proposed`») теперь расходится с данными. Поведение правила верно. Файл не входит в эту задачу, пункт ушёл в бэклог T-222.
+
+### Как тестировал
+- `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `golangci-lint run ./...` (0 issues), `go run ./cmd/mvctl contracts check` (65/8/58), `make test` (exit 0) — всё зелёное; `gitleaks dir blueprints` — no leaks found.
+- Мутанты в копии дерева `t203i2-mutants` (scratch, без `-overlay`), контрольный первым: убиты 8 из 8.
+  - M0 — `max_tokens` 150.
+  - M5 и M5r — снят `additionalProperties` у события в `tick-global.json` и `tick-region.json`.
+  - Z2 — вставка с битым отступом, `did not find expected key`.
+  - M9 — без `dice.rolled`.
+  - M10–M12 — без каждого из добавленных предложений.
+- Копия удалена по точному пути.
