@@ -239,9 +239,6 @@ func TestOpenAPIAdminSectionIsReservedForT239(t *testing.T) {
 // the list can only shrink, and when it is empty the route table equals the
 // spec.
 var notYetMounted = map[string]string{
-	"listWorlds":       "T-306",
-	"createCharacter":  "T-306",
-	"getPlayer":        "T-306",
 	"pollDeliveries":   "T-307",
 	"ackDeliveries":    "T-307",
 	"streamDeliveries": "T-307",

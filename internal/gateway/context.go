@@ -22,11 +22,14 @@ import (
 
 	"multiverse-core.io/internal/gateway/actions"
 	"multiverse-core.io/internal/gateway/api"
+	"multiverse-core.io/internal/gateway/characters"
 	"multiverse-core.io/internal/gateway/consumer"
 	"multiverse-core.io/internal/gateway/handlers"
 	"multiverse-core.io/internal/gateway/links"
 	"multiverse-core.io/internal/gateway/readmodel"
+	"multiverse-core.io/internal/gateway/session"
 	"multiverse-core.io/internal/gateway/store"
+	"multiverse-core.io/internal/gateway/turns"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
@@ -64,9 +67,10 @@ type Context struct {
 
 	// Built in New and mounted in Routes; their dependencies are set in Start,
 	// before the process server serves (api.Config).
-	httpCfg *api.Config
-	links   *handlers.Links
-	actions *handlers.Actions
+	httpCfg    *api.Config
+	links      *handlers.Links
+	actions    *handlers.Actions
+	characters *handlers.Characters
 
 	mu        sync.Mutex
 	started   bool
@@ -79,6 +83,9 @@ type Context struct {
 	keys      *actions.Keys
 	service   *actions.Service
 	limiter   *actions.Limiter
+	sessions  *session.Manager
+	turns     *turns.Tracker
+	chars     *characters.Service
 	log       *slog.Logger
 	stopLoop  context.CancelFunc
 	loopDone  chan struct{}
@@ -89,7 +96,7 @@ type Context struct {
 // serve builds the contexts, and an error belongs to the start of the process.
 func New(src env.Source) *Context {
 	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{}, actions: &handlers.Actions{},
-		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
+		characters: &handlers.Characters{}, loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
 }
 
 var (
@@ -107,10 +114,13 @@ func (c *Context) DependsOn() []string { return nil }
 // process server serves it (api servedByProcess).
 func (c *Context) Routes(mux *http.ServeMux) {
 	router := api.GatewayRouter(api.Handlers{
-		ResolveLink: http.HandlerFunc(c.links.Resolve),
-		ConsentLink: http.HandlerFunc(c.links.Consent),
-		ForgetLink:  http.HandlerFunc(c.links.Forget),
-		PostAction:  http.HandlerFunc(c.actions.Post),
+		ResolveLink:     http.HandlerFunc(c.links.Resolve),
+		ConsentLink:     http.HandlerFunc(c.links.Consent),
+		ForgetLink:      http.HandlerFunc(c.links.Forget),
+		ListWorlds:      http.HandlerFunc(c.characters.ListWorlds),
+		CreateCharacter: http.HandlerFunc(c.characters.Create),
+		GetPlayer:       http.HandlerFunc(c.characters.Player),
+		PostAction:      http.HandlerFunc(c.actions.Post),
 	})
 	router.Mount(mux, api.Chain(c.httpCfg)...)
 }
@@ -173,8 +183,18 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	loadCtx, cancelLoad := context.WithTimeout(context.WithoutCancel(ctx), c.loadBudget)
 	from := c.loadProjection(loadCtx, model, log)
 	cancelLoad()
+	svc, err := c.services(deps, settings, gatewayDB, linkStore, model, log)
+	if err != nil {
+		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
+	}
+	// The effects of the facts of a character proposal: its row goes with its
+	// fact, and a refusal of State expires it (component §7.1).
 	dispatcher, err := consumer.New(consumer.Config{
 		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock, Log: log,
+		Effects: map[string][]consumer.Effect{
+			readmodel.TypeEntityCreated:  {svc.chars.OnCreated},
+			readmodel.TypeUpdateRejected: {svc.chars.OnRejected},
+		},
 	})
 	if err == nil {
 		catchUpCtx, cancelCatchUp := context.WithTimeout(context.WithoutCancel(ctx), c.catchUpBudget)
@@ -198,18 +218,10 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		Clock:      deps.Clock,
 		Log:        log,
 	}
-	*c.links = handlers.Links{Store: linkStore, Clock: deps.Clock}
-	keys := actions.NewKeys(gatewayDB, store.KeyTTL)
-	service, err := actions.New(actions.Config{
-		Bus: deps.Bus, Model: model, Keys: keys, Filter: settings.filter, FilterName: settings.filterName,
-		Turns: actions.NewMemoryTurns(), Clock: deps.Clock, Timers: deps.Timers, Log: log,
-		GMPath: settings.gmPath, Grace: settings.grace, KeyTTL: store.KeyTTL,
-	})
-	if err != nil {
-		return errors.Join(fmt.Errorf("gateway: %w", err), dispatcher.Stop(ctx), gatewayDB.Close(), linksDB.Close())
-	}
-	*c.actions = handlers.Actions{Service: service}
-	c.keys, c.service = keys, service
+	*c.links = handlers.Links{Store: linkStore, Clock: deps.Clock, CharacterStatus: svc.chars.Status}
+	*c.actions = handlers.Actions{Service: svc.actions}
+	*c.characters = handlers.Characters{Service: svc.chars, Worlds: model}
+	c.keys, c.service, c.sessions, c.turns, c.chars = svc.keys, svc.actions, svc.sessions, svc.turns, svc.chars
 	// The rate limit is a limit of live players; a replay feeds recorded
 	// actions as fast as the harness sends them (component §5.1 p. 6).
 	if deps.Mode != runtime.ModeReplay {
@@ -232,13 +244,63 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	return nil
 }
 
-// actionSettings are the variables of actions (component §11.3).
+// actionSettings are the variables of actions, sessions, turns and characters
+// (component §11.3).
 type actionSettings struct {
 	filter           actions.InputFilter
 	filterName       string
 	perMinute, burst int
 	grace            time.Duration
 	gmPath           string
+	// MV_GATEWAY_SESSION_IDLE, _TURN_TIMEOUT, _CHARACTER_WAIT and
+	// _CHARACTER_DEADLINE.
+	sessionIdle, turnTimeout, characterWait, characterDeadline time.Duration
+}
+
+// services are the services over the databases and the projection.
+type services struct {
+	keys     *actions.Keys
+	actions  *actions.Service
+	sessions *session.Manager
+	turns    *turns.Tracker
+	chars    *characters.Service
+}
+
+// services builds the sessions, turns, actions and characters of a start.
+// Analytics go to the bus in live mode only: a replay reads them and publishes
+// none (C-10, component §11.2).
+func (c *Context) services(deps runtime.Deps, s actionSettings, gatewayDB *sql.DB, linkStore *links.SQLite,
+	model *readmodel.Model, log *slog.Logger) (services, error) {
+	var analytics session.Publisher
+	if deps.Mode != runtime.ModeReplay {
+		analytics = deps.Bus
+	}
+	sessions, err := session.New(session.Config{DB: gatewayDB, Bus: analytics, Idle: s.sessionIdle, Log: log})
+	if err != nil {
+		return services{}, err
+	}
+	tracker, err := turns.New(turns.Config{DB: gatewayDB, Sessions: sessions, Bus: analytics, Clock: deps.Clock,
+		Timeout: s.turnTimeout, GMPath: s.gmPath, Log: log})
+	if err != nil {
+		return services{}, err
+	}
+	keys := actions.NewKeys(gatewayDB, store.KeyTTL)
+	service, err := actions.New(actions.Config{
+		Bus: deps.Bus, Model: model, Keys: keys, Filter: s.filter, FilterName: s.filterName,
+		Turns: tracker, Clock: deps.Clock, Timers: deps.Timers, Log: log,
+		GMPath: s.gmPath, Grace: s.grace, KeyTTL: store.KeyTTL,
+	})
+	if err != nil {
+		return services{}, err
+	}
+	chars, err := characters.New(characters.Config{
+		Links: linkStore, Model: model, Sessions: sessions, DB: gatewayDB, Bus: deps.Bus, Filter: service,
+		IDs: deps.IDs, Clock: deps.Clock, Wait: s.characterWait, Deadline: s.characterDeadline, Log: log,
+	})
+	if err != nil {
+		return services{}, err
+	}
+	return services{keys: keys, actions: service, sessions: sessions, turns: tracker, chars: chars}, nil
 }
 
 func (c *Context) actionSettings() (actionSettings, error) {
@@ -265,6 +327,27 @@ func (c *Context) actionSettings() (actionSettings, error) {
 		errs = append(errs, err)
 	case s.grace < 0:
 		errs = append(errs, fmt.Errorf("%s must not be negative", env.GatewayEncounterGrace.Name()))
+	}
+	for _, d := range []struct {
+		dst      *time.Duration
+		variable env.Var
+	}{
+		{&s.sessionIdle, env.GatewaySessionIdle}, {&s.turnTimeout, env.GatewayTurnTimeout},
+		{&s.characterWait, env.GatewayCharacterWait}, {&s.characterDeadline, env.GatewayCharacterDeadline},
+	} {
+		switch *d.dst, err = d.variable.DurationFrom(c.src); {
+		case err != nil:
+			errs = append(errs, err)
+		case *d.dst <= 0:
+			errs = append(errs, fmt.Errorf("%s must be positive", d.variable.Name()))
+		}
+	}
+	// The wait for the fact of a character ends before its deadline: with the
+	// wait at or past the deadline, the sweeper could take a character off its
+	// link while its request still waits for the fact (N-5 of review #1 of
+	// T-306). Checked only when both parsed as positive durations.
+	if s.characterWait > 0 && s.characterDeadline > 0 && s.characterWait >= s.characterDeadline {
+		errs = append(errs, fmt.Errorf("%s must be less than %s", env.GatewayCharacterWait.Name(), env.GatewayCharacterDeadline.Name()))
 	}
 	if s.gmPath != eventbus.GMPathAgent && s.gmPath != eventbus.GMPathLegacy {
 		errs = append(errs, fmt.Errorf("%s is %s or %s", env.GMPath.Name(), eventbus.GMPathAgent, eventbus.GMPathLegacy))
@@ -354,8 +437,9 @@ func openDatabases(ctx context.Context, dir string) (*sql.DB, *sql.DB, error) {
 
 // sweep runs the housekeeping: every store.SweepInterval the expired character
 // requests, the old marks of processed events, the expired answers to actions
-// and the half published actions whose key expired go and a pending compaction
-// is retried; every
+// and the half published actions whose key expired go, a pending compaction
+// is retried, the characters past their deadline leave their links, the turns
+// past theirs time out and the idle sessions end; every
 // actions.LimiterSweepInterval the rate limit forgets the players who stopped
 // acting; and every store.LinksCompactInterval links.db is compacted as the
 // safety net of /forget (ADR-019 addendum p. 1). Errors are logged; the next
@@ -383,6 +467,15 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 				c.log.Error("action keys sweep", slog.String("error", err.Error()))
 			}
 			c.service.SweepPending(now)
+			if _, err := c.chars.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("pending characters sweep", slog.String("error", err.Error()))
+			}
+			if _, err := c.turns.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("turns sweep", slog.String("error", err.Error()))
+			}
+			if _, err := c.sessions.Sweep(ctx, now); err != nil && ctx.Err() == nil {
+				c.log.Error("sessions sweep", slog.String("error", err.Error()))
+			}
 		case <-limits.C():
 			c.limiter.Sweep(clk.Now())
 		case <-compact.C():

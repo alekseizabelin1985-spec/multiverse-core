@@ -290,3 +290,16 @@
 - **Остаточный риск.** Перезапуск процесса между публикациями пакета теряет пакет в памяти, и повтор публикует действие заново с новым id. Закреплено тестом `TestARestartBetweenPublicationsBuildsTheActionAgain`. Оценка риска — в карточке. Правило для КД §5.5 вносит architect#3.
 - **Проверки.** `go build`/`vet`, `go test -short ./...`, e2e, `golangci-lint` (0), `mvctl env check`, `contracts check`, `make test` — зелёные. Мутанты R2, R3, R6–R9 ревьюера и 9 новых прогнаны в копиях дерева: контрольный зелёный, остальные красные. Копии удалены по точным путям.
 - Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал. Не коммитил.
+
+## developer#1 · T-306 · `characters`, `GET /v1/worlds`, `GET /v1/players/{id}`, `session` + `turns`, аналитика C-10 · 2026-09-13
+
+Ветка `task/T-306-characters-sessions`, папка `.worktrees/T-306`. Статус — `review`. Подробности, итог по DoD, мутанты и вопросы — карточка `tasks/T-306.md`, раздел «Выполнение (developer)». Не коммитил.
+
+- **Новые пакеты.** `session` — сессии scope в `gateway.db`: открытие первым действием, `idle` через 30 мин действием или sweeper'ом, `forget`/`leave`/`death` через `End`, парность `started/ended` (событие, не принятое шиной, откатывает строку). `turns` — трекер ходов вместо `actions.MemoryTurns`: резерв `seq` при `Begin`, запись при `Accepted`, `rejected` сразу, `completed`/`degraded` после ack последнего адресата, `timeout` по дедлайну 60 с. `characters` — `POST /v1/characters` с ожиданием факта 2 с, `202 creating`, дедлайном 60 с, идемпотентностью `(link_id, action_key)`, фильтром имени через `FilterText(KindName)`; `GET /v1/players/{id}`, статус персонажа для `resolve`.
+- **API.** Смонтированы `listWorlds`, `createCharacter`, `getPlayer`; OpenAPI описывает поведение трёх операций. `api.ValidCharacterName` — одно правило имени для шлюза и бота: выражение бота, 2–32, строго без двух пробелов подряд и без комбинирующих знаков (поручение оркестратора).
+- **Окно отметки сжатия `links.db`** (строка приёмки T-303) закрыто счётчиком поколений удалений; тест с принудительным порядком.
+- **Переменные** (КД §11.3): `MV_GATEWAY_SESSION_IDLE`, `MV_GATEWAY_TURN_TIMEOUT`, `MV_GATEWAY_CHARACTER_WAIT`, `MV_GATEWAY_CHARACTER_DEADLINE` — нужна отметка tech-lead#1.
+- **Фикстура** `internal/gateway/testdata/analytics/solo-30.jsonl` — запасной путь (согласия tech-lead#1 на `testdata/analytics/` нет); уведомление EPIC-005 — в карточке.
+- **Отступление от поручения.** Схемы C-10 требуют `session.id`, `participants[].entity.id`, `entity.entity.id`, а `Publish` проверяет схему: без этих полей аналитика не публикуется вовсе. Пишутся только обязательные поля, `scope` и имена — нет. Решение по R2-M-1 A для событий шины — вопрос оркестратору и system-architect.
+- **Проверки.** `go build`/`vet`, `go test -short ./...`, пакет `updates` через `go test -c`, e2e, `golangci-lint` (0), `mvctl env check` (78), `contracts check`, `privacy scan`, `make test` — см. карточку. Мутанты — в копиях дерева, контрольный первым, копии удалены по точным путям.
+- Интеграционные тесты, Docker и стенд `:8888` не трогал, `.env` не открывал.
