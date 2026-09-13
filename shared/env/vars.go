@@ -113,6 +113,18 @@ var (
 	GatewayEncounterGrace = Declare("MV_GATEWAY_ENCOUNTER_GRACE", "10s",
 		"how long an active encounter may run without its task agent before its actions answer encounter_unavailable",
 		IsDuration())
+	GatewaySessionIdle = Declare("MV_GATEWAY_SESSION_IDLE", "30m",
+		"how long a session of a scope waits for an action before it ends with end_reason=idle (BR-17)", IsDuration())
+	GatewayTurnTimeout = Declare("MV_GATEWAY_TURN_TIMEOUT", "60s",
+		"how long a turn waits for the delivery of its narrative before analytics.turn.completed status=timeout", IsDuration())
+	GatewayCharacterWait = Declare("MV_GATEWAY_CHARACTER_WAIT", "2s",
+		"how long POST /v1/characters waits for entity.created before it answers 202 creating", IsDuration())
+	GatewayCharacterDeadline = Declare("MV_GATEWAY_CHARACTER_DEADLINE", "60s",
+		"how long a character may stay creating before it is taken off its link", IsDuration())
+	GatewayDeliveryLease = Declare("MV_GATEWAY_DELIVERY_LEASE", "30s",
+		"how long a delivery given out by long-poll waits for its ack before it is given out again (ADR-006)", IsDuration())
+	GatewayDeliveryTTL = Declare("MV_GATEWAY_DELIVERY_TTL", "24h",
+		"how long a delivery stays pending before it is dropped (ADR-006)", IsDuration())
 
 	// --- core -------------------------------------------------------------
 

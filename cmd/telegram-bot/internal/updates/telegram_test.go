@@ -148,7 +148,13 @@ func TestTelegramHandsUpdatesOverInOrderAndStopsWithTheContext(t *testing.T) {
 
 	var buf bytes.Buffer
 	log, redactor := testLogger(&buf)
-	src := NewTelegram(TelegramOptions{Token: testToken, Log: log, Redactor: redactor, ServerURL: srv.URL})
+	var ready atomic.Int32
+	src := NewTelegram(TelegramOptions{Token: testToken, Log: log, Redactor: redactor, ServerURL: srv.URL, OnReady: func() {
+		ready.Add(1)
+		if tg.polled.Load() != 0 {
+			t.Error("OnReady called after the first getUpdates")
+		}
+	}})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -157,6 +163,9 @@ func TestTelegramHandsUpdatesOverInOrderAndStopsWithTheContext(t *testing.T) {
 		inside atomic.Int32
 	)
 	err := src.Start(ctx, func(_ context.Context, u Update) {
+		if ready.Load() != 1 {
+			t.Error("an update was handled before OnReady")
+		}
 		if inside.Add(1) != 1 {
 			t.Error("handlers ran concurrently: updates must be handled one at a time")
 		}
@@ -171,6 +180,9 @@ func TestTelegramHandsUpdatesOverInOrderAndStopsWithTheContext(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("handled %d updates, want 2", len(got))
+	}
+	if n := ready.Load(); n != 1 {
+		t.Errorf("OnReady called %d times, want 1", n)
 	}
 	first, second := got[0], got[1]
 	if first.ID != 10 || first.Message == nil || first.Message.Chat.Type != ChatPrivate || first.Message.Chat.ID != 987654321 ||
@@ -270,7 +282,10 @@ func TestTelegramStartReportsARejectedTokenWithoutIt(t *testing.T) {
 	srv := httptest.NewServer(tg)
 	defer srv.Close()
 
-	err := NewTelegram(TelegramOptions{Token: testToken, Redactor: privacy.NewRedactor(testToken), ServerURL: srv.URL}).
+	// T-312 acceptance, N-3 of review #1: the delivery loop waits for OnReady,
+	// so a rejected token must not call it.
+	err := NewTelegram(TelegramOptions{Token: testToken, Redactor: privacy.NewRedactor(testToken), ServerURL: srv.URL,
+		OnReady: func() { t.Error("OnReady called although getMe answered 401") }}).
 		Start(context.Background(), func(context.Context, Update) { t.Error("no update expected") })
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("Start = %v, want ErrUnauthorized", err)

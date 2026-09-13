@@ -1,4 +1,4 @@
-package config_test
+package main
 
 import (
 	"os"
@@ -21,14 +21,11 @@ var allowedInternal = map[string]bool{
 var forbiddenModules = []string{"modernc.org/sqlite", "github.com/pressly/goose"}
 
 // TestTheBotReachesOnlyTheGatewayClientAndAPI is the import boundary of the
-// bot until depguard has a rule for cmd/telegram-bot (tasks.md T-310, the
-// decision is system-architect's). It lists the transitive dependencies of the
-// shipped code — tests excluded, since a test of the bot may use FakeGateway,
-// which runs the whole gateway in-process.
-//
-// The check is about the whole bot, not about config: it lives here only until
-// cmd/telegram-bot has a package of its own (main.go, T-312), which takes it
-// over.
+// bot behind the depguard rule cmd-telegram-bot of .golangci.yml, its second
+// line: depguard sees the direct imports of a file, this test the transitive
+// dependencies of the shipped code — tests excluded, since a test of the bot
+// may use FakeGateway, which runs the whole gateway in-process. It lives in the
+// package of the binary, which it is about (review #1 of T-310, N-3; T-312).
 func TestTheBotReachesOnlyTheGatewayClientAndAPI(t *testing.T) {
 	goBin, err := exec.LookPath("go")
 	if err != nil {
