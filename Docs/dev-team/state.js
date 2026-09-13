@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T16:12:20+03:00",
+  "updatedAt": "2026-09-13T16:20:10+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2389,13 +2389,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-446",
           "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:46:40+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:20:10+03:00",
           "reviewIterations": 2,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 141,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-446.md",
           "branch": "task/T-446-runtime-cmd-layout",
@@ -2548,7 +2548,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-457",
           "title": "Решения system-architect: поправки ADR-016/017 по ADR-029 и C-07 ref; вопросы T-054 (C-05, inv-01/09) и T-060 (replay); N Qwen3.6 в ADR-005",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T15:48:01+03:00",
           "finishedAt": null,
@@ -2794,16 +2794,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-055",
           "title": "state — конвейер предложение → факт, источники в serve.go",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-1/developer#3",
+          "startedAt": "2026-09-13T16:20:10+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
           "subwave": "1.3",
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-002-state-mechanics/tasks/T-055.md"
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-055.md",
+          "branch": "task/T-055-state-pipeline",
+          "worktree": ".worktrees/T-055"
         },
         {
           "id": "T-056",
@@ -3065,14 +3067,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-448",
           "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
-          "status": "review",
+          "status": "done",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T13:31:28+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-13T16:20:10+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.3",
-          "spentMinutes": 0,
+          "spentMinutes": 160,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md",
           "branch": "task/T-448-changed-form-proposal-id",
@@ -8863,7 +8865,7 @@ window.DEVTEAM_STATE =
       "task": "T-457",
       "action": "Решения: ADR-029/C-07 ref, В1–В4 T-054, вопросы T-060",
       "startedAt": "2026-09-13T15:48:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:20:10+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -8883,7 +8885,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Приёмка T-446 на слитом с эпиком дереве",
       "startedAt": "2026-09-13T15:56:06+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:20:10+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -8903,7 +8905,7 @@ window.DEVTEAM_STATE =
       "task": "T-448",
       "action": "Приёмка T-448 на слитом дереве эпика",
       "startedAt": "2026-09-13T16:00:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T16:20:10+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8963,6 +8965,26 @@ window.DEVTEAM_STATE =
       "task": "T-454",
       "action": "Приёмка T-454 гонка и флак CI",
       "startedAt": "2026-09-13T16:12:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "state: конвейер предложение → факт",
+      "startedAt": "2026-09-13T16:20:10+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-457",
+      "action": "Ревью #1: решения архитектора C-01/C-05/C-07",
+      "startedAt": "2026-09-13T16:20:10+03:00",
       "finishedAt": null
     }
   ],
@@ -11882,6 +11904,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-455 принята tech-lead#1: Mi-1 (форма KEY: value в declared_names, проверено пробой и мутантом), N-1 (тексты приведены к факту), N-2 (одна переменная default_env_files) закрыты при приёмке; прогоны в окружении как в CI — ok. Слияние ждёт T-450 (итерация 2); после слияния T-450 синхронизировать T-45"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 принята tech-lead#1: DoD 1–9, слитое дерево (кончик 647c5d8 + T-446) зелёное — build/vet/27 пакетов/e2e/lint/contracts check; вывод mvctl help побайтно тот же; отметка владельца cmd/* (мягкий режим) — сам владелец. Коммит edf7692; при finish конфликт хвоста tasks.md (T-453/T-449/T-456 выше T-4"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 принята TEAM-1/tech-lead#2: Mi-3 (тест null в changedPayload, мутанты R5/R6/R6b), N-4 (проверка attributes до мира) закрыты при приёмке; лишний \r в review.md исправлен; слитое с кончиком 1fc6480 дерево зелёное (28 пакетов). Строки DoD в T-055, T-056, T-059. Коммит 3162aa0, слита в epic/EPIC-00"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-457 выполнена system-architect#1: ADR-016/017 поправки по ADR-029 подтверждены; C-07 v1.5 (ref в unknown_entity вариант A, временная форма other отменена; labels_hash для нарратива); C-05 v1.8 п. 9 (В1 — участник-нарушение только при затронутом тем же пакетом погибшем), В2 законный мёртвый NPC, C-"
+    },
+    {
+      "at": "2026-09-13T16:20:10+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Начата T-055 (TEAM-1/developer#3): internal/state конвейер предложение → факт — зависимости T-050/T-052/T-054/T-060/T-448 слиты."
     }
   ],
   "blockers": [],
