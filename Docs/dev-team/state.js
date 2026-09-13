@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:07:40+03:00",
+  "updatedAt": "2026-09-13T14:16:04+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2408,7 +2408,7 @@ window.DEVTEAM_STATE =
           "assignee": "system-architect#1",
           "startedAt": "2026-09-13T13:49:33+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -2683,11 +2683,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-060",
           "title": "internal/replay — EventClock, NullTimers, Recording, сборка в serve.go",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:16:34+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -2895,7 +2895,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-448",
           "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
-          "status": "in-progress",
+          "status": "review",
           "assignee": "TEAM-1/developer#3",
           "startedAt": "2026-09-13T13:31:28+03:00",
           "finishedAt": null,
@@ -8149,7 +8149,7 @@ window.DEVTEAM_STATE =
       "task": "T-448",
       "action": "Форма changed[] для append и remove, согласованная с правилом догона §",
       "startedAt": "2026-09-13T13:31:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:16:04+03:00"
     },
     {
       "instance": "developer#1",
@@ -8189,7 +8189,7 @@ window.DEVTEAM_STATE =
       "task": "T-201",
       "action": "итерация 2 T-201: ContentHash, fence, плейсхолдеры",
       "startedAt": "2026-09-13T13:45:18+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:08:27+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -8269,7 +8269,7 @@ window.DEVTEAM_STATE =
       "task": "T-449",
       "action": "ревью #1 T-449 (TEAM-1)",
       "startedAt": "2026-09-13T14:00:01+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:16:04+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -8309,6 +8309,46 @@ window.DEVTEAM_STATE =
       "task": "T-060",
       "action": "приёмка T-060 (TEAM-1)",
       "startedAt": "2026-09-13T14:07:40+03:00",
+      "finishedAt": "2026-09-13T14:16:04+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "ревью #2 T-201 (TEAM-2)",
+      "startedAt": "2026-09-13T14:08:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-448",
+      "action": "Ревью #1: форма changed[], proposal_id, ±2^53",
+      "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-449",
+      "action": "Итерация 2 T-449 и подтверждение решений T-448",
+      "startedAt": "2026-09-13T14:16:04+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-060",
+      "action": "Отметка владельца cmd/multiverse по serve.go",
+      "startedAt": "2026-09-13T14:16:04+03:00",
       "finishedAt": null
     }
   ],
@@ -10898,6 +10938,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Параллельность 2 → 6 (указание пользователя до 50 % недельного лимита). Начаты T-399 (architect#1), T-398 (tech-writer#1), T-441 (developer#1); T-405 — после слияния T-437"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Push выполнен по разрешению пользователя: develop (9c93764) и epic/EPIC-001…004 созданы на origin; gitleaks по 154 коммитам, которых нет на origin, — 0 находок. CI Go не запустился — это не сбой: в go.yml push-триггер только main и integration/**, ветки эпиков по замыслу проверяются через PR; тригге"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение пользователя по защите develop: «только проверки пока» — required status checks без обязательного одобрения PR. Настройку в GitHub выполняет владелец репозитория; оркестратор настройки безопасности не меняет. Состав обязательных проверок — после первого зелёного прогона go.yml на develop (T-"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-448 выполнена TEAM-1/developer#3: (а) entity.Change с флагами HasOld/HasNew и JSON по наличию ключей, схема entity.updated — required [path] + anyOf, правило догона в КД §4.8; (б) proposal_id обязателен у entity.create.proposed, двойник пропускает create/update без него с Warn; (в) числа за ±2^53 "
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-449 · ревью #1 (TEAM-1/code-reviewer#2): вернуть — 0/3/6/5. Ma-1 КД State §5.1 не приведён к C-03 v1.3; Ma-2 контракт пишет Version == 0, код и DoD — <= 0; Ma-3 текст правила «локальный адрес» шире таблицы T-450 (числовые записи хоста, отказы формы URL, точка на конце). Итерация 2 — system-archite"
+    },
+    {
+      "at": "2026-09-13T14:16:04+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-060 принята TEAM-1/tech-lead#2: DoD выполнен, итерация 2 проверена, мутанты M0/M3/M4 красные. При приёмке добавлено WARN «replay without a recording» для --mode=replay без --recording (тест и мутанты M5/M6). make test — 0, internal/replay 96,8 %. До слияния — отметка tech-lead#1 по cmd/multiverse/"
     }
   ],
   "blockers": [],
