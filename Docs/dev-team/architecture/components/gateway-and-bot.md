@@ -19,7 +19,7 @@
 | `gateway` | `internal/gateway` → `cmd/multiverse --contexts=gateway`, порт `:8088` | HTTP API v1 (C-08); псевдонимизация (BR-07, ADR-009); валидация действий до механики и публикация `player.*`/`group.*`/`round.*` (C-04); сессии, ходы и `analytics.*` (C-10); координация раундов группы (ADR-020); outbox доставок с long-poll и ack (ADR-006); read-model состояния персонажей (проекция C-02/C-05); `/health`; прокси `/v1/admin/*` к `core` (C-06) | `links.db` (единственная копия ПДн), `gateway.db` (сессии, ходы, раунды, ключи идемпотентности, outbox, курсоры), read-model в памяти + объект `snapshots-{world}/gateway/…` |
 | `telegram-bot` | `cmd/telegram-bot` | тонкий клиент: long polling Telegram → **allowlist Telegram user id (SEC-06, решение пользователя U-7) и только личные чаты (SEC-07)** → команды словаря FR-002 → HTTP gateway; long-poll доставок → сообщения в чат без `parse_mode` (SEC-10); онбординг (`/start` с уведомлением об ИИ, 18+, согласием), `/help`, `/forget`; редакция токена в логах/ошибках (SEC-08); лимит 20 команд/мин на user id (SEC-11) | ничего персистентного; в памяти — только состояние диалога на чат (TTL), кэш `chat_id → player_id` (TTL) и счётчики лимита |
 
-Вне блока: механика, рой, LLM (EPIC-003), State (EPIC-002), память и `mvctl` (EPIC-005), контракты/шина/`testkit`-каркас (EPIC-001). Всё общение с ними — только события через `eventbus.Bus` (C-01) и один HTTP-прокси к admin-порту `core`.
+Вне блока: механика, рой, LLM (EPIC-003), State (EPIC-002), память и `mvctl` (EPIC-005), контракты/шина/`testkit`-каркас (EPIC-001). Всё общение с ними — только события через `eventbus.Bus` (C-01) и один HTTP-прокси к admin-порту `core`. *(изм. T-444, C-08 v1.4, ADR-001 доп. 2026-09-13 п. 5)* Двойники блока живут в двух местах: `Harness` — в `shared/testkit/gateway` (из шлюза видит ровно `client` и `api`), `FakeGateway` — в `internal/gateway/gatewaytest` (in-process сервер поверх настоящего шлюза; в production запрещён).
 
 Принципы, унаследованные из `overview.md` §14 и обязательные в блоке: единственный писатель (gateway **не** пишет сущности мира, только `entity.*.proposed`); record-replay (`round.closed` публикуется до обработки раунда, таймеры — через `Clock`, в `--mode=replay` таймеры выключены); идемпотентность по `action_key` (клиент) и `event.id` (потребитель); приватность по построению (внешний ID — только в `links.db`; ключ идемпотентности `POST /v1/characters` — суррогат `link_id`, не внешний ID (SEC-03); тела `links/*` и `characters` не логируются).
 
@@ -111,7 +111,7 @@ internal/gateway/
   config.go                  # Config из env (shared/env), см. §11.3
   deps.go                    # Deps{Bus, ObjStore, Clock, IDs, Logger}; интерфейсы внешних зависимостей
   api/
-    server.go                # http.Server, таймауты, listen 127.0.0.1:8088, graceful shutdown
+    server.go                # (изм. T-444) своего http.Server нет: маршруты на runtime.Mux процесса; дедлайны маршрутов — runtime.SetDeadlines, остановка long-poll — runtime.ShuttingDown (C-01 v1.8)
     router.go                # регистрация маршрутов (ServeMux patterns 1.22)
     middleware.go            # client allow-list, actor_kind, request_id, body limit 64 KiB (413), rate limit 30/мин (429), один long-poll на клиента (409), JSON error, recover, no-log для links/characters
     errors.go                # apiError{code,status,msg}; таблица §1.6
@@ -188,11 +188,12 @@ cmd/telegram-bot/
   internal/deliver/          # цикл long-poll → send → ack; последовательность на chat_id
   internal/privacy/          # slog.Handler: запрет полей external_id/chat_id/username/text; редакция токена `bot<digits>:<token>` → `bot<redacted>` в любом сообщении/ошибке (SEC-08); тест-помощник
 
-shared/testkit/gateway/      # владелец — EPIC-004 (ownership.md): FakeGateway, Harness, фикстуры player-A/B/C
+internal/gateway/gatewaytest/ # (изм. T-444) FakeGateway: in-process HTTP поверх настоящего internal/gateway на membus; только для тестов
+shared/testkit/gateway/      # владелец — EPIC-004 (ownership.md): Harness, фикстуры player-A/B/C; (изм. T-444) FakeGateway переехал в internal/gateway/gatewaytest
 api/gateway.openapi.yaml     # OpenAPI 3.1 (§5.6)
 ```
 
-Правила зависимостей: `internal/gateway/*` не импортирует другие `internal/*` (depguard, ADR-001); разрешены `shared/{eventbus,contracts,jsonpath,objstore,env,logging,entity,testkit}`. `cmd/telegram-bot` импортирует **только** `internal/gateway/client` и `internal/gateway/api` (типы DTO) из платформенного кода — не `eventbus`, не `links`. `shared/testkit/gateway` импортирует `internal/gateway` целиком (in-process сервер) — это тестовый код.
+Правила зависимостей: `internal/gateway/*` не импортирует другие `internal/*` (depguard, ADR-001); разрешены `shared/{eventbus,contracts,jsonpath,objstore,env,logging,entity,testkit}`. `cmd/telegram-bot` импортирует **только** `internal/gateway/client` и `internal/gateway/api` (типы DTO) из платформенного кода — не `eventbus`, не `links`. *(изм. T-444, ADR-001 доп. 2026-09-13 п. 5; прежде — «`shared/testkit/gateway` импортирует `internal/gateway` целиком (in-process сервер) — это тестовый код»)* `shared/testkit/gateway` импортирует из шлюза ровно `internal/gateway/client` и `internal/gateway/api` (узкое правило линтера; `client` — листовой пакет, импортирует только `api`). Общий слой `shared/*` не импортирует `internal/*`, и то, что пакет тестовый, этого не отменяет: `Harness` импортируют тесты EPIC-002/003, и через исключение на весь шлюз им открылись бы SQLite, outbox и шина. In-process сервер `FakeGateway` — `internal/gateway/gatewaytest`; production-код его не импортирует (запрет рядом с `no-testkit-in-production`). e2e, которому нужен `FakeGateway`, живёт вне `internal/<контекст>`: правила контекстов действуют и на тестовые файлы.
 
 ---
 
@@ -365,9 +366,9 @@ Retention/уборка (sweeper раз в 60 с по `Clock`): `idempotency_keys
 5. `nolog` для `POST /v1/links/*`, `DELETE /v1/links`, `POST /v1/characters`: тело и `external_id` не попадают в лог ни при какой ошибке (только `request_id`, `code`).
 6. `ratelimit` на `POST /v1/players/{id}/actions`: token bucket на `player_id` — **30 действий/мин, burst 5** (`MV_GATEWAY_RATE_ACTIONS_PER_MIN=30`, `MV_GATEWAY_RATE_ACTIONS_BURST=5`; стартовые значения по SEC-11, уточняются замером) → `429 rate_limited` с `Retry-After`. Бакеты — в памяти, `player_id` → bucket, уборка неактивных раз в 10 мин; в `replay` лимит выключен.
 7. `pollguard` на `GET /v1/clients/{client_id}/deliveries`: один активный long-poll на `client_id` (`sync.Map` client → in-flight); второй параллельный → `409 poll_in_progress` (C-08 v1.1) — защита от истощения соединений (T-13).
-8. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с).
+8. `timeout`: 5 с на все маршруты, кроме long-poll (`wait_ms + 5 с`, максимум 30 с) и прокси admin (30 с). *(изм. T-444, C-01 v1.8)* Дедлайны ставятся на запрос через `runtime.SetDeadlines(w, read, write)` (чтение тела — 10 с, запись — по строке выше); время у функции реальное в любом режиме, контекст шлюза часы для этого не берёт. Long-poll дополнительно слушает `runtime.ShuttingDown(r.Context())` и при остановке процесса отвечает пустым списком доставок, не дожидаясь `wait_ms`.
 
-Сервер: `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`, адрес — **`MV_CORE_ADDR`**, как у любого процесса `cmd/multiverse` (один процесс — один HTTP-сервер; `serve.go` отдаёт его mux всем контекстам `--contexts`, и в процессе с контекстом `gateway` API игрока живёт на том же адресе, что `/health`). В compose у сервиса `gateway` — `MV_CORE_ADDR: ":8088"` литералом, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3. Переменных `MV_GATEWAY_LISTEN` и `MV_GATEWAY_ADDR` нет (вторая выведена из манифеста в T-408, первая в манифест не попадала; T-409).
+Сервер: *(изм. T-444, C-01 v1.8; прежде — `http.Server{ReadHeaderTimeout: 5s, ReadTimeout: 10s, WriteTimeout: 35s, IdleTimeout: 120s}`)* сервер процесса общий для всех контекстов и настраивается в `shared/runtime`: `ReadHeaderTimeout 5s`, `IdleTimeout 120s`. `ReadTimeout` и `WriteTimeout` на уровне сервера не ставятся — они стали бы потолком для маршрутов всех контекстов процесса; таймауты шлюза — по п. 8 выше. Адрес — **`MV_CORE_ADDR`**, как у любого процесса `cmd/multiverse` (один процесс — один HTTP-сервер; `serve.go` отдаёт его mux всем контекстам `--contexts`, и в процессе с контекстом `gateway` API игрока живёт на том же адресе, что `/health`). В compose у сервиса `gateway` — `MV_CORE_ADDR: ":8088"` литералом, наружу публикуется `127.0.0.1:8088:8088` — `compose-lint` проверяет, ADR-009 дополнение п. 3. Переменных `MV_GATEWAY_LISTEN` и `MV_GATEWAY_ADDR` нет (вторая выведена из манифеста в T-408, первая в манифест не попадала; T-409).
 
 ### 5.2. Маршруты и обработчики
 
@@ -988,7 +989,7 @@ C4Component
 | e2e бота (детерминированный) | `FakeUpdateSource` подаёт сценарий обновлений (`/start` → согласие → имя → `/enter` → `/attack`…), `FakeSender` записывает исходящие; gateway — `testkit.FakeGateway` (in-process) или живой `--contexts=gateway` на membus; проверяются тексты, клавиатуры, `action_key` стабильность, ack, порядок сообщений | `cmd/telegram-bot/internal/flow`, `deliver` |
 | stand (не CI) | живой Telegram + стенд: S9 (сквозной соло-ход), NFR-003 замер `ack_latency_p95_ms` | ручной чек-лист |
 
-Фейки, которые поставляет EPIC-004 (ownership.md): `shared/testkit/gateway.FakeGateway` (in-process HTTP-сервер поверх реального `internal/gateway` с `membus` — для бота), `Harness` (Go-клиент + фикстуры `player-A/B/C`, `RegisterAndEnter`, `Act`, `AwaitDelivery(kind, timeout)`, `CloseRound`, генератор `player.*` прямо в `membus` для EPIC-002/003 до готовности gateway — C-04 «Заглушка»).
+Фейки, которые поставляет EPIC-004 (ownership.md): `gatewaytest.FakeGateway` в `internal/gateway/gatewaytest` *(изм. T-444, C-08 v1.4; прежде — `shared/testkit/gateway.FakeGateway`)* (in-process HTTP-сервер поверх реального `internal/gateway` с `membus` — для бота), `Harness` (Go-клиент + фикстуры `player-A/B/C`, `RegisterAndEnter`, `Act`, `AwaitDelivery(kind, timeout)`, `CloseRound`, генератор `player.*` прямо в `membus` для EPIC-002/003 до готовности gateway — C-04 «Заглушка»).
 
 Покрытие: цель ≥ 60 % по `internal/gateway/{actions,rounds,outbox,links,turns,session}` (NFR-064 распространяется на «ядро цикла»; координатор раундов и outbox — часть цикла).
 
