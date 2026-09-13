@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T14:40:05+03:00",
+  "updatedAt": "2026-09-13T14:41:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2389,11 +2389,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-446",
           "title": "Ревизия контрактов 4 — runtime и раскладка cmd (contract-change)",
-          "status": "review",
+          "status": "in-progress",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T13:46:40+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -8439,7 +8439,7 @@ window.DEVTEAM_STATE =
       "task": "T-446",
       "action": "Ревью #1: runtime и раскладка cmd по владельцам",
       "startedAt": "2026-09-13T14:16:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T14:41:31+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -8549,6 +8549,16 @@ window.DEVTEAM_STATE =
       "task": "T-439",
       "action": "Итерация 2: ADR-029 ярлыки вызова, замечания ревью",
       "startedAt": "2026-09-13T14:40:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-446",
+      "action": "Итерация 2: SetDeadlines и long-poll, имена владельцев e2e",
+      "startedAt": "2026-09-13T14:41:31+03:00",
       "finishedAt": null
     }
   ],
@@ -11258,6 +11268,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-003",
       "role": "orchestrator",
       "text": "T-439 · ревью #1 (TEAM-2/code-reviewer#2): вернуть — 0/1/8/5. Числа E (160/210/4/2), формула, группа и temperature 0.7 верны — T-203 может брать их. Ma-1 решение о ярлыках eK/bK меняет ADR-017 (правило 3: unknown_entity → schema_invalid на весь ответ, выпадение из NFR-021), ADR-016 (компиляция схемы"
+    },
+    {
+      "at": "2026-09-13T14:41:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-446 · ревью #1 (TEAM-1/code-reviewer#3): вернуть — 0/2/1/4. Раскладка по владельцам, реестр (65 типов, порядок), вывод mvctl, ShuttingDown без гонки — верны; 90 параллельных прогонов дедлайнов зелёные. Ma-2 doc SetDeadlines неверен: у запроса без тела истечение дедлайна чтения отменяет r.Context()"
     }
   ],
   "blockers": [],
