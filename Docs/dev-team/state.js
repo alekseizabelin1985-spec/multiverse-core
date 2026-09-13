@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T18:33:01+03:00",
+  "updatedAt": "2026-09-13T18:33:49+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -9430,7 +9430,7 @@ window.DEVTEAM_STATE =
       "task": "T-055",
       "action": "Приёмка T-055 конвейер State",
       "startedAt": "2026-09-13T18:16:20+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T18:33:49+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -9500,6 +9500,16 @@ window.DEVTEAM_STATE =
       "task": "T-318",
       "action": "Текст уведомления FR-009",
       "startedAt": "2026-09-13T18:33:01+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-055",
+      "action": "Отметка владельца cmd/multiverse, vars.go, .env.example",
+      "startedAt": "2026-09-13T18:33:49+03:00",
       "finishedAt": null
     }
   ],
@@ -12797,6 +12807,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-318 начата: текст уведомления FR-009 (/start) — business-analyst#1 (TEAM-3), затем вычитка tech-writer и ревью security-engineer (SEC-26), приёмка tech-lead#3. Задача без зависимостей, разблокирует T-311; ветка task/T-318-fr009-notice-text от epic/EPIC-004 (карточка и prd.md «Формулировка»)."
+    },
+    {
+      "at": "2026-09-13T18:33:49+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-055 принята TEAM-1/tech-lead#2: итерация 2 проверена; при приёмке закрыты Mi-5 (state.Config.Timers, по умолчанию RealTimers, Deps.Timers не читается), Mi-7 (expected_version < 0 → invalid_op без details, проходит схему), Mi-6 (тест ждёт письма в dead_letters), N-5; N-4 — мутант R20 эквивалентен, "
+    },
+    {
+      "at": "2026-09-13T18:33:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Бэклог из приёмки T-055 для system-architect/EPIC-001: sentinel ошибки схемы при Publish (ErrInvalidPayload → publish_rejected); подписка/партиция system_events на мир для процессов с несколькими мирами."
     }
   ],
   "blockers": [],
