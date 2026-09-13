@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:14:27+03:00",
+  "updatedAt": "2026-09-13T22:16:55+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4687,11 +4687,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-317",
           "title": "README gateway и бота, runbook §6, .env.example",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "tech-writer#1",
           "startedAt": "2026-09-13T21:44:45+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.7",
           "spentMinutes": 0,
@@ -10171,7 +10171,7 @@ window.DEVTEAM_STATE =
       "task": "T-317",
       "action": "Ревью #1 документации",
       "startedAt": "2026-09-13T22:05:27+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:16:55+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -10181,6 +10181,16 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Ревью #2",
       "startedAt": "2026-09-13T22:14:27+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-writer#1",
+      "role": "tech-writer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-317",
+      "action": "Итерация 2 документации",
+      "startedAt": "2026-09-13T22:16:55+03:00",
       "finishedAt": null
     }
   ],
@@ -13988,6 +13998,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-056 · итерация 2 (developer#2): Ma-1 каждый оставшийся набор неатомарного пакета отвергается под своей сущностью (ветка i<0), фильтр по Ref.ID убран; Ma-2 неканонический путь — invalid_op на шаге 1; Mi-1 rest по сущности до операций; Mi-2/Mi-3 тесты; Mi-4 страж oneStateOverTheWorld в стенде (R7 кр"
+    },
+    {
+      "at": "2026-09-13T22:16:55+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-317 · ревью #1 (TEAM-3/code-reviewer#3): вернуть — 0/2/11/8. Ma-1 README шлюза описывает проверку БД в /health как реализованную (она в T-309); Ma-2 проверка webhook вписывает токен в команду/адрес и проверяет отозванным токеном. Minor: описание /forget, Harness v0, MV_GATEWAY_DATA_DIR, правило de"
     }
   ],
   "blockers": [],
