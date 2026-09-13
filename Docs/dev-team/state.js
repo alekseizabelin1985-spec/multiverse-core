@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T22:50:37+03:00",
+  "updatedAt": "2026-09-13T22:51:46+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2907,7 +2907,7 @@ window.DEVTEAM_STATE =
           "assignee": "developer#2",
           "startedAt": "2026-09-13T20:39:02+03:00",
           "finishedAt": null,
-          "reviewIterations": 2,
+          "reviewIterations": 3,
           "wave": 1,
           "subwave": "1.4",
           "spentMinutes": 0,
@@ -10254,7 +10254,7 @@ window.DEVTEAM_STATE =
       "task": "T-056",
       "action": "Ревью #3",
       "startedAt": "2026-09-13T22:40:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T22:51:46+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10294,6 +10294,26 @@ window.DEVTEAM_STATE =
       "task": "T-312",
       "action": "deliver и main бота",
       "startedAt": "2026-09-13T22:50:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Просмотр contract-change T-056 и вопросы по State",
+      "startedAt": "2026-09-13T22:51:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-056",
+      "action": "Отметка владельца T-056",
+      "startedAt": "2026-09-13T22:51:46+03:00",
       "finishedAt": null
     }
   ],
@@ -14185,6 +14205,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-312 начата (TEAM-3/developer#2): deliver (long-poll → send → ack) и main бота; строки DoD приёмок T-310/T-311/T-317 (best-effort отправитель отказов, короткий таймаут клиента для flow, логгер поверх privacy, ValidCharacterName, README и runbook)."
+    },
+    {
+      "at": "2026-09-13T22:51:46+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-056 · ревью #3 (TEAM-1/code-reviewer#3): принять — 0/0/2/1. Ma-3 (скаляры после ApplyOps, путь ниже скаляра), Mi-6 (строгий страж, K4/K5 красные, 60/60 прогонов стенда), N-3 закрыты. Mi-7 список scalarAttributes неполон (World/Region/Group/Encounter, region_id NPC) и тип значения в корне не провер"
     }
   ],
   "blockers": [],
