@@ -251,6 +251,41 @@ func healthScenarios() []Scenario {
 			Env: map[string]string{"MV_LLM_URL": "http://u:x/FAKEPW123@127.0.0.1:{PORT}"},
 			Steps: health(Expect{Exit: 1, Stderr: []string{"MV_LLM_URL=http://…@127.0.0.1:<PORT> has a non-numeric port 'x'"},
 				Absent: []string{"FAKEPW123"}})},
+		// T-463, C-15 v1.5 "Печать значения": an @ after the first / leaves the
+		// head of a password where the parser sees the host, and the value is
+		// accepted by llm_parse_url and refused by the judge. Every sentence of
+		// the judge prints such a value by its scheme alone and does not name
+		// the host. One scenario per sentence the judge can reach; the sentence
+		// of the other invalid kinds (malformed) is unreachable while
+		// llm_parse_url refuses a malformed host first, and only the static
+		// comparison of the messages holds it. fakepw is a fake password.
+		{ID: "H67", Title: "health: an @ after the first /, a one-word host without a port: neither the value nor the host is printed (T-463)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://fakepw/x@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1,
+				Stderr:     []string{"MV_LLM_URL=http://… has no port; a local address is written with the port its runtime listens on, and 80, the default of the scheme, is a port nobody chose (the rest of the value and its host are not printed"},
+				AbsentFold: []string{"fakepw", "127.0.0.1", "/x@"}})},
+		{ID: "H68", Title: "health: the same value in mixed case: the host is lower-cased by the parser and still not printed (T-463)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "HTTP://FakePW/x@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1,
+				Stderr:     []string{"MV_LLM_URL=http://… has no port; a local address is written"},
+				AbsentFold: []string{"fakepw", "127.0.0.1"}})},
+		{ID: "H69", Title: "health: an @ after the first /, localhost without a port: the sentence of the startable kinds is masked too (T-463)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "https://localhost/fakepw@127.0.0.1:{PORT}"},
+			Steps: health(Expect{Exit: 1,
+				Stderr:     []string{"MV_LLM_URL=https://… has no port; the local runtime would bind 443, the default of the scheme, and the probe would knock there — write the port you mean (the rest of the value and its host are not printed"},
+				AbsentFold: []string{"fakepw", "127.0.0.1", "localhost"}})},
+		// The sentence of the any-address advises "write 127.0.0.1" by itself, so
+		// the address behind the @ here is another one.
+		{ID: "H70", Title: "health: an @ after the first /, the any-address: the host is not named (T-463)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://0.0.0.0:{PORT}/fakepw@10.0.0.5:{PORT}"},
+			Steps: health(Expect{Exit: 1,
+				Stderr:     []string{"MV_LLM_URL=http://… names the any-address: a server listens there, a client cannot call it — write 127.0.0.1 or the address of the host, with the port (the rest of the value and its host are not printed"},
+				AbsentFold: []string{"fakepw", "0.0.0.0", "10.0.0.5"}})},
+		{ID: "H71", Title: "health: without an @ the value and its host are printed as before (T-463)", Script: scriptServer,
+			Env: map[string]string{"MV_LLM_URL": "http://fakehost/x"},
+			Steps: health(Expect{Exit: 1,
+				Stderr:     []string{"MV_LLM_URL=http://fakehost/x has no port; a local address is written with the port its runtime listens on, and 80, the default of the scheme, is a port nobody chose"},
+				AbsentFold: []string{"are not printed"}})},
 	}
 }
 
@@ -395,6 +430,18 @@ func upDownScenarios() []Scenario {
 		{ID: "U18", Title: "up: single mode without MV_LLM_MODEL_FILE", Script: scriptServer,
 			Env:   upEnv(nil),
 			Steps: []Step{{Action: "up", Expect: Expect{Exit: 1, NoLaunch: true, Stderr: []string{"llm: MV_LLM_MODEL_FILE is not set (single mode needs -m)"}}}}},
+		// T-463 review #1 Ma-1: the refusal of U11 printed the probe, and the
+		// probe carries the host and the path of the value. An @ after the first
+		// / may end a password with a bare / in it (C-15 v1.5), so the refusal
+		// names the variable instead. The double answers 404 on the unknown
+		// path, /health included, which is still "somebody answers". fakepw is a
+		// fake password.
+		{ID: "U19", Title: "up: somebody else answers, the value holds an @ after the first /: the refusal prints neither the value nor its host (T-463)", Script: scriptServer,
+			Env: upEnv(map[string]string{"MV_LLM_URL": "http://127.0.0.1:{PORT}/fakepw@x", "MV_LLM_MODEL_FILE": e}), Server: ownerLike(), Program: &DoubleConfig{},
+			Steps: []Step{{Action: "up", Expect: Expect{Exit: 1, NoLaunch: true,
+				Stderr: []string{"llm: the address of MV_LLM_URL (http://…) already answers 404 at /health and ops/llm-server.pid records no process of ours — refusing to start a second server on the same address",
+					"(the rest of the value and its host are not printed: the value holds an @"},
+				AbsentFold: []string{"fakepw", "@x"}}}}},
 		{ID: "D01", Title: "down: no pid file", Script: scriptServer,
 			Env:   map[string]string{"MV_LLM_URL": url},
 			Steps: []Step{{Action: "down", Expect: Expect{Exit: 0, Contains: []string{"llm: no live server in ops/llm-server.pid — nothing to stop"}}}}},

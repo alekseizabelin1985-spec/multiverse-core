@@ -141,7 +141,8 @@
 # --fixtures runs the linter over its own fixtures in testdata/compose-lint:
 # every bad-*.yml must be rejected by exactly the rule its `# expect-rule: N`
 # line names, and its message must contain every `# expect-text: ...` line of
-# the fixture; every good-*.yml must pass. A fixture rejected by another rule
+# the fixture and none of its `# expect-absent: ...` lines, in any letter case
+# (T-463); every good-*.yml must pass. A fixture rejected by another rule
 # proves nothing about its own (T-411 acceptance). The fixtures run side by
 # side and are judged in a fixed order afterwards (T-429).
 # Environment:
@@ -215,6 +216,7 @@ run_fixtures() {
   # `cat` of each one cost Git Bash more than the runs themselves (T-429).
   local re_rule='^# expect-rule:' re_num='^# expect-rule:[[:space:]]*([0-9]+)[[:space:]]*$'
   local re_text='^# expect-text:[[:space:]]*(.*)$' re_fired='\[rule ([0-9]+)\]'
+  local re_absent='^# expect-absent:[[:space:]]*(.*)$' folded
   # A moved, renamed or mistyped directory must not turn the self-test into a
   # silent pass (T-413 review #1 Mi-3): no fixtures is a failure, not a clean run.
   if [ ! -d "$dir" ]; then
@@ -347,8 +349,25 @@ run_fixtures() {
       continue
     fi
     ok=1
+    folded=${out,,}
     while IFS= read -r line || [ -n "$line" ]; do
       line=${line%$'\r'}
+      # `# expect-absent: ...` is a fragment the refusal must NOT contain, in
+      # any letter case: a fake password planted in the value (T-463). This
+      # failure does not echo the report — it holds the fragment. An
+      # `expect-text` failure of the same fixture below still echoes it, and a
+      # broken mask fails both, so the fragment does reach the output then; it
+      # is the fake value of a committed fixture (T-463 review #2 N-8).
+      if [[ $line =~ $re_absent ]]; then
+        text=${BASH_REMATCH[1]}
+        [ -n "$text" ] || continue
+        if [[ $folded == *"${text,,}"* ]]; then
+          echo "compose-lint: $bad was rejected by rule $expected, but the report prints '$text', which its '# expect-absent:' line forbids" >&2
+          ok=0
+          failed=1
+        fi
+        continue
+      fi
       [[ $line =~ $re_text ]] || continue
       text=${BASH_REMATCH[1]}
       [ -n "$text" ] || continue
@@ -708,8 +727,17 @@ PY
 : >"$work/llm-verdicts.bin"
 while IFS= read -r -d '' llm_service && IFS= read -r -d '' llm_key && IFS= read -r -d '' llm_url; do
   llm_endpoint_classify "$llm_url" "$llm_key"
-  printf '%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
-    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" >>"$work/llm-verdicts.bin"
+  # An @ anywhere in the value may end a password with a bare / in it, so rule
+  # 6 names the host of such a value in NO sentence — its own sentence of the
+  # cloud included, which does not come from the judge (C-15 v1.5, T-463 review
+  # #1 Ma-1). The flag travels with the verdict; the host itself is not blanked,
+  # so the verdict stays what the function said.
+  llm_masked=0
+  case "$llm_url" in
+  *@*) llm_masked=1 ;;
+  esac
+  printf '%s\0%s\0%s\0%s\0%s\0%s\0%s\0' "$llm_service" "$llm_key" "$LLM_CLASS" "$LLM_CLASS_KIND" \
+    "$LLM_CLASS_HOST" "$LLM_CLASS_ERROR" "$llm_masked" >>"$work/llm-verdicts.bin"
 done <"$work/llm-urls.bin"
 
 # Rule 3's second half needs the work tree, not the model. The scope is what
@@ -1018,13 +1046,20 @@ for name, svc in sorted(services.items()):
 # --------------------------------------------------------------------------
 # Rule 3 — no default credentials
 # --------------------------------------------------------------------------
+# `MV_.*_SALT`: MV_TELEGRAM_ACTION_KEY_SALT is a Secret() of the manifest whose
+# name ends past `_KEY`, and a literal salt in compose passed every rule until
+# it was named here (T-464).
 SECRET_KEY = re.compile(
     r"^(MINIO_ROOT_USER|MINIO_ROOT_PASSWORD|NEO4J_AUTH|NEO4J_PASSWORD"
-    r"|MV_.*_KEY|MV_.*_PASSWORD|MV_TELEGRAM_BOT_TOKEN)$"
+    r"|MV_.*_KEY|MV_.*_PASSWORD|MV_.*_SALT|MV_TELEGRAM_BOT_TOKEN)$"
 )
 # The ones the stack must refuse to start without: they need `${VAR:?}`, not a
-# default. MV_LLM_API_KEY and MV_ANTHROPIC_API_KEY are absent on purpose — an
-# empty cloud key is the normal, local case.
+# default. The secrets that are legitimately empty are absent on purpose, and
+# for them the advice is `${VAR:-}`, their manifest's empty default: an empty
+# MV_LLM_API_KEY or MV_ANTHROPIC_API_KEY is the normal, local case, and an
+# empty MV_TELEGRAM_ACTION_KEY_SALT derives the HMAC key of action_key from
+# the token (ADR-018, T-310). A `:?` on any of them would stop a stack that is
+# right to start (T-464 review #1 Mi-1, N-1).
 MUST_BE_REQUIRED = {
     "MINIO_ROOT_USER",
     "MINIO_ROOT_PASSWORD",
@@ -1035,6 +1070,24 @@ MUST_BE_REQUIRED = {
     "MV_NEO4J_PASSWORD",
     "MV_TELEGRAM_BOT_TOKEN",
 }
+# What a refusal prints in place of a value that belongs to a secret: the value
+# sits in the file under review, but not in the log of CI (C-15 v1.5 "a refusal
+# does not print the value"; T-464 review #1 N-2). Rule 8 uses it as well.
+WITHHELD = "<withheld>"
+
+
+def is_secret(name):
+    return bool(name) and SECRET_KEY.match(name) is not None
+
+
+def advice(key):
+    """The form rule 3 asks a secret to take instead of what it found."""
+    if key in MUST_BE_REQUIRED:
+        return f"use ${{{key}:?...}}"
+    return (f"use ${{{key}:-}}: an optional secret, empty by the manifest's "
+            "default (rule 8), and no `:?`, which would stop a stack that is "
+            "right to start")
+
 
 # Credentials as written, in every file and wherever they sit. Layout is not
 # part of the rule — `environment` may be a mapping or a list, a key may be
@@ -1063,9 +1116,9 @@ for compose_path, raw in raw_models:
         # text, which is a default credential like any other.
         refs = [r for r in interpolations(value) if r.name]
         if not refs:
-            note(3, where, f"{key} carries the literal {value!r}; use ${{{key}:?...}}")
+            note(3, where, f"{key} carries the literal {WITHHELD}; {advice(key)}")
         elif key in MUST_BE_REQUIRED and not any(r.op == ":?" for r in refs):
-            note(3, where, f"{key} has a default ({value!r}); a missing credential must "
+            note(3, where, f"{key} has a default ({WITHHELD}); a missing credential must "
                            "stop the stack, so it needs ${VAR:?}")
 flush()
 
@@ -1121,7 +1174,8 @@ for name, svc in sorted(services.items()):
         )
 
 # The verdicts of llm_endpoint_classify (scripts/lib/llm-endpoint.sh), taken
-# in bash before this program started: service, key, class, kind, host, error.
+# in bash before this program started: service, key, class, kind, host, error,
+# and 1 when the value holds an @ (then no sentence names the host, T-463).
 # No second copy of the rule lives here (T-450). The error is printed as the
 # function wrote it: llm_parse_url cuts the query and the fragment off the value
 # it echoes, and the user information in front of the last @ as well — before
@@ -1131,15 +1185,28 @@ for name, svc in sorted(services.items()):
 # log; the fixture bad-llm-url-userinfo holds that with a fake password.
 with open(os.path.join(work, "llm-verdicts.bin"), "rb") as fh:
     fields = [f.decode("utf-8", errors="replace") for f in fh.read().split(b"\0")[:-1]]
-if len(fields) % 6:
+if len(fields) % 7:
     print("compose-lint: the verdicts of llm_endpoint_classify are malformed "
-          f"({len(fields)} fields, want groups of 6)", file=sys.stderr)
+          f"({len(fields)} fields, want groups of 7)", file=sys.stderr)
     sys.exit(2)
-for i in range(0, len(fields), 6):
-    name, key, verdict, kind, llm_host, reason = fields[i:i + 6]
+for i in range(0, len(fields), 7):
+    name, key, verdict, kind, llm_host, reason, masked = fields[i:i + 7]
     if verdict == "local":
         continue
-    if verdict == "cloud":
+    if verdict == "cloud" and masked == "1":
+        # What the parser calls the host may be the head of a password
+        # (http://pw.example/x@10.0.0.5:8080), so neither the value nor the
+        # host is printed (C-15 v1.5, T-463 review #1 Ma-1).
+        fail(
+            6,
+            f"{name}: {key} points at a host which is not a local address "
+            f"(testdata/llm/local-endpoints.tsv); a cloud endpoint needs "
+            "MV_LLM_CLOUD_ENABLED=true and never a compose default "
+            "(SEC-15, ADR-005 add. 2 p. 3) (the value and its host are not "
+            "printed: the value holds an @, and what stands in front of it "
+            "may be a key)",
+        )
+    elif verdict == "cloud":
         fail(
             6,
             f"{name}: {key} points at {llm_host!r}, which is not a local address "
@@ -1341,15 +1408,24 @@ def fix_for(name, default, whole):
             f"${{{name}:-{default}}}, or require it with ${{{name}:?...}}")
 
 
-def check(where, ref, whole):
+def check(where, ref, whole, hidden=False):
+    # `hidden`: the interpolation is the value of a secret's key, or of a
+    # secret's own interpolation around it — then no refusal prints what was
+    # written (WITHHELD of rule 3; T-464 review #1 N-2).
+    hidden = hidden or is_secret(ref.name)
     # Not inside the message of `:?`/`?`: compose evaluates it only on its way
     # to a refusal, so nothing in it reaches a container (see walk).
     if not ref.op.endswith("?"):
         for inner in ref.inner:
-            check(where, inner, False)
+            check(where, inner, False, hidden)
     name = ref.name
     if name is None:
         return
+
+    def shown(text):
+        return WITHHELD if hidden else repr(text)
+
+    written = f"${{{name}{ref.op}{WITHHELD}}}" if hidden and ref.arg else ref.text
     if name.startswith("MV_"):
         if unknown(where, name):
             return
@@ -1369,7 +1445,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{ref.text} falls back to the default only when {name} is unset: a .env "
+            f"{written} falls back to the default only when {name} is unset: a .env "
             f"line `{name}=` hands the container an EMPTY {name} instead of the default "
             f"of {source} ({default!r}); " + fix_for(name, default, whole),
         )
@@ -1378,7 +1454,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{ref.text} hands the process compose's own text when {name} "
+            f"{written} hands the process compose's own text when {name} "
             "is set and an EMPTY value when .env is silent - never the operator's "
             f"value and never the default of {source} (T-411 review #2 N-6); "
             + fix_for(name, default, whole),
@@ -1391,7 +1467,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{ref.text} has no default: when .env is silent the container "
+                f"{written} has no default: when .env is silent the container "
                 f"gets an EMPTY {name} instead of the default of {source} ({default!r}); "
                 + fix_for(name, default, whole),
             )
@@ -1399,7 +1475,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{ref.text} has neither a default nor `:?`: when .env is "
+                f"{written} has neither a default nor `:?`: when .env is "
                 f"silent the process gets an EMPTY {name}, not the default of {source} "
                 f"({default!r}), and shared/env reads set-to-empty as a value - for an "
                 "allow-list that is nobody (T-411 review #1 Mi-2); "
@@ -1411,7 +1487,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} falls back to another variable here ({value!r}), and "
+            f"{name} falls back to another variable here ({shown(value)}), and "
             f"{source} declares {default!r}: one value with two sources by "
             "construction (T-411 review #1 N-1); " + fix_for(name, default, whole),
         )
@@ -1422,7 +1498,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source} - two sources of one value (contracts.md §16 p. 5); "
             + fix_for(name, default, whole),
         )
@@ -1434,7 +1510,7 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{name} defaults to {value!r} here; {misshapen[0]!r} does not "
+                f"{name} defaults to {shown(value)} here; {shown(misshapen[0])} does not "
                 f"have the same shape as the manifest's default {default!r} ({want}) - "
                 "a network address may name a service of this network, but in the "
                 "shape the process reads (contracts.md §16 p. 5)",
@@ -1443,8 +1519,8 @@ def check(where, ref, whole):
             note(
                 8,
                 where,
-                f"{name} defaults to {value!r} here and to {default!r} in "
-                f"{source}; {foreign[0]!r} is not a service of this compose network, so "
+                f"{name} defaults to {shown(value)} here and to {default!r} in "
+                f"{source}; {shown(foreign[0])} is not a service of this compose network, so "
                 "it is a second, invented source of the value (T-411). Every item "
                 "must name a service of this file",
             )
@@ -1452,7 +1528,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source}; it is {NOT_NETWORK_ADDRESSES[name]}, and contracts.md §16 "
             "p. 5 keeps it out of the set of network addresses; "
             + fix_for(name, default, whole),
@@ -1467,7 +1543,7 @@ def check(where, ref, whole):
         note(
             8,
             where,
-            f"{name} defaults to {value!r} here and to {default!r} in "
+            f"{name} defaults to {shown(value)} here and to {default!r} in "
             f"{source} - two sources of one value (T-411); {name} is not in the "
             "explicit set of network addresses, the only variables compose may "
             "point at a service of its own network; "
@@ -1528,7 +1604,8 @@ for compose_path, raw in raw_models:
         in_env = item.parent.endswith(".environment") or (
             item.parent.startswith("x-") and "." not in item.parent and "[" not in item.parent)
         for ref in interpolations(item.text):
-            check(where, ref, whole=in_env and item.value is not None and ref.text == item.value)
+            check(where, ref, whole=in_env and item.value is not None and ref.text == item.value,
+                  hidden=is_secret(item.key))
 flush()
 
 # --------------------------------------------------------------------------
