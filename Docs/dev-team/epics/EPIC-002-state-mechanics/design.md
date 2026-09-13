@@ -1,8 +1,9 @@
 # Дизайн эпика EPIC-002 «Состояние и механика»
 
-Версия 0.1 · 2026-09-09 · architect#1 (TEAM-1) · статус: к нарезке tech-lead#1 (`tasks.md`), инкремент I1 — волна 1, I2 — после приёмки I1 тимлидом.
-Команда TEAM-1 · ветка `epic/EPIC-002-state-mechanics` (от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0) · G2 утверждён 2026-09-09.
-Основание: `plan/epics.md` v0.2 §2 «EPIC-002» (I1/I2, единый способ инициализации мира); `architecture/components/state-and-mechanics.md` v0.2 (детальная архитектура — **не дублируется**, ссылки по §); ADR-011 (хранение/снапшоты), ADR-012 (правила как данные), ADR-013 (версии/atomic); `contracts.md` v0.2 (C-01 v1.1, C-02 v1.1, C-03 v1.1, C-13, C-14 v1.1); `consolidation.md` §2 (S-1…S-10); `epics/EPIC-001-foundation/design.md` §5 (что уже есть после F-10).
+Версия 0.1.1 · 2026-09-13 · architect#1 (TEAM-1), редакционная правка v0.1.1 — tech-lead#1 · статус: нарезан (`tasks.md`), G3 утверждён 2026-09-09; инкремент I1 — волна 1, I2 — после приёмки I1 тимлидом.
+**История версий**: v0.1 — 2026-09-09, architect#1: дизайн к нарезке. **v0.1.1 — 2026-09-13, tech-lead#1: редакционная правка по сверке плана EPIC-002 с деревом (`journal.md` 2026-09-13), подход и объём не менялись.** Ссылки — на `contracts.md` v0.10. Ветка — от `develop`, вместо `integration/mvp-1` — контрольные слияния в `develop`. §5, строка C-01 — по C-01 v1.7. §8, паника — по C-01 v1.5. §8, источник bootstrap — по решению system-architect. §4.1 I1-10/I1-11 — `serve.go` и `test/e2e`. §11 — закрыт риск имени ветки.
+Команда TEAM-1 · ветка `epic/EPIC-002-state-mechanics` от `develop` 1c2ee7e (создана 2026-09-13, после контрольного слияния EPIC-001 → `develop`); задачи — ветки `task/T-NNN-<slug>` в своих папках · G2 утверждён 2026-09-09. ~~(от `integration/mvp-1` после тега `mvp-1/wave-0`; не создавать до конца волны 0)~~ заменено (v0.1.1).
+Основание: `plan/epics.md` v0.3 §2 «EPIC-002» (I1/I2, единый способ инициализации мира); `architecture/components/state-and-mechanics.md` v0.3 (детальная архитектура — **не дублируется**, ссылки по §); ADR-011 (хранение/снапшоты), ADR-012 (правила как данные), ADR-013 (версии/atomic), ADR-023 (остановка), ADR-024 (сигнатуры C-03), ADR-025 (таблица владения), ADR-027 (id из причины, двухшаговый дедуп); **`contracts.md` v0.10 (C-01 v1.7, C-02 v1.4, C-03 v1.2, C-13, C-14 v1.2)** ~~`contracts.md` v0.2 (C-01 v1.1, C-02 v1.1, C-03 v1.1, C-13, C-14 v1.1)~~; `consolidation.md` §2 (S-1…S-10); `epics/EPIC-001-foundation/design.md` §5 (что уже есть после F-10).
 
 ---
 
@@ -38,11 +39,11 @@
 
 ## 3. Подход
 
-1. **Стартуем от F-10, а не с нуля**: `shared/entity` v2, типы `mechanics` + `Load` + YAML, `FakeState` v0, `FixedMechanics`, фикстуры уже в `integration/mvp-1`. Первая задача I1 — не «написать entity», а «дополнить и покрыть тестами».
+1. **Стартуем от F-10, а не с нуля**: `shared/entity` v2, типы `mechanics` + `Load` + YAML, `FakeState` v0, `FixedMechanics`, фикстуры уже в `develop` ~~`integration/mvp-1`~~ (v0.1.1). Первая задача I1 — не «написать entity», а «дополнить и покрыть тестами».
 2. **Две независимые нитки в волне 1** (`teams.md` §4: developer#1 — `mechanics`, developer#2 — `entity`/`state`): `mechanics` — чистая библиотека, тестируется таблицами; `state` — над `memstore` + `membus`, без MinIO до задачи `objStore`.
 3. **Порядок I1** (`state-and-mechanics.md` §12): `entity` + схемы → `mechanics` (RNG, `Resolve`, `NPCTarget`, `Invariants`, `ChangesFor`) → `state` (memstore, Applier, факты; замена `FakeState` v0) → `objStore` + снапшоты → `bootstrap` + `mvctl world init` → recovery + `replay` → e2e S1/S3 → архив as-is.
 4. **I1-α как точка приёмки I1** внутри TEAM-1: `solo-30` на `FakeEncounter` + `FakeNarrator` (EPIC-003 T-219/T-220) + `Harness` v0 в одном процессе `--bus=memory --mode=replay`; затем живая игра через бота (EPIC-004 I1) на стенде.
-5. **I2 стартует по приёмке I1 тимлидом** (правило `epics.md` §2), слияние I2 — после интеграционного прогона I1; освободившийся слот уходит в 005-ops.
+5. **I2 стартует по приёмке I1 тимлидом** (правило `epics.md` §2), слияние I2 в `develop` — контрольным слиянием после интеграционного прогона I1 (v0.1.1: вместо `integration/mvp-1`, по постоянному разрешению пользователя от 2026-09-13); освободившийся слот уходит в 005-ops.
 
 ---
 
@@ -63,8 +64,8 @@
 | I1-7 | `state` персист + снапшоты | `store.go` (objStore), `intent.go`, `snapshot.go` | `Store` над `shared/objstore`; интент для пакетов > 1 сущности (в соло — пакет «встреча + игрок + NPC» из агента, §7.1); снапшот по `MV_STATE_SNAPSHOT_EVERY`, `SIGTERM`, admin; ротация K=5; `latest.json` указатель; `snapshot.created` | I1-6, F-5 |
 | I1-8 | `bootstrap` + `mvctl world init` | `bootstrap.go`, `cmd/mvctl/internal/world/{init,status}.go` | §4.10 `state-and-mechanics.md`; `EnsureBucket` с `BucketOptionsFor`; снапшот seq 0 `reason=bootstrap`; идемпотентность повторного запуска; `world status` | I1-7, F-4c |
 | I1-9 | `state` recovery + `health` + `admin` | `recovery.go`, `health.go`, `admin.go` | протокол §4.8 (a)–(g); `Routes(mux)` на `shared/runtime`; `/health` секция; `analytics.replay.completed mode=recovery`; `log_gap` | I1-7 |
-| I1-10 | `internal/replay` | `cursor.go`, `eventclock.go`, `timers.go`, `journal.go`, `recording.go`, `middleware.go` | §6; сборка в `cmd/multiverse` (`--mode=replay` → `EventClock`, `NullTimers`, middleware) — PR в `cmd/multiverse/main.go` через tech-lead#1 | F-2 |
-| I1-11 | e2e S1 / S3 | `internal/state/e2e_test.go` | `solo-30` (Harness v0 + `FakeEncounter` + `FakeNarrator`), `recovery` (10 ходов → `Stop/Start` in-process → `identical=true, llm_calls=0`), `--chaos=duplicate` | I1-8…I1-10, F-10 |
+| I1-10 | `internal/replay` | `cursor.go`, `eventclock.go`, `timers.go`, `journal.go`, `recording.go`, `middleware.go` | §6; сборка в `cmd/multiverse` (`--mode=replay` → `EventClock`, `NullTimers`, middleware) — правка `cmd/multiverse/serve.go` через tech-lead#1 (v0.1.1: флаги режима разбирает `serve.go`; ~~PR в `cmd/multiverse/main.go`~~) | F-2 |
+| I1-11 | e2e S1 / S3 | `test/e2e/{solo30,recovery}_test.go` (v0.1.1; ~~`internal/state/e2e_test.go`~~) | `solo-30` (Harness v0 + `FakeEncounter` + `FakeNarrator`), `recovery` (10 ходов → `Stop/Start` in-process → `identical=true, llm_calls=0`), `--chaos=duplicate` | I1-8…I1-10, F-10 |
 | I1-12 | архив as-is | `services/_archive/{services/entity-manager,services/rule-engine,shared/rules}` | `git mv` + `ARCHIVED.md` (U-1); только после зелёного S3 | I1-11 |
 
 Критерий готовности I1 (из `epics.md`): `mvctl world init` создаёт «Тёмный лес» из фикстур; 30 ходов соло на `FakeNarrator` без расхождений снапшота и журнала; рестарт → `identical=true`, `llm_calls=0`; участие в I1-α (живая игра через бота).
@@ -100,7 +101,7 @@
 | C-14 (снапшоты) | **поставщик формата** | `snapshot.created`, `latest.json`, порядок старта (`state` первым, `replay.completed` — сигнал остальным) | фикстура `latest.json` seq 0 |
 | `analytics.replay.completed` | совладение с EPIC-005 | файл схемы — EPIC-002; `mode=test`, `events_hash_match` — EPIC-005 через PR с ревью EPIC-002 | — |
 | C-13 (резерв `object`) | поставщик | пустые строки `object/monitor` в `OwnershipRules`; `level_violation` до `MV_SWARM_OBJECT_AGENTS_ENABLED` | — |
-| C-01 (шина/журнал/часы/рантайм) | потребитель | `Bus.Publish`, `Journal.ReadRange/Tail/End`, `PositionFromContext`, `Dedup`, `objstore`, `clock`, `runtime.Routes` | `membus` (EPIC-001) |
+| C-01 v1.7 (шина/журнал/часы/рантайм) | потребитель | `Bus.Publish`, `Journal.ReadRange/Tail/End`, `PositionFromContext`, `Dedup` (`Has`/`Add`, `IDs`/`Restore` — окно в снапшот, C-14 v1.2), `WithCauseID` для фактов State (решение — T-055), `objstore`, `clock`, `runtime.Routes`. Процесс ставит источники конструкторов в `cmd/multiverse/serve.go` (T-055; в replay — `EventClock`, T-060). `Delivery` перехватывает панику обработчика (v1.5), State как stateful-контекст останавливает мир сам. Подписка State, раздающая предложения worker'ам миров, — посредник доставки (v1.6). `Stop` отменяет контекст подписки до `Close` шины, `Close` обработчик не прерывает (v1.7, ADR-023) | `membus` — вторая реализация C-01 в `shared/eventbus/membus`, не заглушка (v0.1.1; ~~`membus` (EPIC-001)~~) |
 | C-04 (действия игрока) | потребитель косвенно (через предложения gateway) | `entity.create.proposed player/group`, `entity.update.proposed position/scope/rest` | `Harness` v0 (F-10) |
 | C-05 (`combat.decided` и др.) | потребитель косвенно (агент встречи публикует предложения) | `entity.update.proposed cause=combat` из `ChangesFor` | `testkit/swarm.FakeEncounter` (T-219) |
 | `internal/state/audit` (Go, внутри TEAM-1) | поставщик для 005-ops | `Recompute`, `Compare` | — (I2) |
@@ -125,11 +126,11 @@
 
 ## 8. Безопасность (что учтено)
 
-- Владение (`level_violation`) по `contracts.OwnershipRules` — агент/gateway не может менять чужие атрибуты (BR-16); `system` proposer только из `bootstrap` (`source=core/state`), `author` — только `mvctl`.
+- Владение (`level_violation`) по `contracts.OwnershipRules` — агент/gateway не может менять чужие атрибуты (BR-16); `system` proposer только из `bootstrap` (источник — **по решению system-architect**, v0.1.1: в реестре у `entity.*.proposed` издателя `core/state` нет; ~~`source=core/state`~~), `author` — только `mvctl`.
 - Admin-маршрут снапшота — `runtime.AdminOnly` (`X-Actor-Kind: ci`/оператор), loopback (ADR-009 п. 9).
 - В сущностях и фактах нет внешних ID и текста игроков (`player.said.text` не попадает в состояние); `privacy-scan` покрывает фикстуры.
 - Валидация схем при чтении (`MV_BUS_VALIDATE_ON_READ`) — невалидные предложения не доходят до Applier.
-- Панику в worker'е не глотаем (NFR-012): `/health fail`, мир останавливается.
+- ~~Панику в worker'е не глотаем (NFR-012): `/health fail`, мир останавливается.~~ Заменено (v0.1.1) по **C-01 v1.5** «Паника обработчика». `Delivery` перехватывает панику обработчика: без повтора, событие — в `dead_letters` с `ErrHandlerPanic`, лог `Error` со стеком и `handled=false`. Паника остаётся дефектом (NFR-012, `service_panics`). State не может доказать целостность мира после паники, поэтому ставит свой `recover` на границе worker'а и останавливает мир: `/health fail` (`state-and-mechanics.md` §9). Что обработчик отдаёт шине после остановки мира — решение T-055.
 
 ---
 
@@ -176,7 +177,7 @@
 | Снапшот по `session.ended` требует чтения `analytics_events` (S-10) | оставлено по ADR-003; в replay — по счётчику |
 | `Journal.End` на kafka под нагрузкой (high watermark) отстаёт от реального конца | `End` берётся до `ReadRange`, догон `Tail`'ом; contract-тест EPIC-001 |
 | `state` и `swarm` грузят один YAML независимо — рассинхрон версий при горячем изменении файла | горячая перезагрузка правил не в MVP-1; `rules_version` в `/health` обоих сверяет тест |
-| Ветка: `epic/EPIC-002-state` (`teams.md`) vs `epic/EPIC-002-state-mechanics` (задание) | tech-lead#1 фиксирует одно имя до создания |
+| ~~Ветка: `epic/EPIC-002-state` (`teams.md`) vs `epic/EPIC-002-state-mechanics` (задание)~~ | ~~tech-lead#1 фиксирует одно имя до создания~~ закрыт (v0.1.1): ветка `epic/EPIC-002-state-mechanics` создана 2026-09-13 от `develop` 1c2ee7e |
 | Допущение: `Harness` v0 достаточно для `group-3x30` до `Harness` v1 EPIC-004 | если нет — генератор `round.opened/closed` добавляется в `testkit/gateway` запросом к EPIC-004 (владелец) |
 
 Связь: ADR-003, ADR-011, ADR-012, ADR-013, ADR-021; C-02, C-03, C-14; `state-and-mechanics.md` v0.2 §16.
