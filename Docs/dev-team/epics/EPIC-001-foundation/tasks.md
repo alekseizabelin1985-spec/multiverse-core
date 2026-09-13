@@ -846,3 +846,28 @@
 - **Зависимости**: числа окончательны после T-438; до старта T-203 нужен хотя бы предварительный набор.
 - **Исполнитель и ветка**: architect#2 (EPIC-003), ветка `task/T-439-narrative-length-cap`.
 - **Владение (важно)**: задача стоит в индексе EPIC-001 как **передача** — она родилась из решения U-2. Сами правки идут в документы EPIC-003 (КД `components/swarm-llm-laws.md` §13.3–13.4, строки `:735` и `:977`, DoD T-203): вносит их **architect#2**, подтверждает **tech-lead#2**. Архитектор EPIC-001 в чужие документы не пишет. Дублировать ли строку в индексе EPIC-003 — решение оркестратора.
+
+### T-441: Delivery — не писать «parked», если запись в dead_letters не удалась · Размер: XS · Статус: done · Волна 1 (бэклог)
+- **Причина (ревью #1 T-436, Mi-1; строка бэклога раздела T-436)**: `Delivery.Deliver` (`shared/eventbus/delivery.go:128`) пишет `Warn` «event parked in dead letters» **до** записи в `dead_letters`. Если запись падает, событие не припарковано и не закоммичено, а лог утверждает обратное.
+  - После T-436 это путь kafka-адаптера: последняя попытка падающего обработчика заканчивается после `Close`, запись падает на `ErrClosed`, `stopped(loopCtx, …)` превращает её в `nil`. `Subscribe` возвращает `nil`, событие придёт снова, и ложный `Warn` — единственный след.
+  - У membus так было и раньше (T-395). Та же ошибка у `DeliverRaw`: «undecodable message parked in dead letters» тоже пишется до записи.
+- **Что сделать** (`shared/eventbus/delivery.go`; обе шины одной правкой, потому что обе читают через `Delivery`):
+  - строку «parked» писать только после успешной записи в `dead_letters`;
+  - при неудачной записи, включая ветку без приёмника, — строку «event not parked in dead letters; it stays uncommitted and will be delivered again» с причиной и ошибкой записи. Уровень — по исходу:
+    - шина закрыта (`ErrClosed`, `io.ErrClosedPipe` писателя kafka-go) — `Warn`: это штатный конец подписки под `Close`;
+    - запись упала на живой шине — `Error`: подписка падает, топик стоит;
+  - возврат ошибок, цепочку ошибки (C-01 v1.6) и коммит не менять; Go-API `shared/eventbus` не менять.
+- **DoD**:
+  - тест на лог для `Deliver` и `DeliverRaw`:
+    - запись удалась → одна строка «parked»;
+    - запись не удалась (закрытая шина, закрытый писатель, сбой на живой шине, нет приёмника) → строки «parked» нет, есть «not parked» нужного уровня с причиной;
+    - паника с неудачной записью → `Error` паники плюс «not parked»;
+  - мутант «вернуть безусловный `Warn` до записи» краснеет; контрольный мутант идёт первым; мутанты — в копии в scratch, не через `-overlay`;
+  - `go build ./... && go vet ./...`, `go test -short -count=1 ./...`, `golangci-lint run ./...` зелёные; dev-log заполнен.
+- **Метка**: `contract-change` не нужна — Go-API и контракт не меняются, меняются только текст и уровень строки лога. Правка `shared/eventbus` — с ревью system-architect по карте владения.
+- **Исполнитель**: developer#1. Ветка `task/T-441-no-false-parked-warn` (от эпика после T-436, `adadca5`).
+- **(приёмка tech-lead#2, 2026-09-13)** Принята после ревью #1 (0/0/2/1). Итерация 2 закрыла Mi-1, Mi-2 и N-1, исправления проверены при приёмке. Мои мутанты в копии в scratch: контрольный M0 красный; R1 (`err == io.ErrClosedPipe`), R2 (`err == ErrClosed`), H1 (без `handled`), «безусловный `Warn` до записи» на обоих путях, перевёрнутый уровень и `busClosed(cause)` — красные. `go build`/`go vet` — 0, `go test -short -count=1 ./...` — 27 ok, `golangci-lint run ./...` — 0 issues. Подробно — карточка `tasks/T-441.md`, «Приёмка».
+- **Бэклог (из T-441, 2026-09-13)** — отдельные задачи, не блокируют:
+  - Гонка в `Kafka.Close` (владелец `shared/eventbus`, EPIC-001; ревью #1 T-441, п. 1 бэклога). `closed=true` ставится под `mu` (`kafka.go:348`) раньше отмены `loopCtx` — после `stopReaders()` (`:364`) и в горутине `context.AfterFunc` (`:206`). Запись в `dead_letters` в этом промежутке получает `ErrClosed`, `stopped(loopCtx, …)` его не узнаёт: `Subscribe` возвращает «write dead letter … bus is closed» вместо `nil`, в логе — `Warn` с `bus_closed=true`. Правка: `stopped` принимает `errors.Is(err, ErrClosed)` или адаптер проверяет `k.closing.Err()`; unit-тест на `stopped` и мутант. Задачу заводит оркестратор.
+  - README `shared/eventbus`: одной строкой назвать исходы `Delivery` в логе — parked / not parked, `bus_closed`, уровни. Не срочно.
+  - Строка `logPanic` «event handler panicked; the event goes to dead letters» пишется до записи в `dead_letters` (NFR-012, C-01 v1.5 п. 3; T-441 её не трогала). При неудачной записи за ней теперь идёт «not parked». Переформулировать ли — вопрос к владельцу метрики `service_panics`.
