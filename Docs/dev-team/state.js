@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T12:34:45+03:00",
+  "updatedAt": "2026-09-13T13:15:30+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2388,15 +2388,40 @@ window.DEVTEAM_STATE =
         {
           "id": "T-052",
           "title": "Схемы EPIC-002 — ревизия, примеры и фикстуры valid/invalid",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-1/developer#2",
           "startedAt": "2026-09-13T12:32:53+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:12:59+03:00",
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.2",
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 39,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:32",
+              "to": "13.09 12:48",
+              "duration": "15m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:48",
+              "to": "13.09 13:01",
+              "duration": "12m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 13:01",
+              "to": "13.09 13:04",
+              "duration": "3m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 13:04",
+              "to": "13.09 13:12",
+              "duration": "8m"
+            }
+          ],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-052.md",
           "branch": "task/T-052-schemas-fixtures",
           "worktree": ".worktrees/T-052"
@@ -2668,6 +2693,20 @@ window.DEVTEAM_STATE =
           "spentMinutes": 0,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-071.md"
+        },
+        {
+          "id": "T-448",
+          "title": "Форма changed[] для append и remove, согласованная с правилом догона §4.4; proposal_id в entity.create.proposed (contract-change, до T-055)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "1.3",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-448.md"
         }
       ],
       "defects": [],
@@ -2705,15 +2744,18 @@ window.DEVTEAM_STATE =
         {
           "id": "T-201",
           "title": "A1 · shared/agent v2: типы блупринта, парсер, плейсхолдеры, чистка пакета",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in-progress",
+          "assignee": "TEAM-2/developer#1",
+          "startedAt": "2026-09-13T12:52:40+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-201.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-201.md",
+          "subwave": "A",
+          "branch": "task/T-201-agent-blueprint-v2",
+          "worktree": ".worktrees/T-201"
         },
         {
           "id": "T-202",
@@ -2726,7 +2768,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-202.md",
+          "subwave": "B"
         },
         {
           "id": "T-203",
@@ -2739,7 +2782,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-203.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-203.md",
+          "subwave": "C"
         },
         {
           "id": "T-204",
@@ -2752,7 +2796,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-204.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-204.md",
+          "subwave": "G"
         },
         {
           "id": "T-205",
@@ -2765,7 +2810,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-205.md",
+          "subwave": "B"
         },
         {
           "id": "T-206",
@@ -2780,7 +2826,8 @@ window.DEVTEAM_STATE =
           "timeLog": [],
           "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-206.md",
           "branch": "task/T-206-llm-gateway-types",
-          "worktree": ".worktrees/T-206"
+          "worktree": ".worktrees/T-206",
+          "subwave": "A"
         },
         {
           "id": "T-207",
@@ -2793,7 +2840,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-207.md",
+          "subwave": "B"
         },
         {
           "id": "T-208",
@@ -2806,7 +2854,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-208.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-208.md",
+          "subwave": "C"
         },
         {
           "id": "T-209",
@@ -2819,7 +2868,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-209.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-209.md",
+          "subwave": "D"
         },
         {
           "id": "T-210",
@@ -2832,7 +2882,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-210.md",
+          "subwave": "C"
         },
         {
           "id": "T-211",
@@ -2845,7 +2896,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-211.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-211.md",
+          "subwave": "E"
         },
         {
           "id": "T-212",
@@ -2858,7 +2910,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-212.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-212.md",
+          "subwave": "F"
         },
         {
           "id": "T-213",
@@ -2871,7 +2924,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-213.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-213.md",
+          "subwave": "G"
         },
         {
           "id": "T-214",
@@ -2924,7 +2978,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-216.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-216.md",
+          "subwave": "A"
         },
         {
           "id": "T-217",
@@ -2937,7 +2992,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-217.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-217.md",
+          "subwave": "F"
         },
         {
           "id": "T-218",
@@ -2950,7 +3006,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-218.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-218.md",
+          "subwave": "D"
         },
         {
           "id": "T-219",
@@ -3069,7 +3126,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-221.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-221.md",
+          "subwave": "L"
         },
         {
           "id": "T-222",
@@ -3082,7 +3140,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-222.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-222.md",
+          "subwave": "D"
         },
         {
           "id": "T-223",
@@ -3095,7 +3154,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-223.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-223.md",
+          "subwave": "E"
         },
         {
           "id": "T-224",
@@ -3108,7 +3168,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-224.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-224.md",
+          "subwave": "F"
         },
         {
           "id": "T-225",
@@ -3121,7 +3182,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-225.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-225.md",
+          "subwave": "G"
         },
         {
           "id": "T-226",
@@ -3134,7 +3196,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-226.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-226.md",
+          "subwave": "H"
         },
         {
           "id": "T-227",
@@ -3147,7 +3210,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-227.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-227.md",
+          "subwave": "I"
         },
         {
           "id": "T-228",
@@ -3160,7 +3224,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-228.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-228.md",
+          "subwave": "J"
         },
         {
           "id": "T-229",
@@ -3173,7 +3238,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-229.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-229.md",
+          "subwave": "H"
         },
         {
           "id": "T-230",
@@ -3186,7 +3252,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-230.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-230.md",
+          "subwave": "I"
         },
         {
           "id": "T-231",
@@ -3199,7 +3266,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-231.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-231.md",
+          "subwave": "J"
         },
         {
           "id": "T-232",
@@ -3212,7 +3280,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-232.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-232.md",
+          "subwave": "K"
         },
         {
           "id": "T-233",
@@ -3225,7 +3294,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-233.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-233.md",
+          "subwave": "I"
         },
         {
           "id": "T-234",
@@ -3238,7 +3308,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-234.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-234.md",
+          "subwave": "E"
         },
         {
           "id": "T-235",
@@ -3251,7 +3322,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-235.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-235.md",
+          "subwave": "G"
         },
         {
           "id": "T-236",
@@ -3264,7 +3336,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-236.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-236.md",
+          "subwave": "H"
         },
         {
           "id": "T-237",
@@ -3277,7 +3350,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-237.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-237.md",
+          "subwave": "K"
         },
         {
           "id": "T-238",
@@ -3290,7 +3364,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-238.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-238.md",
+          "subwave": "N"
         },
         {
           "id": "T-239",
@@ -3303,7 +3378,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-239.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-239.md",
+          "subwave": "M"
         },
         {
           "id": "T-240",
@@ -3316,7 +3392,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-240.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-240.md",
+          "subwave": "M"
         },
         {
           "id": "T-241",
@@ -3329,7 +3406,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-241.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-241.md",
+          "subwave": "L"
         },
         {
           "id": "T-242",
@@ -3342,7 +3420,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-242.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-242.md",
+          "subwave": "M"
         },
         {
           "id": "T-243",
@@ -3355,7 +3434,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-243.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-243.md",
+          "subwave": "N"
         },
         {
           "id": "T-244",
@@ -3368,7 +3448,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-244.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-244.md",
+          "subwave": "N"
         },
         {
           "id": "T-245",
@@ -3381,7 +3462,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-245.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-245.md",
+          "subwave": "N"
         },
         {
           "id": "T-246",
@@ -3394,7 +3476,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-246.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-246.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-247",
@@ -3407,7 +3490,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-247.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-247.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-248",
@@ -3420,7 +3504,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-248.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-248.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-249",
@@ -3433,7 +3518,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-249.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-249.md",
+          "subwave": "2.2"
         },
         {
           "id": "T-250",
@@ -3446,7 +3532,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-250.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-250.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-251",
@@ -3459,7 +3546,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-251.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-251.md",
+          "subwave": "2.3"
         },
         {
           "id": "T-252",
@@ -3472,7 +3560,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-252.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-252.md",
+          "subwave": "2.4"
         },
         {
           "id": "T-253",
@@ -3485,7 +3574,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-253.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-253.md",
+          "subwave": "2.3"
         },
         {
           "id": "T-254",
@@ -3498,7 +3588,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-254.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-254.md",
+          "subwave": "2.1"
         },
         {
           "id": "T-255",
@@ -3561,7 +3652,8 @@ window.DEVTEAM_STATE =
           "wave": null,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-256.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-256.md",
+          "subwave": "N"
         },
         {
           "id": "T-419",
@@ -3624,7 +3716,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-421.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-421.md",
+          "subwave": "J"
         },
         {
           "id": "T-422",
@@ -3637,7 +3730,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-422.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-422.md",
+          "subwave": "K"
         },
         {
           "id": "T-423",
@@ -3650,7 +3744,8 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-423.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-423.md",
+          "subwave": "L"
         },
         {
           "id": "T-424",
@@ -3663,12 +3758,13 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-424.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-424.md",
+          "subwave": "M"
         },
         {
           "id": "T-427",
           "title": "Действие до encounter.started: окно до подъёма агента встречи",
-          "status": "todo",
+          "status": "review",
           "assignee": null,
           "startedAt": null,
           "finishedAt": null,
@@ -3689,7 +3785,22 @@ window.DEVTEAM_STATE =
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
-          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md"
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-439.md",
+          "subwave": "A"
+        },
+        {
+          "id": "T-447",
+          "title": "Подключение llm, laws, swarm в cmd/multiverse — один ленивый стек (решение 7 ревизии 4)",
+          "status": "todo",
+          "assignee": null,
+          "startedAt": null,
+          "finishedAt": null,
+          "reviewIterations": 0,
+          "wave": 1,
+          "subwave": "L",
+          "spentMinutes": 0,
+          "timeLog": [],
+          "card": "epics/EPIC-003-swarm-llm-laws/tasks/T-447.md"
         }
       ],
       "defects": [],
@@ -3743,14 +3854,39 @@ window.DEVTEAM_STATE =
         {
           "id": "T-302",
           "title": "Хранилище gateway: SQLite, миграции goose",
-          "status": "in-progress",
+          "status": "done",
           "assignee": "TEAM-3/developer#2",
           "startedAt": "2026-09-13T12:09:07+03:00",
-          "finishedAt": null,
-          "reviewIterations": 0,
+          "finishedAt": "2026-09-13T13:09:07+03:00",
+          "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
-          "timeLog": [],
+          "spentMinutes": 60,
+          "timeLog": [
+            {
+              "stage": "Разработка",
+              "from": "13.09 12:09",
+              "to": "13.09 12:33",
+              "duration": "24m"
+            },
+            {
+              "stage": "Ревью",
+              "from": "13.09 12:33",
+              "to": "13.09 12:48",
+              "duration": "14m"
+            },
+            {
+              "stage": "Разработка 2",
+              "from": "13.09 12:48",
+              "to": "13.09 12:56",
+              "duration": "7m"
+            },
+            {
+              "stage": "Приёмка",
+              "from": "13.09 12:56",
+              "to": "13.09 13:09",
+              "duration": "12m"
+            }
+          ],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-302.md",
           "branch": "task/T-302-store-migrations",
           "worktree": ".worktrees/T-302"
@@ -7252,7 +7388,7 @@ window.DEVTEAM_STATE =
       "task": "T-301",
       "action": "T-301 OpenAPI/DTO/клиент",
       "startedAt": "2026-09-13T12:09:07+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:37:12+03:00"
     },
     {
       "instance": "developer#2",
@@ -7312,7 +7448,7 @@ window.DEVTEAM_STATE =
       "task": "T-050",
       "action": "ревью #1 T-050 (TEAM-1)",
       "startedAt": "2026-09-13T12:28:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:40:50+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -7322,7 +7458,7 @@ window.DEVTEAM_STATE =
       "task": "T-405",
       "action": "ревью #2 T-405 (TEAM-1)",
       "startedAt": "2026-09-13T12:31:56+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:50:58+03:00"
     },
     {
       "instance": "developer#1",
@@ -7332,7 +7468,7 @@ window.DEVTEAM_STATE =
       "task": "T-053",
       "action": "mechanics — Resolve, NPCTarget (*Actor, error), ChangesFor, dice.rolle",
       "startedAt": "2026-09-13T12:32:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T13:07:30+03:00"
     },
     {
       "instance": "developer#2",
@@ -7342,7 +7478,7 @@ window.DEVTEAM_STATE =
       "task": "T-052",
       "action": "Схемы EPIC-002 — ревизия, примеры и фикстуры valid/invalid",
       "startedAt": "2026-09-13T12:32:53+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:48:06+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -7352,7 +7488,7 @@ window.DEVTEAM_STATE =
       "task": "T-302",
       "action": "ревью #1 T-302 (TEAM-3)",
       "startedAt": "2026-09-13T12:33:57+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:48:45+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -7362,7 +7498,7 @@ window.DEVTEAM_STATE =
       "task": "T-444",
       "action": "T-444 ревизия контрактов 4 — документы",
       "startedAt": "2026-09-13T12:34:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:39:45+03:00"
     },
     {
       "instance": "developer#3",
@@ -7372,7 +7508,7 @@ window.DEVTEAM_STATE =
       "task": "T-445",
       "action": "T-445 линтер, реестр, схемы",
       "startedAt": "2026-09-13T12:34:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:45:24+03:00"
     },
     {
       "instance": "developer#2",
@@ -7382,7 +7518,7 @@ window.DEVTEAM_STATE =
       "task": "T-206",
       "action": "T-206 типы и конфиг LLM-шлюза",
       "startedAt": "2026-09-13T12:34:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T12:43:57+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -7392,6 +7528,226 @@ window.DEVTEAM_STATE =
       "task": "EPIC-003",
       "action": "индекс и DoD EPIC-003 под v0.10 и ревизию 4",
       "startedAt": "2026-09-13T12:34:45+03:00",
+      "finishedAt": "2026-09-13T12:52:20+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "ревью #1 T-301 (TEAM-3)",
+      "startedAt": "2026-09-13T12:37:12+03:00",
+      "finishedAt": "2026-09-13T12:54:46+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "ревью #1 T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T12:39:45+03:00",
+      "finishedAt": "2026-09-13T12:55:52+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "итерация 2 T-050: Mi-1–Mi-3, Nit",
+      "startedAt": "2026-09-13T12:40:50+03:00",
+      "finishedAt": "2026-09-13T12:57:03+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "ревью #1 T-206 (TEAM-2)",
+      "startedAt": "2026-09-13T12:43:57+03:00",
+      "finishedAt": "2026-09-13T12:58:16+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "ревью #1 T-445 (TEAM-1)",
+      "startedAt": "2026-09-13T12:45:24+03:00",
+      "finishedAt": "2026-09-13T13:15:30+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "итерация 2 T-302: Mi-1, Nit",
+      "startedAt": "2026-09-13T12:48:45+03:00",
+      "finishedAt": "2026-09-13T12:56:26+03:00"
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "ревью #1 T-052 (TEAM-3 в помощь TEAM-1)",
+      "startedAt": "2026-09-13T12:48:45+03:00",
+      "finishedAt": "2026-09-13T13:01:23+03:00"
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "итерация 3 T-405: Mi-1, Mi-2",
+      "startedAt": "2026-09-13T12:50:58+03:00",
+      "finishedAt": "2026-09-13T13:02:37+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-201",
+      "action": "T-201 shared/agent v2",
+      "startedAt": "2026-09-13T12:52:40+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "итерация 2 T-301: Mi-1–Mi-7, group_move",
+      "startedAt": "2026-09-13T12:54:46+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "итерация 2 T-444: Ma-1–Ma-3, Minor",
+      "startedAt": "2026-09-13T12:55:52+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-302",
+      "action": "приёмка T-302 (TEAM-3)",
+      "startedAt": "2026-09-13T12:56:26+03:00",
+      "finishedAt": "2026-09-13T13:09:07+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-050",
+      "action": "приёмка T-050 (TEAM-1)",
+      "startedAt": "2026-09-13T12:57:03+03:00",
+      "finishedAt": "2026-09-13T13:12:03+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-2",
+      "initiative": "EPIC-003",
+      "task": "T-206",
+      "action": "итерация 2 T-206: Secret, гейт, цены",
+      "startedAt": "2026-09-13T12:58:16+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "итерация 2 T-052: фикстуры replay, EPIC-005",
+      "startedAt": "2026-09-13T13:01:23+03:00",
+      "finishedAt": "2026-09-13T13:04:44+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-405",
+      "action": "приёмка T-405 (TEAM-1)",
+      "startedAt": "2026-09-13T13:02:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-052",
+      "action": "приёмка T-052 (TEAM-1)",
+      "startedAt": "2026-09-13T13:04:44+03:00",
+      "finishedAt": "2026-09-13T13:12:59+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-053",
+      "action": "ревью #1 T-053 (TEAM-1)",
+      "startedAt": "2026-09-13T13:07:30+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-301",
+      "action": "приёмка T-301 (TEAM-3)",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-444",
+      "action": "ревью #2 T-444 (TEAM-1)",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "PROJECT",
+      "task": "PROJECT",
+      "action": "пакет решений: T-050, T-053, T-206, T-448",
+      "startedAt": "2026-09-13T13:12:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-445",
+      "action": "итерация 2 T-445: depguard (б), $ в правилах",
+      "startedAt": "2026-09-13T13:15:30+03:00",
       "finishedAt": null
     }
   ],
