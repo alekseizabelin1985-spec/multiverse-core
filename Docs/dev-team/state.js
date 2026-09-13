@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-13T19:31:47+03:00",
+  "updatedAt": "2026-09-13T19:35:33+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2565,7 +2565,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-460",
           "title": "eventbus.Permanent и Policy.World (C-01 v1.10) с contract-тестом на обе шины (после T-456)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-13T19:18:49+03:00",
           "finishedAt": null,
@@ -9689,7 +9689,7 @@ window.DEVTEAM_STATE =
       "task": "T-460",
       "action": "Permanent и Policy.World, contract-тест",
       "startedAt": "2026-09-13T19:18:49+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-13T19:35:33+03:00"
     },
     {
       "instance": "developer#1",
@@ -9749,6 +9749,16 @@ window.DEVTEAM_STATE =
       "task": "T-461",
       "action": "Приёмка T-461 и индекс EPIC-001 (T-460, T-463)",
       "startedAt": "2026-09-13T19:31:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-460",
+      "action": "Ревью #1 Permanent и Policy.World",
+      "startedAt": "2026-09-13T19:35:33+03:00",
       "finishedAt": null
     }
   ],
@@ -13232,6 +13242,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-461 · ревью #1 (TEAM-1/code-reviewer#1): принять — 0/0/0/2. Текст правила байт в байт, существующие правила не ослаблены; 12 мутантов по ожиданию. N-1 тесты бота доходят до шины через shared/testkit/* (вопрос system-architect до T-315), N-2 надуманный путь internal/<x>/cmd/telegram-bot. Бэклог sys"
+    },
+    {
+      "at": "2026-09-13T19:35:33+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-460 выполнена TEAM-1/developer#2: eventbus.ErrPermanent/Permanent (nil → nil, errors.Is/As до причины); Delivery паркует Permanent сразу без пауз, при отменённом контексте возвращает ctx.Err() и не паркует, паника — по-прежнему ErrHandlerPanic; Policy.World (WorldOptional/WorldRequired) в Check пр"
     }
   ],
   "blockers": [],
