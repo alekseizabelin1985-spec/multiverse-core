@@ -17485,3 +17485,116 @@ Ma-1 закрыт. `data-model.md` §3 стал единственным ист�
 - Тела `/health` проверены чтением кода `shared/runtime` и `cmd/telegram-bot` на базе `e7adb6d`. Если `runtime.Status` получит поле перед `status` или `MarshalJSON` с другим порядком, разбор «первого ключа» сломается молча. Сейчас порядок держит только объявление структуры.
 - Байты `curl` проверены на `file://` и на отказе соединения, не на живом HTTP. `-w` пишет `curl` одинаково для любых протоколов.
 - Scratch ревьюера `t476r-health` и `t476r-curl` удаляется по точным путям после записи.
+
+## T-482 · ревью #1 · 2026-09-14 · code-reviewer#2 (TEAM-1)
+
+Папка `.worktrees/T-482`, ветка `task/T-482-ci-green-on-linux`, база `a3defd6`, коммитов нет. Проверялась рабочая копия: 10 файлов кода, запись T-482 в `dev-log.md`, карточка `tasks/T-482.md` (только чтение). Логи: прогон O из scratch оркестратора и последний завершённый прогон на `develop` — 34827849541 («checkpoint Q, CI on develop red», `55bbcdb`). Код этого прогона совпадает с базой `a3defd6`, разница только в `.dev-team.json` и `CLAUDE.md`. Модель Opus. Не коммитил, индекс не менял, CI не перезапускал. Docker, стек, `.env` и 127.0.0.1:8888 не трогал.
+
+### Что проверено
+
+**1. Правки тестов не ослабляют проверки.**
+- **`cmd/multiverse/dispatch_test.go`.** Направление перекрытия развёрнуто: манифест `MV_BUS=kafka`, флаг `--bus=memory`. Мутант M3 проверяет случай, когда флаг проигрывает манифесту: в `serve.go` `bus`/`busFrom` берутся из `env.Bus`. Он убит: `the_flag_overrides_the_manifest` падает на старте kafka при `MV_KAFKA_BROKERS=127.0.0.1:1`. При живом брокере случай поймает строка `kafka (MV_BUS)` ≠ `memory (--bus)`. Режим по-прежнему `replay` → `live`. Проверка не ослаблена.
+- **`internal/gateway/store/open_test.go`.** `os.WriteFile(path, nil, 0o600)` до `sql.Open`. Пустой файл SQLite принимает как новую базу, существующий файл права не расширяет, umask их только сужает. Утверждение «ошибка называет `auto_vacuum`» осталось, код `store` не менялся. На Windows `checkMode` возвращает nil, поэтому проверено чтением и логом CI: `links.db has mode 0644`.
+- **`internal/gateway/gatewaytest/gatewaytest_test.go`.** `t.TempDir()` создаёт подкаталог `001` с `0o777` минус umask, в CI это `0755`. `sqlitedir.Temp` — `os.MkdirTemp` (0700) с удалением в `t.Cleanup`. Тест смотрит `gateway.db` после `Close`, то есть до очистки. Смысл «каталог теста не удаляется» сохранён.
+- **`internal/gateway/snapshot_test.go`.** Таблицу `cursors` (`topic` — PRIMARY KEY) пишет только диспетчер эффектов (`consumer/dispatcher.go:609`). Снимок берёт курсор эффектов из той же таблицы (`snapshots.go`, `consumer.Cursors` + 1). Значит, ожидание `offset = 2` — ровно то условие, при котором `Effects[system_events] = 3`. Проверка, что снимок пишет курсоры 3/3/3, не ослаблена.
+- **`cmd/telegram-bot/internal/deliver/pace_test.go`.** `stop()` = `cancel()` + `<-done`. Повторный вызов из `defer` безопасен. Гонка в логе Q ровно такая: чтение `buf.String()` в `pace_test.go:88` против записи `slog` из горутины цикла. Остальные чтения `buf` в `loop_test.go` идут после `mustOnce` или `<-done`.
+- **`shared/testkit/gateway/stand_test.go`.**
+  - `stateAtRest` ждёт по условию с дедлайном `standTimeout`, опрос через `clock.RealTimers`, как в `heardOfTheFight`.
+  - Случай «фактов нет, Harness не знает сущность» теперь допустим. Harness узнаёт версию только из фактов (`record`), сид State ему не виден.
+  - Сравнение с версией последнего факта в журнале не слабее прежнего сравнения с `FakeState.Get`. Harness не может быть впереди журнала, а отставание от последнего факта ловится.
+  - Замечание — Mi-1: чтение Harness стоит после ожидания State.
+
+**2. Правка двойника EPIC-003 `FakeEncounter.fold`.**
+- **Монотонность.** Все наборы пакета закреплены `expected_version` (`changes.sets` → `Propose(…, true)`). State не выводит атрибуты сверх операций: `internal/state` не меняет `status` сам. Версия сущности растёт на 1 на непустой `changed`, факты об одной сущности идут по одному топику по порядку.
+- **Факт не новее рабочего view.** Такой факт — либо свой, уже применённый оптимистично пакет, либо конфликтующая чужая запись. Во втором случае пакет вернётся с `version_conflict`, и `rollback` восстановит view по `e.facts`. Там факт применён: у представления фактов версии идут строго по порядку.
+- **Повторная доставка** факта (at-least-once) раньше откатывала атрибуты `e.facts`. Теперь она идемпотентна. Это улучшение, а не маскировка.
+- **Другой дефект не маскируется.** Прежняя цепочка: поздний факт возвращает hp, `apply` делает `version++` на изменении, которого State не видит, отсюда конфликт, повтор и `drop` «world moved past the decision». Правка убирает первое звено. Молчание после `drop` остаётся отдельным вопросом, п. 3 бэклога исполнителя. Я его поддерживаю.
+- **Регрессионный тест.** Прогнал зонд-копию теста с распечаткой `system_events` в точке остановки `answerUntil`:
+  - оба `entity.update.proposed` (prop-4 и prop-14) лежат до фактов;
+  - State применил оба пакета;
+  - двойник прочитал факты prop-4 (encounter v2, player-A v2, wolf-alpha v2), когда view волка уже стоял на v3;
+  - факты prop-14 не прочитаны.
+
+  Комментарий теста точен, предусловие создаётся структурно (два `act` до `answer`), а не удачным порядком идентификаторов.
+- **Мутанты** через `go -overlay`, копии в scratch:
+
+| Мутант | Правка | Итог |
+|---|---|---|
+| K0 (контроль, первым) | `fold` не применяет атрибуты никогда (`&& false`) | KILLED: 7 тестов `shared/testkit/swarm` красные, overlay работает |
+| M1 | прежнее условие `len(ops) > 0` | KILLED: `TestALateFactOfAnOlderPackageDoesNotHealTheWolf` — «blow 3 is struck at 39 hit points, the blow before it left the wolf at 38» |
+| M2 | M1 на стенде, `-count=30 -cpu=1,2` | KILLED: `…HearsOfTheFightLast/fight-00` — «prop-lt00-46 lost the version race and never came back as a fact». Дефект исполнителя воспроизведён |
+| M3 | `serve.go`: `bus`/`busFrom` из манифеста, флаг проигрывает | KILLED: `the_flag_overrides_the_manifest` (см. п. 1) |
+
+**3. `scripts/backup-prune-test.sh`.**
+- SIGPIPE устранён. На Git Bash под `set -euo pipefail` новый конвейер на 200 000 строк `FAIL` — rc=0.
+- Соседние конвейеры безопасны. Строка 169 `printf | sed` — `sed` дочитывает вход. `grep -qF` в строке 634 читает файл, а не канал. Других `head`/`grep -q`/`grep -m` в канале в `backup-prune-test.sh` и `backup-prune.sh` нет.
+- Замечание — Mi-2: строка 164 может завершить прогон по другой причине.
+- Двойника `.ps1` у `backup-prune*` нет, паритет не нужен.
+
+**4. `testdata/script-parity/stand.go`, `listenFree`.**
+- **Утечки нет.** Слушатель, найденный с уже выданным портом, закрывается в цикле. Отложенное закрытие через замыкание на переменную `listener` срабатывает при провале `freePort` для `DEAD` и при провале `Setup`. После `serveInProcess` переменная обнуляется, и слушатель закрывает `srv.Close()` из `stop`.
+- **Раннего закрытия нет.** Слушатель открыт до `Setup`, но `Setup` со `Server` есть только у B04 (`matrixCopy`, копия файла), порт он не трогает.
+- **H52, H53, U19** (`Server` + `Program`) ведут себя как раньше: сервер в процессе слушает `PORT` до шагов.
+- `serveInProcess` не менялся.
+
+**5. Полнота по прогону 34827849541.** Упали `unit`, `integration`, `e2e`, `scripts-parity`. `race`, `contracts`, `security`, `compose-lint` зелёные, `image` пропущен.
+
+| Падение | Задания | Покрыто |
+|---|---|---|
+| `cmd/multiverse` `the_flag_overrides_the_manifest` | unit, integration, e2e | группа 1 |
+| `store` `TestOpenLinksRefusesAFileWithoutIncrementalVacuum` | unit, integration, e2e | группа 2 |
+| `testkit/gateway` стенд, fight-05 «harness 7, State 6» | unit | группа 3 |
+| `backup-prune-mutants`: «grep: write error: Broken pipe», Error 2 | scripts-parity | группа 4 |
+| `gatewaytest` `TestAFakeGatewayLeavesWhatTheTestPassed` 0755 | unit, integration, e2e | 5а |
+| `deliver` `TestAGatewayThatAnswersEmptyAtOnceIsPolledOncePerPause`, DATA RACE | unit, integration | 5б |
+| **`internal/gateway/consumer` `TestConsumerOnRedpanda/OutboxWhileTheBrokerIsAway`** (`redpanda_integration_test.go:838`): «turn.completed on the broker 2 (ids of the attempts [046a7250-…]), want one under the id of every attempt» | integration | **нет** — Ma-1 |
+
+- **Шаги, которые не выполнились.** В `unit` пропущен «Coverage floor of the core packages». В `scripts-parity` `make backup-prune-mutants` — последний шаг, `make scripts-parity` в этом прогоне зелёный. Задание `image` пропущено по зависимости. Эти шаги впервые пройдут только после исправлений.
+- **Остальные пакеты.** В `integration` все прочие пакеты `ok`, включая `internal/gateway/snapshot`, `shared/testkit/gateway` и `shared/testkit/swarm`. 5в и 5г в этом прогоне не проявились, в P они были.
+
+**6. `time.Sleep`/`time.Now`.** В добавленных строках нет `time.Sleep`, `time.Now`, `time.After`/`Tick`/`NewTimer`/`NewTicker`/`Since`/`Until`, `os.Getenv` и `log.Print*`. Ожидание в `stateAtRest` — `clock.RealTimers{}.After`. `time.Sleep(20 * time.Millisecond)` в `pace_test.go:82` и `time.Sleep` в `sqlitedir.Temp` были до задачи.
+
+### Прогоны (Windows, Git Bash, Go 1.26, без cgo — `-race` недоступен)
+
+| Прогон | Результат |
+|---|---|
+| `go build ./... && go vet ./... && go vet -tags e2e ./... && go vet -tags integration ./... && go vet ./testdata/script-parity` | ok |
+| `MV_KAFKA_BROKERS=127.0.0.1:1 go test -short -count=1 ./...` | rc=0, 59 пакетов ok, «Access is denied» не было |
+| `MV_KAFKA_BROKERS=127.0.0.1:1 go test -tags e2e -count=1 ./...` | rc=0, 61 пакет ok |
+| `go test -count=20 -cpu=1,2 -run "Stand\|Harness" ./shared/testkit/gateway/...` | ok, 28 с |
+| `go test -count=50 -cpu=1,2` обоих тестов стенда | ok, 42 с, 0 падений |
+| `go test -count=3 -cpu=1,2,4 ./shared/testkit/swarm/... ./internal/gateway/... ./cmd/telegram-bot/internal/deliver/ ./cmd/multiverse/` | ok, 20 пакетов |
+| стенд с правкой Mi-1 (overlay), `-count=40 -cpu=1,2,4` | ok, 0 падений |
+| `golangci-lint run ./...` | 0 issues |
+| `make backup-prune-mutants` | rc=0: P00, P02–P18 KILLED, P01 GREEN, P10 SKIPPED (symlink на Windows), «mutants ok» |
+
+### Замечания
+
+| # | Уровень | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Ma-1 | Major | прогон 34827849541, `integration`; `internal/gateway/consumer/redpanda_integration_test.go:838` | Цель задачи — «найти причину каждого падения на Linux и устранить». Последний завершённый прогон на `develop` (код = база) содержит десятое падение вне девяти причин. После 3 отказов `ack` при остановленном брокере и 4 попыток под одним id на брокере лежат **две** копии `turn.completed`. Подтест пришёл с T-316/T-473 и в CI впервые выполнился в этом прогоне: в O его не было, `integration` в P отменён. Без разбора `develop` останется красным и после слияния T-482. Это возможный дефект кода: публикация из outbox после тайм-аута клиента дублируется при возврате брокера. Возможно и завышенное ожидание теста при at-least-once (C-01). Отдельно от этого T473 measure — «heard every topic again 30.05s after the broker was back» | Разобрать причину: лог `integration` 34827849541, прогон пакета `internal/gateway/consumer` с тегом `integration` по одному разу с разрешения, отметка владельца EPIC-004. Либо оркестратор выделяет падение в отдельную задачу EPIC-004 (T-316/T-473) и сужает цель и DoD T-482 до девяти причин. Тогда Ma-1 закрывается этим решением |
+| Mi-1 | Minor | `shared/testkit/gateway/stand_test.go:137–138` | Комментарий `stateAtRest` обещает: Harness сравнивается с опубликованным «at once», потому что «a harness that returned before the fact is the defect the stand exists to catch». Но `h.Version(id)` читается **после** `stateAtRest`. Когда State отстаёт, Harness получает то же окно ожидания, до `standTimeout`, и отставший Harness успевает догнать факт незамеченным | Снять показание Harness до ожидания: `version, known := h.Version(id)`, затем `who, published := stateAtRest(…)`. Проверено overlay: `-count=40 -cpu=1,2,4` обоих тестов стенда — 0 падений. Harness к возврату `Run` в покое: `awaitReaction` ждёт факты всех названных сущностей |
+| Mi-2 | Minor | `scripts/backup-prune-test.sh:164` | Тот же класс, что группа 4: убитый мутант обрывает весь прогон. Если вывод убитого мутанта (код 1) не содержит строки `^FAIL`, `grep` вернёт 1, и `pipefail` + `set -e` завершат прогон кодом 1 молча, без «mutants ok» и без сообщения. Проверено на Git Bash. Код 1 без `FAIL` возможен, если мутант обрывает сам тест под `set -e`. Прежний конвейер вёл себя так же, но правка T-482 касается ровно этой строки и её комментарий обещает закрыть класс | `KILLED) awk '/^FAIL/ && n++ < 3 { print "          " $0 }' <<<"$out" ;;` — `awk` всегда выходит с 0 и дочитывает вход |
+| N-1 | Nit | `testdata/script-parity/stand.go:409–462` | `listenFree` повторяет цикл, блокировку и учёт `usedPorts` из `freePort` | `freePort` через `listenFree`: взять слушатель, закрыть, вернуть порт. Одна копия учёта портов |
+
+### Вердикт
+
+**Вернуть.** Critical: 0 · Major: 1 · Minor: 2 · Nit: 1.
+
+- В самом diff нет Critical и Major. Все девять причин разобраны верно, тесты не ослаблены, мутанты убиты.
+- Правка `fold` корректна по C-02/C-05 и ничего не маскирует. Стенд `-count=50 -cpu=1,2` зелёный.
+- Возврат — только из-за Ma-1: цель «CI на `develop` зелёный» по последнему завершённому прогону не достигается. Если оркестратор выделит падение `consumer` в отдельную задачу и сузит DoD, итерации 2 достаточно закрыть Mi-1 и Mi-2. Возможна и приёмка с их переносом.
+- Группы 2, 5а, 5б и 5в на Windows не воспроизводятся: права не проверяются, `-race` нет. Окончательно их подтвердит только CI на Linux.
+
+### Предложения в бэклог
+
+1. EPIC-004 (T-316/T-473): разбор дубля `turn.completed` после возврата брокера, если он не войдёт в T-482. Отдельно — 30 с на повторную подписку в T473 measure: это похоже на тайм-аут диалера, а не на backoff.
+2. devops (EPIC-001): поддерживаю п. 1 и 2 бэклога исполнителя. `head` под `pipefail` в `llm-bench.sh`/`llm-server.sh`, окно гонки порта у двойников-программ `script-parity`.
+3. devops (EPIC-001): сделать `make backup-prune-mutants` и `make scripts-parity` независимыми шагами задания `scripts-parity` (`if: always()` или раздельные задания). Сейчас падение первого скрывает результат следующих шагов.
+4. EPIC-003: п. 3 бэклога исполнителя (молчание после `drop`) — к system-architect, как предложил tech-lead#2.
+
+### Риски и допущения
+
+- Классификация Ma-1 как дефекта кода или теста не проверена: интеграционный прогон с Redpanda я не запускал. Воспроизводимость на Linux неизвестна, прогон был один.
+- Шаг «Coverage floor» в `unit` и задание `image` в CI ещё не выполнялись на этом коде.
+- Scratch ревьюера (`t482r-*`) удалён по точным путям после записи.

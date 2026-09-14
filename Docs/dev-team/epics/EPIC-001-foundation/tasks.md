@@ -1,6 +1,6 @@
 # Задачи EPIC-001 «Фундамент» (волна 0)
 
-Версия 0.1.7 · 2026-09-14 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
+Версия 0.1.8 · 2026-09-14 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
 **Правки сведения 3** (`architecture/consolidation.md` §14, `contracts.md` v0.4, `infrastructure.md` v0.3; внесено tech-lead#1): T-001 (F-1 — IDE-каталоги), T-004 (F-6a — `MINIO_REPO`/`LLAMACPP_BUILD`/`LLM_MODEL_DEFAULT`, `extra_hosts`, форк MinIO), T-006 (F-4b-1 — `Spec.Publishers`, строка gateway в `OwnershipRules`, `cause=forget`), T-007 (F-5 — `MV_LLM_*`, условные `OLLAMA_*`), T-008 (F-6b — `llm-server.*`, `make llm-*`, правило `compose-lint`), T-012 (F-7 — CODEOWNERS), T-013 (F-8 — `prompts.jsonl`, порядок E→C→A), T-017 (F-10d — `replay.completed`, `abandoned`), §0 (F-6 +0,5), §9 п. 1. Структура подволн и состав задач не менялись.
 **Правки ревизии контрактов T-416** (`contracts.md` v0.7; ADR-025 подтверждён, ADR-026, ADR-027; внесено tech-lead#1 2026-09-11): T-006 — пометка «таблица владения — единственная истина»; T-413 — пункты T-416 п. 15–16; §8 — `mvctl report`; §9 п. 4 — пометка. Новые задачи T-417 и T-418 завёл оркестратор. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 **Правки 2026-09-13 (tech-lead#1, приёмка T-461; версия 0.1.2)**: добавлены разделы T-460 (`in_progress`), T-461 (`done`) и T-463 (`todo`). Статусы T-400, T-403, T-404, T-408–T-412, T-414, T-417, T-418 и T-439 в заголовках разделов приведены к `state.js` (`todo` → `done`; бэклог приёмки T-456, п. 4). Тексты этих разделов не менялись.
@@ -9,6 +9,7 @@
 **Правки 2026-09-14 (tech-lead#1, приёмка T-470; версия 0.1.5 — после 0.1.4 приёмки T-464)**: добавлен раздел T-470 (`done`; раздела не было — задачу system-architect завёл оркестратор). В раздел T-468 внесён объём по C-15 v1.6 (передача T-470); строки для T-469 — в разделе T-470. T-466 (C-01 v1.11, КД State §6.1, §6.2) оркестратор закрыл как покрытую T-470; раздела T-466 в индексе нет. Тексты прочих разделов не менялись.
 **Правки 2026-09-14 (tech-lead#1, приёмка T-469; версия 0.1.6)**: T-469 — `done`; в разделе T-469 ветка приведена к факту (`task/T-469-compose-gateway-vars`), «восемь `MV_GATEWAY_*`» заменено на десять (добавлены две переменные T-307), добавлены итог приёмки, передача и бэклог. В разделе T-470 отмечен п. 1 передачи для T-469. Тексты прочих разделов не менялись.
 **Правки 2026-09-14 (tech-lead#1, приёмка T-476; версия 0.1.7)**: T-476 — `done`. В разделе T-476 проверка слияния T-059 заменена поиском коммита слияния задачи (`git log --merges … | grep -F 'Merge task/T-059-'`): прежний `grep T-059` по журналу `develop` находил служебные коммиты. Добавлены итог приёмки, передача, бэклог и ссылка на отметку по файлам EPIC-001 из T-059. Тексты прочих разделов не менялись.
+**Правки 2026-09-14 (tech-lead#1, приёмка T-482; версия 0.1.8)**: добавлен раздел T-482 (`done`; раздела не было — задачу завёл оркестратор, номер выдан им). В разделе: итог приёмки, передача (порядок слияния, `integration` красный до T-483) и бэклог п. 1–6; п. 3 закрыт при приёмке, п. 4 сведён с п. 2 бэклога T-454. Тексты прочих разделов не менялись.
 Команда TEAM-1 · ветка `epic/EPIC-001-foundation` (от `integration/mvp-1`, создана после F-0, коммит `744fb10`) · волна 0 · G2 утверждён 2026-09-09.
 Основание: `epics/EPIC-001-foundation/design.md` v0.1 (§4 подволны, §5 заглушки v0, §10 тестируемость); `architecture/infrastructure.md` v0.2 (§2.1–§2.5, §3.1–§3.4, §4.5, §4.6, §6.4, §10 чек-лист); `architecture/components/foundation.md` v0.2 (§1–§12, §14); `architecture/contracts.md` v0.2 (C-01, C-02, C-03, C-04, C-05, C-06, C-13, C-14, §17); `plan/epics.md` v0.2 §6; `plan/decomposition-review.md` §2, §3.3, §5.3; `plan/teams.md` §4; `plan/ownership.md` v0.2; ADR-001, ADR-004, ADR-007, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-021.
 
@@ -1514,3 +1515,49 @@
   4. devops (ревью #1): `$(COMPOSE) ps --services | grep -qx` под `pipefail` может дать 141 и показать поднятый сервис как `-`; заменить на `grep -x … >/dev/null`.
   5. devops (ревью #1): у `docker compose exec -T core /multiverse health` нет своего тайм-аута; решать вместе с п. 2.
   6. system-architect (приёмка): `infrastructure.md` §2.2, строка `make health` — среди причин кода ≠ 0 нет недоступного LLM при `LLM_STRICT=1`; вместе с п. 1.
+
+### T-482: CI на `develop` зелёный на Linux — тесты, зависящие от брокера, прав файлов, порядка подписок и SIGPIPE · Размер: M · Статус: done · Волна 1 (бэклог, срочно)
+- **Причина (оркестратор, 2026-09-14)**: workflow `go` красный на `develop` на каждом push с 2026-09-13 11:25. Прогоны: O — 34823893793, P — 34826902656, Q — 34827615499. Локально на Windows `make ci` зелёный. Номер выдан оркестратором.
+- **Ветка**: `task/T-482-ci-green-on-linux` от `epic/EPIC-001-foundation` (`a3defd6`), папка `.worktrees/T-482`.
+- **Связи**: T-483 (EPIC-004) — десятое падение, `internal/gateway/consumer` `TestConsumerOnRedpanda/OutboxWhileTheBrokerIsAway` (`integration`, прогон 34827849541). Вынесено решением оркестратора по Ma-1 ревью #1. Остальные связи: T-414, T-313/T-318, T-433/T-419, T-463, T-405, T-315.
+- **Файлы** (владельцы):
+  - EPIC-001 — `cmd/multiverse/dispatch_test.go`, `scripts/backup-prune-test.sh`, `testdata/script-parity/stand.go`;
+  - EPIC-004 — `internal/gateway/store/open_test.go`, `internal/gateway/gatewaytest/gatewaytest_test.go`, `internal/gateway/snapshot_test.go`, `cmd/telegram-bot/internal/deliver/pace_test.go`, `shared/testkit/gateway/stand_test.go`;
+  - EPIC-003 — `shared/testkit/swarm/fake_encounter.go` (`fold`), `fake_encounter_test.go`.
+- **Описание**: подробно — карточка `tasks/T-482.md`. Девять причин:
+  1. `--bus=kafka` в `dispatch_test` требовал брокер;
+  2. `links.db` создавался с umask 0644;
+  3. стенд сравнивал Harness с `FakeState.Get` раньше `store.Put`;
+  4. SIGPIPE `grep | head` под `pipefail` обрывал прогон мутантов;
+  5. а — `t.TempDir` 0755; б — гонка на `bytes.Buffer` лога; в — курсор эффектов отставал до `Stop`; г — гонка за порт двойника в процессе.
+
+  Попутно: `FakeEncounter.fold` откатывал view поздним фактом.
+- **DoD** (полностью — карточка):
+  1. Тест группы 1 не зависит от брокера.
+  2. Файл готовится с 0600, код `store` не ослаблен.
+  3. Стенд ждёт State по условию; `-count=50 -cpu=1,2` без падений.
+  4. `make backup-prune-test` и `make backup-prune-mutants` зелёные.
+  5. Падения 5а–5г разобраны, правки перечислены для владельцев.
+  6. build, vet (без тега, `e2e`, `integration`), `go test -short`, `-tags e2e`, `golangci-lint`, `make test` зелёные.
+  7. Карточка и `dev-log.md`.
+- **Метка**: нет. Production-код не менялся. Правка кода — только двойник `shared/testkit/swarm/fake_encounter.go` (EPIC-003), её подтвердил tech-lead#2.
+- **Исполнитель**: developer#2 (TEAM-1, Opus). Ревью — code-reviewer#2. Отметки владельцев EPIC-003 и EPIC-004 — tech-lead#2. Карточка — `tasks/T-482.md`.
+- **(приёмка tech-lead#1, 2026-09-14)** Принята. Ревью #1 (0/1/2/1), итераций ревью — 1; итерацию 2 проверила приёмка без ревью #2 (решение оркестратора). DoD 1–7, суженный до девяти причин, подтверждён прогонами.
+  - Ma-1 закрыт переносом в T-483. Mi-1 (Harness читается до ожидания State), Mi-2 (`awk` вместо конвейера, проверено под `pipefail`), N-1 (`freePort` через `listenFree`) закрыты.
+  - Прогоны: build и vet с тремя наборами тегов, `go test -short` и `-tags e2e` (59 и 61 пакет) — зелёные; `golangci-lint` — 0 issues; стенд `-count=50 -cpu=1,2` — ok; `make backup-prune-test` и `make backup-prune-mutants` (17 KILLED, P01 GREEN, P10 SKIPPED) — rc=0; `make scripts-parity "PARITY_ARGS=-jobs 1"` после N-1 — 113/0/2, порты 36/36, testcontainers во время прогона не было; `make test` с порогом покрытия — зелёный.
+  - Оговорка: «Access is denied» у `env`, `updates`, `render` — блокировка Windows; эти пакеты прогнаны через `go test -c`.
+  - Отметка владельца EPIC-001 по трём файлам — в карточке.
+  - **Передать** (подробно — карточка):
+    1. T-482 → `epic/EPIC-001-foundation`, затем контрольное слияние `epic/EPIC-001-foundation` → `develop` и push — первый push, который покажет CI на Linux. Условия порядка T-476 выполнены (`cmd/telegram-bot/e2e` в `develop`, слияние T-059 — `77d06ff`).
+    2. **`integration` останется красным до T-483.** Зелёными должны стать `unit` (с «Coverage floor»), `e2e`, `race`, `scripts-parity`, `contracts`, `security`, `compose-lint`.
+    3. Группы 2, 3, 5а–5г подтвердит только CI на Linux.
+    4. `make secrets-scan` после коммита, до push.
+- **Бэклог (из T-482, 2026-09-14)**:
+  1. devops (EPIC-001): `head` под `pipefail` в `scripts/llm-bench.sh:712,715,741` и `scripts/llm-server.sh:330,408`. Пока не падали: вход короткий. Заменить на `sed -n 1p`, `awk` или here-string без конвейера, как в T-482.
+  2. devops (EPIC-001): гонка портов у двойников-программ `script-parity`. `sc.Program` получает номер через `freePort` и слушает его сам, окно гонки остаётся. Варианты: повтор шага `up` при `address already in use` или передача слушателя дочернему процессу.
+  3. devops (EPIC-001), ревью #1 п. 3: независимые шаги CI для `backup-prune-mutants` и `scripts-parity`. **Закрыто при приёмке, задача не нужна**: у обоих шагов `backup-prune` задания `scripts-parity` уже стоит `if: ${{ !cancelled() }}` (T-463, Mi-5). Раздельные задания — только если понадобится отдельный статус в защите ветки.
+  4. tech-writer, сверка devops-engineer (EPIC-001): запись в runbook разработчика «локальный `make test` без cgo не ловит гонки (ОВ-5)». Падения 5б, 5в и группы 3 под `-race` видны только в CI. Совпадает с п. 2 бэклога T-454 — вести одной задачей.
+  5. EPIC-003 → system-architect, при нарезке рантайма встречи `internal/swarm`:
+     - правило «факт новее представления»: атрибуты факта применяются, только если его версия новее представления мира агента, — в дизайн `internal/swarm`;
+     - молчание после `drop` («world moved past the decision»): действие не получает ответа, и Harness ждёт дедлайн. Как агент сообщает шлюзу о сдавшемся действии (C-05 п. 1) — решает system-architect.
+  6. devops (EPIC-001), приёмка: «Access is denied» при запуске тестового exe на Windows бывает не только у `cmd/telegram-bot/internal/updates` (T-462), но и у `cmd/mvctl/internal/env` и `cmd/telegram-bot/internal/render`. Из-за этого `make test` локально останавливается до порога покрытия. Расширить T-462 или сделать общий обход.
