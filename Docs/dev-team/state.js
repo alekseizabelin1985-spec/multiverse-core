@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:31:37+03:00",
+  "updatedAt": "2026-09-14T10:34:28+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3047,7 +3047,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
@@ -11212,7 +11212,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Ревью #2: восстановление State",
       "startedAt": "2026-09-14T10:21:26+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:34:28+03:00"
     },
     {
       "instance": "developer#3",
@@ -11232,6 +11232,16 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "Ревью #1: make health, test-race",
       "startedAt": "2026-09-14T10:31:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Итерация 3: stateOverBus, from = to в roll-forward",
+      "startedAt": "2026-09-14T10:34:28+03:00",
       "finishedAt": null
     }
   ],
@@ -15777,6 +15787,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-476 выполнена devops-engineer#1: make health печатает настоящие статусы (ok/degraded/FAIL), degraded — сбой только при DEGRADED_STRICT=1 (по умолчанию), up/deploy/rollback вызывают health с DEGRADED_STRICT=0; RACE_E2E_PKGS во второй команде test-race; infrastructure.md §2.2/§2.3/§3.1/§7.2 (+§8, §9"
+    },
+    {
+      "at": "2026-09-14T10:34:28+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 · итерация 2 (developer#2): CauseInit убран из world.go, CanonicalPath в CatchUpChanged, log_gap проставляет fact_event_id, проба health 0 на ok/degraded, State без хранилища только над памятью, Ma-1 roll-forward проверяет весь интент до записи, Mi-2/Mi-3/N-1/N-2. Ревью #2 (code-reviewer#4): в"
     }
   ],
   "blockers": [],
