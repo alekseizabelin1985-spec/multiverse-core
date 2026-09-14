@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:18:34+03:00",
+  "updatedAt": "2026-09-14T10:21:26+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2686,6 +2686,12 @@ window.DEVTEAM_STATE =
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T10:18:34+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-476.md"
+        },
+        {
+          "id": "T-477",
+          "title": "shared/eventbus: остановка подписки и RebalanceTimeout 10 с",
+          "status": "todo",
+          "card": "epics/EPIC-001-foundation/tasks/T-477.md"
         }
       ],
       "defects": [],
@@ -3040,11 +3046,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -11145,7 +11151,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Итерация 2: Ma-1, решения архитектора, слияния",
       "startedAt": "2026-09-14T10:04:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:21:26+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -11175,7 +11181,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "io.EOF и RebalanceTimeout в shared/eventbus",
       "startedAt": "2026-09-14T10:05:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:21:26+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11195,6 +11201,16 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "degraded в make health, e2e бота в test-race",
       "startedAt": "2026-09-14T10:18:34+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#4",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Ревью #2: восстановление State",
+      "startedAt": "2026-09-14T10:21:26+03:00",
       "finishedAt": null
     }
   ],
@@ -15716,6 +15732,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "Заведена и запущена T-476 (devops-engineer#1, counters.task = 476): make health и документы считают degraded работающим процессом (решение system-architect#1 по T-059: мир uninitialized → degraded, проба принимает degraded; Makefile DEGRADED_STRICT, infrastructure.md §2.2/§2.3/§7.2, README/runbook) "
+    },
+    {
+      "at": "2026-09-14T10:21:26+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 · просмотр system-architect#2: io.EOF — nil из Subscribe/Tail только при отменённом контексте или Close шины, голый io.EOF при живых шине и контексте — ошибка чтения (C-01 v1.12 в ветке T-473, версия contracts v0.20 — по порядку слияний); окно глухоты — вариант (а) RebalanceTimeout = 10 с в Ka"
+    },
+    {
+      "at": "2026-09-14T10:21:26+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решения оркестратора по T-473: задача T-477 EPIC-001 «shared/eventbus: что считается остановкой подписки и RebalanceTimeout 10 с» (DoD — блоки А1–А4, Б1–Б3 из карточки T-473; вариант A — один интеграционный прогон ./shared/eventbus/... с остановкой своего контейнера Redpanda), counters.task = 477, р"
     }
   ],
   "blockers": [],
