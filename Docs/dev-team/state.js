@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:22:03+03:00",
+  "updatedAt": "2026-09-14T13:49:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2695,6 +2695,17 @@ window.DEVTEAM_STATE =
           "title": "shared/eventbus: остановка подписки и RebalanceTimeout 10 с",
           "status": "todo",
           "card": "epics/EPIC-001-foundation/tasks/T-477.md"
+        },
+        {
+          "id": "T-482",
+          "title": "CI на develop зелёный на Linux",
+          "status": "done",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T12:24:59+03:00",
+          "card": "epics/EPIC-001-foundation/tasks/T-482.md",
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T13:49:11+03:00",
+          "spentMinutes": 80
         }
       ],
       "defects": [],
@@ -3264,11 +3275,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "review",
+          "status": "done",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:20:42+03:00",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T12:41:42+03:00",
+          "spentMinutes": 77
         }
       ],
       "defects": [],
@@ -5045,11 +5058,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "review",
+          "status": "done",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:02:05+03:00",
-          "reviewIterations": 2
+          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T12:57:24+03:00",
+          "spentMinutes": 109
         },
         {
           "id": "T-479",
@@ -5073,6 +5088,15 @@ window.DEVTEAM_STATE =
           "title": "Нарратив хода по kind",
           "status": "todo",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-481.md"
+        },
+        {
+          "id": "T-483",
+          "title": "Дубль turn.completed в outbox после возврата брокера (CI integration)",
+          "status": "review",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T13:19:31+03:00",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-483.md",
+          "reviewIterations": 1
         }
       ],
       "defects": [],
@@ -11461,7 +11485,7 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "Приёмка T-475",
       "startedAt": "2026-09-14T12:22:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:41:42+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11471,6 +11495,86 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Ревью #2: SAVEPOINT, Sweep",
       "startedAt": "2026-09-14T12:22:03+03:00",
+      "finishedAt": "2026-09-14T12:57:24+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "CI develop зелёный на Linux",
+      "startedAt": "2026-09-14T12:24:59+03:00",
+      "finishedAt": "2026-09-14T12:57:24+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Ревью #1: CI на Linux",
+      "startedAt": "2026-09-14T12:57:24+03:00",
+      "finishedAt": "2026-09-14T13:19:31+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Отметки EPIC-003 и EPIC-004",
+      "startedAt": "2026-09-14T12:57:24+03:00",
+      "finishedAt": "2026-09-14T13:19:31+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Итерация 2: Mi-1, Mi-2",
+      "startedAt": "2026-09-14T13:19:31+03:00",
+      "finishedAt": "2026-09-14T13:39:07+03:00"
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Дубль turn.completed в integration CI",
+      "startedAt": "2026-09-14T13:19:31+03:00",
+      "finishedAt": "2026-09-14T13:39:07+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Приёмка T-482",
+      "startedAt": "2026-09-14T13:39:07+03:00",
+      "finishedAt": "2026-09-14T13:49:11+03:00"
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Ревью #1: дубль turn.completed",
+      "startedAt": "2026-09-14T13:39:07+03:00",
+      "finishedAt": "2026-09-14T13:49:11+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Приёмка T-483",
+      "startedAt": "2026-09-14T13:49:11+03:00",
       "finishedAt": null
     }
   ],
@@ -16190,9 +16294,86 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-478 · итерация 2 (developer#1): завершение хода в OnMechanics внутри SAVEPOINT — сбой публикации turn.completed откатывает только завершение, эффект и механика фиксируются, ход дозавершает следующий Sweep или повтор механики с тем же id; N-1, N-4…N-6; КД §7.7 — фраза на подтверждение architect#3. "
+    },
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние Q (постоянное разрешение): epic/EPIC-001-foundation → develop (4320d3c) — T-476; make ci BASE=develop — rc=0 (test-race SKIPPED без cgo, links-file SKIPPED без Developer Mode), secrets-scan чист; синхронизация develop → EPIC-002/003/004 без конфликтов; push develop и эпиков, gitl"
+    },
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "ОБНАРУЖЕНО: workflow go на GitHub для develop не проходил ни разу (первый прогон 13.09 11:25 и все последующие — failure; P отменён, Q в очереди). Контрольные слияния M…Q шли по локальному make ci на Windows. Падения на Linux: (1) cmd/multiverse dispatch_test the_flag_overrides_the_manifest зависит "
+    },
+    {
+      "at": "2026-09-14T12:41:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 принята tech-lead#2: DoD закрыт (стенд — в T-063), решения system-architect сверены с кодом (bootstrap только без latest.json на worker'е, 409; мутанты B2a–B2f, R409 — B2f выжил, в бэклог), Mi-1/N-1…N-3 приняты; бэклог 7 строк; индекс 0.1.11. Итераций ревью — 1. Коммит, ветка запушена, слита в"
+    },
+    {
+      "at": "2026-09-14T12:41:42+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 · решения architect#3 (итерация 2): фраза §7.7 про SAVEPOINT и Sweep подтверждена и уточнена (N-7: дозавершает Sweep, следующее событие механики того же типа или ack другого нарратива корреляции; N-10); N-3 — фраза в §5.5, код не меняется; правило для T-479 — закрытие сессии в той же точке сох"
+    },
+    {
+      "at": "2026-09-14T12:44:38+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Указание пользователя: по достижении первой версии (I1-α) — пауза; следующие шаги реализации пользователь назовёт сам. Решение оркестратора: доводятся текущие T-482 (CI develop на Linux) и T-478 (приёмка), затем контрольное слияние EPIC-002 (T-475) и EPIC-004 (T-478, T-480) в develop при зелёном CI;"
+    },
+    {
+      "at": "2026-09-14T12:57:24+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 принята tech-lead#3 (DoD, -count=10 -cpu=1,4 на итерации 2; отступления §7.7 и SAVEPOINT подтверждены architect#3; C-10 — T-481 заведена с карточкой; строки DoD T-479; З-43…З-46; индекс 0.1.17). Итераций ревью — 2. Коммит f9d5500, sync с эпиком (tasks.md: шапка 0.1.17, строка приёмки T-473 пер"
+    },
+    {
+      "at": "2026-09-14T12:57:24+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 выполнена developer#2: девять причин падений CI на Linux устранены — dispatch_test (манифест kafka, флаг memory), store/open_test (файл 0600), стенд testkit/gateway (ожидание по условию), дефект FakeEncounter.fold (поздний факт старого пакета откатывал hp — применять только при большей версии,"
+    },
+    {
+      "at": "2026-09-14T13:19:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 · отметки владельцев (tech-lead#2): EPIC-003 — правка FakeEncounter.fold соответствует C-02/C-05, закрыла и скрытый дефект дубля; EPIC-004 (по назначению оркестратора) — проверки не ослаблены, merge-file gatewaytest_test с T-480 без конфликтов. Ревью #1 (code-reviewer#2): вернуть — 0/1/2/1. Ma"
+    },
+    {
+      "at": "2026-09-14T13:39:07+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 · итерация 2 (developer#2): Mi-1 порядок чтения версии Harness до ожидания State, Mi-2 awk вместо grep под pipefail, N-1 freePort через listenFree; цель сужена до девяти причин (десятая — T-483). Приёмка — tech-lead#1 (без ревью #2)."
+    },
+    {
+      "at": "2026-09-14T13:39:07+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-483 выполнена developer#3: дефекта шлюза нет — kafka-go v0.4.51 на Linux повторяет пачку при ECONNREFUSED после истечения срока WriteMessages, вторая копия turn.completed ложится на брокер с тем же id (на Windows WSAECONNREFUSED не временная — дубля нет); C-01 at-least-once и КД §5.5/§7.7 это допу"
+    },
+    {
+      "at": "2026-09-14T13:49:11+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 принята tech-lead#1 (итерация 2 без ревью #2; суженный DoD из девяти причин; scripts-parity 113/0 после N-1; make test с обходом Access is denied у env/updates/render; бэклог 6 пунктов, п. 3 закрыт — шаги backup-prune уже if: !cancelled()). Итераций ревью — 1. Коммит, ветка запушена, слита в e"
+    },
+    {
+      "at": "2026-09-14T13:49:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-483 · ревью #1 (code-reviewer#3): принять — 0/0/0/2. Механизм подтверждён по коду kafka-go v0.4.51 (WriteMessages после отмены контекста дописывает пачку, ECONNREFUSED на Linux временная, до 10 попыток ~7,4 с) и сходится с логом CI по числам; контракт C-01/КД §5.5, §7.7 допускает копию под тем же "
     }
   ],
-  "blockers": [],
+  "blockers": [
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "text": "CI на develop красный с 13.09 (Linux): T-482"
+    }
+  ],
   "risks": [
     {
       "id": "R-01",

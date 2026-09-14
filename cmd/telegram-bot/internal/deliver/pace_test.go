@@ -85,6 +85,9 @@ func TestAGatewayThatAnswersEmptyAtOnceIsPolledOncePerPause(t *testing.T) {
 		ob.clock.Advance(time.Millisecond)
 	}
 	waitUntil(t, func() bool { return len(ob.pollAfters()) == 4 })
+	// The loop logs from its own goroutine, and the buffer is not safe for a
+	// read beside a write: the log is read once the loop has stopped (T-482).
+	stop()
 	if !strings.Contains(buf.String(), "deliveries answered empty before the wait") {
 		t.Errorf("no line of the early empty answer:\n%s", buf.String())
 	}

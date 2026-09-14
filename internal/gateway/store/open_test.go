@@ -110,8 +110,15 @@ func checkPragmas(t *testing.T, db *sql.DB, want map[string]string) {
 // A links.db created elsewhere without auto_vacuum cannot be switched to it
 // by a PRAGMA once it has tables, and SQLite says nothing. Such a file would
 // keep a forgotten ID in its free pages, so Open must refuse it.
+//
+// The file is made 0600 before SQLite opens it: a file SQLite creates takes the
+// umask (0644 on Linux), and Open would refuse it for its mode before it ever
+// read auto_vacuum (T-482).
 func TestOpenLinksRefusesAFileWithoutIncrementalVacuum(t *testing.T) {
 	path := store.LinksPath(sqlitedir.Temp(t))
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	plain, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)

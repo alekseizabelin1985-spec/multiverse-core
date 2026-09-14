@@ -134,13 +134,17 @@ func standFight(t *testing.T, prefix string, late bool) {
 	// too early leaves exactly this behind — a version the world has left —
 	// and the next proposal of a script pinned to it is refused (ADR-013 p. 1).
 	for _, id := range []string{playerA, npcID} {
-		who, ok := fake.Get(id)
-		if !ok {
-			t.Fatalf("%s is not in the world State kept", id)
-		}
-		if version, known := h.Version(id); !known || version != who.Version {
+		// The harness is read before State is waited for: the wait must not give
+		// a harness that returned before the fact the time to catch up.
+		version, known := h.Version(id)
+		who, published := stateAtRest(t, bus, fake, id)
+		switch {
+		case published == 0 && known:
+			t.Errorf("the harness thinks %s is at version %d, and State has published no fact about it",
+				id, version)
+		case published != 0 && (!known || version != published):
 			t.Errorf("the harness thinks %s is at version %d, State says %d",
-				id, version, who.Version)
+				id, version, published)
 		}
 		if status, _ := who.Status(); entity.IsTerminalStatus(status) {
 			if held, known := h.Status(id); !known || held != status {
@@ -202,6 +206,62 @@ func standRefusals(t *testing.T, facts []eventbus.Event) {
 				"gave up instead of offering it again", proposal)
 		}
 	}
+}
+
+// stateAtRest is the entity as State keeps it and the version of the last fact
+// State published about it — zero when it published none — once the two agree,
+// waiting no longer than standTimeout for that.
+//
+// Both halves of the wait are the order of State and not patience. State
+// publishes a fact before it puts the entity into the view Get reads (§4.5
+// p. 11–12), and the harness returns from an action on the fact, so the view can
+// still be one version behind the harness for a moment (T-482). And a fight can
+// end without a blow on the wolf: then no fact names it, the harness has never
+// heard of it, and the version State holds is the one it was seeded with — the
+// journal, not the view, is what says whether there was anything to hear.
+//
+// Only State is waited for. The harness is compared with what State published
+// at once, because a harness that returned before the fact is the defect the
+// stand exists to catch.
+func stateAtRest(t *testing.T, bus *membus.Bus, fake *state.FakeState, id string) (*entity.Entity, int64) {
+	t.Helper()
+	deadline := testkit.After(standTimeout)
+	for {
+		published := lastFactVersion(read(t, bus, eventbus.TopicSystemEvents), id)
+		who, ok := fake.Get(id)
+		if !ok {
+			t.Fatalf("%s is not in the world State kept", id)
+		}
+		if published == 0 || who.Version == published {
+			return who, published
+		}
+		select {
+		case <-deadline:
+			t.Errorf("State published version %d of %s and still holds %d after %s",
+				published, id, who.Version, standTimeout)
+			return who, published
+		case <-clock.RealTimers{}.After(time.Millisecond).C():
+		}
+	}
+}
+
+// lastFactVersion is the version the last fact of State about the entity gave
+// it, or zero when State published no fact about it.
+func lastFactVersion(facts []eventbus.Event, id string) int64 {
+	var version int64
+	for _, ev := range facts {
+		if ev.Type != state.TypeCreated && ev.Type != state.TypeUpdated {
+			continue
+		}
+		pa := ev.Path()
+		if who, _ := pa.GetString("entity.entity.id"); who != id {
+			continue
+		}
+		if v, ok := pa.GetInt("version"); ok {
+			version = int64(v)
+		}
+	}
+	return version
 }
 
 // heardOfTheFight waits, no longer than standTimeout, until the harness has

@@ -9026,3 +9026,59 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Отметка по T-059.** Согласовано предварительно: итерация 3 не завершена, финальный `serve.go` проверю по её завершении. Место стража `OneStateOverTheWorld` в `shared/testkit/state` подтверждаю. Рекомендация для T-059: `TestRunHealth` должен проверять и stdout.
 - **Индекс.** `tasks.md` 0.1.7: T-476 `done`, проверка слияния, итог приёмки, бэклог п. 1–6.
 - Не коммитил, `git add` не делал, код не менял. `.env` не открывал, контейнеры и 127.0.0.1:8888 не трогал, в `.worktrees/T-059` не писал. Scratch `t476tl-*` удалён по точным путям.
+
+## developer#2 · T-482 · CI на `develop` зелёный на Linux: девять падений в тестах и стендах, дефект `FakeEncounter.fold` · 2026-09-14
+
+Рабочая папка `.worktrees/T-482`, ветка `task/T-482-ci-green-on-linux`, база `a3defd6`, Opus. Подробности в карточке `tasks/T-482.md`, раздел «Выполнение (developer)». Статус `review`.
+- **Разбор.** Логи прогонов O (34823893793), P (34826902656), Q (34827615499). Кроме четырёх групп из поручения нашлись ещё четыре падения: `gatewaytest` 0755, DATA RACE в `deliver/pace_test`, курсор эффектов в `snapshot_test`, «address already in use» в `script-parity`.
+- **Группа 1** (`cmd/multiverse/dispatch_test.go`). Перекрытие развёрнуто: манифест `kafka`, флаг `memory`. Причина: с T-444 контекст `gateway` читает `system_events` уже при старте. Без брокера падение воспроизведено, после правки прогон зелёный.
+- **Группа 2** (`store/open_test.go`). Файл создаётся с 0600 до SQLite. Код не менялся.
+- **Группа 3** (`testkit/gateway/stand_test.go`). `stateAtRest` ждёт по условию, пока State догонит свой последний факт: факт публикуется раньше `store.Put`. Harness сверяется с журналом без ожидания.
+- **Группа 3+, правка двойника EPIC-003** (`testkit/swarm/fake_encounter.go`). `fold` больше не пишет атрибуты факта, который не новее view. Раньше поздний факт возвращал hp, и следующий пакет проигрывал гонку версий. Добавлен регрессионный тест, мутант он ловит.
+- **Группа 4** (`scripts/backup-prune-test.sh`). Бомбы времени нет, `NOW` зафиксирован. Прогон обрывал SIGPIPE: `grep | head` под `pipefail`. Конвейер заменён на `grep <<<… | sed -n 1,3p`.
+- **5а–5г.** `gatewaytest` на `sqlitedir.Temp`. `pace_test`: `stop()` до чтения лога. `snapshot_test`: ожидание курсора эффектов. `script-parity/stand.go`: `listenFree` отдаёт двойнику открытый слушатель, а не номер порта.
+- **Прогоны.** Зелёные: `go build`, `go vet` (без тега, `e2e`, `integration`), `golangci-lint` (0 issues), `go test -short` и `-tags e2e` с `MV_KAFKA_BROKERS=127.0.0.1:1`, `make test`. Оба теста стенда `-count=50 -cpu=1,2` — 0 падений. `make backup-prune-test`, `make backup-prune-mutants`: 19 мутантов, все как должны. `make scripts-parity -jobs 1`: 113/0/2. `-race` локально нет (нет cgo). Группы 2, 5а, 5б, 5в подтвердит только CI на Linux.
+- **Отметки владельцев.** EPIC-001: 3 файла. EPIC-004: 5 файлов. EPIC-003: `fake_encounter.go` и его тест.
+- Не коммитил, `git add` не делал, CI не перезапускал. `.env`, стек и 127.0.0.1:8888 не трогал. Scratch `t482-*` удалён по точным путям.
+
+## tech-lead#2 · T-482 · отметки владельцев EPIC-003 и EPIC-004 (по назначению оркестратора) · 2026-09-14
+
+Рабочая папка `.worktrees/T-482`, база `a3defd6`, Opus. Подробности в карточке `tasks/T-482.md`, разделы «Отметка владельца EPIC-003 (tech-lead#2)» и «Отметка владельца EPIC-004 (по назначению оркестратора, tech-lead#2)».
+- **EPIC-003, подтверждено.** `FakeEncounter.fold` применяет атрибуты только факта новее представления. Это соответствует C-02: версия +1 на непустой `changed[]`, порядок в топике, at-least-once. C-05 п. 1 и 1б не затронуты: все наборы закреплены `expected_version`, чужой факт на той же версии даёт отказ и `rollback` из `e.facts`. Попутно закрыт откат `e.facts` дублем старого факта. Мутант прежнего условия убит.
+- **EPIC-003, совместимость.** Оба файла в `epic/EPIC-003-swarm-llm-laws` (`b38d162`) совпадают с develop, `merge-file` не понадобился. На экспорте кончика с патчем `go test -short -count=3 ./shared/testkit/swarm/... ./internal/swarm/... ./internal/laws/...` зелёный. Тесты T-452 (`died_at`/`killed_by`) прошли `-count=20`.
+- **EPIC-004, подтверждено.** Пять тестов не ослаблены, смысл T-308, T-309, T-315, T-480 сохранён. Пробный `git merge-file` `gatewaytest_test.go` против `dfcad6b` (T-480): rc=0, без конфликтов. `snapshot_test.go` в кончике совпадает с develop (T-473 уже там, T-478 файл не меняла) и прогнан на экспорте кончика с патчем.
+- **Прогоны.** Зелёные в рабочей папке и на экспорте `dfcad6b` с патчами: `go build ./... && go vet ./...` и `MV_KAFKA_BROKERS=127.0.0.1:1 go test -short -count=1 ./internal/gateway/... ./cmd/telegram-bot/... ./shared/testkit/...` (34 пакета). Повторы стенда `-count=20 -cpu=1,2` тоже зелёные. `-race` локально недоступен, гонки и права подтвердит CI на Linux.
+- **Бэклог EPIC-003.** Правило «новее представления» — в дизайн агента встречи `internal/swarm`. Молчание после `drop` — вопрос к system-architect.
+- Не коммитил, `git add` не делал, код не менял. `.env`, контейнеры и 127.0.0.1:8888 не трогал. `review.md` и `tasks.md` не трогал. Экспорты и scratch `t482tl2-*` удалены по точным путям.
+
+## developer#2 · T-482 · итерация 2 по ревью #1 (0/1/2/1) · 2026-09-14
+
+Рабочая папка `.worktrees/T-482`, ветка `task/T-482-ci-green-on-linux`, Opus. Подробности — карточка `tasks/T-482.md`, раздел «Итерация 2 (developer)». Статус `review`.
+- **Ma-1.** Закрыто решением оркестратора: падение `consumer` (`OutboxWhileTheBrokerIsAway`, integration) вынесено в T-483 (EPIC-004). Цель и DoD сужены до девяти причин.
+- **Mi-1.** В стенде версия Harness читается до ожидания State (`stateAtRest`).
+- **Mi-2.** Вывод убитого мутанта печатает `awk` без конвейера. Отсутствие строк `FAIL` больше не обрывает прогон.
+- **N-1.** `freePort` построен на `listenFree`, учёт портов в одном месте.
+- **Карточка.** Добавлены «Ревью (code-reviewer)», «Итерация 2 (developer)» и пустой «Учёт времени (оркестратор)». Разделы tech-lead#2 не тронуты.
+- **Прогоны.** Зелёные: `go vet ./...`; `go test -short` пакета стенда с `MV_KAFKA_BROKERS=127.0.0.1:1`; стенд `-count=20 -cpu=1,2` без падений; `golangci-lint` (0 issues); `make backup-prune-test`; `make backup-prune-mutants` (17 KILLED, 1 GREEN, 1 SKIPPED).
+- Не коммитил, `git add` не делал, CI не перезапускал. `.env` и 127.0.0.1:8888 не трогал. В основную папку не писал.
+
+<!-- dev-log T-482 acceptance -->
+## tech-lead#1 · T-482 · приёмка: итерация 2 без ревью #2, Mi-1, Mi-2, N-1 закрыты, Ma-1 — T-483 · 2026-09-14
+
+Рабочая папка `.worktrees/T-482`, ветка `task/T-482-ci-green-on-linux`, база `a3defd6`, Opus. Подробно — карточка `tasks/T-482.md`, раздел «Приёмка (tech-lead)».
+- **Решение: принять**, статус `done`. Итераций ревью — 1, итерацию 2 принял без ревью #2 по поручению оркестратора.
+- **DoD 1–7** (суженный до девяти причин) подтверждён. Ma-1 закрыт переносом в T-483. Mi-1: Harness читается до `stateAtRest`. Mi-2: `awk` без конвейера, под `set -euo pipefail` прогон на выводе без `FAIL` не обрывается (прежний конвейер — rc=1). N-1: `freePort` через `listenFree`.
+- **Прогоны.**
+  - Зелёные: `go build`, `go vet` (без тега, `e2e`, `integration`, `./testdata/script-parity`), `golangci-lint` (0 issues).
+  - `go test -short` и `-tags e2e` с `MV_KAFKA_BROKERS=127.0.0.1:1`: 59 и 61 пакет. `env`, `updates` («Access is denied») прогнаны через `go test -c`.
+  - Стенд `-count=50 -cpu=1,2` — ok.
+  - `make backup-prune-test` и `make backup-prune-mutants` — rc=0: 17 KILLED, P01 GREEN, P10 SKIPPED.
+  - `make scripts-parity "PARITY_ARGS=-jobs 1"` после N-1 — 113/0/2, порты 36/36. Запущен после конца интеграционного прогона T-483, опрос раз в минуту контейнеров testcontainers не нашёл.
+  - `make test`: `render` («Access is denied») прогнан через `go test -c`, порог покрытия — rc=0 (89.7 / 96.5 / 100 %).
+- **Отметка EPIC-001.** Правки `dispatch_test.go`, `backup-prune-test.sh`, `stand.go` подтверждаю. Все десять файлов кода в `develop` и эпиках EPIC-002, EPIC-003 совпадают с базой, в EPIC-004 отличается только `gatewaytest_test.go` (`merge-file` tech-lead#2 — без конфликтов).
+- **Передать.**
+  - T-482 → `epic/EPIC-001-foundation`, затем контрольное слияние эпика в `develop` и push — первый показ CI на Linux. Условия T-476 выполнены.
+  - `integration` останется красным до T-483.
+  - `make secrets-scan` после коммита, до push.
+- **Индекс.** `tasks.md` 0.1.8: раздел T-482 (`done`), итог приёмки, передача, бэклог п. 1–6. П. 3 (независимые шаги CI) закрыт — `if: ${{ !cancelled() }}` уже есть с T-463. П. 4 сведён с п. 2 бэклога T-454. П. 6 (приёмка) — «Access is denied» у `env` и `render`, к T-462.
+- Не коммитил, `git add` не делал, код не менял, CI не перезапускал. `.env` не открывал, стек и 127.0.0.1:8888 не трогал. Scratch-exe `t482tl_*` удалены по точным путям.

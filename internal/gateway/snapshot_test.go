@@ -336,6 +336,19 @@ func TestTheProjectionHashOfTheSnapshotIsTheStateHashOnFactsOfV16(t *testing.T) 
 	}
 	model := gateway.ReadModel(r.ctx)
 	eventually(t, "the facts to reach the projection", func() bool { v, _ := model.Version("player-A"); return v == truth.Version })
+	// The effects consumer reads the same facts on a subscription of its own and
+	// can be a fact behind the projection when Stop takes the snapshot; the
+	// cursors below are asserted once it has taken the last one, offset 2 (T-482).
+	gatewayDB, err := store.OpenGateway(context.Background(), store.GatewayPath(r.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = gatewayDB.Close() }()
+	eventually(t, "the facts to move the effects cursor", func() bool {
+		var offset int64
+		err := gatewayDB.QueryRowContext(context.Background(), `SELECT "offset" FROM cursors WHERE topic = ?`, eventbus.TopicSystemEvents).Scan(&offset)
+		return err == nil && offset == 2
+	})
 	for i, e := range fixture.Entities {
 		if e.ID == truth.ID {
 			fixture.Entities[i] = truth
