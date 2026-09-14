@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:34:28+03:00",
+  "updatedAt": "2026-09-14T10:40:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5034,6 +5034,18 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
           "reviewIterations": 1
+        },
+        {
+          "id": "T-478",
+          "title": "Ход с Phase 1 завершается после механики",
+          "status": "todo",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md"
+        },
+        {
+          "id": "T-479",
+          "title": "Конец сессии соло по leave и смерти",
+          "status": "todo",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-479.md"
         }
       ],
       "defects": [],
@@ -11192,7 +11204,7 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Ревью #2: e2e соло",
       "startedAt": "2026-09-14T10:05:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:40:13+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -11242,6 +11254,16 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Итерация 3: stateOverBus, from = to в roll-forward",
       "startedAt": "2026-09-14T10:34:28+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "Приёмка T-313, заведение T-478/T-479",
+      "startedAt": "2026-09-14T10:40:13+03:00",
       "finishedAt": null
     }
   ],
@@ -15793,6 +15815,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-059 · итерация 2 (developer#2): CauseInit убран из world.go, CanonicalPath в CatchUpChanged, log_gap проставляет fact_event_id, проба health 0 на ok/degraded, State без хранилища только над памятью, Ma-1 roll-forward проверяет весь интент до записи, Mi-2/Mi-3/N-1/N-2. Ревью #2 (code-reviewer#4): в"
+    },
+    {
+      "at": "2026-09-14T10:40:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313 · ревью #2 (code-reviewer#3): принять — 0/0/1/2. Ma-1 и Ma-2 закрыты (прогоны при -cpu=1,2 и под нагрузкой зелёные, зонд дублей красный), Mi-1/Mi-2 закрыты. Mi-3 narrative_event_id проверяется только при нескольких нарративах, N-5 граница mechanics_at, N-6 дубль запроса курсоров — решение орке"
     }
   ],
   "blockers": [],
