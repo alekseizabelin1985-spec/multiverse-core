@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:53:38+03:00",
+  "updatedAt": "2026-09-14T11:53:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5064,6 +5064,12 @@ window.DEVTEAM_STATE =
           "assignee": "developer#3",
           "startedAt": "2026-09-14T11:49:37+03:00",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-480.md"
+        },
+        {
+          "id": "T-481",
+          "title": "Нарратив хода по kind",
+          "status": "todo",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-481.md"
         }
       ],
       "defects": [],
@@ -11382,7 +11388,7 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Уточнения §7.7 и C-10 по T-478",
       "startedAt": "2026-09-14T11:42:48+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:53:59+03:00"
     },
     {
       "instance": "developer#3",
@@ -16071,6 +16077,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-475 выполнена TEAM-1/developer#1: mvctl world init --bus kafka предлагает по Redpanda только сущности без объекта в entities-{world} (state.WithObjects), ждёт ответы и просит снапшот seq 0 через admin-маршрут с телом {\"reason\":\"bootstrap\"} (400 invalid_reason/invalid_body); --force и --store memor"
+    },
+    {
+      "at": "2026-09-14T11:53:59+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 · решения architect#3: оба уточнения §7.7 приняты (механика по типу события — первое combat.decided для attack/flee, entity.updated для enter/leave/rest; счёт доставок до recipients_count), КД §7.7 дополнен; C-10 — вариант (б): нарратив хода — первый по офсету нужного kind (entry у enter/look,"
     }
   ],
   "blockers": [],
