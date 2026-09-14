@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T13:39:07+03:00",
+  "updatedAt": "2026-09-14T13:49:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2699,11 +2699,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-482",
           "title": "CI на develop зелёный на Linux",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T12:24:59+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-482.md",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T13:49:11+03:00",
+          "spentMinutes": 80
         }
       ],
       "defects": [],
@@ -11553,7 +11555,7 @@ window.DEVTEAM_STATE =
       "task": "T-482",
       "action": "Приёмка T-482",
       "startedAt": "2026-09-14T13:39:07+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T13:49:11+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11563,6 +11565,16 @@ window.DEVTEAM_STATE =
       "task": "T-483",
       "action": "Ревью #1: дубль turn.completed",
       "startedAt": "2026-09-14T13:39:07+03:00",
+      "finishedAt": "2026-09-14T13:49:11+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Приёмка T-483",
+      "startedAt": "2026-09-14T13:49:11+03:00",
       "finishedAt": null
     }
   ],
@@ -16342,6 +16354,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-483 выполнена developer#3: дефекта шлюза нет — kafka-go v0.4.51 на Linux повторяет пачку при ECONNREFUSED после истечения срока WriteMessages, вторая копия turn.completed ложится на брокер с тем же id (на Windows WSAECONNREFUSED не временная — дубля нет); C-01 at-least-once и КД §5.5/§7.7 это допу"
+    },
+    {
+      "at": "2026-09-14T13:49:11+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 принята tech-lead#1 (итерация 2 без ревью #2; суженный DoD из девяти причин; scripts-parity 113/0 после N-1; make test с обходом Access is denied у env/updates/render; бэклог 6 пунктов, п. 3 закрыт — шаги backup-prune уже if: !cancelled()). Итераций ревью — 1. Коммит, ветка запушена, слита в e"
+    },
+    {
+      "at": "2026-09-14T13:49:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-483 · ревью #1 (code-reviewer#3): принять — 0/0/0/2. Механизм подтверждён по коду kafka-go v0.4.51 (WriteMessages после отмены контекста дописывает пачку, ECONNREFUSED на Linux временная, до 10 попыток ~7,4 с) и сходится с логом CI по числам; контракт C-01/КД §5.5, §7.7 допускает копию под тем же "
     }
   ],
   "blockers": [
