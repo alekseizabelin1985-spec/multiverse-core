@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:10:50+03:00",
+  "updatedAt": "2026-09-14T03:12:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4702,9 +4702,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-313",
           "title": "e2e соло: solo-30, death, flee-fail",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -4730,9 +4730,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-315",
           "title": "e2e бота на фейках",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10929,6 +10929,26 @@ window.DEVTEAM_STATE =
       "action": "Грамматика пути в shared/entity",
       "startedAt": "2026-09-14T03:01:16+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "e2e соло: solo-30, death, flee-fail",
+      "startedAt": "2026-09-14T03:12:11+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-315",
+      "action": "e2e бота на фейках",
+      "startedAt": "2026-09-14T03:12:11+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -15257,6 +15277,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Синхронизация develop → EPIC-002 (d91ba59) с рецептом встречи правила 9 T-469 и MV_RULES_PATH T-471 в том же коммите: строка READERS (state, swarm) с комментарием, причина MV_SWARM_FAKE без «образ не несёт rules/», MV_RULES_PATH в фикстурах good-reach-host-only.yml и bad-reach-all.yml. make compose-"
+    },
+    {
+      "at": "2026-09-14T03:12:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Запущены: T-313 (e2e соло solo-30/death/flee-fail, developer#1) и T-315 (e2e бота на FakeUpdateSource/FakeSender/FakeGateway, developer#2) от кончика EPIC-004 585de13."
     }
   ],
   "blockers": [],
