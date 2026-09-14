@@ -175,6 +175,10 @@ func TestAWrittenPackageWhoseIntentStayedIsSentByItsRepeat(t *testing.T) {
 			if rec := recoveryOf(t, r); rec.RolledForward != 0 || rec.Accepted != 1 || rec.EventsReplayed != 1 {
 				t.Errorf("recovery %+v, want wolf-alpha taken in, player-A caught up and nothing rolled forward", rec)
 			}
+			// The world goes on with player-A before the repeat: the package is
+			// still written whole, its entity only past to_version (review #1 of
+			// T-059, Ma-1).
+			s.answered(t, hit(t, "prop-between", 1))
 			s.repeat(t, cut)
 			waitFor(t, "the fact of wolf-alpha", func() bool { return len(answersTo(t, s.bus.Bus, "prop-round")) == 2 })
 			s.answered(t, hit(t, "prop-after", 1))
@@ -571,6 +575,11 @@ func TestTheVectorsOfCatchingUp(t *testing.T) {
 		"two past the end":                      {map[string]any{"tags": []any{"wounded"}}, "tags[2]", true},
 		"no list, the second element":           {map[string]any{}, "tags[1]", true},
 		"null in place of the list, the second": {map[string]any{"tags": nil}, "tags[1]", true},
+		// C-02 v1.8b p. 2: State publishes canonical paths only (acceptance of
+		// T-472).
+		"an index spelled as a key":    {map[string]any{"tags": []any{"wounded"}}, "tags.0", true},
+		"an index with a leading zero": {map[string]any{"tags": []any{"wounded"}}, "tags[01]", true},
+		"a key spelled as a number":    {map[string]any{}, "a.+1", true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t)
@@ -626,5 +635,261 @@ func TestCatchingUpOnTheFactsOfTheLivePipelineGivesTheSameWorld(t *testing.T) {
 		if applied, err := caught.applier.CatchUpFact(fact); applied || err != nil {
 			t.Errorf("the fact %s a second time = %v, %v; want it passed over", fact.ID, applied, err)
 		}
+	}
+}
+
+// Review #1 of T-059, Ma-1 (probe P1): an intent outlives a package written
+// whole — its removal failed, which does not stop the world (§9) — and the world
+// goes on changing an entity of the package: past its to_version, or a turn
+// without a change under another proposal. The restart removes the intent,
+// writes nothing and serves the world; it is not a divergence.
+func TestAnIntentThatOutlivedItsPackageDoesNotStopTheWorld(t *testing.T) {
+	for name, later := range map[string]func(t *testing.T) eventbus.Event{
+		"a hit past to_version": func(t *testing.T) eventbus.Event { return hit(t, "prop-later", 1) },
+		"a turn without a change": func(t *testing.T) eventbus.Event {
+			return update(t, "prop-later", "author", true, set(ref("player-A", entity.TypePlayer), nil, op(entity.OpSet, "hp", 8)))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newStored(t)
+			c, _ := s.start(t)
+			s.seededRound(t)
+			s.objects.setDeleteHook(func(_, key string) error {
+				if strings.HasPrefix(key, "_intents/") {
+					return errors.New("the store refuses the delete")
+				}
+				return nil
+			})
+			publish(t, s.bus.Bus, round(t))
+			waitFor(t, "the answer to the round", advancing(s.sources.Clock, func() bool {
+				return len(answersTo(t, s.bus.Bus, "prop-round")) == 2
+			}))
+			s.objects.setDeleteHook(nil)
+			s.answered(t, later(t))
+			if n := len(intentsOf(t, s.objects.Memory)); n != 1 {
+				t.Fatalf("%d intents, want the one that outlived its package", n)
+			}
+			if err := stop(c); err != nil {
+				t.Fatalf("Stop: %v", err)
+			}
+			writes := len(s.objects.timeline.matching("put player/")) + len(s.objects.timeline.matching("put npc/"))
+
+			r, _ := s.start(t)
+			rec := recoveryOf(t, r)
+			if rec.Failure != nil || rec.RolledForward != 0 || r.Health().Status != runtime.StatusOK {
+				t.Fatalf("recovery %+v, health %+v; want a world served with nothing rolled forward", rec, r.Health())
+			}
+			if n := len(intentsOf(t, s.objects.Memory)); n != 0 || worldHealth(r, world)["pending_intents"] != int64(0) {
+				t.Errorf("%d intents and health %+v, want the intent removed", n, worldHealth(r, world))
+			}
+			if got := len(s.objects.timeline.matching("put player/")) + len(s.objects.timeline.matching("put npc/")); got != writes {
+				t.Errorf("%d entity writes by the restart, want none", got-writes)
+			}
+			s.answered(t, hit(t, "prop-after-restart", 1))
+			teststate.OneStateOverTheWorld(t, allOn(t, s.bus.Bus, eventbus.TopicSystemEvents))
+		})
+	}
+}
+
+// Review #1 of T-059, Ma-1: an intent that does not fit the world stops it, and
+// no entity of the intent is written — not even the one that would fit and is
+// checked first.
+func TestAnIntentThatDoesNotFitWritesNothing(t *testing.T) {
+	s := newStored(t)
+	c, _ := s.start(t)
+	s.seededRound(t)
+	if err := stop(c); err != nil {
+		t.Fatal(err)
+	}
+	player := s.objects.entityObject(t, world, entity.TypePlayer, "player-A")
+	if err := state.NewObjectStore(s.objects.Memory).PutIntent(context.Background(), world, &state.Intent{
+		ProposalID: "prop-cut", World: world, Cause: "combat",
+		Changes: []state.IntentChange{
+			{Ref: ref("player-A", entity.TypePlayer), FromVersion: 1, ToVersion: 2,
+				AttributesAfter: map[string]any{"hp": 1.0, "hp_max": player.Attributes["hp_max"]},
+				Changed:         []entity.Change{{Path: "hp", Old: 10.0, HasOld: true, New: 1.0, HasNew: true}}},
+			{Ref: ref("wolf-alpha", entity.TypeNPC), FromVersion: 5, ToVersion: 6,
+				AttributesAfter: map[string]any{"hp": 1.0},
+				Changed:         []entity.Change{{Path: "hp", Old: 10.0, HasOld: true, New: 1.0, HasNew: true}}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writes := len(s.objects.timeline.matching("put player/")) + len(s.objects.timeline.matching("put npc/"))
+
+	r, _ := s.start(t)
+	if rec := recoveryOf(t, r); !errors.Is(rec.Failure, state.ErrStateDivergence) || rec.RolledForward != 0 {
+		t.Fatalf("recovery %+v, want state_divergence with nothing rolled forward", rec)
+	}
+	if got := len(s.objects.timeline.matching("put player/")) + len(s.objects.timeline.matching("put npc/")); got != writes {
+		t.Errorf("%d entity writes, want none", got-writes)
+	}
+	if object := s.objects.entityObject(t, world, entity.TypePlayer, "player-A"); object.Version != 1 {
+		t.Errorf("the object of player-A at v%d, want v1: nothing of a divergent intent is written", object.Version)
+	}
+	if n := len(intentsOf(t, s.objects.Memory)); n != 1 {
+		t.Errorf("%d intents, want the intent kept for the operator", n)
+	}
+}
+
+// last_change.batch_size is the number of change sets applied, not written
+// (state-and-mechanics.md §4.5 p. 10, §19 p. 3): an entity written of a loose
+// package whose next write failed carries the whole number, and an audit sees
+// the part written by the entities that name the proposal.
+func TestAWrittenEntityOfAPackageCutInHalfCarriesTheAppliedBatch(t *testing.T) {
+	f, objects := newStoredFixture(t, state.ApplierConfig{})
+	f.seedWorld(t)
+	f.seed(t, "player-A", entity.TypePlayer, 1, map[string]any{"hp": 10})
+	f.seed(t, "wolf-alpha", entity.TypeNPC, 1, map[string]any{"hp": 10})
+	objects.setHook(func(_, key string) error {
+		if key == "npc/wolf-alpha.json" {
+			return errors.New("the process died")
+		}
+		return nil
+	})
+	loose := update(t, "prop-loose", "combat", false,
+		set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -2)),
+		set(ref("wolf-alpha", entity.TypeNPC), version(1), op(entity.OpInc, "hp", -3)))
+	if err := f.applyAdvancing(t, context.Background(), loose); !errors.Is(err, state.ErrPersistFailed) {
+		t.Fatalf("Apply = %v, want persist_failed at the second write", err)
+	}
+	player := objects.entityObject(t, world, entity.TypePlayer, "player-A")
+	if player.Version != 2 || player.LastChange.ProposalID != "prop-loose" || player.LastChange.BatchSize != 2 || player.LastChange.Atomic {
+		t.Errorf("the object of player-A %+v, want v2 of the loose package with batch_size 2", player.LastChange)
+	}
+	if intents := intentsOf(t, objects.Memory); len(intents) != 0 {
+		t.Errorf("%d intents of a loose package, want none", len(intents))
+	}
+}
+
+// noChangeRound is an atomic round whose second change set changes nothing:
+// wolf-alpha is set to the hp it has, so its version does not move
+// (from_version = to_version).
+func noChangeRound(t *testing.T) eventbus.Event {
+	return update(t, "prop-round", "author", true,
+		set(ref("player-A", entity.TypePlayer), version(1), op(entity.OpInc, "hp", -2)),
+		set(ref("wolf-alpha", entity.TypeNPC), version(1), op(entity.OpSet, "hp", 10)))
+}
+
+// Review #2 of T-059, Mi-4 (probe P3): an atomic package cut before the write
+// of its change without a change. The version does not tell whether wolf-alpha
+// is written, the proposal does: the restart rolls wolf-alpha forward under
+// prop-round, and the repeat sends both facts of the package.
+func TestAChangeWithoutAChangeOfACutPackageIsRolledForward(t *testing.T) {
+	s := newStored(t)
+	c, _ := s.start(t)
+	s.seededRound(t)
+	if _, err := c.Snapshot(context.Background(), world, state.SnapshotAdmin); err != nil {
+		t.Fatal(err)
+	}
+	s.objects.setHook(func(_, key string) error {
+		if key == "npc/wolf-alpha.json" {
+			return errors.New("the process died")
+		}
+		return nil
+	})
+	cut := noChangeRound(t)
+	publish(t, s.bus.Bus, cut)
+	waitFor(t, "the world to stop between the writes", advancing(s.sources.Clock, func() bool {
+		return worldHealth(c, world)["reason"] == "persist_failed"
+	}))
+	_ = stop(c)
+	s.objects.setHook(nil)
+
+	r, _ := s.start(t)
+	if rec := recoveryOf(t, r); rec.RolledForward != 1 || rec.Failure != nil {
+		t.Errorf("recovery %+v, want wolf-alpha rolled forward", rec)
+	}
+	wolf := s.objects.entityObject(t, world, entity.TypeNPC, "wolf-alpha")
+	if wolf.Version != 1 || wolf.LastChange == nil || wolf.LastChange.ProposalID != "prop-round" {
+		t.Errorf("the object of wolf-alpha %+v, want v1 under prop-round", wolf.LastChange)
+	}
+	s.repeat(t, cut)
+	waitFor(t, "both facts of the package", func() bool { return len(answersTo(t, s.bus.Bus, "prop-round")) == 2 })
+	s.answered(t, hit(t, "prop-after", 1))
+	if byEntity := idsByEntity(answersTo(t, s.bus.Bus, "prop-round")); len(byEntity["player-A"]) != 1 || len(byEntity["wolf-alpha"]) != 1 {
+		t.Errorf("facts %v, want one of each entity", byEntity)
+	}
+	if r.Health().Status != runtime.StatusOK {
+		t.Errorf("health %+v, want ok", r.Health())
+	}
+	teststate.OneStateOverTheWorld(t, allOn(t, s.bus.Bus, eventbus.TopicSystemEvents))
+}
+
+// Review #2 of T-059, Mi-4, the other side (probe P1 with a change without a
+// change): the package is written whole, its intent outlived it, and a turn
+// without a change on wolf-alpha under another proposal followed. The history
+// names prop-round: the restart does not write wolf-alpha again and serves the
+// world.
+func TestAWrittenChangeWithoutAChangeIsNotRolledForwardAgain(t *testing.T) {
+	s := newStored(t)
+	c, _ := s.start(t)
+	s.seededRound(t)
+	s.objects.setDeleteHook(func(_, key string) error {
+		if strings.HasPrefix(key, "_intents/") {
+			return errors.New("the store refuses the delete")
+		}
+		return nil
+	})
+	publish(t, s.bus.Bus, noChangeRound(t))
+	waitFor(t, "the answer to the round", advancing(s.sources.Clock, func() bool {
+		return len(answersTo(t, s.bus.Bus, "prop-round")) == 2
+	}))
+	s.objects.setDeleteHook(nil)
+	s.answered(t, update(t, "prop-later", "author", true, set(ref("wolf-alpha", entity.TypeNPC), nil, op(entity.OpSet, "hp", 10))))
+	if err := stop(c); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	writes := len(s.objects.timeline.matching("put npc/"))
+
+	r, _ := s.start(t)
+	if rec := recoveryOf(t, r); rec.RolledForward != 0 || rec.Failure != nil || r.Health().Status != runtime.StatusOK {
+		t.Fatalf("recovery %+v, health %s; want nothing rolled forward and a world served", rec, r.Health().Status)
+	}
+	if got := len(s.objects.timeline.matching("put npc/")); got != writes {
+		t.Errorf("wolf-alpha written %d times by the restart, want none", got-writes)
+	}
+	if wolf := s.objects.entityObject(t, world, entity.TypeNPC, "wolf-alpha"); wolf.LastChange.ProposalID != "prop-later" {
+		t.Errorf("the object of wolf-alpha under %s, want prop-later kept", wolf.LastChange.ProposalID)
+	}
+	if n := len(intentsOf(t, s.objects.Memory)); n != 0 {
+		t.Errorf("%d intents, want the intent removed", n)
+	}
+}
+
+// Review #2 of T-059, Mi-4, for the guard of a repeat (finishedIn): a package cut
+// before its change without a change is not finished, although wolf-alpha is at
+// its to_version. A repeat over the entity objects alone — a caller that did not
+// recover — publishes nothing and stops the world, as for any unfinished package.
+func TestARepeatOfAPackageCutBeforeItsChangeWithoutAChangeSendsNoFact(t *testing.T) {
+	first, objects := newStoredFixture(t, state.ApplierConfig{})
+	first.seed(t, "player-A", entity.TypePlayer, 1, map[string]any{"hp": 10})
+	first.seed(t, "wolf-alpha", entity.TypeNPC, 1, map[string]any{"hp": 10})
+	// The entities as they were before the round are in the store too: wolf-alpha
+	// is at its to_version there, which is what the guard must not take for
+	// written.
+	for _, id := range []string{"player-A", "wolf-alpha"} {
+		if err := state.NewObjectStore(objects).PutEntity(context.Background(), world, first.get(t, id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	objects.setHook(func(_, key string) error {
+		if key == "npc/wolf-alpha.json" {
+			return errors.New("the process died")
+		}
+		return nil
+	})
+	cut := noChangeRound(t)
+	if err := first.applyAdvancing(t, context.Background(), cut); !errors.Is(err, state.ErrPersistFailed) {
+		t.Fatalf("Apply = %v, want persist_failed before wolf-alpha", err)
+	}
+	objects.setHook(nil)
+
+	second := newStoredFixtureOver(t, objects, state.ApplierConfig{Store: loadedFrom(t, objects.Memory, world)})
+	if err := second.applier.Apply(context.Background(), cut); !errors.Is(err, state.ErrPersistFailed) {
+		t.Errorf("Apply of the repeat = %v, want persist_failed of an unfinished package", err)
+	}
+	if events := second.journal.all(); len(events) != 0 {
+		t.Errorf("published %v, want nothing of an unfinished package", types(events))
 	}
 }

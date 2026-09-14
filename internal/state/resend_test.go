@@ -272,7 +272,8 @@ func TestAFactSentAgainKeepsItsFirstIDUnderANewEvent(t *testing.T) {
 		t.Errorf("applied_at %s and timestamp %s, want the instant of the first proposal %s", at, fact.Timestamp, lost.Timestamp)
 	}
 	if cause, _ := fact.Path().GetString("cause"); cause != "combat" || fact.Meta.CausationID != lost.ID {
-		t.Errorf("cause %q caused by %s, want combat from the commit record and the first proposal %s", cause, fact.Meta.CausationID, lost.ID)
+		t.Errorf("cause %q caused by %s, want combat from the commit record and the first proposal %s (state-and-mechanics.md §4.5 p. 2)",
+			cause, fact.Meta.CausationID, lost.ID)
 	}
 	if fact.CorrelationID() != again.CorrelationID() {
 		t.Errorf("correlation %s, want that of the event at hand %s: the commit record keeps no envelope", fact.CorrelationID(), again.CorrelationID())

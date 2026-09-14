@@ -161,7 +161,7 @@ func (a *Applier) recover(ctx context.Context, journal eventbus.Journal, end int
 	}
 	if gap {
 		rec.LogGap = true
-		if err := a.rebuildFromObjects(ctx, snap); err != nil {
+		if err := a.rebuildFromObjects(ctx, snap, facts); err != nil {
 			return rec, err
 		}
 		return a.rollForward(ctx, rec)
@@ -230,7 +230,11 @@ func (a *Applier) intactSnapshot(ctx context.Context, pointer *LatestPointer) (*
 		return nil, "", err
 	}
 	for _, ref := range refs {
-		if ref.Key != pointer.Snapshot.Key && len(keys) < SnapshotsKept {
+		// Only the snapshots before the one latest.json names: an object newer
+		// than the pointer was written by a process that died before its
+		// pointer, and §4.8 rebuilds from the snapshot before (review #1 of
+		// T-059, N-2).
+		if ref.Seq < pointer.Snapshot.Seq && len(keys) < SnapshotsKept {
 			keys = append(keys, ref.Key)
 		}
 	}
@@ -307,7 +311,9 @@ func (a *Applier) setRecoveredSnapshot(pointer *LatestPointer, snap *Snapshot, f
 // The second result is a gap: the journal does not start at from — its first
 // offsets are gone past the retention, or it is a younger journal than the
 // snapshot (a memory bus after a restart) — so the facts after the cursor
-// cannot be read.
+// cannot all be read. The facts of the rest of the journal are returned with
+// it: they are not applied, they mark the objects they announced
+// (rebuildFromObjects).
 func (a *Applier) readFacts(ctx context.Context, journal eventbus.Journal, from, end int64) ([]eventbus.Event, bool, error) {
 	if from > end {
 		return nil, true, nil
@@ -335,7 +341,7 @@ func (a *Applier) readFacts(ctx context.Context, journal eventbus.Journal, from,
 	case ctx.Err() != nil:
 		return nil, false, fmt.Errorf("read %s stopped at %d of %d: %w", eventbus.TopicSystemEvents, next, end, ctx.Err())
 	case first != from:
-		return nil, true, nil
+		return facts, true, nil
 	case next < end:
 		return nil, false, fmt.Errorf("read %s stopped at %d of %d", eventbus.TopicSystemEvents, next, end)
 	}
@@ -343,12 +349,19 @@ func (a *Applier) readFacts(ctx context.Context, journal eventbus.Journal, from,
 }
 
 // rebuildFromObjects is the world after a gap of the journal (§4.8, "Разрыв
-// журнала"): the entity objects, which are never behind the snapshot. An object
-// at the version of the snapshot keeps the commit record of the snapshot, which
-// knows the fact that announced it; an object ahead of the snapshot does not
-// know whether its fact went out, and a repeat of its proposal publishes it
-// (under the id it was first derived with).
-func (a *Applier) rebuildFromObjects(ctx context.Context, snap *Snapshot) error {
+// журнала"; §19 p. 1): the entity objects, which are never behind the snapshot.
+//
+//   - An object at the version of the snapshot under the same proposal keeps the
+//     commit record of the snapshot, which knows the fact that announced it.
+//   - The facts the rest of the journal still holds are not applied — the
+//     objects are the truth — but mark the object they announced: an object
+//     with the id, the version and the proposal_id of a fact learns the id of
+//     that fact, so that a repeat of its proposal publishes nothing.
+//   - An object whose fact is not found does not know whether it went out, and
+//     a repeat of its proposal publishes it under the id it was first derived
+//     with, possibly a second time; consumers drop it by id. The fact could only
+//     have gone into the part of the journal that is lost.
+func (a *Applier) rebuildFromObjects(ctx context.Context, snap *Snapshot, facts []eventbus.Event) error {
 	objects, err := a.entityObjects(ctx)
 	if err != nil {
 		return err
@@ -357,16 +370,41 @@ func (a *Applier) rebuildFromObjects(ctx context.Context, snap *Snapshot) error 
 	for _, e := range snap.Entities {
 		known[e.ID] = e
 	}
+	announced := make(map[announcement]eventbus.Event, len(facts))
+	for _, fact := range facts {
+		announced[factKey(fact)] = fact
+	}
 	world := make([]*entity.Entity, 0, len(objects))
 	for _, object := range objects {
 		if held, ok := known[object.ID]; ok && held.Version == object.Version && sameProposal(held, object) {
 			object = entity.Clone(held)
+		} else if fact, ok := announced[objectKey(object)]; ok {
+			object.SetFactEventID(fact.ID)
 		}
 		world = append(world, object)
 	}
 	a.log.Warn("the journal no longer holds the facts after the snapshot; the world is rebuilt from the entity objects",
 		"code", "log_gap", "snapshot_id", snap.Snapshot.ID, "entities", len(world), "handled", true)
 	return a.store.Replace(a.worldID, world...)
+}
+
+// factKey and objectKey tell which object a fact announced: the entity, its
+// version and the proposal (§19 p. 1).
+type announcement struct {
+	entity   string
+	version  int64
+	proposal string
+}
+
+func factKey(ev eventbus.Event) announcement {
+	id, _ := ev.Path().GetString("entity.entity.id")
+	version, _ := ev.Path().GetInt("version")
+	proposal, _ := ev.Path().GetString("proposal_id")
+	return announcement{entity: id, version: int64(version), proposal: proposal}
+}
+
+func objectKey(e *entity.Entity) announcement {
+	return announcement{entity: e.ID, version: e.Version, proposal: proposalOf(e)}
 }
 
 // --- the facts of the journal (§4.8, the rule of catching up) ---
@@ -612,17 +650,27 @@ func (a *Applier) rollForward(ctx context.Context, rec Recovery) (Recovery, erro
 	return rec, nil
 }
 
+// rollForwardIntent writes the entities of one intent still behind it.
+// Every change of the intent is checked, and committed on a copy, before
+// anything is written (review #1 of T-059, Ma-1; review #2, N-5):
+//
+//   - an entity the package is written on (writtenBy) is left;
+//   - an entity at from_version is committed from the intent on a copy, and
+//     the commit has to reach to_version;
+//   - anything else — below from_version, not in the world, or changes that
+//     do not reach to_version — is a divergence, and no entity of the intent is
+//     written.
 func (a *Applier) rollForwardIntent(ctx context.Context, in *Intent) (int, error) {
-	rolled := 0
+	var behind []*entity.Entity
 	for _, change := range in.Changes {
 		held, ok := a.store.Get(a.worldID, change.Ref.ID)
 		switch {
 		case !ok:
-			return rolled, fmt.Errorf("%w: the intent of %s names %s, which the world does not hold", ErrStateDivergence, in.ProposalID, change.Ref.ID)
-		case held.Version == change.ToVersion && held.LastChange != nil && held.LastChange.ProposalID == in.ProposalID:
+			return 0, fmt.Errorf("%w: the intent of %s names %s, which the world does not hold", ErrStateDivergence, in.ProposalID, change.Ref.ID)
+		case writtenBy(held, in, change):
 			continue
 		case held.Version != change.FromVersion:
-			return rolled, fmt.Errorf("%w: the intent of %s takes %s from v%d to v%d, the world holds v%d",
+			return 0, fmt.Errorf("%w: the intent of %s takes %s from v%d to v%d, the world holds v%d",
 				ErrStateDivergence, in.ProposalID, change.Ref.ID, change.FromVersion, change.ToVersion, held.Version)
 		}
 		held.Commit(change.AttributesAfter, change.Changed, entity.LastChange{
@@ -630,9 +678,13 @@ func (a *Applier) rollForwardIntent(ctx context.Context, in *Intent) (int, error
 			AppliedAt: in.AppliedAt, Atomic: true, BatchSize: len(in.Changes),
 		})
 		if held.Version != change.ToVersion {
-			return rolled, fmt.Errorf("%w: the intent of %s takes %s to v%d, its changes give v%d",
+			return 0, fmt.Errorf("%w: the intent of %s takes %s to v%d, its changes give v%d",
 				ErrStateDivergence, in.ProposalID, change.Ref.ID, change.ToVersion, held.Version)
 		}
+		behind = append(behind, held)
+	}
+	rolled := 0
+	for _, held := range behind {
 		if err := a.withAttempts(ctx, in.ProposalID, "roll forward "+held.ID, func(out context.Context) error {
 			return a.objects.PutEntity(out, a.worldID, held)
 		}); err != nil {
@@ -646,6 +698,33 @@ func (a *Applier) rollForwardIntent(ctx context.Context, in *Intent) (int, error
 			"entity_id", held.ID, "version", held.Version, "handled", true)
 	}
 	return rolled, nil
+}
+
+// writtenBy reports whether the package of an intent is written on an entity.
+//
+//   - A change that moves the version: the entity is at to_version or past it.
+//     Past it when the intent outlived a package written whole — its removal
+//     failed, which does not stop the world (§9) — and the world went on. It
+//     cannot have gone on while the package was unwritten: the world stopped
+//     with persist_failed then, and the roll forward comes before any proposal.
+//   - A change without a change (from_version = to_version) does not tell by
+//     the version (review #2 of T-059, Mi-4): the entity is written when it has
+//     moved past, or when its commit record or its history names the proposal.
+//     The history keeps 50 entries, and 50 later turns on the entity can only
+//     come after the package was written whole.
+func writtenBy(e *entity.Entity, in *Intent, change IntentChange) bool {
+	if change.FromVersion != change.ToVersion {
+		return e.Version >= change.ToVersion
+	}
+	if e.Version > change.ToVersion || proposalOf(e) == in.ProposalID {
+		return e.Version >= change.ToVersion
+	}
+	for _, h := range e.History {
+		if h.ProposalID == in.ProposalID {
+			return e.Version >= change.ToVersion
+		}
+	}
+	return false
 }
 
 // --- the end of a recovery ---

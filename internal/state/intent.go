@@ -17,7 +17,8 @@ import (
 var ErrPersistFailed = errors.New("state: persist_failed")
 
 // persistPauses are the pauses between the attempts of one write: three more
-// attempts after the first (§4.5 p. 11).
+// attempts after the first (state-and-mechanics.md §4.5 p. 11, which names the
+// numbers below).
 //
 // They stack on the retries of the client of the object store: MinIO retries
 // a transient failure itself, three calls with 100 and 500 ms between them
@@ -151,13 +152,13 @@ func newIntent(p *Proposal, worldID string, entities []written) *Intent {
 	return in
 }
 
-// finishedIn reports whether every entity of an intent is already at its
-// to_version under the proposal of the intent: the package is written whole,
-// and only the removal of its intent failed.
+// finishedIn reports whether the package of an intent is written on every
+// entity (writtenBy): only the removal of its intent failed, and the world may
+// have changed its entities since (review #1 of T-059, Ma-1; review #2, Mi-4).
 func (a *Applier) finishedIn(in *Intent) bool {
 	for _, change := range in.Changes {
 		e, ok := a.store.Get(a.worldID, change.Ref.ID)
-		if !ok || e.Version != change.ToVersion || e.LastChange == nil || e.LastChange.ProposalID != in.ProposalID {
+		if !ok || !writtenBy(e, in, change) {
 			return false
 		}
 	}

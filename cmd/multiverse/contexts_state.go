@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state"
@@ -56,6 +57,30 @@ func newStateWithTheLaws() runtime.Context {
 // stateObjects is the object store of State; a test of the process puts its
 // own store here.
 var stateObjects = objectsFromEnv
+
+// stateOverBus refuses a process whose State would run without an object store
+// over a bus other than memory (state-and-mechanics.md §19): without a store
+// State reads system_events from offset 0 at every start, which is right for a
+// journal that dies with the process and would answer every proposal of a
+// broker again at every restart.
+//
+// It is a check of the configuration of the process, made by serve before the
+// contexts are built: the bus, the contexts and the keys are all the process
+// knows then, and the factory of State does not need the bus (review #2 of
+// T-059, Ma-2). A store that cannot be built is not refused here: the factory
+// names that error.
+func stateOverBus(bus string, names []string) error {
+	withState := slices.Contains(names, stateContext) || slices.Contains(names, runtime.All)
+	if bus == busMemory || !withState {
+		return nil
+	}
+	if objects, err := stateObjects(); objects != nil || err != nil {
+		return nil
+	}
+	return fmt.Errorf("state: without an object store state runs over the memory bus only, "+
+		"and this process runs over --bus %s: set %s and %s, or run --bus %s",
+		bus, env.MinIOAccessKey.Name(), env.MinIOSecretKey.Name(), busMemory)
+}
 
 // objectsFromEnv is a client over MV_MINIO_*, or none without the keys: a
 // process on the memory bus runs without MinIO and keeps its worlds in memory,

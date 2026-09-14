@@ -203,6 +203,10 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		// stopped before are what the store and the journal say, not what this
 		// process remembers.
 		store, appliers = memstore.New(), nil
+		// The window of event ids too: a restarted process has none, and an
+		// event handled before the Stop has to reach the worker again when it
+		// is delivered again (review #1 of T-059, N-1).
+		c.delivered = eventbus.NewDedup(c.cfg.DedupCapacity)
 		if from, err = journal.End(ctx, eventbus.TopicSystemEvents); err != nil {
 			return fmt.Errorf("state: end of %s: %w", eventbus.TopicSystemEvents, err)
 		}

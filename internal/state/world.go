@@ -6,10 +6,6 @@ import (
 	"multiverse-core.io/shared/entity"
 )
 
-// CauseInit is the cause of the proposals that bring a world into being: the
-// bootstrap of mvctl world init (§4.10).
-const CauseInit = "init"
-
 // A world recovery finds neither latest.json nor an entity object of is
 // uninitialized (state-and-mechanics.md §18): mvctl world init has not run
 // yet. Until the world entity is in the working set, State answers only the

@@ -134,10 +134,12 @@ func (a *Applier) resendUnpublished(ctx context.Context, p *Proposal) error {
 // uncommitted and is decided again once the intent is gone (review #1 of
 // T-057, question 2; decision of the orchestrator).
 //
-// An intent whose every entity is at its to_version under this proposal is
-// not unfinished: the package was written whole — before the cut, or by the
-// roll forward of recovery — and only the removal of its intent failed, which
-// does not stop the world (§9). Its facts are sent.
+// An intent whose package is written on every entity (finishedIn, writtenBy:
+// at to_version or past it, and for a change without a change the proposal in
+// the commit record or the history) is not unfinished: the package was written
+// whole — before the cut, or by the roll forward of recovery — and only the
+// removal of its intent failed, which does not stop the world (§9). The world
+// may have changed its entities since. Its facts are sent.
 //
 // The list of intents is asked with the attempts of a write: a single refusal
 // of the store would otherwise stop the world (acceptance of T-057).

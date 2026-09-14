@@ -362,6 +362,9 @@ func TestACorruptedSnapshotGivesWayToTheOneBefore(t *testing.T) {
 	for name, spoil := range map[string]func(s *stored, t *testing.T, key string){
 		"not JSON":         (*stored).corrupt,
 		"a hash that lies": (*stored).tamper,
+		// The key is derived from taken_at and seq, not taken as written
+		// (§4.4; review #1 of T-059, Mi-2).
+		"a taken_at its key does not name": (*stored).shiftTakenAt,
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := newStored(t)
@@ -469,6 +472,14 @@ func TestADivergenceStopsTheWorld(t *testing.T) {
 		"an element past the end of its list": {func(s *stored, t *testing.T) {
 			s.fact(t, "prop-x", 2, entity.Change{Path: "inventory[1]", New: map[string]any{"item_id": "i"}, HasNew: true})
 		}, byTheJournal},
+		// review #1 of T-059, Mi-3.
+		"an object at the same version in another state": {func(s *stored, t *testing.T) {
+			other := s.objects.entityObject(t, world, entity.TypePlayer, "player-A")
+			other.Attributes["hp"] = 3
+			if err := state.NewObjectStore(s.objects.Memory).PutEntity(context.Background(), world, other); err != nil {
+				t.Fatal(err)
+			}
+		}, byTheObjects},
 		"an object two versions ahead": {func(s *stored, t *testing.T) {
 			ahead := s.objects.entityObject(t, world, entity.TypePlayer, "player-A")
 			ahead.Version = 3
@@ -530,9 +541,9 @@ func (j trimmed) ReadRange(ctx context.Context, topic string, from, to int64, h 
 // ahead of it does not know whether its fact went out.
 func TestAGapInTheJournalRebuildsTheWorldFromTheObjects(t *testing.T) {
 	for name, journal := range map[string]func(s *stored, t *testing.T) eventbus.Journal{
-		"offsets past the retention": func(s *stored, t *testing.T) eventbus.Journal {
+		"every offset past the retention": func(s *stored, t *testing.T) eventbus.Journal {
 			end, _ := s.bus.End(context.Background(), eventbus.TopicSystemEvents)
-			return trimmed{Bus: s.bus.Bus, earliest: end - 1}
+			return trimmed{Bus: s.bus.Bus, earliest: end}
 		},
 		"a journal younger than the snapshot": func(s *stored, t *testing.T) eventbus.Journal {
 			return newBus(t)
@@ -580,4 +591,141 @@ func TestAGapInTheJournalRebuildsTheWorldFromTheObjects(t *testing.T) {
 
 func createWolf() eventbus.Event {
 	return create("prop-wolf-born", ref("wolf-alpha", entity.TypeNPC), "", map[string]any{"hp": 5})
+}
+
+// recordOffset is the offset of the first record of system_events that match
+// accepts.
+func recordOffset(t *testing.T, s *stored, match func(eventbus.Event) bool) int64 {
+	t.Helper()
+	for i, ev := range allOn(t, s.bus.Bus, eventbus.TopicSystemEvents) {
+		if match(ev) {
+			return int64(i)
+		}
+	}
+	t.Fatal("no such record on system_events")
+	return 0
+}
+
+func proposalIs(id string) func(eventbus.Event) bool {
+	return func(ev eventbus.Event) bool {
+		got, _ := ev.Path().GetString("proposal_id")
+		return got == id
+	}
+}
+
+// fromOffset is the events of system_events from an offset on: what a journal
+// trimmed there still holds.
+func fromOffset(t *testing.T, s *stored, offset int64) []eventbus.Event {
+	t.Helper()
+	return allOn(t, s.bus.Bus, eventbus.TopicSystemEvents)[offset:]
+}
+
+// §19 p. 1 (system-architect#1 on T-059): at a gap the facts the rest of the
+// journal still holds are not applied, they mark the objects they announced —
+// the same id, version and proposal_id. The guard reads the journal as it
+// survived, from the first offset kept.
+//
+//   - (а) an entity ahead of the snapshot whose fact is in the rest of the
+//     journal: a repeat of its proposal publishes no second fact;
+//   - (б) an entity whose fact lies before the first offset kept: a repeat
+//     publishes exactly one fact, under the id of the first derivation;
+//   - (в) a fact of the same entity and version under another proposal: no
+//     mark and no divergence — at a gap the objects are the truth.
+func TestAGapMarksTheObjectsTheRestOfTheJournalAnnounced(t *testing.T) {
+	// world: the world and its wolf with a snapshot, a hit on the wolf, a hit
+	// on player-A; the process died without its shutdown snapshot.
+	died := func(t *testing.T, extra func(s *stored)) (*stored, eventbus.Event, eventbus.Event) {
+		s := newStored(t)
+		c, _ := s.start(t)
+		s.seededWorld(t)
+		s.answered(t, createWolf())
+		if _, err := c.Snapshot(context.Background(), world, state.SnapshotAdmin); err != nil {
+			t.Fatal(err)
+		}
+		wolfHit := update(t, "prop-wolf", "author", true, set(ref("wolf-alpha", entity.TypeNPC), nil, op(entity.OpInc, "hp", -1)))
+		playerHit := hit(t, "prop-player", 1)
+		s.answered(t, wolfHit)
+		s.answered(t, playerHit)
+		if extra != nil {
+			extra(s)
+		}
+		s.refuseSnapshots()
+		_ = stop(c)
+		s.objects.setHook(nil)
+		return s, wolfHit, playerHit
+	}
+
+	t.Run("(а) the fact in the rest of the journal", func(t *testing.T) {
+		s, _, playerHit := died(t, nil)
+		earliest := recordOffset(t, s, proposalIs("prop-player"))
+		s.journal = trimmed{Bus: s.bus.Bus, earliest: earliest}
+		r, _ := s.start(t)
+		if rec := recoveryOf(t, r); !rec.LogGap || rec.Failure != nil {
+			t.Fatalf("recovery %+v, want log_gap", rec)
+		}
+		fact := answersTo(t, s.bus.Bus, "prop-player")[0]
+		if player, _ := r.Get(world, "player-A"); player.LastChange.FactEventID != fact.ID || player.LastEventID != fact.ID {
+			t.Errorf("player-A %+v, want the id of its fact %s from the rest of the journal", player, fact.ID)
+		}
+		s.repeat(t, playerHit)
+		s.answered(t, hit(t, "sentinel", 1))
+		if answers := answersTo(t, s.bus.Bus, "prop-player"); len(answers) != 1 {
+			t.Errorf("%d answers to prop-player, want its one fact: the repeat publishes no second", len(answers))
+		}
+		teststate.OneStateOverTheWorld(t, fromOffset(t, s, earliest))
+	})
+
+	t.Run("(б) the fact before the first offset kept", func(t *testing.T) {
+		s, wolfHit, _ := died(t, nil)
+		first := answersTo(t, s.bus.Bus, "prop-wolf")[0]
+		earliest := recordOffset(t, s, proposalIs("prop-player"))
+		s.journal = trimmed{Bus: s.bus.Bus, earliest: earliest}
+		r, _ := s.start(t)
+		if wolf, _ := r.Get(world, "wolf-alpha"); wolf.Version != 2 || wolf.LastChange.FactEventID != "" {
+			t.Errorf("wolf-alpha %+v, want v2 with its fact unknown", wolf)
+		}
+		s.repeat(t, wolfHit)
+		waitFor(t, "the fact of prop-wolf sent again", func() bool { return len(answersTo(t, s.bus.Bus, "prop-wolf")) == 2 })
+		sent := answersTo(t, s.bus.Bus, "prop-wolf")[1]
+		if sent.ID != first.ID {
+			t.Errorf("the fact sent again is %s, want the id of the first derivation %s", sent.ID, first.ID)
+		}
+		s.answered(t, hit(t, "sentinel", 1))
+		if n := len(answersTo(t, s.bus.Bus, "prop-wolf")); n != 2 {
+			t.Errorf("%d answers to prop-wolf, want the one sent again", n)
+		}
+		teststate.OneStateOverTheWorld(t, fromOffset(t, s, earliest))
+	})
+
+	t.Run("(в) a fact under another proposal", func(t *testing.T) {
+		var other eventbus.Event
+		s, _, _ := died(t, func(s *stored) { other = s.fact(t, "prop-other", 2, hpTo(10, 9)) })
+		earliest := recordOffset(t, s, func(ev eventbus.Event) bool { return ev.ID == other.ID })
+		s.journal = trimmed{Bus: s.bus.Bus, earliest: earliest}
+		r, _ := s.start(t)
+		rec := recoveryOf(t, r)
+		if !rec.LogGap || rec.Failure != nil || r.Health().Status == runtime.StatusFail {
+			t.Fatalf("recovery %+v and health %s, want log_gap without a divergence", rec, r.Health().Status)
+		}
+		if player, _ := r.Get(world, "player-A"); player.Version != 2 || player.LastChange.ProposalID != "prop-player" ||
+			player.LastChange.FactEventID != "" {
+			t.Errorf("player-A %+v, want v2 of prop-player from its object, unmarked", player)
+		}
+	})
+}
+
+// shiftTakenAt moves taken_at of a snapshot object by a second and leaves its
+// key and its state_hash.
+func (s *stored) shiftTakenAt(t *testing.T, key string) {
+	t.Helper()
+	var snap state.Snapshot
+	readJSON(t, s.objects.Memory, objstore.SnapshotsBucket(world), key, &snap)
+	snap.Snapshot.TakenAt = snap.Snapshot.TakenAt.Add(time.Second)
+	body, err := json.Marshal(snap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.objects.Memory.Put(context.Background(), objstore.SnapshotsBucket(world), key, body, objstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
 }

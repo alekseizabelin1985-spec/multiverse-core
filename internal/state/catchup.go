@@ -18,6 +18,7 @@ var ErrCorruptFact = errors.New("state: corrupt fact")
 // the rule of catching up (C-02 v1.6, state-and-mechanics.md §4.8) and returns
 // the attributes after it; the attributes passed in are not changed.
 //
+// Every path is checked for its canonical spelling first (entity.CanonicalPath).
 // Entry by entry, in order:
 //   - new present: written at its path. A node on the way that is missing or is
 //     not a container is replaced with an object, as set does. The element a[n]
@@ -43,6 +44,11 @@ func CatchUpChanged(attrs map[string]any, changed []entity.Change) (map[string]a
 		root = map[string]any{}
 	}
 	for _, change := range changed {
+		// State publishes only canonical paths (C-02 v1.8b p. 2): any other
+		// spelling — inventory.0, inventory[01] — is a fact no State wrote.
+		if !entity.CanonicalPath(change.Path) {
+			return nil, fmt.Errorf("%w: %q is not a canonical path", ErrCorruptFact, change.Path)
+		}
 		tokens, err := pathTokens(change.Path)
 		if err != nil {
 			return nil, err
