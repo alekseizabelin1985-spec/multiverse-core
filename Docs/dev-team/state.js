@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:28:13+03:00",
+  "updatedAt": "2026-09-14T03:34:40+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3228,11 +3228,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-472",
           "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "spentMinutes": 0,
           "timeLog": [],
@@ -10928,7 +10928,7 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Грамматика пути в shared/entity",
       "startedAt": "2026-09-14T03:01:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:34:40+03:00"
     },
     {
       "instance": "developer#1",
@@ -10978,6 +10978,26 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Решения по T-058 и ревью depguard",
       "startedAt": "2026-09-14T03:28:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-472",
+      "action": "Ревью #1: грамматика пути, виды атрибутов",
+      "startedAt": "2026-09-14T03:34:40+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#2",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-472",
+      "action": "Просмотр contract-change T-472",
+      "startedAt": "2026-09-14T03:34:40+03:00",
       "finishedAt": null
     }
   ],
@@ -15331,6 +15351,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-058 выполнена TEAM-1/developer#1: state.Bootstrap (шесть предложений world→region→npc→players, ответ через Journal.Tail 10 с, повтор даёт 0 фактов — чтение журнала до предложений), mvctl world init --bus memory (бакеты, exit 2 над инициализированным миром, снапшот bootstrap, state_hash совпадает с"
+    },
+    {
+      "at": "2026-09-14T03:34:40+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 выполнена TEAM-1/developer#3: entity.CanonicalPath и ApplyOps отвергают неканонический путь и путь ниже скаляра для всех читателей; remove inventory[0] пишет путь списка, StateHash после догона совпадает; таблица видов атрибутов по data-model §3 (attrs.go), CheckAttributes при создании; canoni"
     }
   ],
   "blockers": [],
