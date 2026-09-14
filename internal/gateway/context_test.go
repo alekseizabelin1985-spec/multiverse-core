@@ -85,11 +85,28 @@ type options struct {
 	journal func(*membus.Bus) eventbus.Journal
 	// budget shortens both budgets of the start when set.
 	budget time.Duration
+	// timers stands in front of the manual timers of the clock when set.
+	timers func(clock.Timers) clock.Timers
+	// prepare runs on the data directory before the context is built.
+	prepare func(dir string)
+	// log receives the lines of the context when set.
+	log io.Writer
+	// probeInterval shortens the interval of the checks of /health when set.
+	probeInterval time.Duration
+	// repairBudget and snapshotBudget shorten the budget of a repair of stale
+	// entities and of a snapshot write when set.
+	repairBudget, snapshotBudget time.Duration
+	// beforeStart runs on the bus after the context is built and before it
+	// starts: the journal a stopped process finds.
+	beforeStart func(bus *membus.Bus)
 }
 
 // build makes the context and its dependencies without starting it.
 func build(t *testing.T, mode runtime.Mode, dir string, o options) (running, *http.ServeMux, runtime.Deps) {
 	t.Helper()
+	if o.prepare != nil {
+		o.prepare(dir)
+	}
 	vars := map[string]string{env.GatewayDataDir.Name(): dir}
 	for name, value := range o.vars {
 		vars[name] = value
@@ -97,6 +114,15 @@ func build(t *testing.T, mode runtime.Mode, dir string, o options) (running, *ht
 	c := gateway.New(env.MapSource(vars))
 	if o.objects != nil {
 		gateway.SetObjectStore(c, o.objects)
+	}
+	if o.probeInterval > 0 {
+		gateway.SetHealthProbeInterval(c, o.probeInterval)
+	}
+	if o.repairBudget > 0 {
+		gateway.SetStaleRepairBudget(c, o.repairBudget)
+	}
+	if o.snapshotBudget > 0 {
+		gateway.SetSnapshotWriteBudget(c, o.snapshotBudget)
 	}
 	if o.budget > 0 {
 		gateway.SetStartBudgets(c, o.budget, o.budget)
@@ -107,11 +133,20 @@ func build(t *testing.T, mode runtime.Mode, dir string, o options) (running, *ht
 	bus := newBus(t)
 	deps := runtime.Deps{Clock: manual, Timers: manual.Timers(), IDs: sequence(), Mode: mode,
 		Bus: bus, Journal: bus, Log: slog.New(slog.NewJSONHandler(io.Discard, nil))}
+	if o.log != nil {
+		deps.Log = slog.New(slog.NewJSONHandler(o.log, nil))
+	}
+	if o.beforeStart != nil {
+		o.beforeStart(bus)
+	}
 	if o.bus != nil {
 		deps.Bus = o.bus(bus)
 	}
 	if o.journal != nil {
 		deps.Journal = o.journal(bus)
+	}
+	if o.timers != nil {
+		deps.Timers = o.timers(deps.Timers)
 	}
 	return running{ctx: c, clock: manual, dir: dir, bus: bus}, mux, deps
 }

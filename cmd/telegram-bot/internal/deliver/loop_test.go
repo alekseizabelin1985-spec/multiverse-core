@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -583,5 +584,85 @@ func TestNewRequiresAGatewayAndASender(t *testing.T) {
 	}
 	if _, err := deliver.New(deliver.Options{Gateway: newOutbox(nil)}); err == nil {
 		t.Error("New without a sender succeeded")
+	}
+}
+
+// scriptedGateway answers each long-poll with the next result a test hands
+// it, and waits for one meanwhile.
+type scriptedGateway struct {
+	results chan error
+	polls   atomic.Int32
+}
+
+func (g *scriptedGateway) Deliveries(ctx context.Context, _ string, _ int, _ time.Duration) (api.DeliveriesResponse, error) {
+	select {
+	case err := <-g.results:
+		g.polls.Add(1)
+		return api.DeliveriesResponse{Deliveries: []api.Delivery{}}, err
+	case <-ctx.Done():
+		return api.DeliveriesResponse{}, ctx.Err()
+	}
+}
+
+func (g *scriptedGateway) Ack(context.Context, []string) (api.AckResponse, error) {
+	return api.AckResponse{}, nil
+}
+
+// Acceptance of T-312: the loop is degraded after DegradedAfterFailedPolls
+// failed long-polls in a row, not one before, and a successful long-poll makes
+// it healthy again. The pauses run on clock.Timers.
+func TestTheLoopIsDegradedAfterASeriesOfFailedPolls(t *testing.T) {
+	gw := &scriptedGateway{results: make(chan error)}
+	l := newLoop(t, gw, &sender.Fake{}, &instantTimers{}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		l.Run(ctx)
+		close(done)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+	if h := l.Health(); h.Degraded() {
+		t.Fatalf("a new loop is degraded: %+v", h)
+	}
+	refused := errors.New("gateway GET /v1/clients/telegram-bot/deliveries: connection refused")
+	for n := 1; n < deliver.DegradedAfterFailedPolls; n++ {
+		gw.results <- refused
+		waitUntil(t, func() bool { return l.Health().FailedPolls == n })
+		if h := l.Health(); h.Degraded() {
+			t.Fatalf("degraded after %d failed polls, want only after %d", n, deliver.DegradedAfterFailedPolls)
+		}
+	}
+	gw.results <- refused
+	waitUntil(t, func() bool { return l.Health().Degraded() })
+	gw.results <- nil
+	waitUntil(t, func() bool { return l.Health().FailedPolls == 0 })
+	if h := l.Health(); h.Degraded() {
+		t.Errorf("a successful poll left the loop degraded: %+v", h)
+	}
+}
+
+// Acceptance of T-312: a 401 on a send makes the loop degraded, whatever the
+// long-poll does; a message sent later makes it healthy again.
+func TestARefusedTokenOnASendDegradesTheLoop(t *testing.T) {
+	ob := newOutbox(nil)
+	ob.enqueue(delivery("a1", "player-A", chatA, render.KindMechanics, "A"))
+	s := &sender.Fake{}
+	s.FailNext(sender.ErrUnauthorized)
+	l := newLoop(t, ob, s, &instantTimers{}, nil)
+	mustOnce(t, l)
+	if h := l.Health(); !h.Unauthorized || !h.Degraded() {
+		t.Fatalf("after a 401 on a send: %+v, want degraded", h)
+	}
+	mustOnce(t, l)
+	if h := l.Health(); !h.Unauthorized {
+		t.Errorf("a successful poll without a send cleared the 401: %+v", h)
+	}
+	ob.clock.Advance(lease + time.Millisecond)
+	mustOnce(t, l)
+	if h := l.Health(); h.Unauthorized || h.Degraded() {
+		t.Errorf("after a message sent: %+v, want ok", h)
 	}
 }
