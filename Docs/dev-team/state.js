@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:52:46+03:00",
+  "updatedAt": "2026-09-14T11:02:05+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2682,11 +2682,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-476",
           "title": "degraded в make health и документах, e2e бота в test-race",
-          "status": "review",
+          "status": "done",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T10:18:34+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-476.md",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T11:02:05+03:00",
+          "spentMinutes": 42
         },
         {
           "id": "T-477",
@@ -4723,14 +4725,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-313",
           "title": "e2e соло: solo-30, death, flee-fail",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:12:11+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T11:02:05+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.9",
-          "spentMinutes": 0,
+          "spentMinutes": 463,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-313.md"
         },
@@ -5038,8 +5040,10 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "todo",
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md"
+          "status": "in_progress",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-14T11:02:05+03:00"
         },
         {
           "id": "T-479",
@@ -11264,7 +11268,7 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Приёмка T-313, заведение T-478/T-479",
       "startedAt": "2026-09-14T10:40:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:02:05+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -11304,6 +11308,16 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "Приёмка T-476, отметка по T-059",
       "startedAt": "2026-09-14T10:52:46+03:00",
+      "finishedAt": "2026-09-14T11:02:05+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-478",
+      "action": "Ход с Phase 1 завершается после механики",
+      "startedAt": "2026-09-14T11:02:05+03:00",
       "finishedAt": null
     }
   ],
@@ -15885,6 +15899,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-476 · итерация 2 (devops-engineer#1): порядок слияния единообразно в карточке и индексе, runbook про LLM_STRICT, таблица статусов в README/runbook, причина зависимости от T-059. Приёмка — tech-lead#1 (с отметкой по файлам EPIC-001 из T-059)."
+    },
+    {
+      "at": "2026-09-14T11:02:05+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313 принята tech-lead#3: DoD и отклонения (контексты в процессе теста, live на clock.Manual, фикстура solo-30 вариант (а), нормализации журнала, p95 202, Drain) приняты; Mi-3/N-5/N-6 ревью #2 — в DoD T-478; заведены T-478 (S, подволна 1.11) и T-479 (S–M, после T-478; OnEnded на новом пути закрытия"
+    },
+    {
+      "at": "2026-09-14T11:02:05+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-476 принята tech-lead#1 (итерация 2 без ревью #2): DoD 1–6; проверка порядка перед слиянием EPIC-001 в develop исправлена на git log --merges develop | grep -F 'Merge task/T-059-' (grep T-059 ловил служебные коммиты) и git ls-tree develop cmd/telegram-bot/e2e; бэклог 6 пунктов; предварительная отм"
+    },
+    {
+      "at": "2026-09-14T11:02:05+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Запущена T-478 «Ход с Phase 1 завершается после механики» (developer#1) от кончика EPIC-004 23a38c7."
     }
   ],
   "blockers": [],
