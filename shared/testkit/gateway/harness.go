@@ -10,10 +10,12 @@
 // gateway will be validated against. A consumer that only works when the
 // harness drives it is a consumer that read something C-04 never promised.
 //
-// What it deliberately does not do: HTTP. There is no client, no session, no
-// action_key and no idempotency window; the harness publishes what a request
+// What Harness deliberately does not do: HTTP. There is no client, no session,
+// no action_key and no idempotency window; the harness publishes what a request
 // would have produced after the gateway had accepted it. Groups, rounds and
-// the analytics of C-10 are not here either.
+// the analytics of C-10 are not here either. The same fixture characters over
+// the HTTP API of the real gateway are HTTPHarness (http.go, T-308), which
+// stands next to Harness and changes nothing of it.
 //
 // Combat is here, and only half of it: Attack and Flee publish the two actions
 // of C-04 that open a fight, and somebody else decides what the blow did. The

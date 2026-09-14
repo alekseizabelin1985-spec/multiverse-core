@@ -802,6 +802,24 @@ telegram-bot` — там токен виден открытым текстом.
   дважды; повтор `/forget confirm` после ответа «удаление не завершено» и
   рестарта между ними ответит «нечего удалять», хотя связка и данные уже
   стёрты — оператору это не требует действий.
+- Не запускать CI-харнесс (`HTTPHarness` из `shared/testkit/gateway`, клиент
+  `ci-harness`, e2e шлюза) против шлюза, у которого работает бот (профиль
+  `bot`), — до решения system-architect о платформе `ci-harness` (T-308).
+  Сейчас шлюз условно отдаёт `ci-harness` доставки платформы `telegram`
+  (`internal/gateway/handlers.ClientPlatforms`), и бот с харнессом делят одну
+  очередь: харнесс заберёт и подтвердит сообщения живых игроков и увидит их
+  внешние ID, а бот попытается отправить в Telegram сообщения тестовых игроков.
+  Харнесс поднимает свой шлюз (`gatewaytest.FakeGateway`) или ходит в dev-стек
+  без бота. **Действие оператора:** на стенде, где работает бот, и в prod
+  задать в `.env` строку `MV_GATEWAY_CLIENT_IDS` без `ci-harness` (например,
+  `MV_GATEWAY_CLIENT_IDS=telegram-bot,mvctl`). Само по себе это не
+  происходит: манифест (`shared/env/vars.go`) по умолчанию допускает
+  `telegram-bot,ci-harness,mvctl`, а compose передаёт переменную без своего
+  значения, так что без строки в `.env` харнесс допущен. Со строкой без
+  `ci-harness` харнесс получает `403 client_unknown`. Так же убрать
+  `ci-harness` из `MV_GATEWAY_ACTOR_KIND_CLIENTS` и `MV_CORE_ADMIN_CLIENTS`
+  (`.env.example`, комментарий над списками). Подробности —
+  [`shared/testkit/gateway/README.md`](../../shared/testkit/gateway/README.md).
 
 ## 7. Ежедневный / еженедельный чек оператора
 

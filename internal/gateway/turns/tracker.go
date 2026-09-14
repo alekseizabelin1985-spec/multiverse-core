@@ -157,8 +157,14 @@ func (t *Tracker) Begin(ctx context.Context, turn actions.Turn) (api.TurnRef, er
 	return api.TurnRef{Seq: seq, SessionID: s.ID}, nil
 }
 
-// Accepted records the turn of a published action and counts it in its
-// session. A repeat for the same event records nothing more.
+// Accepted records the turn of an action whose player.* event is about to be
+// published and counts it in its session; acked_at is the moment of the record
+// until Acked moves it. A repeat for the same event records nothing more.
+//
+// The row is written as accepted, not received (component §4.2): the steps of
+// the facts, the narrative and the deadline read accepted, and a turn whose
+// event did not go out is taken back by Withdrawn instead of waiting in a
+// state of its own.
 func (t *Tracker) Accepted(ctx context.Context, turn actions.Turn, ref api.TurnRef, eventID string) error {
 	now := t.cfg.Clock.Now()
 	return t.inTx(ctx, func(tx *sql.Tx) error {
@@ -177,6 +183,34 @@ func (t *Tracker) Accepted(ctx context.Context, turn actions.Turn, ref api.TurnR
 		}
 		return session.CountTurn(ctx, tx, ref.SessionID, session.Counts{Turns: 1})
 	})
+}
+
+// Withdrawn takes back the turn of an action whose player.* event the bus did
+// not acknowledge: the row goes, and the count of its session with it. A turn
+// that already has its mechanics or its narrative stays — the event reached
+// the broker after all — and a turn that is not there is not an error.
+func (t *Tracker) Withdrawn(ctx context.Context, ref api.TurnRef, eventID string) error {
+	return t.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM turns WHERE correlation_id = ? AND session_id = ? AND status = ?
+			AND mechanics_at IS NULL`, eventID, ref.SessionID, StatusAccepted)
+		if err != nil {
+			return fmt.Errorf("turns: take back the turn %s: %w", eventID, err)
+		}
+		if n, err := res.RowsAffected(); err != nil || n == 0 {
+			return err
+		}
+		return session.CountTurn(ctx, tx, ref.SessionID, session.Counts{Turns: -1})
+	})
+}
+
+// Acked records at as the moment the action of a turn was acknowledged and
+// answered 202. A turn already finished keeps the moment it was published with.
+func (t *Tracker) Acked(ctx context.Context, eventID string, at time.Time) error {
+	if _, err := t.cfg.DB.ExecContext(ctx, `UPDATE turns SET acked_at = ? WHERE correlation_id = ? AND status IN (?, ?, ?)`,
+		formatTime(at), eventID, StatusAccepted, StatusMechanicsApplied, StatusNarrated); err != nil {
+		return fmt.Errorf("turns: acknowledgement of %s: %w", eventID, err)
+	}
+	return nil
 }
 
 // Rejected publishes analytics.turn.completed status=rejected for an action

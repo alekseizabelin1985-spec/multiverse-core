@@ -1,0 +1,22 @@
+# Rule 9 for the Telegram bot, known by its entrypoint and not by --contexts:
+# the service does not pass MV_TELEGRAM_COMMANDS_PER_MIN, the class of T-310,
+# nor the token. The advice for the token is `:?` (rule 3) and holds no value.
+#
+# expect-rule: 9
+# expect-text: telegram-bot: MV_TELEGRAM_COMMANDS_PER_MIN is read by the binary telegram-bot
+# expect-text: (entrypoint /telegram-bot)
+# expect-text: add ${MV_TELEGRAM_COMMANDS_PER_MIN:-20}
+# expect-text: add ${MV_TELEGRAM_BOT_TOKEN:?set MV_TELEGRAM_BOT_TOKEN in .env}
+services:
+  telegram-bot:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    entrypoint: ["/telegram-bot"]
+    environment:
+      MV_ENV: ${MV_ENV:-dev}
+      MV_LOG_LEVEL: ${MV_LOG_LEVEL:-info}
+      MV_LOG_FORMAT: ${MV_LOG_FORMAT:-json}
+      MV_TELEGRAM_ALLOWED_USER_IDS: ${MV_TELEGRAM_ALLOWED_USER_IDS:-}
+      MV_TELEGRAM_GATEWAY_URL: ${MV_TELEGRAM_GATEWAY_URL:-http://127.0.0.1:8088}
+      MV_TELEGRAM_POLL_TIMEOUT_S: ${MV_TELEGRAM_POLL_TIMEOUT_S:-25}
+      MV_TELEGRAM_HEALTH_ADDR: ${MV_TELEGRAM_HEALTH_ADDR:-:8089}
+      MV_TELEGRAM_ACTION_KEY_SALT: ${MV_TELEGRAM_ACTION_KEY_SALT:-}

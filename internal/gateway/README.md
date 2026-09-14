@@ -27,10 +27,10 @@
 | Персонажи, `GET /v1/worlds`, `GET /v1/players/{id}`, сессии, ходы, аналитика C-10 | `characters/`, `session/`, `turns/` | T-306 |
 | Исходящие доставки: outbox, long-poll и ack, тексты правил, эффекты consumer | `outbox/`, `consumer/`, `handlers/` | T-307 |
 | Снапшот шлюза, догон журнала до `Journal.End()`, восстановление сессий и ходов при старте, полный `/health` | `snapshot/`, `consumer/`, `health.go`, `snapshots.go` | T-309 |
+| `FakeGateway` для тестов (настоящий шлюз in-process на `membus`) и HTTP-обвязка `HTTPHarness` рядом с `Harness` v0 в `shared/testkit/gateway` | `gatewaytest/` | T-308 |
 
 | Ещё не реализовано (эти пакеты в дереве отсутствуют) | Что войдёт | Задача |
 |---|---|---|
-| `FakeGateway` и HTTP-обвязка рядом с `Harness` v0 (`shared/testkit/gateway` уже есть) | `gatewaytest/` | T-308 |
 | Группы, раунды, групповые доставки (`group.*`, `round.opened`, `player.said`), служебные и admin-маршруты | `groups/`, `rounds/` | T-352…T-356 |
 
 Прокси `/v1/admin/*` к `core` (T-356) ещё нет, поэтому в `/health` нет поля
@@ -50,10 +50,11 @@
 | `actions/` | Валидация и публикация действий игрока, идемпотентность по `action_key`, лимит темпа, `InputFilter` |
 | `characters/` | Создание персонажа предложением State и ожидание факта (`201`/`200`/`202 creating`), статус персонажа, `GET /v1/players/{id}` |
 | `session/` | Сессии scope: открытие первым действием, простой `MV_GATEWAY_SESSION_IDLE`, `analytics.session.started/ended` |
-| `turns/` | Ходы: `accepted` → механика → нарратив → ack последнего адресата, `timeout`, `analytics.turn.completed` |
+| `turns/` | Ходы: `accepted` (запись до публикации `player.*`; не принятое шиной действие забирает ход обратно) → механика → нарратив → ack последнего адресата, `timeout`, `analytics.turn.completed` |
 | `outbox/` | Очередь доставок: `Enqueue` (идемпотентно), `Lease` (голова очереди на игрока, одна в лизинге), `Ack`, уборка (`Sweep`), long-poll (`Service.Serve`, `Notifier`), тексты правил (`Mechanics`, `EncounterOpened`, `Died`, `Refused`) |
 | `handlers/` | HTTP-обработчики поверх `links`/`actions`/`characters`/`outbox` |
-| `client/` | Go-клиент HTTP API шлюза (C-08); потребители — бот (с T-311) и `FakeGateway` (T-308) |
+| `client/` | Go-клиент HTTP API шлюза (C-08); потребители — бот (с T-311) и `HTTPHarness` из `shared/testkit/gateway` (T-308) |
+| `gatewaytest/` | `FakeGateway` — этот контекст за процессным HTTP-сервером на `127.0.0.1:0`, со своей `membus`, `clock.Manual`, id из последовательности и временным каталогом данных. Только для тестов: production-код пакет не импортирует (depguard `no-testkit-in-production`); описание — `shared/testkit/gateway/README.md` |
 
 ## Как поднять локально
 
@@ -235,11 +236,13 @@ write_failed`, а в `Stop` не отнимает срок у сжатия `link
   по порядку `seq`. `route.external_id` подставляется из `links.db` в момент
   ответа и только клиенту платформы связки: в MVP-1 платформа `telegram` есть у
   `telegram-bot` и, условно до решения system-architect, у `ci-harness`
-  (`handlers.ClientPlatforms`); в prod `ci-harness` не входит в
-  `MV_GATEWAY_CLIENT_IDS` и получает `403 client_unknown`. При остановке процесса
+  (`handlers.ClientPlatforms`). Клиент, которого нет в `MV_GATEWAY_CLIENT_IDS`,
+  получает `403 client_unknown`, но умолчание манифеста (`shared/env/vars.go`)
+  допускает `ci-harness`: на стенде с ботом и в prod оператор убирает его из
+  этой строки `.env` сам (`Docs/ops/runbook.md` §6). При остановке процесса
   long-poll сразу отвечает пустым списком.
 - **Харнесс и бот делят одну очередь `telegram`.** До решения system-architect
-  о платформе `ci-harness` не запускать харнесс (T-308, e2e) против шлюза, у
+  о платформе `ci-harness` не запускать харнесс (`HTTPHarness`, T-308; e2e) против шлюза, у
   которого работает бот (профиль `bot`): харнесс заберёт и подтвердит сообщения
   живых игроков и увидит их внешние ID, а бот попытается отправить сообщения
   тестовых игроков. В dev-стеке `ci-harness` допущен в `MV_GATEWAY_CLIENT_IDS`
