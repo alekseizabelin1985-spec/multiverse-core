@@ -3,26 +3,13 @@ package flow
 import (
 	"errors"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"multiverse-core.io/cmd/telegram-bot/internal/render"
 	"multiverse-core.io/internal/gateway/api"
 	"multiverse-core.io/internal/gateway/client"
 )
-
-// namePattern is the rule of a character name of api-contracts.md §1.3: 2–32
-// characters, letters, digits, space and hyphen, no control characters.
-var namePattern = regexp.MustCompile(`^[\p{L}\p{Nd} -]+$`)
-
-// ValidName reports whether a name, already trimmed, passes the rule of
-// api-contracts.md §1.3.
-func ValidName(name string) bool {
-	n := utf8.RuneCountInString(name)
-	return n >= 2 && n <= 32 && namePattern.MatchString(name)
-}
 
 // start is /start: resolve, then the notice, the name or the character.
 func (t *turn) start() {
@@ -180,8 +167,11 @@ func (t *turn) awaitingName(d *dialog) {
 		}
 		return
 	}
+	// The bot trims the text of the message; the rule itself is the one of
+	// POST /v1/characters, so the bot and the gateway cannot disagree on a name
+	// (api-contracts.md §1.3; acceptance of T-312).
 	name := strings.TrimSpace(t.u.Message.Text)
-	if !ValidName(name) {
+	if !api.ValidCharacterName(name) {
 		if t.reply(render.NameInvalid, nil) {
 			t.f.setDialog(t.chat, d, t.now)
 		}

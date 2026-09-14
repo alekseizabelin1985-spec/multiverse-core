@@ -354,11 +354,14 @@ func TestReplayPublishesNoTurns(t *testing.T) {
 	}
 }
 
-// Mi-6 of T-305 with the tracker of gateway.db: the budget of the decision runs
-// out between the last publication and Turns.Accepted. The turn is recorded all
-// the same, the repeat of the key answers the kept 202, and the action is not
-// published twice.
-func TestTheTurnIsRecordedWhenTheBudgetRunsOutAfterTheLastPublication(t *testing.T) {
+// Mi-6 of T-305 with the tracker of gateway.db, in the order of T-308: the turn
+// is recorded before the action goes out, and the budget of the decision runs
+// out between the last publication and Turns.Acked. acked_at is recorded all
+// the same — on the context of the decision the update would fail and leave the
+// moment of the record before the publication (review #2 of T-308, Mi-1) — the
+// repeat of the key answers the kept 202, and the action is not published
+// twice.
+func TestTheAcknowledgementIsRecordedWhenTheBudgetRunsOutAfterTheLastPublication(t *testing.T) {
 	f := newFixture(t, options{})
 	f.bus.set(nil, func(ctx context.Context, ev eventbus.Event) {
 		if ev.Type != actions.TypeUpdateProposed {
@@ -369,8 +372,9 @@ func TestTheTurnIsRecordedWhenTheBudgetRunsOutAfterTheLastPublication(t *testing
 	})
 	first := accepted(t, f.submit(t, "k-rest", api.ActionRest, ""))
 	f.bus.set(nil, nil)
-	if row := rowOf(t, f, first.CorrelationID); row.Status != turns.StatusAccepted {
-		t.Fatalf("turn = %+v", row)
+	if row := rowOf(t, f, first.CorrelationID); row.Status != turns.StatusAccepted || !row.AckedAt.Equal(first.AckedAt) ||
+		!first.AckedAt.Equal(t0.Add(api.RequestTimeout)) {
+		t.Fatalf("turn = %+v, answer acked_at %s; want acked_at of the answer, after the budget", row, first.AckedAt)
 	}
 	again := accepted(t, f.submit(t, "k-rest", api.ActionRest, ""))
 	if again.CorrelationID != first.CorrelationID || !again.AckedAt.Equal(first.AckedAt) || again.Turn != first.Turn {

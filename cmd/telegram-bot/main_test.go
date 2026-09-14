@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"multiverse-core.io/cmd/telegram-bot/internal/access"
 	"multiverse-core.io/cmd/telegram-bot/internal/config"
+	"multiverse-core.io/cmd/telegram-bot/internal/deliver"
 	"multiverse-core.io/cmd/telegram-bot/internal/privacy"
 	"multiverse-core.io/cmd/telegram-bot/internal/sender"
 	"multiverse-core.io/cmd/telegram-bot/internal/updates"
@@ -290,6 +292,22 @@ func TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients(t *testing.T) {
 	if loopGW.HTTP.Timeout != testLimits.DeliverGatewayTimeout || flowGW.ClientID != ClientID || loopGW.ClientID != ClientID {
 		t.Errorf("client of the loop: timeout %s, client ids %q %q", loopGW.HTTP.Timeout, flowGW.ClientID, loopGW.ClientID)
 	}
+	// Acceptance of T-307: the ack of the loop has a client of its own whose
+	// repeats end before the lease; the loop tells an early empty answer by the
+	// clock of the process.
+	ackGW, _ := b.loopOpts.Acks.(*client.Client)
+	if ackGW == nil || ackGW == loopGW || ackGW.HTTP == loopGW.HTTP || ackGW.HTTP.Timeout != deliver.AckHTTPTimeout ||
+		ackGW.Backoff != deliver.AckBackoff || ackGW.ClientID != ClientID || ackGW.BaseURL != loopGW.BaseURL {
+		t.Errorf("client of the ack: %+v, want deliver.NewAckClient beside the client of the loop", ackGW)
+	}
+	// Mi-2 of review #1 of T-315: the pauses between the attempts of an ack
+	// run on the timers of the process, not on the wall clock.
+	if ackGW != nil && ackGW.Timers != e.timers {
+		t.Errorf("client of the ack pauses on %T, want the timers of the process %T", ackGW.Timers, e.timers)
+	}
+	if b.loopOpts.Clock != e.clock || b.loopOpts.Timers != e.timers {
+		t.Error("the loop does not run on the clock and the timers of the process")
+	}
 	if b.accOpts.Sender == b.loopOpts.Sender || b.accOpts.Sender == b.flowOpts.Sender || b.flowOpts.Sender == b.loopOpts.Sender {
 		t.Error("the gate, the flow and the loop do not each have a sender of their own")
 	}
@@ -399,5 +417,48 @@ func TestAnUnknownCommandExitsWithTwo(t *testing.T) {
 	e := environment{stdout: &syncBuffer{}, stderr: &syncBuffer{}, source: env.MapSource(nil)}
 	if code := run(context.Background(), []string{"helth"}, e); code != 2 {
 		t.Errorf("exit code %d, want 2", code)
+	}
+}
+
+// /health of the bot tells the state of its deliveries: degraded after the
+// series of failed long-polls or a refused token, ok otherwise; the counters
+// stay, and the probe of the image exits 1 on the degraded answer (acceptance
+// of T-312).
+func TestHealthReportsTheDeliveriesOfTheBot(t *testing.T) {
+	cases := []struct {
+		name   string
+		health deliver.Health
+		status string
+		exit   int
+	}{
+		{"delivering", deliver.Health{}, statusOK, 0},
+		{"a few failed polls", deliver.Health{FailedPolls: deliver.DegradedAfterFailedPolls - 1}, statusOK, 0},
+		{"a series of failed polls", deliver.Health{FailedPolls: deliver.DegradedAfterFailedPolls}, statusDegraded, 1},
+		{"token refused", deliver.Health{Unauthorized: true}, statusDegraded, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			srv := httptest.NewServer(healthHandler(func() access.Counters { return access.Counters{Denied: 2} },
+				func() deliver.Health { return c.health }))
+			defer srv.Close()
+			resp, err := http.Get(srv.URL + "/health")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			var h health
+			if err := json.NewDecoder(resp.Body).Decode(&h); err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != http.StatusOK || h.Status != c.status || h.Details["bot_denied_total"] != float64(2) ||
+				h.Details["deliveries_failed_polls"] != float64(c.health.FailedPolls) ||
+				h.Details["telegram_token_unauthorized"] != c.health.Unauthorized {
+				t.Errorf("/health = %d %+v, want %s", resp.StatusCode, h, c.status)
+			}
+			e := environment{stdout: &syncBuffer{}, stderr: &syncBuffer{}, source: env.MapSource(nil)}
+			if got := run(context.Background(), []string{"health", "--url", srv.URL + "/health"}, e); got != c.exit {
+				t.Errorf("telegram-bot health = %d, want %d", got, c.exit)
+			}
+		})
 	}
 }
