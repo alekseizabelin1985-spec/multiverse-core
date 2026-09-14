@@ -308,6 +308,14 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 	if !entity.JSONCompatible(spec.Attributes) {
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
+	// So are the kinds of the attributes and the attributes the type requires
+	// (§4.5; C-02 v1.8 p. 2): an entity created without its hit points, or
+	// with a status that is an object, is one no reader of it could read.
+	if err := entity.CheckAttributes(ref.Type, spec.Attributes); err != nil {
+		a.log.Info("create refused by the attributes of its type", "proposal_id", p.ID,
+			"entity_id", ref.ID, "entity_type", ref.Type, "err", err)
+		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
+	}
 	if a.alreadyApplied(p) {
 		return a.resendUnpublished(ctx, p)
 	}

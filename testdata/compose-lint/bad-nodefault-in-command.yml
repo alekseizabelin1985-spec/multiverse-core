@@ -2,7 +2,9 @@
 # silent the flag becomes `--world=` instead of the manifest's world. The
 # refusal is right; the advice it used to give — "pass it through as a key with
 # no value" — is not available inside a command or a longer string, and the
-# message must say what is (review #2 T-411, N-5).
+# message must say what is (review #2 T-411, N-5). The command names no
+# context: with `--contexts=state` rule 9 would ask this service for every
+# variable state reads, and the fixture would be red for two rules (T-469).
 #
 # expect-rule: 8
 # expect-text: ${MV_WORLD_ID} has neither a default nor
@@ -10,4 +12,4 @@
 services:
   core:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}
-    command: ["--contexts=state", "--world=${MV_WORLD_ID}"]
+    command: ["--world=${MV_WORLD_ID}"]

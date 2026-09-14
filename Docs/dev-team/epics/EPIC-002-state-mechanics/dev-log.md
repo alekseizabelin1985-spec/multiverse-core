@@ -647,6 +647,107 @@
 - **Nit:** метки `contract-change` в разделе T-057 индекса нет — проставить tech-lead#2.
 - **`design.md` §4.1 и §7** не правил (зона architect и tech-lead#2): точный текст правки v0.1.2 — в карточке, п. 5. Устаревшие имена стоят только в строках 64 и 123.
 
+## developer#3 · T-472 · грамматика пути и виды атрибутов в `shared/entity` · 2026-09-14 03:08–03:35
+
+Подробности — карточка `tasks/T-472.md`, раздел «Выполнение (developer)». Метка `contract-change`; коммитов и `git add` нет.
+- **Оценка влияния — до кода.** Кончики EPIC-003 и EPIC-004 и рабочая копия T-309 — только чтение.
+  - Из тестов шлюза задет только шаг `set position.region` в `readmodel/apply_test.go`.
+  - Строка «under a number» (`hp.deep`) не задета: `ApplyOps` там не вызывается.
+  - Издатели пишут корневые константы.
+- **Решение о типе** (исполнитель, на просмотр system-architect): `ApplyOps` берёт тип из `Entity.Type`, шаг 1 State — из `changes[].entity.type`. Таблица — по типам; атрибут вне таблицы своего типа не типизирован.
+- **Сделано:**
+  - `entity.CanonicalPath`, `entity.CheckOp`, таблица видов `AttributeSpecOf`/`Holds`, `entity.CheckAttributes`;
+  - `ApplyOps` отвергает неканонический путь, путь ниже скаляра и значение чужого вида в корне затронутого скаляра;
+  - State: шаг 1 зовёт `CheckOp`, создание — `CheckAttributes`; `canonicalPath` и `scalarAttributes` удалены; Н-2 T-471.
+- **Отклонения:**
+  - виды `KindModifier` («int / формула», §3.3) и `KindOpen` (контейнер или `scope`, только обязательность);
+  - `CheckOp` не проверяет значение: причины `inc` сохранены;
+  - одна строка матрицы сменила ожидание по C-02 v1.8a п. 3; порядок держит новая строка `remove hp`, M5 на ней красный.
+- **Мутанты** (копия `scratchpad/t472-mut`, без `-overlay`, контрольный первым, удалена по точному пути): C0, U1a, U1b, M5g, U2a, U2b, M5, K1–K8 — красные. K4 (шаг 1 без типа) сначала выжил; добавлена строка «gateway: weather.x of the world, the form before the rights».
+- **Прогоны** (go1.26, windows/amd64):
+  - `gofmt -l` пусто; build/vet — 0;
+  - `go test -short -count=1 ./...` — ok, кроме `cmd/mvctl/internal/env` («Access is denied»); обход `go test -c -o scratchpad/t472_env.exe` — PASS, exe удалён по точному пути;
+  - стенд `-count=20` — ok; e2e — ok; lint — 0 issues; `contracts check` — exit 0;
+  - `make test` — exit 0, `internal/state` 91,4 %.
+
+  Интеграция не запускалась; Docker, `.env`, `:8888` не трогались.
+- **Риски слияния:**
+  - `internal/gateway/readmodel/apply_test.go` — зона EPIC-004;
+  - `cmd/multiverse/contexts_state_test.go` — через tech-lead#1; рядом T-059 правит `contexts_state.go`;
+  - `internal/state/{apply,proposal}.go` и `helpers_test.go` — общие файлы с T-058 и T-059.
+
+## system-architect#2 · T-472 · просмотр `contract-change` C-02 · 2026-09-14
+
+Подробности — карточка `tasks/T-472.md`, раздел «Просмотр system-architect». Код не менял и не запускал. Коммитов и `git add` нет, `review.md` не трогал.
+- **Вердикт:** одобрено при условии итерации 2 (И2-1).
+- **Решения:**
+  - таблица по типам принята: тип — `Entity.Type`, на шаге 1 — `changes[].entity.type`. Неизвестный атрибут типа форма не отвергает, его ограничивают таблица владения и inv-09;
+  - `KindModifier` и `KindOpen` подтверждены;
+  - ключ из цифр любой длины запрещён: граница `strconv.Atoi` зависит от платформы (И2-1);
+  - перечисления, ссылки и диапазоны — нормы State и законы, а не форма; записано в C-02;
+  - в C-02 добавлена строка об атрибутах создания;
+  - функция догона в `shared/entity` — отдельная задача EPIC-002 после T-059. В самой T-059 — проверка `CanonicalPath` в `pathTokens`.
+- **Документы:** `contracts.md` v0.17 (C-02 v1.8b); КД State v0.4.1 (§3.2, §4.5 п. 1, абзац создания).
+- **Итерация 2:**
+  - И2-1 — `CanonicalPath` и тест грамматики;
+  - И2-2 (minor) — строка матрицы: `died_at.x` у `player` → `level_violation`.
+- **Проверка слияния** КД и `contracts.md` с `.worktrees/T-058` и `.worktrees/T-059` (база `0345177`, CRLF): 0 конфликтов. Строка changelog КД перенесена под «v0.4», чтобы не встать на место вставки T-058.
+
+## developer#3 · T-472 · итерация 2 (ревью #1, просмотр system-architect#2) · 2026-09-14
+
+Подробности — карточка `tasks/T-472.md`, раздел «Итерация 2 (developer)». Коммитов и `git add` нет; разделы system-architect, `contracts.md` и КД не трогались.
+- **Условия system-architect:**
+  - И2-1 — `CanonicalPath` отвергает ключ шаблоном `^[+-]?[0-9]+$` любой длины, без `strconv.Atoi`; пять новых написаний в тесте грамматики;
+  - И2-2 — строка матрицы `task` / `died_at.x` у живого `player` → `level_violation`.
+- **Ревью #1:**
+  - Mi-1 — полнота таблицы сверяется множествами ключей через `export_test.go`;
+  - Mi-2 — свойство-тест со списками из двух элементов и независимым оракулом отвергаемых путей;
+  - Mi-3 — `TestAPathBelowAScalarRefusesALoosePackageWhole` (`atomic=false`);
+  - N-1…N-3 исправлены.
+- **`flee`** (решение оркестратора): при создании необязателен (§3.3); вопрос на подтверждение system-architect.
+- **Мутанты** (копия `scratchpad/t472i2-mut`, без `-overlay`, контрольный первым, удалена по точному пути): C0 (роняет и свойство-тест), A1, D1, K4, F1, T1 — красные.
+- **Прогоны** (go1.26, windows/amd64):
+  - `gofmt -l` пусто; build/vet — 0;
+  - тесты `shared/entity`, `internal/state`, `internal/gateway`, `shared/testkit`, `cmd/multiverse` — 26 пакетов ok;
+  - lint — 0 issues;
+  - `make test` — exit 0, `internal/state` 91,4 %.
+- **Передать T-059:** в `CatchUpChanged` нет проверки `CanonicalPath`; добавляет задача, которая сливается второй.
+
+## tech-lead#2 · T-472 · приёмка · 2026-09-14 09:23
+
+Подробности — карточка `tasks/T-472.md`, раздел «Приёмка (tech-lead)». Коммитов, `git add` и слияний нет; `contracts.md`, КД и разделы исполнителя и system-architect не трогал.
+- **Решение:** принято; итерация 2 принята без ревью #2 (в ревью #1 только Minor и Nit).
+- **До слияния:** отметка tech-lead#1 (`cmd/multiverse/contexts_state_test.go`), отметка tech-lead#3 (`internal/gateway/readmodel/apply_test.go`), «Учёт времени». Подтверждение system-architect по `flee` слияние не держит; до правки `data-model.md` §3.3, C-02 v1.8b п. 2 и КД §4.5 код мягче текста.
+- **Итерация 2 по коду:** И2-1, И2-2, Mi-1…Mi-3, N-1…N-3 и `flee` закрыты. Мутанты при приёмке (копия `scratchpad/t472tl-mut`, контрольный первым, копия удалена по точному пути):
+  - «любой непустой путь канонический» — красный, в том числе свойство-тест;
+  - «ключ по `strconv.Atoi`» — красный;
+  - «`died_at` в таблице `player`» — красный;
+  - «`flee` обязателен» — красный.
+- **Прогоны** (go1.26.8, windows/amd64):
+  - `gofmt` пусто; build/vet — 0;
+  - `go test -short ./...` — 54 пакета ok, `env` и `updates` — «Access is denied», оба прошли в `make test`;
+  - e2e — ok; стенд I1-α `-count=5` — ok; lint — 0 issues; `contracts check` — exit 0;
+  - `make test` — exit 0, `internal/state` 91,4 %, `shared/entity` 93,5 %.
+- **Риски слияния:**
+  - T-059: `apply.go` сливается без конфликтов; пробное дерево зелёное. `CatchUpChanged` не проверяет `CanonicalPath` — рекомендовано сливать T-472 первой, строка DoD T-059 внесена;
+  - T-058: общих Go-файлов нет, пробное дерево зелёное. КД сливается в обе стороны без конфликтов (база `0345177` в CRLF). `CauseInit` объявлена и в T-058, и в T-059 — назвать при слиянии;
+  - `dev-log.md`/`review.md` — хвост снимает драйвер `appendtail`.
+- **Индекс v0.1.8:** статус и приёмка T-472, строка DoD T-059, четыре строки бэклога без номеров (функция догона в `shared/entity`, `opFor` → EPIC-004, виды контейнеров, путь `name`).
+
+## tech-lead#3 · T-472 · отметки владельцев EPIC-004 и EPIC-001 (EPIC-001 — по назначению оркестратора) · 2026-09-14 09:45
+
+Подробности — карточка `tasks/T-472.md`, разделы «Отметка владельца EPIC-004 (tech-lead#3)» и «Отметка владельца EPIC-001 (по назначению оркестратора, tech-lead#3)». Код, индексы, `contracts.md` и разделы других ролей не трогал. Коммитов, `git add` и слияний нет.
+- **EPIC-004, `internal/gateway/readmodel/apply_test.go` — одобрено.**
+  - Шаг `set banner "green"` + `set banner.region` сохраняет смысл «текст заменяется объектом».
+  - `ErrCorruptFact` на неканонический путь или значение чужого вида State не вызывает: шаг 1 и `ApplyOps` отвергают такое предложение, пути `changed[]` — канонические.
+  - Пробное дерево T-472 + `internal/gateway`, `shared/testkit/gateway` с кончика `6b67fec` собирается. С тестом кончика падает ровно `TestChangedOfBothFormsReproducesTheStateOfState` (`position.region`). С тестом T-472 — 18 пакетов шлюза и `cmd/multiverse` ok.
+  - Риск: журнал dev-стенда с фактами, которые новая форма отвергает, остановит догон шлюза. `RepairFromStateSnapshot` такой факт не спасает.
+  - Строка бэклога для §8 индекса EPIC-004 (З-25, `opFor` → `CanonicalPath` у каждого элемента) — в карточке.
+- **EPIC-001, `cmd/multiverse/contexts_state_test.go` — одобрено** (за tech-lead#1, по назначению оркестратора).
+  - Создание несёт полный набор атрибутов `player`, строка «object at the root of hp» ждёт `invalid_op`.
+  - Проверку законов тест не теряет: inv-10, inv-02 и законный ход остаются. Мутанты L1 (законы сняты), L2 (снят inv-02), F1 (снята проверка вида) — красные.
+- **Прогоны** (go1.26.8, windows/amd64, `.worktrees/T-472`): `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./internal/gateway/readmodel/... ./cmd/multiverse/...` — ok. Пробная копия `scratchpad/t472tl3-probe` удалена по точному пути. Docker, `.env` и `:8888` не трогал.
+
 ## developer#2 · T-059 · recovery, `/health`, admin-маршрут · 2026-09-14
 
 Подробности — карточка `tasks/T-059.md`, раздел «Выполнение (developer)». Коммитов и `git add` нет.
