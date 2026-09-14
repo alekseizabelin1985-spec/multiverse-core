@@ -69,8 +69,17 @@
 #      MV_TELEGRAM_GATEWAY_URL — may name a service of this network instead,
 #      in the shape of the manifest's default (redpanda:9092, http://core:8090).
 #      ${MV_X}, $MV_X, ${MV_X:+x} and a default that is another interpolation
-#      are refused; a platform variable is otherwise passed through as a key
-#      with no value (T-411, T-413).
+#      are refused (T-411, T-413). The form of passing for a new line is
+#      ${MV_X:-<the manifest's default>} — ${MV_X:-} for an optional secret,
+#      ${MV_X:?...} for a required one — so that a silent .env and an empty
+#      line in it give the process the same default; a key with no value is
+#      kept for the allow-lists, whose empty value means nobody (T-411, T-469);
+#   9. a variable a context reads reaches every service that runs the context
+#      (`--contexts=...` of its command; the bot by its entrypoint): without
+#      the line the value of .env never reaches the container, and the process
+#      silently takes the manifest's default. Who reads what is the table of
+#      rule 9 in scripts/compose-lint.sh; every variable of shared/env is in
+#      that table or marked Tooling() in the manifest (T-469).
 #
 # Known limitation of a single compose file (T-008; dev-log ОВ-40): a port
 # publication cannot be made conditional on a profile. Where §1.4 asks for a
@@ -124,6 +133,14 @@ x-platform-env: &platform-env
   MV_MINIO_SECRET_KEY: ${MV_MINIO_SECRET_KEY:?set MV_MINIO_SECRET_KEY in .env}
   MV_MINIO_USE_SSL: ${MV_MINIO_USE_SSL:-false}
   MV_WORLD_ID: ${MV_WORLD_ID:-dark-forest-world}
+  # Read by the process, whatever its contexts: shared/runtime.AdminOnly guards
+  # /v1/admin/* of any context and the replay clock of serve.go (rule 9, T-469).
+  # Passed through as a key with no value, like the allow-lists of the gateway
+  # (T-411): .env or the manifest, never a third list written here — and an
+  # empty line in .env means nobody. The `operator` that once stood in core kept
+  # mvctl and the CI harness out of /v1/admin/* in a container while a process
+  # started by hand let them in.
+  MV_CORE_ADMIN_CLIENTS:
 
 # The platform starts only after the bus and the object store are not merely
 # healthy but initialised: topics with their retention (§5.1) and the
@@ -267,6 +284,28 @@ services:
       MV_GATEWAY_CLIENT_IDS:
       MV_GATEWAY_ACTOR_KIND_CLIENTS:
       MV_CORE_URL: ${MV_CORE_URL:-http://core:8090}
+      # The path of the game master an action is sent down (internal/gateway,
+      # actionSettings); core reads it too. Until T-469 only core had the line,
+      # and a gateway in a container took the manifest's default whatever .env
+      # said (rule 9).
+      MV_GM_PATH: ${MV_GM_PATH:-agent}
+      # Actions of players (T-305; SEC-11, FR-056): the rate, the input filter
+      # and the grace of an encounter without its task agent. The defaults are
+      # the manifest's (rule 8), in the form of passing of rule 8: a silent .env
+      # and an empty line in it both give the gateway that default (T-469).
+      MV_GATEWAY_RATE_ACTIONS_PER_MIN: ${MV_GATEWAY_RATE_ACTIONS_PER_MIN:-30}
+      MV_GATEWAY_RATE_ACTIONS_BURST: ${MV_GATEWAY_RATE_ACTIONS_BURST:-5}
+      MV_GATEWAY_INPUT_FILTER: ${MV_GATEWAY_INPUT_FILTER:-noop}
+      MV_GATEWAY_ENCOUNTER_GRACE: ${MV_GATEWAY_ENCOUNTER_GRACE:-10s}
+      # Sessions and characters (T-306) and the deliveries of the outbox
+      # (T-307; component §8.4, §11.3): read at start with the rest of the
+      # settings of the gateway, in the same form of passing (T-469).
+      MV_GATEWAY_SESSION_IDLE: ${MV_GATEWAY_SESSION_IDLE:-30m}
+      MV_GATEWAY_TURN_TIMEOUT: ${MV_GATEWAY_TURN_TIMEOUT:-60s}
+      MV_GATEWAY_CHARACTER_WAIT: ${MV_GATEWAY_CHARACTER_WAIT:-2s}
+      MV_GATEWAY_CHARACTER_DEADLINE: ${MV_GATEWAY_CHARACTER_DEADLINE:-60s}
+      MV_GATEWAY_DELIVERY_LEASE: ${MV_GATEWAY_DELIVERY_LEASE:-30s}
+      MV_GATEWAY_DELIVERY_TTL: ${MV_GATEWAY_DELIVERY_TTL:-24h}
     ports:
       - "127.0.0.1:8088:8088"
     volumes:
@@ -300,11 +339,8 @@ services:
       # variable in .env stays what it always really was — the address of a
       # process the operator starts by hand on the host (go run, mvctl).
       MV_CORE_ADDR: ":8090"
-      # Passed through like the allow-lists of the gateway (T-411): .env or the
-      # manifest, never a third list written here. The `operator` that stood
-      # here kept mvctl and the CI harness out of /v1/admin/* in a container
-      # while a process started by hand let them in.
-      MV_CORE_ADMIN_CLIENTS:
+      # MV_CORE_ADMIN_CLIENTS moved to x-platform-env: every process reads it,
+      # not core alone (rule 9, T-469).
       # Empty value = memory is off, a documented degradation (FR-035); with the
       # `memory` profile set MV_MEMORY_URL=http://memory:8082 in .env.
       MV_MEMORY_URL: ${MV_MEMORY_URL:-}
@@ -336,6 +372,16 @@ services:
       MV_LLM_CLOUD_ENABLED: ${MV_LLM_CLOUD_ENABLED:-false}
       MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS: ${MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS:-false}
       MV_LLM_CLOUD_BUDGET_USD_PER_DAY: ${MV_LLM_CLOUD_BUDGET_USD_PER_DAY:-0}
+      # A secret that is legitimately empty: the key of the anthropic provider is
+      # needed only with MV_LLM_PROVIDER=anthropic, and the process checks that
+      # at start (RequiredWhen). Hence the manifest's empty default and no `:?`,
+      # which would stop a local stack that is right to start (rules 3 and 8,
+      # T-464, T-469).
+      MV_ANTHROPIC_API_KEY: ${MV_ANTHROPIC_API_KEY:-}
+      # Needed only with MV_LLM_PROVIDER=ollama (RequiredWhen); empty otherwise.
+      # With the profile gpu set MV_OLLAMA_URL=http://ollama:11434 in .env. Rule
+      # 6 holds a non-empty value to a local address (rule 9, T-469).
+      MV_OLLAMA_URL: ${MV_OLLAMA_URL:-}
     # No published port on purpose: the admin API of `core` is reached through
     # the gateway proxy (ADR-009 p. 9, threat-model T-14). Compose's internal
     # network is enough for gateway -> core; publish it only for local debugging.
