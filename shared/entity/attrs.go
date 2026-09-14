@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -445,3 +447,256 @@ func (e *Entity) OpenedByEventID() (string, bool) { return e.AttrString(AttrOpen
 // ClosedByEventID is the event that resolved it. An encounter still running has
 // none.
 func (e *Entity) ClosedByEventID() (string, bool) { return e.AttrString(AttrClosedByEventID) }
+
+// --- kinds of values (data-model.md §3; C-02 v1.8 p. 2) ---
+
+// ValueKind is the kind of value data-model.md §3 gives an attribute.
+type ValueKind string
+
+// The kinds of §3. A text, a reference and an enumeration are all strings on
+// the wire; they are named apart because the model names them apart, and
+// nothing here checks that a reference resolves or that an enumeration holds
+// one of its values — that is a question about the world, not about the form
+// of a value.
+const (
+	KindText     ValueKind = "text"
+	KindInteger  ValueKind = "integer"
+	KindNumber   ValueKind = "number"
+	KindTime     ValueKind = "time"     // RFC 3339, as AttrTime reads it
+	KindDuration ValueKind = "duration" // a Go duration ("24h"), as AttrDuration reads it
+	KindRef      ValueKind = "ref"
+	KindEnum     ValueKind = "enum"
+	// KindModifier is the "int / формула" of the combat stats (§3.3): a whole
+	// number or the text of a formula ("+2", "d6"). AttrInt and Flee read
+	// both.
+	KindModifier ValueKind = "modifier"
+	// KindOpen is a container of §3 (inventory[], members[], spawned_by) or
+	// the scope, which is the object {id, type} or its shorthand. It is not a
+	// scalar, its value is not checked, and it is in the table only for
+	// whether a create has to carry it.
+	KindOpen ValueKind = "open"
+)
+
+// AttributeSpec is one row of a table of data-model.md §3: the kind of the
+// value, whether an entity of the type is created with it (a required
+// attribute), and whether null stands for it. null is allowed on an optional
+// attribute, and on the one required attribute whose row says so: the
+// leader_id of a group without living members (§3.6).
+//
+// flee is optional although its row says "Обяз.: да": the same row says that
+// null or no flee at all is "does not run" (§3.3), so a character created
+// without it is a character that does not run (decision of the orchestrator
+// on review #1 of T-472, to be confirmed by system-architect).
+type AttributeSpec struct {
+	Kind     ValueKind
+	Required bool
+	Nullable bool
+}
+
+// Scalar says whether the attribute is one value, below which no path goes.
+func (s AttributeSpec) Scalar() bool { return s.Kind != KindOpen }
+
+func required(kind ValueKind) AttributeSpec { return AttributeSpec{Kind: kind, Required: true} }
+func optional(kind ValueKind) AttributeSpec { return AttributeSpec{Kind: kind, Nullable: true} }
+
+// attrName is the name every entity has (§3, EntityBase). The entity carries it
+// in Entity.Name, so a create need not repeat it among the attributes; an
+// attribute of that name is still a text with nothing below it.
+const attrName = "name"
+
+// attrLastSessionEndedAt has no exported constant, for the reason given above
+// the getters of the world.
+const attrLastSessionEndedAt = "last_session_ended_at"
+
+// attributeTable is data-model.md §3 type by type: §3.1–§3.4, §3.6 and §3.7,
+// each with the common name. Item (§3.5) is a value inside inventory[], not a
+// row here. An attribute its type does not list, and a type that is not here,
+// is not typed: the model is open (C-02 v1.8 p. 2).
+var attributeTable = map[string]map[string]AttributeSpec{
+	TypeWorld: {
+		attrName:         {Kind: KindText},
+		AttrLawsVersion:  required(KindText),
+		AttrWeather:      required(KindEnum),
+		AttrTimeOfDay:    required(KindEnum),
+		AttrDay:          required(KindInteger),
+		AttrSeason:       optional(KindText),
+		AttrEpoch:        optional(KindText),
+		AttrBlueprintRef: required(KindText),
+		AttrLocale:       required(KindText),
+	},
+	TypeRegion: {
+		attrName:                  {Kind: KindText},
+		AttrDescription:           required(KindText),
+		AttrCanon:                 optional(KindOpen),
+		AttrNPCIDs:                required(KindOpen),
+		AttrRespawnTTL:            required(KindDuration),
+		AttrPerceptionRadius:      optional(KindNumber),
+		AttrEncounterChance:       required(KindNumber),
+		AttrPlayersPresent:        required(KindOpen),
+		AttrLastBackgroundEventAt: optional(KindTime),
+		AttrBlueprintRef:          required(KindText),
+	},
+	TypePlayer: {
+		attrName:               {Kind: KindText},
+		AttrHP:                 required(KindInteger),
+		AttrHPMax:              required(KindInteger),
+		AttrAtk:                required(KindModifier),
+		AttrDef:                required(KindModifier),
+		AttrDmg:                required(KindModifier),
+		AttrFlee:               optional(KindModifier),
+		AttrStatus:             required(KindEnum),
+		AttrPosition:           required(KindText),
+		AttrScope:              required(KindOpen),
+		AttrGroupID:            optional(KindRef),
+		AttrEncounterID:        optional(KindRef),
+		AttrInventory:          required(KindOpen),
+		AttrActorKind:          required(KindEnum),
+		attrLastSessionEndedAt: optional(KindTime),
+	},
+	TypeNPC: {
+		attrName:          {Kind: KindText},
+		AttrKind:          required(KindText),
+		AttrRegionID:      required(KindRef),
+		AttrHP:            required(KindInteger),
+		AttrHPMax:         required(KindInteger),
+		AttrAtk:           required(KindModifier),
+		AttrDef:           required(KindModifier),
+		AttrDmg:           required(KindModifier),
+		AttrStatus:        required(KindEnum),
+		AttrPosition:      required(KindText),
+		AttrDiedAt:        optional(KindTime),
+		AttrKilledBy:      optional(KindRef),
+		AttrLoot:          required(KindOpen),
+		AttrLootClaimedBy: optional(KindRef),
+		AttrSpawnedBy:     optional(KindOpen),
+	},
+	TypeGroup: {
+		attrName:        {Kind: KindText},
+		AttrLeaderID:    {Kind: KindRef, Required: true, Nullable: true},
+		AttrMembers:     required(KindOpen),
+		AttrPosition:    required(KindText),
+		AttrScope:       required(KindOpen),
+		AttrEncounterID: optional(KindRef),
+		AttrState:       required(KindEnum),
+	},
+	TypeEncounter: {
+		attrName:            {Kind: KindText},
+		AttrRegionID:        required(KindRef),
+		AttrScope:           required(KindOpen),
+		AttrParticipants:    required(KindOpen),
+		AttrNPCs:            required(KindOpen),
+		AttrState:           required(KindEnum),
+		AttrResolution:      optional(KindEnum),
+		AttrRoundSeq:        required(KindInteger),
+		AttrTaskAgentID:     optional(KindRef),
+		AttrOpenedByEventID: optional(KindRef),
+		AttrClosedByEventID: optional(KindRef),
+	},
+}
+
+// AttributeSpecOf is the row of data-model.md §3 for an attribute of a type;
+// false means the attribute is not typed for that type.
+func AttributeSpecOf(entityType, name string) (AttributeSpec, bool) {
+	spec, ok := attributeTable[entityType][name]
+	return spec, ok
+}
+
+// Holds says whether a value is of the kind of the attribute as the wire carries
+// it: an int built in Go and the float64 read off the bus are the same whole
+// number, and a time.Time is the RFC 3339 text it is written as.
+func (s AttributeSpec) Holds(value any) bool {
+	if s.Kind == KindOpen {
+		return true
+	}
+	wire, ok := wireValue(value)
+	if !ok {
+		return false
+	}
+	if wire == nil {
+		return s.Nullable
+	}
+	text, isText := wire.(string)
+	number, isNumber := wire.(float64)
+	whole := isNumber && number == math.Trunc(number)
+	switch s.Kind {
+	case KindText, KindRef, KindEnum:
+		return isText
+	case KindInteger:
+		return whole
+	case KindNumber:
+		return isNumber
+	case KindModifier:
+		return isText || whole
+	case KindTime:
+		_, err := time.Parse(time.RFC3339, text)
+		return isText && err == nil
+	case KindDuration:
+		_, err := time.ParseDuration(text)
+		return isText && err == nil
+	default:
+		return false
+	}
+}
+
+// wireValue is a value as a reader of the bus decodes it.
+func wireValue(value any) (any, bool) {
+	switch value.(type) {
+	case nil, string, bool, float64, map[string]any, []any:
+		return value, true
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	var decoded any
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
+// Reasons a set of attributes cannot make an entity: the message of
+// ErrInvalidAttribute. On the wire every one of them is invalid_op (C-02).
+const (
+	ReasonRequiredMissing = "required attribute is missing"
+	ReasonWrongKind       = "value is not of the kind of the attribute"
+)
+
+// ErrInvalidAttribute is an attribute an entity of its type cannot be created
+// with: a required one missing, or a value of another kind. State answers it
+// with entity.update.rejected reason=invalid_op (state-and-mechanics.md §4.5,
+// the paragraph on create).
+type ErrInvalidAttribute struct {
+	Type      string
+	Attribute string
+	Reason    string
+}
+
+func (e ErrInvalidAttribute) Error() string {
+	return fmt.Sprintf("invalid attributes of %s: %s: %s", e.Type, e.Attribute, e.Reason)
+}
+
+// CheckAttributes checks the attributes of a create against the table of its
+// type: every required attribute is there, and every typed one holds a value of
+// its kind; attributes the table does not list are left alone. The problem
+// reported is the first in the order of the names, so the answer does not
+// depend on the order a map iterates in.
+func CheckAttributes(entityType string, attrs map[string]any) error {
+	table := attributeTable[entityType]
+	names := make([]string, 0, len(table))
+	for name := range table {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		spec := table[name]
+		value, present := attrs[name]
+		switch {
+		case !present && spec.Required:
+			return ErrInvalidAttribute{Type: entityType, Attribute: name, Reason: ReasonRequiredMissing}
+		case present && !spec.Holds(value):
+			return ErrInvalidAttribute{Type: entityType, Attribute: name, Reason: ReasonWrongKind}
+		}
+	}
+	return nil
+}

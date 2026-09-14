@@ -58,7 +58,9 @@ func TestTheProcessRunsTheStateOfEPIC002(t *testing.T) {
 				"proposal_id": "prop-through-the-process",
 				"entity":      map[string]any{"entity": map[string]any{"id": "player-A", "type": entity.TypePlayer}},
 				"attributes": map[string]any{
-					"hp": 10, "hp_max": 10, "status": "alive", "position": "outside:dark-forest-world",
+					"hp": 10, "hp_max": 10, "atk": 2, "def": 12, "dmg": "d6", "flee": "2",
+					"status": "alive", "position": "outside:dark-forest-world",
+					"scope": map[string]any{"id": "player-A", "type": "solo"}, "actor_kind": "ci", "inventory": []any{},
 				},
 				"cause": "create",
 			})
@@ -81,7 +83,9 @@ func TestTheProcessRunsTheStateOfEPIC002(t *testing.T) {
 // --bus=memory with the context state as serve builds it: a proposal that breaks
 // a law of rules/dark-forest.yaml is refused law_violation with the law named,
 // and a legal move of the same character goes through (T-471). State built with
-// state.Config{} applies all three refusals below.
+// state.Config{} applies the refusals of the laws below. An object at the root of
+// hp is refused by the form of the package since T-472 (entity.ApplyOps, C-02
+// v1.8a p. 3), with or without the laws.
 func TestTheStateOfTheProcessHoldsTheLaws(t *testing.T) {
 	onLoopback(t)
 	clearVar(t, env.SwarmFake.Name())
@@ -129,24 +133,28 @@ func TestTheStateOfTheProcessHoldsTheLaws(t *testing.T) {
 		for _, tc := range []struct {
 			name     string
 			proposal eventbus.Event
+			reason   state.Reason
 			law      string
 		}{
 			{"the gateway moves the character to a region that does not exist",
-				gateway("move-nowhere", "move", entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: "nowhere"}), "inv-10"},
+				gateway("move-nowhere", "move", entity.Op{Op: entity.OpSet, Path: entity.AttrPosition, Value: "nowhere"}),
+				state.ReasonLawViolation, "inv-10"},
 			{"the encounter writes an object at the root of hp",
-				task("hp-object", "combat", entity.Op{Op: entity.OpSet, Path: entity.AttrHP, Value: map[string]any{"x": 999}}), "inv-02"},
+				task("hp-object", "combat", entity.Op{Op: entity.OpSet, Path: entity.AttrHP, Value: map[string]any{"x": 999}}),
+				state.ReasonInvalidOp, ""},
 			{"the encounter writes hp above hp_max",
-				task("hp-above", "combat", entity.Op{Op: entity.OpSet, Path: entity.AttrHP, Value: 11}), "inv-02"},
+				task("hp-above", "combat", entity.Op{Op: entity.OpSet, Path: entity.AttrHP, Value: 11}),
+				state.ReasonLawViolation, "inv-02"},
 		} {
 			answer := answerTo(t, deps, tc.proposal)
 			if answer.Type != state.TypeRejected {
-				t.Errorf("%s: answered %s, want %s law_violation %s", tc.name, answer.Type, state.TypeRejected, tc.law)
+				t.Errorf("%s: answered %s, want %s %s %s", tc.name, answer.Type, state.TypeRejected, tc.reason, tc.law)
 				continue
 			}
 			reason, _ := answer.Path().GetString("reason")
 			law, _ := answer.Path().GetString("details.invariant_id")
-			if reason != string(state.ReasonLawViolation) || law != tc.law {
-				t.Errorf("%s: refused %s %q, want law_violation %s", tc.name, reason, law, tc.law)
+			if reason != string(tc.reason) || law != tc.law {
+				t.Errorf("%s: refused %s %q, want %s %q", tc.name, reason, law, tc.reason, tc.law)
 			}
 		}
 
