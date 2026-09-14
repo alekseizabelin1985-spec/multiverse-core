@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:06:58+03:00",
+  "updatedAt": "2026-09-14T12:15:49+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -16144,6 +16144,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-475 · ревью #1 (code-reviewer#1): принять — 0/0/1/3. Mi-1: снапшот пишется из памяти State core, а «что предлагать» решают объекты — без сверки возможен bootstrap-снапшот неполного мира (зонд P1, нарушение процедуры §4.10 (в)); N-1 MV_CORE_URL через Redacted(); N-2 health без state — предупреждени"
+    },
+    {
+      "at": "2026-09-14T12:15:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние P (постоянное разрешение): epic/EPIC-004-gateway-bot → develop (95f624c) — T-313, T-315, T-473 (и ранее не слитые T-308, T-309, T-316). make ci BASE=develop повторён в спокойное окно — rc=0 (scripts-parity 113/0), secrets-scan чист, пересечений с файлами владельца нет. После слия"
     }
   ],
   "blockers": [],
