@@ -313,6 +313,19 @@ func TestRunHealth(t *testing.T) {
 	defer garbage.Close()
 	unreachable := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	unreachable.Close()
+	answering := func(body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+	// degraded is a process that works: its container is healthy (state-and-
+	// mechanics.md §19, T-059). A status outside the three is not.
+	degraded := answering(`{"status":"degraded","details":{"world":"uninitialized"}}`)
+	defer degraded.Close()
+	failWith200 := answering(`{"status":"fail"}`)
+	defer failWith200.Close()
+	unknown := answering(`{"status":"up"}`)
+	defer unknown.Close()
 
 	tests := map[string]struct {
 		url  string
@@ -322,6 +335,9 @@ func TestRunHealth(t *testing.T) {
 		"unhealthy":   {failing.URL + "/health", 1},
 		"bad body":    {garbage.URL + "/health", 1},
 		"unreachable": {unreachable.URL + "/health", 1},
+		"degraded":    {degraded.URL + "/health", 0},
+		"fail as 200": {failWith200.URL + "/health", 1},
+		"unknown":     {unknown.URL + "/health", 1},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {

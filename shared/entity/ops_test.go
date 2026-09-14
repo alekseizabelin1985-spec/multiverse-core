@@ -103,13 +103,17 @@ func TestApplySet(t *testing.T) {
 	}
 }
 
+// An attribute data-model.md §3 does not type is open: a text there can become
+// an object. A typed scalar cannot (C-02 v1.8 p. 2) — see
+// TestApplyOpsRefusesAPathBelowAScalar.
 func TestApplySetOverAScalarReplacesItWithAMap(t *testing.T) {
 	e := player(t)
+	e.Attributes["motto"] = "run"
 	attrs, _ := applyOK(t, e,
-		entity.Op{Op: entity.OpSet, Path: "dmg.formula", Value: "d8"})
+		entity.Op{Op: entity.OpSet, Path: "motto.text", Value: "hide"})
 
-	if _, ok := attrs[entity.AttrDmg].(map[string]any); !ok {
-		t.Fatalf("dmg = %#v, want a map", attrs[entity.AttrDmg])
+	if _, ok := attrs["motto"].(map[string]any); !ok {
+		t.Fatalf("motto = %#v, want a map", attrs["motto"])
 	}
 }
 
@@ -635,11 +639,11 @@ func TestChangedListAndStateHashMoveTogether(t *testing.T) {
 			ops:   []entity.Op{{Op: entity.OpSet, Path: "banner.colour", Value: "green"}},
 		},
 		{
-			name:  "a scalar replaced by a map and put back",
-			attrs: map[string]any{entity.AttrDmg: "d6"},
+			name:  "an untyped scalar replaced by a map and put back",
+			attrs: map[string]any{"motto": "run"},
 			ops: []entity.Op{
-				{Op: entity.OpSet, Path: "dmg.formula", Value: "d8"},
-				{Op: entity.OpSet, Path: entity.AttrDmg, Value: "d6"},
+				{Op: entity.OpSet, Path: "motto.text", Value: "hide"},
+				{Op: entity.OpSet, Path: "motto", Value: "run"},
 			},
 		},
 		{
@@ -829,7 +833,8 @@ func replayChanged(t *testing.T, base *entity.Entity, changed []entity.Change) s
 // meeting one while catching up stops the world with state_divergence (§4.8).
 var errCorruptFact = errors.New("corrupt fact")
 
-// catchUp applies changed[] entry by entry: new present is written at its path,
+// catchUp applies changed[] entry by entry. A path not in its canonical form is
+// a corrupt fact (C-02 v1.8 p. 2). new present is written at its path,
 // replacing a missing or scalar node on the way with an object, as set does,
 // and appended when the path is the element one past the end of its list; new
 // absent deletes the path. The version is carried over so that the hash answers for the
@@ -863,6 +868,9 @@ func catchUp(base *entity.Entity, changed []entity.Change) (string, error) {
 // catchUpOp is the operation one entry of changed[] comes down to, or nil when
 // there is nothing to do.
 func catchUpOp(attrs map[string]any, change entity.Change) (*entity.Op, error) {
+	if !entity.CanonicalPath(change.Path) {
+		return nil, fmt.Errorf("%w: %q is not a canonical path", errCorruptFact, change.Path)
+	}
 	if !change.HasNew {
 		if _, exists := jsonpath.New(attrs).GetAny(change.Path); !exists {
 			return nil, nil

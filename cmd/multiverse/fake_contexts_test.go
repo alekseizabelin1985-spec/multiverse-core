@@ -564,7 +564,7 @@ func fightThroughTheProcess(t *testing.T, prefix string, tweak func([]*entity.En
 		}
 	}
 	onlyRetriedRefusals(t, eventsOn(t, bus, eventbus.TopicSystemEvents))
-	oneStateOverTheWorld(t, eventsOn(t, bus, eventbus.TopicSystemEvents))
+	state.OneStateOverTheWorld(t, eventsOn(t, bus, eventbus.TopicSystemEvents))
 	if letters, err := bus.DeadLetters(); err != nil || len(letters) != 0 {
 		t.Errorf("dead letters: %v (err %v), want none", letters, err)
 	}
@@ -675,43 +675,6 @@ func (s *stand) bootstrap(ctx context.Context, bus eventbus.Bus, fixtures []*ent
 func (s *stand) wait() {
 	if s.harness != nil {
 		_ = s.harness.Wait()
-	}
-}
-
-// oneStateOverTheWorld is the guard of "one State per world" on the stand
-// (review #1 of T-056, Mi-4; strict since review #2, Mi-6): every fact is
-// published by the State of the process, one version of one entity is announced
-// by one event, and no event is published twice. A second State over the world
-// of the fixtures — a double beside the process, or a second internal/state —
-// answers every proposal again, under its own source or under the very ids of
-// the first, which State derives from the proposal. A fact with an empty
-// changed[] announces no version (C-02) and is held to its id alone.
-func oneStateOverTheWorld(t *testing.T, facts []eventbus.Event) {
-	t.Helper()
-	announced := make(map[string]string)
-	published := make(map[string]bool)
-	for _, ev := range facts {
-		if ev.Type != state.TypeCreated && ev.Type != state.TypeUpdated {
-			continue
-		}
-		id, _ := ev.Path().GetString("entity.entity.id")
-		version, _ := ev.Path().GetInt("version")
-		if ev.Source != contracts.SourceState {
-			t.Errorf("%s of %s v%d is published by %q, want only the State of the process (%s)",
-				ev.Type, id, version, ev.Source, contracts.SourceState)
-		}
-		if published[ev.ID] {
-			t.Errorf("%s of %s v%d is published twice under %s: two States answer one world", ev.Type, id, version, ev.ID)
-		}
-		published[ev.ID] = true
-		if changed, ok := ev.Path().GetSlice("changed"); ok && len(changed) == 0 {
-			continue
-		}
-		key := fmt.Sprintf("%s v%d", id, version)
-		if first, seen := announced[key]; seen {
-			t.Errorf("%s is announced twice, by %s and %s: two States answer one world", key, first, ev.ID)
-		}
-		announced[key] = ev.ID
 	}
 }
 
