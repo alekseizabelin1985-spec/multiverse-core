@@ -8982,3 +8982,47 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **T-471.** Рецепт встречи в `develop`: `"MV_RULES_PATH": ("state", "swarm")` в `READERS`, причина `MV_SWARM_FAKE` без фразы про `rules/` в образе, строки в `good-reach-host-only` и `bad-reach-all`.
 - **Индекс.** `tasks.md` 0.1.6: T-469 `done`, ветка фактическая, «восемь» → «десять», п. 1 передачи T-470 отмечен выполненным.
 - Не коммитил, `.env` не открывал, контейнеры и 127.0.0.1:8888 не трогал.
+
+<!-- dev-log T-476 -->
+## devops-engineer#1 · T-476 · `degraded` в `make health` и документах, e2e бота в `test-race` · 2026-09-14
+
+Рабочая папка `.worktrees/T-476`, ветка `task/T-476-health-degraded-make`, база `e7adb6d`, Opus. Подробно — карточка `tasks/T-476.md`, «Выполнение». Статус — `review`.
+- **`Makefile`.**
+  - `DEGRADED_STRICT ?= 1`. `make health` печатает `ok`/`degraded`/`FAIL`: у `core` — по слову пробы, верно по обе стороны T-059; у `gateway`/`memory`/`telegram-bot` — по первому ключу `status` тела.
+  - `degraded` даёт `rc=1` только при `DEGRADED_STRICT=1`; `up`/`deploy`/`rollback` передают `DEGRADED_STRICT=0`.
+  - `test-race`: `RACE_E2E_PKGS := ./test/e2e/... ./cmd/telegram-bot/e2e/...` в `echo` и `go test` второй команды; `RACE_PKGS` прежний.
+- **Документы.** `infrastructure.md`: §2.2, §2.3, §7.2 — дословно по решению T-059; §2.2/§3.1 — `race`; §8 п. 1, 3; §9.1 п. 3; абзац «Правка T-476»; §4.2 не тронут. `README.md` — врезка про `core degraded` до `mvctl world init`. Runbook — §1 п. 3 и §7. Индекс `tasks.md` — раздел T-476.
+- **Порядок слияния.**
+  - В `develop` не раньше T-059.
+  - И не раньше T-315 в `develop`. Каталога `cmd/telegram-bot/e2e` на ветке нет, и `go test` на таком шаблоне даёт `setup failed`, код 1, а не предупреждение (проверено). Задание `race` краснело бы.
+- **Прогоны.**
+  - `make help` — ok. `make -n test-race` — e2e бота во второй команде с `-tags e2e`.
+  - `go list -tags e2e ./cmd/telegram-bot/e2e/...`: на ветке rc=1 (нет каталога); в `.worktrees/EPIC-004` — пакет найден, без тега — `matched no packages`.
+  - `make compose-lint` — rc=0, 72 bad / 14 good. `make secrets-scan` — no leaks (индекс = HEAD). `gitleaks dir` по копии изменённых файлов — no leaks.
+- **Рецепт `health`.** Проверен на заглушках `curl`/`docker`/`make`: 8 сценариев. Мутанты K0 (первым) PASS; M1–M3 KILLED. `make health` против стека не запускался, контейнеры и 127.0.0.1:8888 не трогал.
+- **Бэклог.** §7.2: `down` → `fail` в примере JSON (system-architect). Проба `core` в `make health` без `--url`. Страж «шаблон пакетов `test-race` без пакетов — отказ».
+- Не коммитил, `git add` не делал, `.env` не открывал; scratch `t476-*` удалён по точным путям.
+
+<!-- dev-log T-476 iteration 2 -->
+## devops-engineer#1 · T-476 · итерация 2 по ревью #1 (0/0/2/2) · 2026-09-14
+
+Рабочая папка `.worktrees/T-476`, база `e7adb6d`, Opus. Подробно — карточка `tasks/T-476.md`, «Итерация 2 (devops)». Статус — `review`.
+- **Mi-1.** Порядок в карточке и индексе — один текст (вариант (а) оркестратора). T-476 → `epic/EPIC-001-foundation` сразу после приёмки; эпик → `develop` не раньше T-059 и T-315 в `develop`. Проверка — `git ls-tree develop cmd/telegram-bot/e2e` и `git log --oneline develop | grep T-059`, оба не пусты. Локальный `make ci` не покажет: без cgo `test-race` — `SKIPPED`.
+- **Mi-2.** Runbook §7: ненулевой код даёт и недоступный LLM при `LLM_STRICT=1` (умолчание).
+- **N-1.** README: строки таблицы `gateway/memory/telegram-bot/core` и `-`, LLM — отдельным `make llm-health`. Runbook §1 п. 3: `FAIL` включает HTTP 200 со статусом вне перечня.
+- **N-2.** Причина зависимости от T-059 — документы описывают её пробу; строка `core` верна по обе стороны.
+- **Бэклог карточки** — п. 4 (`grep -qx` под `pipefail`) и п. 5 (тайм-аут `docker compose exec`) из ревью.
+- **Прогоны.** `make help` — rc=0; `make -n test-race` — e2e бота во второй команде с `-tags e2e`; `make compose-lint` — rc=0, 72/14.
+- Не коммитил, `git add` не делал, `.env` не открывал, контейнеры и 127.0.0.1:8888 не трогал; scratch `t476i2-apply.py` удалён по точному пути.
+
+<!-- dev-log T-476 acceptance -->
+## tech-lead#1 · T-476 · приёмка: итерация 2 без ревью #2, Mi-1, Mi-2, N-1, N-2 закрыты; отметка по файлам EPIC-001 из T-059 · 2026-09-14
+
+Рабочая папка `.worktrees/T-476`, ветка `task/T-476-health-degraded-make`, база `e7adb6d`, Opus. Подробно — карточка `tasks/T-476.md`, разделы «Приёмка (tech-lead)» и «Отметка по файлам EPIC-001 из T-059».
+- **Решение: принять**, статус `done`. Итераций ревью — 1. Итерацию 2 принял без ревью #2 по поручению оркестратора.
+- **DoD 1–6 подтверждены.** Строка `core` читает слово пробы и верна по обе стороны T-059. `degraded` даёт `rc=1` только при `DEGRADED_STRICT=1`. `up`/`deploy`/`rollback` вызывают `health` с `DEGRADED_STRICT=0`. E2e бота — во второй команде `test-race`, `RACE_PKGS` прежний.
+- **Прогоны.** `make help`, `make -n test-race`, `make compose-lint` (72/14), `make secrets-scan`, `go build ./... && go vet ./...` — зелёные. `gitleaks dir --redact` по копии изменённых файлов — no leaks. `go list -tags e2e ./cmd/telegram-bot/e2e/...` — rc=1, ожидаемо до T-315.
+- **Правка приёмки.** Проверка `git log --oneline develop | grep T-059` уже находила 6 служебных коммитов, хотя T-059 не слита. В карточке и индексе заменил её на `git log --merges --oneline develop | grep -F 'Merge task/T-059-'`: для T-059 — 0, контроль T-057 — 1.
+- **Отметка по T-059.** Согласовано предварительно: итерация 3 не завершена, финальный `serve.go` проверю по её завершении. Место стража `OneStateOverTheWorld` в `shared/testkit/state` подтверждаю. Рекомендация для T-059: `TestRunHealth` должен проверять и stdout.
+- **Индекс.** `tasks.md` 0.1.7: T-476 `done`, проверка слияния, итог приёмки, бэклог п. 1–6.
+- Не коммитил, `git add` не делал, код не менял. `.env` не открывал, контейнеры и 127.0.0.1:8888 не трогал, в `.worktrees/T-059` не писал. Scratch `t476tl-*` удалён по точным путям.
