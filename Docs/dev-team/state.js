@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:20:42+03:00",
+  "updatedAt": "2026-09-14T11:40:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5033,11 +5033,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "review",
+          "status": "done",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
-          "reviewIterations": 2
+          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T11:40:31+03:00",
+          "spentMinutes": 459
         },
         {
           "id": "T-478",
@@ -11340,7 +11342,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Приёмка T-473",
       "startedAt": "2026-09-14T11:10:48+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:40:31+03:00"
     },
     {
       "instance": "developer#1",
@@ -15979,6 +15981,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Запущена T-475 «mvctl world init --bus kafka» (developer#1) от 77d06ff: блокирует T-063; открытый вопрос — reason=admin у admin-маршрута против reason=bootstrap для world init. Идёт make ci по EPIC-002 для контрольного слияния O в develop (порядок: EPIC-002 → develop, затем EPIC-004 с T-313/T-315/T-"
+    },
+    {
+      "at": "2026-09-14T11:40:31+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 принята tech-lead#3 (итерация 3 без ревью #3): DoD, отклонения (RealTimers в replay, Stop не ждёт входящий reader, DeleteRecords, тест < 3 мин), цель ≤ 15 с — замер и README, сама цель в T-477 (блоки А1–А4, Б1–Б3, В1–В3 в «Передать»); мутанты приёмки A1–A5 красные; бэклог З-36…З-41; индекс 0.1"
+    },
+    {
+      "at": "2026-09-14T11:40:31+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние O (постоянное разрешение): epic/EPIC-002-state-mechanics → develop (b071ec6) — T-472, T-058, T-059. make ci BASE=develop с scripts-parity -jobs 1 — rc=0 (113 passed), secrets-scan чист, пересечений с файлами владельца нет; develop собирается, тесты state/multiverse/entity/gateway"
     }
   ],
   "blockers": [],
