@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:24:59+03:00",
+  "updatedAt": "2026-09-14T12:41:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3272,11 +3272,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "review",
+          "status": "done",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:20:42+03:00",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T12:41:42+03:00",
+          "spentMinutes": 77
         }
       ],
       "defects": [],
@@ -11469,7 +11471,7 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "Приёмка T-475",
       "startedAt": "2026-09-14T12:22:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:41:42+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -16220,6 +16222,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "ОБНАРУЖЕНО: workflow go на GitHub для develop не проходил ни разу (первый прогон 13.09 11:25 и все последующие — failure; P отменён, Q в очереди). Контрольные слияния M…Q шли по локальному make ci на Windows. Падения на Linux: (1) cmd/multiverse dispatch_test the_flag_overrides_the_manifest зависит "
+    },
+    {
+      "at": "2026-09-14T12:41:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 принята tech-lead#2: DoD закрыт (стенд — в T-063), решения system-architect сверены с кодом (bootstrap только без latest.json на worker'е, 409; мутанты B2a–B2f, R409 — B2f выжил, в бэклог), Mi-1/N-1…N-3 приняты; бэклог 7 строк; индекс 0.1.11. Итераций ревью — 1. Коммит, ветка запушена, слита в"
+    },
+    {
+      "at": "2026-09-14T12:41:42+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 · решения architect#3 (итерация 2): фраза §7.7 про SAVEPOINT и Sweep подтверждена и уточнена (N-7: дозавершает Sweep, следующее событие механики того же типа или ack другого нарратива корреляции; N-10); N-3 — фраза в §5.5, код не меняется; правило для T-479 — закрытие сессии в той же точке сох"
     }
   ],
   "blockers": [
