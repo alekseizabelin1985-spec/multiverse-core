@@ -39,6 +39,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -358,21 +359,8 @@ func (w *gatewayWorld) wait(step *gatewayStep, turn bool) {
 // and every step of a turn the topic causes is in gateway.db.
 func (w *gatewayWorld) consumerBehind() string {
 	w.t.Helper()
-	rows, err := w.gatewayDB.QueryContext(w.ctx, `SELECT topic, "offset" FROM cursors`)
+	cursors, err := consumer.Cursors(w.ctx, w.gatewayDB)
 	if err != nil {
-		w.t.Fatalf("read the cursors of the gateway: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	cursors := map[string]int64{}
-	for rows.Next() {
-		var topic string
-		var offset int64
-		if err := rows.Scan(&topic, &offset); err != nil {
-			w.t.Fatalf("read the cursors of the gateway: %v", err)
-		}
-		cursors[topic] = offset
-	}
-	if err := rows.Err(); err != nil {
 		w.t.Fatalf("read the cursors of the gateway: %v", err)
 	}
 	for _, topic := range consumer.Topics {
@@ -757,20 +745,22 @@ var gatewayIDToken = regexp.MustCompile(`(?:e2e|gw)-\d+|[0-9a-f]{8}-[0-9a-f]{4}-
 //     either order, and the gateway names the first it reads
 //     (turns.Tracker.OnNarrative). The narratives of such a turn are compared
 //     as a set, like every event of the step, and delivery.narrative_event_id
-//     is checked to be one of them (gatewayNormalized);
+//     is replaced by gatewayNarrativeOfTurn; the narrative every turn names is
+//     checked to be one of its own, whatever their number (gatewayNormalized);
 //   - which of the two events of the opening of an encounter a world_event
 //     delivery names: the gateway opens the encounter by encounter.started or
 //     by the entity.created of the encounter, whichever its consumer reads
 //     first (consumer.Deliveries.OnEncounterOpened), and the two come on
 //     different topics. The event is checked to be one of the two and
 //     replaced by gatewayOpeningOf;
-//   - the fields of the mechanics of a turn (gatewayRaceFields), checked on
-//     their own by gatewayAssertMechanics;
 //   - created_at of a delivery, the moment the consumer of the gateway wrote
 //     it: a measure of the consumer, not of the scenario.
 //
 // Everything else — types, payloads, timestamps of the events, texts, the
-// order of the steps — is compared as it was published.
+// order of the steps — is compared as it was published. That includes the
+// fields of the mechanics of a turn: a turn with Phase 1 completes only once
+// its mechanics is recorded (component gateway-and-bot.md §7.7), so they no
+// longer depend on which topic the gateway read first.
 func (w *gatewayWorld) canonical() string {
 	w.t.Helper()
 	w.journal.refresh()
@@ -792,7 +782,13 @@ func (w *gatewayWorld) canonical() string {
 		if narratives[ev.Meta.CorrelationID] == nil {
 			narratives[ev.Meta.CorrelationID] = map[string]bool{}
 		}
-		narratives[ev.Meta.CorrelationID][ev.ID] = true
+		// A turn names the narrative_event_id its narrative carries, and the id
+		// of the narrative only when it carries none (turns.Tracker.OnNarrative).
+		named := ev.ID
+		if id, ok := ev.Path().GetString("narrative_event_id"); ok && id != "" {
+			named = id
+		}
+		narratives[ev.Meta.CorrelationID][named] = true
 	}
 
 	openings := map[string]map[string]bool{}
@@ -848,26 +844,6 @@ func (w *gatewayWorld) canonical() string {
 	return b.String()
 }
 
-// gatewayRaceFields are the fields of analytics.turn.completed that record
-// whether the mechanics of a turn reached the gateway before the
-// acknowledgement of its narrative completed it. The two come to the gateway
-// through different topics — the fact of State or the decision on
-// system_events and game_events, the narrative on narrative_output — and C-01
-// orders neither against the other; a mechanics that comes after the turn is
-// completed is not recorded (turns.Tracker.OnMechanics), and neither are the
-// mode and the level of detail the decision carries. With the template
-// narrator of Phase 1 both are a hop away from the action, and either may be
-// first on any run. The exclusion ends with Н-1 of architect#3 (a turn with
-// Phase 1 completes after its mechanics); until then gatewayAssertMechanics
-// holds these fields to the journal.
-var gatewayRaceFields = [][]string{
-	{"payload", "delivery", "result_event_id"},
-	{"payload", "timings", "mechanics_at"},
-	{"payload", "timings", "mechanics_ms"},
-	{"payload", "turn", "phase1_mode"},
-	{"payload", "turn", "lod"},
-}
-
 // gatewayOpeningOf is what the event of a world_event delivery becomes in the
 // canonical journal.
 const gatewayOpeningOf = "an event of the opening of the encounter"
@@ -876,10 +852,11 @@ const gatewayOpeningOf = "an event of the opening of the encounter"
 // several narratives becomes in the canonical journal.
 const gatewayNarrativeOfTurn = "one of the narratives of the turn"
 
-// gatewayNormalized is the body of a record for the canonical journal. An
-// analytics.turn.completed loses gatewayRaceFields, and when its correlation
-// has several narratives, the narrative it names is checked to be one of them
-// and replaced by gatewayNarrativeOfTurn.
+// gatewayNormalized is the body of a record for the canonical journal. The
+// narrative an analytics.turn.completed names is checked to be one of the
+// narratives of its correlation, and a turn without any names none (Mi-3 of
+// review #2 of T-313); when there are several, the one it names is replaced by
+// gatewayNarrativeOfTurn.
 func gatewayNormalized(t *testing.T, r gatewayRecord, narratives map[string]bool) string {
 	t.Helper()
 	if r.ev.Type != turns.TypeCompleted {
@@ -889,21 +866,17 @@ func gatewayNormalized(t *testing.T, r gatewayRecord, narratives map[string]bool
 	if err := json.Unmarshal([]byte(r.body), &doc); err != nil {
 		t.Fatalf("decode %s: %v", r.ev.ID, err)
 	}
-	for _, path := range gatewayRaceFields {
-		parent := doc
-		for _, key := range path[:len(path)-1] {
-			parent, _ = parent[key].(map[string]any)
-		}
-		delete(parent, path[len(path)-1])
+	payload, _ := doc["payload"].(map[string]any)
+	delivery, _ := payload["delivery"].(map[string]any)
+	named, has := delivery["narrative_event_id"].(string)
+	switch {
+	case len(narratives) == 0 && has:
+		t.Errorf("turn.completed %s names the narrative %q, and its turn has none", r.ev.ID, named)
+	case len(narratives) > 0 && !narratives[named]:
+		t.Errorf("turn.completed %s names the narrative %q, not one of the narratives of its turn %v",
+			r.ev.ID, named, slices.Sorted(maps.Keys(narratives)))
 	}
 	if len(narratives) > 1 {
-		payload, _ := doc["payload"].(map[string]any)
-		delivery, _ := payload["delivery"].(map[string]any)
-		named, _ := delivery["narrative_event_id"].(string)
-		if !narratives[named] {
-			t.Errorf("turn.completed %s names the narrative %q, not one of the narratives of its turn %v",
-				r.ev.ID, named, slices.Sorted(maps.Keys(narratives)))
-		}
 		delivery["narrative_event_id"] = gatewayNarrativeOfTurn
 	}
 	raw, err := json.Marshal(doc)
@@ -913,11 +886,29 @@ func gatewayNormalized(t *testing.T, r gatewayRecord, narratives map[string]bool
 	return string(raw)
 }
 
-// gatewayAssertMechanics holds the mechanics a turn recorded to the journal,
-// since the canonical journal does not compare it (gatewayRaceFields): a turn
-// that names its mechanics names an event of its own chain that is a mechanics
-// — a decision or a fact of State — with the mode and the level of detail of a
-// decision of that chain, at a moment between the action and the completion.
+// gatewayMechanicsOf are the actions whose turn has a Phase 1 — the column
+// "Phase 1" of api-contracts.md §1.4 — with the type of the event that is
+// their mechanics (component gateway-and-bot.md §7.7): the decision of a fight
+// or a flight, the fact of State of a move or a rest.
+var gatewayMechanicsOf = map[string]string{
+	api.ActionEnter:  tkstate.TypeUpdated,
+	api.ActionLeave:  tkstate.TypeUpdated,
+	api.ActionAttack: tkswarm.TypeCombatDecided,
+	api.ActionFlee:   tkswarm.TypeCombatDecided,
+	api.ActionRest:   tkstate.TypeUpdated,
+}
+
+// gatewayAssertMechanics holds the mechanics a turn recorded to the journal.
+// A turn with Phase 1 whose narrative was delivered (timings.narrative_at) has
+// its mechanics (component gateway-and-bot.md §7.7). A turn that names its
+// mechanics names an event of its own chain that is a mechanics — for an
+// action with Phase 1 the event of the type of its action (gatewayMechanicsOf),
+// otherwise a decision or a fact of State — with the mode and the level of
+// detail of a decision of that chain, and its mechanics_at is not before received_at and not after
+// the deadline of the turn, received_at + turns.DefaultTimeout. The
+// acknowledgement of the narrative is no upper bound — the mechanics of a turn
+// may come after it — and neither is the timestamp of turn.completed, which is
+// the moment of the action (turns.Completed).
 func gatewayAssertMechanics(t *testing.T, j *gatewayJournal) {
 	t.Helper()
 	byID := map[string]eventbus.Event{}
@@ -932,6 +923,11 @@ func gatewayAssertMechanics(t *testing.T, j *gatewayJournal) {
 			t.Errorf("turn.completed %s: result_event_id %q and mechanics_at %q, want both or neither", ev.ID, result, at)
 			continue
 		}
+		action, _ := pa.GetString("turn.action_type")
+		want, withPhase1 := gatewayMechanicsOf[action]
+		if withPhase1 && pa.Has("timings.narrative_at") && !hasResult {
+			t.Errorf("turn.completed %s: a turn of %s with its narrative delivered and without its mechanics", ev.ID, action)
+		}
 		if !hasResult {
 			continue
 		}
@@ -940,6 +936,9 @@ func gatewayAssertMechanics(t *testing.T, j *gatewayJournal) {
 			(mech.Type != tkswarm.TypeCombatDecided && mech.Type != tkstate.TypeUpdated) {
 			t.Errorf("turn.completed %s names the mechanics %q (%s of %q), want a decision or a fact of %s",
 				ev.ID, result, mech.Type, mech.Meta.CorrelationID, ev.Meta.CorrelationID)
+		}
+		if withPhase1 && mech.Type != want {
+			t.Errorf("turn.completed %s of %s names the mechanics %q of type %s, want %s", ev.ID, action, result, mech.Type, want)
 		}
 		for _, field := range []string{"phase1_mode", "lod"} {
 			value, has := pa.GetString("turn." + field)
@@ -956,9 +955,16 @@ func gatewayAssertMechanics(t *testing.T, j *gatewayJournal) {
 				t.Errorf("turn.completed %s has %s %q that no decision of its turn carries", ev.ID, field, value)
 			}
 		}
-		received, _ := pa.GetString("timings.received_at")
-		if completed := session.Timestamp(ev.Timestamp); at < received || at > completed {
-			t.Errorf("turn.completed %s: mechanics_at %s outside [%s, %s]", ev.ID, at, received, completed)
+		receivedAt, _ := pa.GetString("timings.received_at")
+		received, errReceived := time.Parse(time.RFC3339Nano, receivedAt)
+		mechanics, errMechanics := time.Parse(time.RFC3339Nano, at)
+		if err := errors.Join(errReceived, errMechanics); err != nil {
+			t.Errorf("turn.completed %s: timings: %v", ev.ID, err)
+			continue
+		}
+		if deadline := received.Add(turns.DefaultTimeout); mechanics.Before(received) || mechanics.After(deadline) {
+			t.Errorf("turn.completed %s: mechanics_at %s outside [received_at %s, deadline %s]", ev.ID, at, receivedAt,
+				session.Timestamp(deadline))
 		}
 	}
 }
