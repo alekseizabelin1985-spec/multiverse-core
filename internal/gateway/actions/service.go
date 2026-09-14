@@ -194,36 +194,64 @@ func (s *Service) Submit(ctx context.Context, c Command) Answer {
 	return s.publish(ctx, c, key, b)
 }
 
-// publish publishes the events of b the bus has not acknowledged yet, then
-// records the turn and keeps 202 under the key. A publication that fails holds
-// the batch from the event that failed: that event may have reached the broker
-// without its acknowledgement, and its repeat carries the same id.
+// publish publishes the events of b the bus has not acknowledged yet and keeps
+// 202 under the key. A publication that fails holds the batch from the event
+// that failed: that event may have reached the broker without its
+// acknowledgement, and its repeat carries the same id.
+//
+// The turn is recorded before the player.* event goes out, not after the
+// batch (component §5.5, Turn before Bus.Publish). The bus delivers
+// asynchronously, and the mechanics and the narrative of the action can reach
+// the consumer while the last event of the batch is still being published: a
+// turn written after them would never see its narrative and would wait for its
+// deadline (review #1 of T-308, Mi-1). An action event the bus did not
+// acknowledge takes its turn back, so a client told to repeat leaves no turn
+// behind; an event after it that fails leaves the turn, because the action is
+// out and its narrative is coming.
 func (s *Service) publish(ctx context.Context, c Command, key batchKey, b *batch) Answer {
+	action := b.events[b.action]
 	for ; b.sent < len(b.events); b.sent++ {
-		if err := s.cfg.Bus.Publish(ctx, b.events[b.sent]); err != nil {
-			if evicted, ok := s.pending.hold(key, b); ok {
-				s.cfg.Log.LogAttrs(ctx, slog.LevelWarn, "half published action dropped from memory at the limit",
-					slog.String("player_id", evicted.playerID), slog.Int("limit", s.cfg.PendingLimit))
+		if b.sent == b.action {
+			if err := s.cfg.Turns.Accepted(ctx, b.turn, b.ref, action.ID); err != nil {
+				s.hold(ctx, key, b)
+				return s.failed(ctx, c, api.CodeInternal, err)
 			}
+		}
+		if err := s.cfg.Bus.Publish(ctx, b.events[b.sent]); err != nil {
+			if b.sent == b.action {
+				// The budget of the decision may be what failed the publication.
+				if werr := s.cfg.Turns.Withdrawn(context.WithoutCancel(ctx), b.ref, action.ID); werr != nil {
+					s.logFailure(ctx, c, "turn of an unpublished action not taken back", werr)
+				}
+			}
+			s.hold(ctx, key, b)
 			return s.failed(ctx, c, api.CodeBusUnavailable, err)
 		}
 	}
 
-	action := b.events[b.action]
 	acked := s.cfg.Clock.Now()
 	accepted := api.ActionAccepted{CorrelationID: action.ID, Turn: b.ref, Status: api.ActionStatusAccepted, AckedAt: acked}
-	// The action is out: a turn or a key that fails to record now is logged,
-	// not answered, because a client told to repeat would publish it twice.
-	// Both are recorded without the cancellation and the budget of the
-	// decision: a budget that runs out after the last publication must not
-	// leave 202 without its key, or the repeat of the key would build the
-	// action again. The store bounds the write by its busy timeout.
+	// The action is out: the moment of its acknowledgement or a key that fails
+	// to record now is logged, not answered, because a client told to repeat
+	// would publish it twice. Both are recorded without the cancellation and
+	// the budget of the decision: a budget that runs out after the last
+	// publication must not leave 202 without its key, or the repeat of the key
+	// would build the action again. The store bounds the write by its busy
+	// timeout.
 	out := context.WithoutCancel(ctx)
-	if err := s.cfg.Turns.Accepted(out, b.turn, b.ref, action.ID); err != nil {
-		s.logFailure(ctx, c, "turn of an accepted action not recorded", err)
+	if err := s.cfg.Turns.Acked(out, action.ID, acked); err != nil {
+		s.logFailure(ctx, c, "acknowledgement of an accepted action not recorded", err)
 	}
 	s.keep(out, c, action.ID, http.StatusAccepted, accepted, acked)
 	return Answer{Status: http.StatusAccepted, Accepted: &accepted}
+}
+
+// hold keeps a batch that is not fully published under its key.
+func (s *Service) hold(ctx context.Context, key batchKey, b *batch) {
+	if evicted, ok := s.pending.hold(key, b); ok {
+		s.cfg.Log.LogAttrs(ctx, slog.LevelWarn, "half published action dropped from memory at the limit",
+			slog.String("player_id", evicted.playerID), slog.Int("limit", s.cfg.PendingLimit))
+	}
 }
 
 // SweepPending drops the half published batches whose key expired by now; the

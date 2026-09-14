@@ -2,17 +2,22 @@ package gateway_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"multiverse-core.io/internal/gateway"
 	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/internal/gateway/store"
+	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
+	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
@@ -329,5 +334,197 @@ func TestTheGatewayHearsTheFactsOfTheBus(t *testing.T) {
 	<-testkit.After(50 * time.Millisecond)
 	if c, _ := model.Character("player-A"); c.HP != 5 {
 		t.Errorf("a fact published after Stop reached the projection: hp %d", c.HP)
+	}
+}
+
+// hpFact is entity.updated of the hp of player-A at version.
+func hpFact(version, from, to int) eventbus.Event {
+	return eventbus.NewRoot(readmodel.TypeEntityUpdated, contracts.SourceState, world, nil, eventbus.ActorSystem,
+		map[string]any{
+			"entity":  map[string]any{"entity": map[string]any{"id": "player-A", "type": "player"}, "name": "Вася"},
+			"version": version, "cause": "combat", "proposal_id": fmt.Sprintf("p-hp-%d", version), "applied_at": "2026-09-13T10:00:00Z",
+			"changed": []any{map[string]any{"path": "hp", "old": from, "new": to}},
+		})
+}
+
+// laterStateSnapshot writes into objects a later snapshot object of State in
+// which player-A is at version with hp, and returns snapshot.created of it with
+// hash as its state_hash; an empty hash is the hash of the object.
+func laterStateSnapshot(t *testing.T, objects objstore.Client, version int64, hp int, hash string) eventbus.Event {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "snapshots", "state", "20260101T000000Z-000000.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var object map[string]any
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatal(err)
+	}
+	var entities []*entity.Entity
+	body, _ := json.Marshal(object["entities"])
+	if err := json.Unmarshal(body, &entities); err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entities {
+		if e.ID == "player-A" {
+			e.Version, e.Attributes["hp"] = version, float64(hp)
+		}
+	}
+	object["entities"] = entities
+	const key = "state/20260913T100000Z-000009.json"
+	body, err = json.Marshal(object)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := objects.Put(context.Background(), objstore.SnapshotsBucket(world), key, body, objstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" {
+		hash = entity.StateHash(entities)
+	}
+	return eventbus.NewRoot(readmodel.TypeSnapshotCreated, contracts.SourceState, world, nil, eventbus.ActorSystem, map[string]any{
+		"component": "state",
+		"snapshot": map[string]any{"id": "state:" + world + ":000009", "seq": 9, "taken_at": "2026-09-13T10:00:00Z",
+			"cursor": map[string]any{eventbus.TopicSystemEvents: 1}, "laws_version": "v1", "state_hash": hash,
+			"size_bytes": len(body), "key": key},
+	})
+}
+
+// staleGateway is a started gateway whose player-A is stale: a fact of version
+// 3 came after the version 1 of the snapshot of State.
+func staleGateway(t *testing.T, mode runtime.Mode) (running, objstore.Client) {
+	t.Helper()
+	objects := snapshotStore(t, nil)
+	r := startWith(t, mode, sqlitedir.Temp(t), objects)
+	if err := r.bus.Publish(context.Background(), hpFact(3, 10, 7)); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the gap of versions to make the projection stale", func() bool {
+		h := r.ctx.Health()
+		return h.Details["projection"] == "stale" && h.Status == runtime.StatusDegraded
+	})
+	return r, objects
+}
+
+// (а) The projection made stale by a gap of versions is repaired, in live and
+// in replay alike, by snapshot.created of State whose object holds the entity
+// at a version not below: /health is ok again and the entity is the copy of
+// the snapshot (component §11.2, review #1 of T-304, N-1).
+func TestASnapshotOfStateRepairsAStaleProjection(t *testing.T) {
+	for _, mode := range []runtime.Mode{runtime.ModeLive, runtime.ModeReplay} {
+		t.Run(string(mode), func(t *testing.T) {
+			testkit.Deterministic(t, "gw")
+			r, objects := staleGateway(t, mode)
+			if err := r.bus.Publish(context.Background(), laterStateSnapshot(t, objects, 3, 4, "")); err != nil {
+				t.Fatal(err)
+			}
+			eventually(t, "the snapshot of State to repair the projection", func() bool {
+				h := r.ctx.Health()
+				return h.Details["projection"] == "ok" && h.Status == runtime.StatusOK
+			})
+			if c, _ := gateway.ReadModel(r.ctx).Character("player-A"); c.HP != 4 || c.Version != 3 {
+				t.Errorf("player-A = hp %d v%d, want the copy of the snapshot", c.HP, c.Version)
+			}
+		})
+	}
+}
+
+// (е) A snapshot of State that does not check — its hash is not the hash of the
+// object — repairs nothing: the projection stays stale, the event moves the
+// effects cursor and nothing goes to dead_letters.
+func TestASnapshotOfStateThatDoesNotCheckLeavesTheProjectionStale(t *testing.T) {
+	testkit.Deterministic(t, "gw")
+	r, objects := staleGateway(t, runtime.ModeLive)
+	if err := r.bus.Publish(context.Background(), laterStateSnapshot(t, objects, 3, 4, entity.StateHash(nil))); err != nil {
+		t.Fatal(err)
+	}
+	gatewayDB, err := store.OpenGateway(context.Background(), store.GatewayPath(r.dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = gatewayDB.Close() }()
+	eventually(t, "the event of the snapshot to move the effects cursor", func() bool {
+		var offset int64
+		err := gatewayDB.QueryRowContext(context.Background(), `SELECT "offset" FROM cursors WHERE topic = ?`, eventbus.TopicSystemEvents).Scan(&offset)
+		return err == nil && offset == 1
+	})
+	if h := r.ctx.Health(); h.Details["projection"] != "stale" || h.Status != runtime.StatusDegraded {
+		t.Errorf("Health after a snapshot that does not check = %+v, want stale", h)
+	}
+	if letters, err := r.bus.DeadLetters(); err != nil || len(letters) != 0 {
+		t.Errorf("dead letters = %d %v, want none", len(letters), err)
+	}
+}
+
+// silentBus subscribes and delivers nothing: what the gateway holds after its
+// start came from the catch-up alone.
+type silentBus struct{ eventbus.Bus }
+
+func (silentBus) Subscribe(ctx context.Context, _, _ string, _ eventbus.Handler) error {
+	<-ctx.Done()
+	return nil
+}
+
+// hangingStore hangs every read of a later snapshot of State until its context
+// ends, and counts those reads.
+type hangingStore struct {
+	objstore.Client
+	hung atomic.Int32
+}
+
+func (h *hangingStore) Get(ctx context.Context, bucket, key string) ([]byte, error) {
+	if strings.HasPrefix(key, "state/2026091") {
+		h.hung.Add(1)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return h.Client.Get(ctx, bucket, key)
+}
+
+// stateAnnouncement is snapshot.created of State of seq whose object nobody
+// reads without hanging.
+func stateAnnouncement(seq int) eventbus.Event {
+	return eventbus.NewRoot(readmodel.TypeSnapshotCreated, contracts.SourceState, world, nil, eventbus.ActorSystem, map[string]any{
+		"component": "state",
+		"snapshot": map[string]any{"id": fmt.Sprintf("state:%s:%06d", world, seq), "seq": seq, "taken_at": "2026-09-13T10:00:00Z",
+			"cursor": map[string]any{eventbus.TopicSystemEvents: 1}, "laws_version": "v1", "state_hash": entity.StateHash(nil),
+			"size_bytes": 1, "key": fmt.Sprintf("state/20260913T100000Z-%06d.json", seq)},
+	})
+}
+
+// A catch-up that meets several snapshots of State while the projection is
+// stale reads the store once, for the last of them, after the journal: a store
+// that hangs costs one repair budget and leaves the projection stale, and the
+// start does not fail (Mi-1 of review #1 of T-309).
+func TestAHangingStoreCostsTheCatchUpOneRepair(t *testing.T) {
+	testkit.Deterministic(t, "gw")
+	objects := &hangingStore{Client: snapshotStore(t, nil)}
+	const repair, catchUp = 300 * time.Millisecond, 2 * time.Second
+	r, mux, deps := build(t, runtime.ModeLive, sqlitedir.Temp(t), options{
+		objects: objects, repairBudget: repair, budget: catchUp,
+		bus: func(b *membus.Bus) eventbus.Bus { return silentBus{Bus: b} },
+		beforeStart: func(bus *membus.Bus) {
+			for _, ev := range []eventbus.Event{hpFact(3, 10, 7), stateAnnouncement(1), stateAnnouncement(2), stateAnnouncement(3)} {
+				if err := bus.Publish(context.Background(), ev); err != nil {
+					t.Fatal(err)
+				}
+			}
+		},
+	})
+	_ = mux
+	began := clock.Real{}.Now()
+	if err := r.ctx.Start(context.Background(), deps); err != nil {
+		t.Fatalf("Start with a hanging store: %v", err)
+	}
+	took := (clock.Real{}).Now().Sub(began)
+	t.Cleanup(func() { _ = r.ctx.Stop(context.Background()) })
+	if n := objects.hung.Load(); n != 1 {
+		t.Errorf("the catch-up read %d snapshots of State, want only the last", n)
+	}
+	if took > catchUp {
+		t.Errorf("Start took %v, the budget of the catch-up is %v", took, catchUp)
+	}
+	if h := r.ctx.Health(); h.Details["projection"] != "stale" || h.Status != runtime.StatusDegraded {
+		t.Errorf("Health = %+v, want stale and degraded", h)
 	}
 }

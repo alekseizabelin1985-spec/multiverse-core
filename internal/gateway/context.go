@@ -29,6 +29,7 @@ import (
 	"multiverse-core.io/internal/gateway/outbox"
 	"multiverse-core.io/internal/gateway/readmodel"
 	"multiverse-core.io/internal/gateway/session"
+	"multiverse-core.io/internal/gateway/snapshot"
 	"multiverse-core.io/internal/gateway/store"
 	"multiverse-core.io/internal/gateway/turns"
 	"multiverse-core.io/shared/clock"
@@ -55,6 +56,18 @@ const (
 	// fails the start: a gateway that validates actions against a projection
 	// it could not bring up to date would answer from an old world.
 	CatchUpBudget = 2 * time.Minute
+	// StaleRepairBudget bounds the read of the snapshot of State that repairs
+	// the stale entities of the projection (component §11.2). The repair runs
+	// in the handler of system_events: past the budget the entities stay stale
+	// and the event goes on.
+	StaleRepairBudget = 5 * time.Second
+	// SnapshotWriteBudget bounds one snapshot of the gateway: the object, the
+	// pointer, the rotation and snapshot.created. A store that hangs costs
+	// write_failed in /health, not the goroutine of the snapshots until Stop
+	// (N-4 of review #1 of T-309). Like the other budgets it is a deadline of
+	// the context: the clients of the store and of the bus take their
+	// deadlines from it.
+	SnapshotWriteBudget = 30 * time.Second
 )
 
 // Context is the gateway context. It is built by New and started once.
@@ -62,6 +75,11 @@ type Context struct {
 	src env.Source
 	// objects replaces the object store built from MV_MINIO_* (tests).
 	objects objstore.Client
+	// probeInterval is HealthProbeInterval unless a test shortened it.
+	probeInterval time.Duration
+	// repairBudget and snapshotBudget are StaleRepairBudget and
+	// SnapshotWriteBudget unless a test shortened them.
+	repairBudget, snapshotBudget time.Duration
 	// loadBudget and catchUpBudget are SnapshotLoadBudget and CatchUpBudget
 	// unless a test shortened them.
 	loadBudget, catchUpBudget time.Duration
@@ -92,6 +110,17 @@ type Context struct {
 	log       *slog.Logger
 	stopLoop  context.CancelFunc
 	loopDone  chan struct{}
+	// snaps is nil without an object store: there is nowhere to write to.
+	snaps *snapshots
+	probe *probe
+	// stopping is set while Stop runs without the lock: a Start meanwhile
+	// would open the files Stop is about to close.
+	stopping bool
+
+	// stateMu guards snapshotState, which the writer goroutine sets while
+	// Health reads it.
+	stateMu       sync.Mutex
+	snapshotState string
 }
 
 // New returns the context reading its variables from src; nil is the process
@@ -100,7 +129,8 @@ type Context struct {
 func New(src env.Source) *Context {
 	return &Context{src: src, httpCfg: &api.Config{}, links: &handlers.Links{}, actions: &handlers.Actions{},
 		characters: &handlers.Characters{}, deliveries: &handlers.Deliveries{},
-		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget}
+		loadBudget: SnapshotLoadBudget, catchUpBudget: CatchUpBudget, probeInterval: HealthProbeInterval,
+		repairBudget: StaleRepairBudget, snapshotBudget: SnapshotWriteBudget}
 }
 
 var (
@@ -134,8 +164,15 @@ func (c *Context) Routes(mux *http.ServeMux) {
 
 // Start opens and migrates links.db and gateway.db in MV_GATEWAY_DATA_DIR,
 // builds the links store, compacts links.db once, loads the projection from
-// the snapshot of State of MV_WORLD_ID, catches it up from the journal and
-// subscribes to the bus, and, in live mode, starts the sweeper.
+// the snapshot of State of MV_WORLD_ID, restores the sessions and the turns
+// (component §7.6), catches the projection and the effects up from the journal
+// to its end and subscribes to the bus, checks the last snapshot of the
+// gateway and starts its writer, and, in live mode, starts the sweeper.
+//
+// The restoration runs before the catch-up, the subscriptions and the first
+// request: the sessions idle for MV_GATEWAY_SESSION_IDLE end idle at the
+// moment they became idle, and the turns past their deadline time out. In
+// replay their analytics are not published (component §11.2).
 //
 // The compaction at the start is unconditional. The mark "compaction pending"
 // lives in memory: a process that stopped between the DELETE of a /forget and
@@ -146,8 +183,11 @@ func (c *Context) Routes(mux *http.ServeMux) {
 func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.started {
+	switch {
+	case c.started:
 		return errors.New("gateway: started twice")
+	case c.stopping:
+		return errors.New("gateway: start while stopping")
 	}
 	if deps.Clock == nil || deps.Timers == nil || deps.IDs == nil || deps.Log == nil || deps.Bus == nil || deps.Journal == nil {
 		return errors.New("gateway: Deps.Clock, Timers, IDs, Log, Bus and Journal are required")
@@ -196,13 +236,23 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	// before the first request is validated against it. Unlike the files they
 	// cross the network, so each has a budget of its own.
 	model := readmodel.New(readmodel.Config{Timers: deps.Timers, Log: log})
+	objects, objectsErr := c.objectStore()
 	loadCtx, cancelLoad := context.WithTimeout(context.WithoutCancel(ctx), c.loadBudget)
-	from := c.loadProjection(loadCtx, model, log)
+	from := c.loadProjection(loadCtx, objects, objectsErr, model, log)
 	cancelLoad()
-	svc, err := c.services(deps, settings, gatewayDB, linkStore, model, log)
+	// Snapshots need a store and a world to write to; a process on the memory
+	// bus has neither store nor snapshots. A replay only checks the last one.
+	world := env.WorldID.StringFrom(c.src)
+	var snaps *snapshots
+	if objects != nil && world != "" {
+		snaps = &snapshots{live: deps.Mode != runtime.ModeReplay, trigger: make(chan struct{}, 1), done: make(chan struct{}),
+			setState: c.setSnapshotState, budget: c.snapshotBudget}
+	}
+	svc, err := c.services(deps, settings, gatewayDB, linkStore, model, snaps, log)
 	if err != nil {
 		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
 	}
+	restore(context.WithoutCancel(ctx), deps.Clock.Now(), svc, log)
 	// The effects of the facts of a character proposal: its row goes with its
 	// fact, and a refusal of State expires it (component §7.1). Then the
 	// deliveries and the steps of the turns (component §8.1, §7.6).
@@ -211,12 +261,24 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	if err != nil {
 		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
 	}
+	// The pauses of the consumer between its subscriptions are a property of
+	// the connection to the broker, not domain time, like the redeliveries of
+	// the bus (C-01 v1.4) and the wait of a long-poll (C-01 v1.8): the null
+	// timers of a replay would never subscribe again and never end the grace of
+	// its Stop. In live mode they are Deps.Timers.
+	subscriptionTimers := deps.Timers
+	if deps.Mode == runtime.ModeReplay {
+		subscriptionTimers = clock.RealTimers{}
+	}
 	dispatcher, err := consumer.New(consumer.Config{
-		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock, Log: log,
+		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock,
+		Timers: subscriptionTimers, Log: log,
 		Effects: consumer.MergeEffects(map[string][]consumer.Effect{
 			readmodel.TypeEntityCreated:  {svc.chars.OnCreated},
 			readmodel.TypeUpdateRejected: {svc.chars.OnRejected},
 		}, fed),
+		Repair:  repairStale(model, objects, world, c.repairBudget, log),
+		Repairs: func(ev eventbus.Event) bool { return readmodel.IsStateSnapshotOf(ev, world) },
 	})
 	if err == nil {
 		catchUpCtx, cancelCatchUp := context.WithTimeout(context.WithoutCancel(ctx), c.catchUpBudget)
@@ -266,6 +328,28 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 
 	c.linksDB, c.gatewayDB, c.store, c.log, c.mode = linksDB, gatewayDB, linkStore, log, deps.Mode
 	c.model, c.consumer, c.outbox = model, dispatcher, queue
+	// The cadence of the checks of /health is a property of the process, not of
+	// the domain: in replay the clock of the events stands between events and
+	// would hide a database that fails after the last one (component §11.4,
+	// NFR-016). Only Now is taken from the wall clock, no timer.
+	probeClock := deps.Clock
+	if deps.Mode == runtime.ModeReplay {
+		probeClock = clock.Real{}
+	}
+	// The age of the oldest delivery is a difference of two times of the
+	// process: created_at is written by Deps.Clock, so the age is taken by it
+	// too, in replay the clock of the events (Mi-4 of review #1 of T-309).
+	c.probe = &probe{clock: probeClock, ageClock: deps.Clock, interval: c.probeInterval, linksDB: linksDB, gateway: gatewayDB,
+		outbox: queue, sessions: svc.sessions}
+	c.probe.read(context.WithoutCancel(ctx))
+	c.setSnapshotState("")
+	c.snaps = nil
+	if snaps != nil {
+		if err := c.startSnapshots(ctx, deps, snaps, objects, model, gatewayDB, svc.sessions, log); err != nil {
+			return errors.Join(fmt.Errorf("gateway: %w", err), dispatcher.Stop(ctx), gatewayDB.Close(), linksDB.Close())
+		}
+		c.snaps = snaps
+	}
 	c.started = true
 	// Replay drives no timers of its own (component §11.2).
 	if deps.Mode != runtime.ModeReplay {
@@ -304,12 +388,16 @@ type services struct {
 // Analytics go to the bus in live mode only: a replay reads them and publishes
 // none (C-10, component §11.2).
 func (c *Context) services(deps runtime.Deps, s actionSettings, gatewayDB *sql.DB, linkStore *links.SQLite,
-	model *readmodel.Model, log *slog.Logger) (services, error) {
+	model *readmodel.Model, snaps *snapshots, log *slog.Logger) (services, error) {
 	var analytics session.Publisher
 	if deps.Mode != runtime.ModeReplay {
 		analytics = deps.Bus
 	}
-	sessions, err := session.New(session.Config{DB: gatewayDB, Bus: analytics, Idle: s.sessionIdle, Log: log})
+	cfg := session.Config{DB: gatewayDB, Bus: analytics, Idle: s.sessionIdle, Log: log}
+	if snaps != nil && snaps.live {
+		cfg.OnEnded = snaps.request
+	}
+	sessions, err := session.New(cfg)
 	if err != nil {
 		return services{}, err
 	}
@@ -399,9 +487,9 @@ func (c *Context) actionSettings() (actionSettings, error) {
 // a warning; an object store configured wrong, a store that cannot be read or
 // a snapshot that does not check is an error and leaves /health degraded
 // (US-011: the gateway does not come up empty in silence).
-func (c *Context) loadProjection(ctx context.Context, model *readmodel.Model, log *slog.Logger) map[string]int64 {
+func (c *Context) loadProjection(ctx context.Context, objects objstore.Client, err error, model *readmodel.Model,
+	log *slog.Logger) map[string]int64 {
 	world := env.WorldID.StringFrom(c.src)
-	objects, err := c.objectStore()
 	if err != nil {
 		model.MarkLoadFailed(readmodel.ReasonStoreMisconfigured)
 		log.Error("projection: object store is configured wrong, built from the journal alone",
@@ -526,76 +614,156 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 }
 
 // Stop cancels the subscriptions and waits for their handlers, stops the
-// sweeper and waits for it, finishes a pending compaction, then closes
-// gateway.db and links.db. The subscriptions go first: the process closes the
-// bus after the last Stop, and Close does not cancel a handler (C-01 v1.7,
-// ADR-023 p. 4). The databases are closed even when a handler or the sweeper
-// does not stop before the deadline of ctx: a context that is not started
-// again must not keep its files open (Windows locks them).
+// sweeper and waits for it, finishes a pending compaction, stops the snapshot
+// writer, writes the snapshot of the shutdown and announces it, then closes
+// gateway.db and links.db.
+//
+// The subscriptions go first: the process closes the bus after the last Stop,
+// and Close does not cancel a handler (C-01 v1.7, ADR-023 p. 4). The snapshot
+// comes after everything that changes what it records has stopped, while the
+// bus is still open for its snapshot.created; it is skipped when the sweeper
+// or the writer did not stop, because either may still hold the only
+// connection of gateway.db. Its write has a deadline of its own, a share of
+// the deadline of Stop (shutdownSnapshotContext), and a
+// snapshot not written is a warning, not an error of Stop (component §11.2).
+// The databases are closed even when something does not stop before the
+// deadline of ctx: a context that is not started again must not keep its
+// files open (Windows locks them).
+//
+// The lock of the context is held only to take the context out of service:
+// Health answers fail at once while Stop waits (R2-N-3 of review #2 of T-303).
 func (c *Context) Stop(ctx context.Context) error {
+	began := clock.Real{}.Now()
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if !c.started {
+		c.mu.Unlock()
 		return nil
 	}
-	c.started = false
+	c.started, c.stopping = false, true
+	dispatcher, stopLoop, loopDone, snaps := c.consumer, c.stopLoop, c.loopDone, c.snaps
+	linkStore, gatewayDB, linksDB, log := c.store, c.gatewayDB, c.linksDB, c.log
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.stopping = false
+		c.mu.Unlock()
+	}()
+
 	var errs []error
-	if err := c.consumer.Stop(ctx); err != nil {
+	if err := dispatcher.Stop(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("gateway: %w", err))
 	}
 	stopped := true
-	if c.stopLoop != nil {
-		c.stopLoop()
+	if stopLoop != nil {
+		stopLoop()
 		select {
-		case <-c.loopDone:
+		case <-loopDone:
 		case <-ctx.Done():
 			stopped = false
 			errs = append(errs, fmt.Errorf("gateway: sweeper did not stop: %w", ctx.Err()))
 		}
 	}
-	if c.store.CompactionPending() {
+	// The wipe of /forget comes before the snapshot: it needs the local file
+	// alone, and a store that hangs must not spend the deadline it has (Mi-2
+	// of review #1 of T-309, ADR-019 addendum p. 1).
+	if linkStore.CompactionPending() {
 		// A sweeper that did not stop may still hold the only connection.
 		err := errors.New("the sweeper did not stop")
 		if stopped {
-			err = c.store.Compact(ctx)
+			err = linkStore.Compact(ctx)
 		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("gateway: links.db left uncompacted after /forget: %w", err))
 		}
 	}
-	if err := c.gatewayDB.Close(); err != nil {
+	if snaps != nil && snaps.live {
+		if err := snaps.stop(ctx); err != nil {
+			stopped = false
+			errs = append(errs, err)
+		}
+		if stopped {
+			// The snapshot of the shutdown is an audit (component §11.2): one
+			// not written costs a warning, and neither the rest of this Stop
+			// nor the other contexts of the process, which share the deadline.
+			writeCtx, cancel := shutdownSnapshotContext(ctx, began, snaps.budget)
+			err := snaps.write(writeCtx, snapshot.ReasonShutdown)
+			cancel()
+			if err != nil {
+				log.Warn("snapshot at the shutdown not written", slog.String("error", err.Error()))
+			}
+		}
+	}
+	if err := gatewayDB.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("gateway: close gateway.db: %w", err))
 	}
-	if err := c.linksDB.Close(); err != nil {
+	if err := linksDB.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("gateway: close links.db: %w", err))
 	}
 	return errors.Join(errs...)
 }
 
-// Health is ok while the context runs; fail before Start and after Stop.
-// It is degraded while a /forget waits for its compaction, while a
-// subscription is down, while the projection is stale, and when the snapshot
-// of State could not be loaded — the store configured wrong, unreadable, the
-// snapshot not checking. A world without a snapshot yet is reported as
-// projection missing and does not degrade the gateway: it is how every new
-// world starts, the empty one of the memory bus included. projection_error is
-// a short code (readmodel.Reason*); the error itself is in the log, because it
-// names the bucket, the key and the address of the store.
+// shutdownSnapshotContext is the context of the snapshot of the shutdown. Its
+// write ends by the middle of the deadline of Stop, taken from began, the
+// moment Stop began, and lasts no more than budget, the SnapshotWriteBudget of
+// any write. The second half is what the closing of the databases and the
+// contexts stopped after the gateway get: runtime.StopTimeout is one deadline
+// for the whole process. The deadline of ctx is a moment of the wall clock, so
+// the moments are taken on it, in replay too.
+func shutdownSnapshotContext(ctx context.Context, began time.Time, budget time.Duration) (context.Context, context.CancelFunc) {
+	by := clock.Real{}.Now().Add(budget)
+	if deadline, ok := ctx.Deadline(); ok {
+		by = minTime(by, began.Add(deadline.Sub(began)/2))
+	}
+	return context.WithDeadline(ctx, by)
+}
+
+func minTime(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
+// Health is the /health of the gateway (component §11.4): fail before Start,
+// after Stop and when either database fails its check; degraded while a
+// /forget waits for its compaction, while a subscription is down (from its end
+// until one started again is heard, consumer.Dispatcher.Err), while the
+// projection is stale, when the snapshot of State could not be loaded — the
+// store configured wrong, unreadable, the snapshot not checking — and when the
+// snapshot of the gateway is corrupted, could not be written, or cannot be
+// written because the world has no laws_version. A world
+// without a snapshot yet is reported as projection missing and does not
+// degrade the gateway: it is how every new world starts, the empty one of the
+// memory bus included. projection_error is a short code (readmodel.Reason*);
+// the error itself is in the log, because it names the bucket, the key and
+// the address of the store.
+//
+// The databases are read by probe, at most every HealthProbeInterval and never
+// longer than HealthProbeDeadline, outside the lock of the context.
 func (c *Context) Health() runtime.Status {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if !c.started {
+		c.mu.Unlock()
 		return runtime.Status{Status: runtime.StatusFail, Details: map[string]any{"started": false}}
 	}
-	projection, loadErr := c.model.Status()
+	model, dispatcher, linkStore, mode, pr := c.model, c.consumer, c.store, c.mode, c.probe
+	c.mu.Unlock()
+
+	v := pr.read(context.Background())
+	projection, loadErr := model.Status()
 	details := map[string]any{
-		"links_store":   runtime.StatusOK,
-		"gateway_store": runtime.StatusOK,
-		"projection":    string(projection),
-		"mode":          string(c.mode),
+		"links_store":         okOrFail(v.linksOK),
+		"gateway_store":       okOrFail(v.gatewayOK),
+		"bus":                 runtime.StatusOK,
+		"projection":          string(projection),
+		"mode":                string(mode),
+		"sessions_active":     v.sessionsActive,
+		"rounds_open":         v.roundsOpen,
+		"outbox_pending":      v.outboxPending,
+		"outbox_oldest_age_s": int64(v.outboxOldestAge / time.Second),
 	}
 	status := runtime.StatusOK
-	if c.store.CompactionPending() {
+	if linkStore.CompactionPending() {
 		details["links_compaction"] = "pending"
 		status = runtime.StatusDegraded
 	}
@@ -606,9 +774,115 @@ func (c *Context) Health() runtime.Status {
 	if projection == readmodel.ProjectionStale {
 		status = runtime.StatusDegraded
 	}
-	if err := c.consumer.Err(); err != nil {
+	if err := dispatcher.Err(); err != nil {
 		details["bus"] = runtime.StatusFail
 		status = runtime.StatusDegraded
 	}
+	if state := c.snapshotStateNow(); state != "" {
+		details["snapshot"] = state
+		status = runtime.StatusDegraded
+	}
+	if !v.linksOK || !v.gatewayOK {
+		status = runtime.StatusFail
+	}
 	return runtime.Status{Status: status, Details: details}
+}
+
+func okOrFail(ok bool) string {
+	if ok {
+		return runtime.StatusOK
+	}
+	return runtime.StatusFail
+}
+
+func (c *Context) setSnapshotState(state string) {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+	c.snapshotState = state
+}
+
+func (c *Context) snapshotStateNow() string {
+	c.stateMu.Lock()
+	defer c.stateMu.Unlock()
+	return c.snapshotState
+}
+
+// restore closes what a stopped process left open (component §7.6): the turns
+// past their deadline time out, then the sessions idle for
+// MV_GATEWAY_SESSION_IDLE end idle. A failure is logged and does not stop the
+// start: in live mode the sweeper repeats both a minute later.
+func restore(ctx context.Context, now time.Time, svc services, log *slog.Logger) {
+	if n, err := svc.turns.Sweep(ctx, now); err != nil {
+		log.Error("restore: turns past their deadline", slog.String("error", err.Error()))
+	} else if n > 0 {
+		log.Info("restore: turns timed out", slog.Int("count", n))
+	}
+	if n, err := svc.sessions.Sweep(ctx, now); err != nil {
+		log.Error("restore: idle sessions", slog.String("error", err.Error()))
+	} else if n > 0 {
+		log.Info("restore: idle sessions ended", slog.Int("count", n))
+	}
+}
+
+// startSnapshots builds the writer of the snapshots of the gateway, checks the
+// last snapshot it wrote and, in live mode, starts the goroutine that writes a
+// snapshot after a session ended. A snapshot that does not check is reported in /health and
+// in the log: the gateway comes up from gateway.db, which is its truth, but
+// not in silence (US-011).
+func (c *Context) startSnapshots(ctx context.Context, deps runtime.Deps, snaps *snapshots, objects objstore.Client,
+	model *readmodel.Model, gatewayDB *sql.DB, sessions *session.Manager, log *slog.Logger) error {
+	world := env.WorldID.StringFrom(c.src)
+	writer, err := snapshot.New(snapshot.Config{Objects: objects, Bus: deps.Bus, WorldID: world, Clock: deps.Clock, Log: log})
+	if err != nil {
+		return err
+	}
+	readCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.loadBudget)
+	_, err = writer.Latest(readCtx)
+	cancel()
+	switch {
+	case err == nil, errors.Is(err, snapshot.ErrNoSnapshot):
+	case errors.Is(err, snapshot.ErrCorrupted):
+		log.Error("snapshot of the gateway does not check", slog.String("world_id", world), slog.String("error", err.Error()))
+		c.setSnapshotState(snapshotCorrupted)
+	default:
+		log.Error("snapshot of the gateway not read", slog.String("world_id", world), slog.String("error", err.Error()))
+		c.setSnapshotState(snapshotUnreadable)
+	}
+	snaps.writer, snaps.worldID, snaps.model, snaps.db, snaps.sessions, snaps.log = writer, world, model, gatewayDB, sessions, log
+	if !snaps.live {
+		return nil
+	}
+	runCtx, stop := context.WithCancel(context.WithoutCancel(ctx))
+	snaps.cancel = stop
+	go snaps.run(runCtx)
+	return nil
+}
+
+// repairStale is the repair of the consumer: the stale entities of the
+// projection taken from the snapshot of State that snapshot.created announces
+// (component §11.2). Without a store or a world there is nothing to read from.
+// A repair that fails is a warning with its code: the entities stay stale and
+// the event is not retried for it.
+func repairStale(model *readmodel.Model, objects objstore.Client, world string, budget time.Duration,
+	log *slog.Logger) func(context.Context, eventbus.Event) {
+	if objects == nil || world == "" {
+		return nil
+	}
+	return func(ctx context.Context, ev eventbus.Event) {
+		repairCtx, cancel := context.WithTimeout(ctx, budget)
+		defer cancel()
+		repaired, left, err := model.RepairFromStateSnapshot(repairCtx, objects, world, ev)
+		var repairErr *readmodel.RepairError
+		switch {
+		case errors.As(err, &repairErr):
+			log.Warn("projection: stale entities not repaired from the snapshot of state",
+				slog.String("event_id", ev.ID), slog.String("reason", repairErr.Reason), slog.Int("stale", left))
+		case err != nil:
+			log.Warn("projection: stale entities not repaired from the snapshot of state",
+				slog.String("event_id", ev.ID), slog.Int("stale", left))
+		case repaired > 0:
+			log.Info("projection: stale entities repaired from the snapshot of state",
+				slog.String("event_id", ev.ID), slog.Int("repaired", repaired), slog.Int("stale", left))
+		}
+	}
 }

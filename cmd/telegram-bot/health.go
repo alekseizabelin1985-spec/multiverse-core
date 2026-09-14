@@ -11,13 +11,18 @@ import (
 	"time"
 
 	"multiverse-core.io/cmd/telegram-bot/internal/access"
+	"multiverse-core.io/cmd/telegram-bot/internal/deliver"
 	"multiverse-core.io/shared/env"
 )
 
-// statusOK is the status of a bot that runs. The shape of the answer is that
-// of runtime.Status of the platform, {status, details}, so that one probe reads
+// statusOK is the status of a bot that runs and delivers; statusDegraded of
+// one that runs and does not deliver. The shape of the answer is that of
+// runtime.Status of the platform, {status, details}, so that one probe reads
 // both processes.
-const statusOK = "ok"
+const (
+	statusOK       = "ok"
+	statusDegraded = "degraded"
+)
 
 // healthTimeout keeps the probe well inside the timeout of the compose
 // healthcheck (5 s, docker-compose.bot.yml).
@@ -29,18 +34,27 @@ type health struct {
 	Details map[string]any `json:"details,omitempty"`
 }
 
-// healthHandler serves GET /health: the bot is up, and how many updates the
-// access gate refused since start (review #1 of T-310, M-1). The counters are
-// numbers only, never who was refused.
-func healthHandler(counters func() access.Counters) http.Handler {
+// healthHandler serves GET /health: the bot is up, how many updates the access
+// gate refused since start (review #1 of T-310, M-1), and whether it delivers
+// — degraded after DegradedAfterFailedPolls failed long-polls in a row or once
+// Telegram refused the token on a send (acceptance of T-312). The counters are
+// numbers only, never who was refused. A degraded bot still answers 200: the
+// status tells the probe, which exits 1 on anything but ok.
+func healthHandler(counters func() access.Counters, deliveries func() deliver.Health) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		c := counters()
+		c, d := counters(), deliveries()
+		status := statusOK
+		if d.Degraded() {
+			status = statusDegraded
+		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_ = json.NewEncoder(w).Encode(health{Status: statusOK, Details: map[string]any{
-			"bot_denied_total":      c.Denied,
-			"bot_not_private_total": c.NotPrivate,
-			"bot_too_often_total":   c.TooOften,
+		_ = json.NewEncoder(w).Encode(health{Status: status, Details: map[string]any{
+			"bot_denied_total":            c.Denied,
+			"bot_not_private_total":       c.NotPrivate,
+			"bot_too_often_total":         c.TooOften,
+			"deliveries_failed_polls":     d.FailedPolls,
+			"telegram_token_unauthorized": d.Unauthorized,
 		}})
 	})
 	return mux

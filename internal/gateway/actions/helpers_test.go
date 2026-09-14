@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -265,15 +266,27 @@ func (m *memoryTurns) Begin(_ context.Context, t actions.Turn) (api.TurnRef, err
 
 func (m *memoryTurns) Accepted(context.Context, actions.Turn, api.TurnRef, string) error { return nil }
 
-// turns records the calls of the service.
+func (m *memoryTurns) Withdrawn(context.Context, api.TurnRef, string) error { return nil }
+
+func (m *memoryTurns) Acked(context.Context, string, time.Time) error { return nil }
+
+// turns records the calls of the service. accepted is the turns that stand:
+// a turn taken back leaves it for withdrawn.
 type turns struct {
-	inner    *memoryTurns
-	mu       sync.Mutex
-	accepted []string
-	rejected []string
-	// acceptedOn is the error of the context of each call of Accepted: T-306
-	// records the turn in gateway.db, where a cancelled context fails the write.
-	acceptedOn []error
+	inner     *memoryTurns
+	mu        sync.Mutex
+	accepted  []string
+	withdrawn []string
+	acked     []string
+	rejected  []string
+	// failAccepted, when set, is what Accepted does instead of recording: it
+	// gets the context of the call.
+	failAccepted func(ctx context.Context) error
+	// ackedOn and withdrawnOn are the errors of the contexts of the calls of
+	// Acked and Withdrawn: the tracker writes both to gateway.db, where a
+	// context that is done fails the write (review #2 of T-308, Mi-1).
+	ackedOn     []error
+	withdrawnOn []error
 }
 
 func (f *turns) Begin(ctx context.Context, t actions.Turn) (api.TurnRef, error) {
@@ -282,10 +295,39 @@ func (f *turns) Begin(ctx context.Context, t actions.Turn) (api.TurnRef, error) 
 
 func (f *turns) Accepted(ctx context.Context, t actions.Turn, ref api.TurnRef, eventID string) error {
 	f.mu.Lock()
-	f.accepted = append(f.accepted, eventID)
-	f.acceptedOn = append(f.acceptedOn, ctx.Err())
+	fail := f.failAccepted
+	if fail == nil {
+		f.accepted = append(f.accepted, eventID)
+	}
 	f.mu.Unlock()
+	if fail != nil {
+		return fail(ctx)
+	}
 	return f.inner.Accepted(ctx, t, ref, eventID)
+}
+
+func (f *turns) Withdrawn(ctx context.Context, ref api.TurnRef, eventID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.accepted = slices.DeleteFunc(f.accepted, func(id string) bool { return id == eventID })
+	f.withdrawn = append(f.withdrawn, eventID)
+	f.withdrawnOn = append(f.withdrawnOn, ctx.Err())
+	return f.inner.Withdrawn(ctx, ref, eventID)
+}
+
+func (f *turns) Acked(ctx context.Context, eventID string, at time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.acked = append(f.acked, eventID)
+	f.ackedOn = append(f.ackedOn, ctx.Err())
+	return f.inner.Acked(ctx, eventID, at)
+}
+
+// recorded reports whether the turn of eventID stands.
+func (f *turns) recorded(eventID string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Contains(f.accepted, eventID)
 }
 
 func (f *turns) Rejected(_ context.Context, _ actions.Turn, code string) error {

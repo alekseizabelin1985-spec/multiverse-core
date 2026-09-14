@@ -109,7 +109,7 @@ func (fd *feed) rebuild(t *testing.T, m *readmodel.Model) {
 		t.Fatal(err)
 	}
 	fd.d, err = consumer.New(consumer.Config{Bus: fd.bus, Journal: fd.bus, DB: fd.db, Model: m, Clock: fd.clock,
-		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), Effects: effects})
+		Timers: fd.clock.Timers(), Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), Effects: effects})
 	if err != nil {
 		t.Fatal(err)
 	}

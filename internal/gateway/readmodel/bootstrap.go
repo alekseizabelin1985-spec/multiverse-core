@@ -10,6 +10,9 @@ import (
 	"multiverse-core.io/shared/objstore"
 )
 
+// stateComponent is the component of a snapshot of State (C-14 v1.1).
+const stateComponent = "state"
+
 // StatePointerKey is the pointer of the latest snapshot of State inside
 // snapshots-{world} (C-14 v1.1).
 const StatePointerKey = "state/latest.json"
@@ -145,30 +148,47 @@ func readStateSnapshot(ctx context.Context, store objstore.Client, worldID strin
 	if err := json.Unmarshal(body, &pointer); err != nil {
 		return nil, nil, fmt.Errorf("readmodel: pointer %s/%s: %w", bucket, StatePointerKey, err)
 	}
-	if pointer.Component != "state" || pointer.Snapshot.Key == "" {
+	if pointer.Component != stateComponent || pointer.Snapshot.Key == "" {
 		return nil, nil, fmt.Errorf("readmodel: pointer %s/%s names no snapshot of state", bucket, StatePointerKey)
 	}
-	body, err = store.Get(ctx, bucket, pointer.Snapshot.Key)
+	entities, err := readStateObject(ctx, store, worldID, pointer.Snapshot.Key, pointer.Snapshot.StateHash)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pointer.Snapshot.Cursor, entities, nil
+}
+
+// readStateObject reads the object of a snapshot of State by its key and takes
+// it only when it is the snapshot of State of worldID, its entities hash to
+// stateHash and every entity has an id. Both the start (the key and the hash
+// of the pointer) and the repair of stale entities (those of snapshot.created)
+// read an object this way.
+func readStateObject(ctx context.Context, store objstore.Client, worldID, key, stateHash string) ([]*entity.Entity, error) {
+	bucket := objstore.SnapshotsBucket(worldID)
+	body, err := store.Get(ctx, bucket, key)
 	if err != nil {
 		// The pointer is written after the object (C-14): a pointer without
 		// its object is damage, not a new world.
-		return nil, nil, fmt.Errorf("readmodel: snapshot %s/%s: %w", bucket, pointer.Snapshot.Key, err)
+		return nil, fmt.Errorf("readmodel: snapshot %s/%s: %w", bucket, key, err)
 	}
 	var object stateObject
 	if err := json.Unmarshal(body, &object); err != nil {
-		return nil, nil, fmt.Errorf("readmodel: snapshot %s/%s: %w", bucket, pointer.Snapshot.Key, err)
+		return nil, fmt.Errorf("readmodel: snapshot %s/%s: %w", bucket, key, err)
+	}
+	if object.Component != stateComponent {
+		return nil, fmt.Errorf("readmodel: snapshot %s/%s is of component %q, not of state", bucket, key, object.Component)
 	}
 	if object.WorldID != worldID {
-		return nil, nil, fmt.Errorf("readmodel: snapshot %s/%s is of world %q: %w", bucket, pointer.Snapshot.Key, object.WorldID, errWorldMismatch)
+		return nil, fmt.Errorf("readmodel: snapshot %s/%s is of world %q: %w", bucket, key, object.WorldID, errWorldMismatch)
 	}
-	if got := entity.StateHash(object.Entities); got != pointer.Snapshot.StateHash {
-		return nil, nil, fmt.Errorf("readmodel: snapshot %s/%s hashes to %s, the pointer says %s: %w",
-			bucket, pointer.Snapshot.Key, got, pointer.Snapshot.StateHash, errHashMismatch)
+	if got := entity.StateHash(object.Entities); got != stateHash {
+		return nil, fmt.Errorf("readmodel: snapshot %s/%s hashes to %s, expected %s: %w",
+			bucket, key, got, stateHash, errHashMismatch)
 	}
 	for _, e := range object.Entities {
 		if e == nil || e.ID == "" {
-			return nil, nil, fmt.Errorf("readmodel: snapshot %s/%s holds an entity without an id", bucket, pointer.Snapshot.Key)
+			return nil, fmt.Errorf("readmodel: snapshot %s/%s holds an entity without an id", bucket, key)
 		}
 	}
-	return pointer.Snapshot.Cursor, object.Entities, nil
+	return object.Entities, nil
 }
