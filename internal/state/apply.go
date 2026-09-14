@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"multiverse-core.io/internal/mechanics"
@@ -107,11 +108,18 @@ type Applier struct {
 	rulesVersion string
 	writer       string
 	// cursor is the offset of system_events past the last proposal the
-	// Applier answered, and sinceSnapshot the facts applied since the last
-	// snapshot. Only the goroutine that calls Apply touches them, and a
-	// snapshot is written by that goroutine or after it has ended.
-	cursor        int64
+	// Applier answered — or the end recovery caught up to — and sinceSnapshot
+	// the facts applied since the last snapshot. Only the goroutine that calls
+	// Apply changes them, and a snapshot is written by that goroutine or after
+	// it has ended; /health reads the cursor from anywhere.
+	cursor        atomic.Int64
 	sinceSnapshot int
+	// pendingIntents is the number of intents of the world in the object
+	// store (PendingIntents).
+	pendingIntents atomic.Int64
+	// uninitialized marks a world recovery found neither a pointer nor an
+	// entity object of (§18, world.go).
+	uninitialized atomic.Bool
 
 	mu sync.Mutex
 	// failure is what stopped the world, or nil. It stays for the life of the
@@ -122,10 +130,18 @@ type Applier struct {
 	retrying int
 	// laws are the invariants of step 8; SetInvariants replaces them.
 	laws []mechanics.Invariant
-	// lastSnapshot is the pointer of the last snapshot written, and
-	// snapshotErr the failure of an attempt after it.
-	lastSnapshot *LatestPointer
-	snapshotErr  error
+	// lastSnapshot is the pointer of the last snapshot written, or the one
+	// recovery started from; snapshotErr the failure of an attempt after it,
+	// and snapshotEventErr the failure of snapshot.created of the last
+	// snapshot written (N-4 of review #1 of T-057).
+	lastSnapshot     *LatestPointer
+	snapshotErr      error
+	snapshotEventErr error
+	// snapshotSinceRecovery is whether a snapshot was written since the last
+	// recovery: a world rebuilt without its journal is whole again once one is.
+	snapshotSinceRecovery bool
+	// recovery is what the last recovery of the world found (recovery.go).
+	recovery Recovery
 }
 
 // NewApplier builds the Applier of one world.
@@ -222,7 +238,7 @@ func (a *Applier) Apply(ctx context.Context, ev eventbus.Event) error {
 		return err
 	}
 	if pos, ok := eventbus.PositionFromContext(ctx); ok && pos.Topic == eventbus.TopicSystemEvents {
-		a.cursor = pos.Offset + 1
+		a.cursor.Store(pos.Offset + 1)
 	}
 	if a.objects != nil && a.every > 0 && a.sinceSnapshot >= a.every {
 		// A snapshot that fails is reported by /health and the log; the
@@ -269,6 +285,9 @@ func (a *Applier) answer(ctx context.Context, ev eventbus.Event) error {
 		a.log.Warn("malformed proposal refused", "event_id", ev.ID, "proposal_id", p.ID, "err", err)
 		return a.publish(ctx, p.ID, rejectedFact(ev, a.source, p.ID, Rejection{Reason: ReasonInvalidOp}))
 	}
+	if a.uninitialized.Load() && !initializes(p) {
+		return a.refuseUninitialized(ctx, p)
+	}
 	if p.Kind == KindCreate {
 		return a.applyCreate(ctx, p)
 	}
@@ -287,6 +306,14 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 	// back from the fact as another (C-02 v1.6), whether or not the entity is
 	// already there (acceptance of T-448).
 	if !entity.JSONCompatible(spec.Attributes) {
+		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
+	}
+	// So are the kinds of the attributes and the attributes the type requires
+	// (§4.5; C-02 v1.8 p. 2): an entity created without its hit points, or
+	// with a status that is an object, is one no reader of it could read.
+	if err := entity.CheckAttributes(ref.Type, spec.Attributes); err != nil {
+		a.log.Info("create refused by the attributes of its type", "proposal_id", p.ID,
+			"entity_id", ref.ID, "entity_type", ref.Type, "err", err)
 		return a.refuse(ctx, p, Rejection{Reason: ReasonInvalidOp, Ref: &ref})
 	}
 	if a.alreadyApplied(p) {
@@ -320,6 +347,9 @@ func (a *Applier) applyCreate(ctx context.Context, p *Proposal) error {
 	}
 	a.remember(p.ID)
 	a.sinceSnapshot++
+	if ref.ID == a.worldID {
+		a.uninitialized.Store(false)
+	}
 	a.log.Info("entity created", "entity_id", ref.ID, "entity_type", ref.Type,
 		"proposal_id", p.ID, "event_id", fact.ID)
 	return nil

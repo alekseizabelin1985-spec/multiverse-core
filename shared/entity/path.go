@@ -3,38 +3,86 @@ package entity
 import (
 	"errors"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"multiverse-core.io/shared/jsonpath"
 )
 
-// The grammar of an op path is the grammar of shared/jsonpath: a.b[0].c, dots
-// between keys and brackets around indices. Reading a path is jsonpath's job
-// and is delegated to it below.
+// An op path is written one way only (C-02 v1.8 p. 2): keys between single
+// dots, and the index of a list element in brackets after its key, a[0][1].
+// A key is not empty, holds no dot and no bracket, and is not written as a
+// decimal integer of any length. CanonicalPath is that grammar; ApplyOps refuses every other
+// spelling before it reads or writes anything.
+//
+// shared/jsonpath is more lenient: it reads status., .status and inventory.0 as
+// second spellings of status and inventory[0]. A second spelling slips past
+// every rule that compares a path as a string, and remove inventory.0 reported
+// the element instead of the list, so a consumer catching up on the fact
+// wrote into the slot instead of shifting the list (probe U-1 of T-056).
+// Reading a canonical path is still delegated to jsonpath below.
 //
 // Writing is not: jsonpath.Accessor.Set walks maps only and would turn
 // members[0] into a map key named "0", and it has no Delete for a list element.
-// splitPath, setIn and deleteIn are the write half of the same grammar.
-//
-// The read half has the same blind spot in the other direction: jsonpath
-// resolves [0] on an object as the plain key "0", so agreement between the two
-// halves is not on its own evidence that either is right. The tests here check
-// the shape of the container an operation leaves behind, not only that
-// something can be read back from the path. Folding both halves into
-// shared/jsonpath — and fixing the read one — is left to EPIC-002 (the package
-// belongs to no epic of this wave).
+// splitPath, setIn and deleteIn are the write half of the same grammar. The
+// tests here check the shape of the container an operation leaves behind, not
+// only that something can be read back from the path.
 
-// errPathSyntax is an unterminated [ in a path. Unlike jsonpath, which skips
-// what it cannot parse, an op says so: a malformed path is invalid_op, not a
-// silent write somewhere else.
+// canonicalSegment is one key of a path with its indices: a key without dots
+// and brackets, then any number of [n], n being 0 or one to nine digits without
+// a leading zero. inventory[01] would be inventory[1] under a second spelling,
+// and an index past nine digits may not fit an int on every platform — past
+// nineteen it fits none, and on an object it reads as a key made of digits.
+var canonicalSegment = regexp.MustCompile(`^([^.\[\]]+)(?:\[(?:0|[1-9][0-9]{0,8})\])*$`)
+
+// numericKey is a key written as a decimal integer: digits with an optional
+// sign, of any length (C-02 v1.8b p. 2). On a list inventory.0 is inventory[0],
+// and the index is written in brackets only. The rule is a pattern and not
+// strconv.Atoi: where Atoi overflows depends on the size of int, so a key of
+// ten digits would be canonical on a 32-bit platform and not on a 64-bit one,
+// and one journal would be answered differently on two machines (NFR-061).
+var numericKey = regexp.MustCompile(`^[+-]?[0-9]+$`)
+
+// CanonicalPath reports whether path is written in the canonical form of C-02
+// v1.8b p. 2: canonicalSegment for every segment, and no key that numericKey
+// matches (0, 007, +1, -1, 99999999999999999999).
+//
+// It is the rule of an operation and of an entry of changed[]: State publishes
+// only canonical paths, so a consumer catching up on a fact treats any other
+// spelling as a corrupt fact.
+func CanonicalPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	for _, segment := range strings.Split(path, ".") {
+		match := canonicalSegment.FindStringSubmatch(segment)
+		if match == nil {
+			return false
+		}
+		if numericKey.MatchString(match[1]) {
+			return false
+		}
+	}
+	return true
+}
+
+// rootOf is the attribute a path is under: hp of hp, inventory of
+// inventory[0].kind.
+func rootOf(path string) string {
+	if i := strings.IndexAny(path, ".["); i >= 0 {
+		return path[:i]
+	}
+	return path
+}
+
+// errPathSyntax is an unterminated [ in a path. CanonicalPath refuses such a
+// path before it gets here; splitPath still says so rather than guess.
 var errPathSyntax = errors.New("malformed path")
 
-// splitPath turns a.b[0].c into [a b 0 c]. An index and a key are the same
-// token here — which of the two it is depends on the container it lands on,
-// exactly as in jsonpath.navigate.
+// splitPath turns a.b[0].c into [a b 0 c]. On a canonical path a token that
+// reads as an integer came out of brackets, because no key does.
 func splitPath(path string) ([]string, error) {
-	path = strings.TrimLeft(path, ".")
 	if path == "" {
 		return nil, nil
 	}
@@ -167,7 +215,7 @@ var errIndexOutOfRange = errors.New("index out of range")
 var errIndexOnObject = errors.New("index into an object")
 
 // isIndex says whether a token addresses an element of a list rather than a key
-// of an object.
+// of an object. On a canonical path only a token written in brackets does.
 func isIndex(token string) bool {
 	n, err := strconv.Atoi(token)
 	return err == nil && n >= 0

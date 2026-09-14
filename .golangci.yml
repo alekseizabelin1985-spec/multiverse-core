@@ -200,6 +200,8 @@ linters:
             - "!**/internal/replay/**"
             # Not a context: the bot's own internal/ has its rule cmd-telegram-bot.
             - "!**/cmd/telegram-bot/**"
+            # Not a context: mvctl world has its rule cmd-mvctl-world.
+            - "!**/cmd/mvctl/internal/world/**"
           deny:
             - pkg: multiverse-core.io/internal
               desc: "this context has no depguard rule yet: declare its allowed neighbours in .golangci.yml before importing internal/* (ADR-001 p. 3)"
@@ -440,6 +442,24 @@ linters:
           deny:
             - pkg: multiverse-core.io/internal
               desc: "the end to end test of the bot may add internal/gateway/gatewaytest (FakeGateway) to what the bot sees, and no other package of internal/* (ADR-001 addendum, boundary 1e; T-315)"
+        # mvctl world creates a world through State and nothing else
+        # (state-and-mechanics.md §4.10, T-058): with --bus memory it runs
+        # internal/state inside the command and holds it to the laws of the rule
+        # book, which internal/mechanics loads. Each neighbour is one package,
+        # with the trailing $ for the reason given at shared-testkit-mechanics.
+        # internal-unlisted excludes the command: its **/internal/** would
+        # otherwise match cmd/mvctl/internal/world and deny the two packages
+        # allowed here. The rule holds for its tests as well.
+        cmd-mvctl-world:
+          list-mode: lax
+          files:
+            - "**/cmd/mvctl/internal/world/**"
+          allow:
+            - multiverse-core.io/internal/state$
+            - multiverse-core.io/internal/mechanics$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "mvctl world may import internal/state and internal/mechanics and no other package of internal/*: it creates a world through State (state-and-mechanics.md §4.10, T-058)"
 
         # cmd/multiverse is the only importer of internal/replay.
         cmd-others:

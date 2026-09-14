@@ -66,7 +66,10 @@ func TestChangedOfBothFormsReproducesTheStateOfState(t *testing.T) {
 		{Op: entity.OpAppend, Path: "inventory", Value: fang},
 		{Op: entity.OpRemove, Path: "inventory", Value: map[string]any{"item_id": "pelt-1"}},
 		{Op: entity.OpSet, Path: "stats.deep.x", Value: 1},
-		{Op: entity.OpSet, Path: "position.region", Value: "dark-forest-01"},
+		// A text replaced by an object. position is a text of data-model.md
+		// §3.3, and since T-472 no path goes below it; banner is untyped.
+		{Op: entity.OpSet, Path: "banner", Value: "green"},
+		{Op: entity.OpSet, Path: "banner.region", Value: "dark-forest-01"},
 		{Op: entity.OpSet, Path: "encounter_id", Value: nil},
 		{Op: entity.OpAppend, Path: "inventory", Value: pelt},
 		{Op: entity.OpRemove, Path: "inventory[0]"},
