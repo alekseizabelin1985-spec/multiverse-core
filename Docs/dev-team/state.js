@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:21:26+03:00",
+  "updatedAt": "2026-09-14T10:23:45+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5028,7 +5028,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "review",
+          "status": "in_progress",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
@@ -11171,7 +11171,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Ревью #1: переподписка consumer",
       "startedAt": "2026-09-14T10:05:47+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:23:45+03:00"
     },
     {
       "instance": "system-architect#2",
@@ -11211,6 +11211,16 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Ревью #2: восстановление State",
       "startedAt": "2026-09-14T10:21:26+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Итерация 2 по ревью #1",
+      "startedAt": "2026-09-14T10:23:45+03:00",
       "finishedAt": null
     }
   ],
@@ -15744,6 +15754,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решения оркестратора по T-473: задача T-477 EPIC-001 «shared/eventbus: что считается остановкой подписки и RebalanceTimeout 10 с» (DoD — блоки А1–А4, Б1–Б3 из карточки T-473; вариант A — один интеграционный прогон ./shared/eventbus/... с остановкой своего контейнера Redpanda), counters.task = 477, р"
+    },
+    {
+      "at": "2026-09-14T10:23:45+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 · ревью #1 (code-reviewer#2): вернуть — 0/1/4/5. Ma-1 тест срока снапшота считает от начала отсчёта теста, а код — от начала Stop: на Linux CI красный каждый раз (мутант R1); Mi-1 ожидание входа в группу перешло в Kafka.Close; Mi-2 возможен Subscribe после Stop; Mi-3 настенные таймеры replay н"
     }
   ],
   "blockers": [],
