@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T13:49:11+03:00",
+  "updatedAt": "2026-09-14T13:59:55+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5092,11 +5092,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-483",
           "title": "Дубль turn.completed в outbox после возврата брокера (CI integration)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T13:19:31+03:00",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-483.md",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T13:59:55+03:00",
+          "spentMinutes": 35
         }
       ],
       "defects": [],
@@ -11575,7 +11577,7 @@ window.DEVTEAM_STATE =
       "task": "T-483",
       "action": "Приёмка T-483",
       "startedAt": "2026-09-14T13:49:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T13:59:55+03:00"
     }
   ],
   "events": [
@@ -16366,6 +16368,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-483 · ревью #1 (code-reviewer#3): принять — 0/0/0/2. Механизм подтверждён по коду kafka-go v0.4.51 (WriteMessages после отмены контекста дописывает пачку, ECONNREFUSED на Linux временная, до 10 попыток ~7,4 с) и сходится с логом CI по числам; контракт C-01/КД §5.5, §7.7 допускает копию под тем же "
+    },
+    {
+      "at": "2026-09-14T13:59:55+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-483 принята tech-lead#3 (DoD; N-1 закрыт правкой текста, N-2 — З-51; бэклог З-47…З-51; индекс 0.1.18). Итераций ревью — 1. Коммит, ветка запушена, слита в epic/EPIC-004-gateway-bot (6391362), эпик запушен. Время — 35 мин."
+    },
+    {
+      "at": "2026-09-14T13:59:55+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние R (постоянное разрешение): epic/EPIC-001-foundation → develop (6e3f11f) — T-482. make ci по EPIC-001: lint, contracts, secrets-scan, privacy-scan, vuln, compose-lint, scripts-parity 113/0, backup-prune-test — зелёные; test-race SKIPPED (нет cgo); пакеты cmd/telegram-bot/internal/"
     }
   ],
   "blockers": [
