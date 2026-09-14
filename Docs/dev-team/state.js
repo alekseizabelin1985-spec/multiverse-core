@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:46:54+03:00",
+  "updatedAt": "2026-09-14T09:07:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3228,7 +3228,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-472",
           "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
@@ -10996,7 +10996,7 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Ревью #1: грамматика пути, виды атрибутов",
       "startedAt": "2026-09-14T03:34:40+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:07:42+03:00"
     },
     {
       "instance": "system-architect#2",
@@ -11006,7 +11006,7 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Просмотр contract-change T-472",
       "startedAt": "2026-09-14T03:34:40+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:07:42+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11026,6 +11026,16 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Переподписка consumer шлюза",
       "startedAt": "2026-09-14T03:46:54+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-472",
+      "action": "Итерация 2: ключ пути, оракул свойство-теста",
+      "startedAt": "2026-09-14T09:07:42+03:00",
       "finishedAt": null
     }
   ],
@@ -15415,6 +15425,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Запущена T-473 (переподписка consumer шлюза после сбоя брокера, developer#3) от кончика EPIC-004 6b67fec; интеграция Redpanda — не больше 3 прогонов, docker pause только своего контейнера."
+    },
+    {
+      "at": "2026-09-14T09:07:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 · просмотр system-architect#2: одобрено с условием И2-1 (числовой ключ любой длины недопустим — регулярное выражение вместо Atoi, NFR-061) и И2-2 (строка матрицы died_at.x у живого player). Таблица по типам, KindModifier (восьмой вид) и KindOpen подтверждены; перечисления, ссылки и диапазоны —"
+    },
+    {
+      "at": "2026-09-14T09:07:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 · ревью #1 (code-reviewer#3): принять — 0/0/3/3. Грамматика перенесена без потерь, таблица видов совпадает с data-model §3, издатели на кончиках EPIC-003/004 передают полный набор атрибутов, патч на кончике EPIC-004 зелёный. Mi-1 обратное направление таблицы, Mi-2 свойство-тест проверяет путь "
     }
   ],
   "blockers": [],
