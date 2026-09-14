@@ -57,6 +57,13 @@ Docker Desktop, GPU для LLM).
 3. `make minio-image` (первый раз ≈ 5 минут) → `make up` (поднимает
    `redpanda`, `minio`, `gateway`, `core` плюс профили из `.env`; init-контейнеры
    создают топики и бакеты) → `make health`.
+   На свежем стеке `make health` показывает `core degraded` — мир не создан —
+   до `mvctl world init` (с `--bus kafka` — после T-475); затем `ok`. Это не
+   авария: `degraded` — работающий процесс, контейнер `healthy`, и `make up`
+   не падает (зовёт `make health` с `DEGRADED_STRICT=0`). Сам `make health`
+   на `degraded` выходит с кодом ≠ 0; `make health DEGRADED_STRICT=0` его
+   принимает. Строки таблицы: `ok`, `degraded`, `FAIL` (`fail`, HTTP ≠ 200,
+   HTTP 200 со статусом вне перечня или процесс недоступен), `-` (сервис не поднят) (`infrastructure.md` §2.2, §7.2).
 4. Проверка вручную: `curl http://127.0.0.1:8088/health` (gateway),
    `curl http://127.0.0.1:8082/health` (memory, если профиль `memory` включён).
    Порт `core` (`:8090`) наружу не публикуется — проверяется изнутри контейнера:
@@ -807,7 +814,11 @@ telegram-bot` — там токен виден открытым текстом.
 
 - Перед сессией (если нужен LLM): `make llm-up` — процесс не служба, после
   перезагрузки Windows сам не поднимется.
-- Регулярно: `make health` (ненулевой код — есть проблема); `make backup`
+- Регулярно: `make health` (ненулевой код — есть `FAIL`, `degraded` или
+  недоступный LLM: смотреть вывод `make llm-health` под таблицей; при
+  `LLM_STRICT=1`, это умолчание, он тоже даёт код ≠ 0, а `LLM_STRICT=0` его не
+  считает; `degraded` — процесс работает, но ждёт действия, например
+  `mvctl world init`); `make backup`
   (еженедельно или перед важными изменениями); `docker system df`.
 - Еженедельно: задание `multiverse\backup-prune` выполнялось —
   `schtasks /Query /TN "multiverse\backup-prune" /V /FO LIST` и
