@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:57:24+03:00",
+  "updatedAt": "2026-09-14T13:19:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2699,7 +2699,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-482",
           "title": "CI на develop зелёный на Linux",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T12:24:59+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-482.md",
@@ -5086,6 +5086,14 @@ window.DEVTEAM_STATE =
           "title": "Нарратив хода по kind",
           "status": "todo",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-481.md"
+        },
+        {
+          "id": "T-483",
+          "title": "Дубль turn.completed в outbox после возврата брокера (CI integration)",
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T13:19:31+03:00",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-483.md"
         }
       ],
       "defects": [],
@@ -11504,7 +11512,7 @@ window.DEVTEAM_STATE =
       "task": "T-482",
       "action": "Ревью #1: CI на Linux",
       "startedAt": "2026-09-14T12:57:24+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T13:19:31+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -11514,6 +11522,26 @@ window.DEVTEAM_STATE =
       "task": "T-482",
       "action": "Отметки EPIC-003 и EPIC-004",
       "startedAt": "2026-09-14T12:57:24+03:00",
+      "finishedAt": "2026-09-14T13:19:31+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Итерация 2: Mi-1, Mi-2",
+      "startedAt": "2026-09-14T13:19:31+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Дубль turn.completed в integration CI",
+      "startedAt": "2026-09-14T13:19:31+03:00",
       "finishedAt": null
     }
   ],
@@ -16275,6 +16303,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-482 выполнена developer#2: девять причин падений CI на Linux устранены — dispatch_test (манифест kafka, флаг memory), store/open_test (файл 0600), стенд testkit/gateway (ожидание по условию), дефект FakeEncounter.fold (поздний факт старого пакета откатывал hp — применять только при большей версии,"
+    },
+    {
+      "at": "2026-09-14T13:19:31+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 · отметки владельцев (tech-lead#2): EPIC-003 — правка FakeEncounter.fold соответствует C-02/C-05, закрыла и скрытый дефект дубля; EPIC-004 (по назначению оркестратора) — проверки не ослаблены, merge-file gatewaytest_test с T-480 без конфликтов. Ревью #1 (code-reviewer#2): вернуть — 0/1/2/1. Ma"
     }
   ],
   "blockers": [
