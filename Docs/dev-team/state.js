@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:02:05+03:00",
+  "updatedAt": "2026-09-14T11:03:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5031,7 +5031,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "review",
+          "status": "in_progress",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
@@ -11278,7 +11278,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Ревью #2: переподписка consumer",
       "startedAt": "2026-09-14T10:44:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:03:03+03:00"
     },
     {
       "instance": "devops-engineer#1",
@@ -11318,6 +11318,16 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Ход с Phase 1 завершается после механики",
       "startedAt": "2026-09-14T11:02:05+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Итерация 3: ожидание hungBroker, сторож, README",
+      "startedAt": "2026-09-14T11:03:03+03:00",
       "finishedAt": null
     }
   ],
@@ -15917,6 +15927,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Запущена T-478 «Ход с Phase 1 завершается после механики» (developer#1) от кончика EPIC-004 23a38c7."
+    },
+    {
+      "at": "2026-09-14T11:03:03+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 · ревью #2 (code-reviewer#2): принять — 0/0/1/3. Mi-1 ревью #1 снят: зонд подтвердил, что Kafka.Close не ждёт снятый с учёта reader; найден узкий сценарий N-6 (истёкший срок Stop — Close ждёт 4,8 с) → T-477. Mi-5 фиксированное ожидание в hungBroker может флакать; N-7 сторож Stop(expired); N-8 "
     }
   ],
   "blockers": [],
