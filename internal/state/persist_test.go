@@ -177,8 +177,10 @@ func TestHealthNamesPersistFailed(t *testing.T) {
 	bus := rig(t)
 	objects := newTracedObjects(t, world)
 	c, manual := runningStored(t, bus, objects, -1)
-	publish(t, bus.Bus, create("prop-born", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10}))
-	untilEnd(t, bus.Bus, 2)
+	// The world entity first: a world without it takes nothing but its init
+	// (§18, T-059).
+	publish(t, bus.Bus, createWorld(), create("prop-born", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10}))
+	untilEnd(t, bus.Bus, 4)
 	objects.setHook(func(_, key string) error {
 		if key == "player/player-A.json" {
 			return errors.New("the disk is full")

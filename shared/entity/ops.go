@@ -166,8 +166,9 @@ func (c ChangeSet) Ref() Ref { return RefFrom(c.Entity.Entity) }
 const (
 	ReasonUnknownOp    = "unknown op"
 	ReasonEmptyPath    = "empty path"
-	ReasonBadPath      = "malformed path"
+	ReasonBadPath      = "malformed path" // not in the canonical form of C-02 v1.8 p. 2
 	ReasonReservedPath = "reserved path"
+	ReasonBelowScalar  = "path below a scalar attribute"
 	ReasonBadIndex     = "no such element"
 	ReasonIndexOnPath  = "index into an object"
 	ReasonNotJSON      = "value is not JSON-compatible"
@@ -221,27 +222,78 @@ var dedupeKeys = []string{"item_id", "player_id", "npc_id"}
 //
 // The first malformed operation stops the whole set: a proposal is either
 // well-formed or it is not, and a half-applied copy would be neither.
+//
+// The type of the entity decides what its attributes are (data-model.md §3):
+// every operation first passes CheckOp for that type, and once all of them have
+// run, every scalar they touched holds a value of its kind or is gone. A
+// scalar that is gone is not refused here — a norm that needs it says so — but
+// set hp {x: 999} and set state {...} would leave every reader of the
+// attribute unable to read it (C-02 v1.8 p. 2).
 func ApplyOps(e *Entity, ops []Op) (map[string]any, []Change, error) {
 	attrs := cloneAttrs(e.Attributes)
 	tracker := &changeTracker{seen: map[string]struct{}{}}
+	touched := map[string]Op{}
+	var roots []string
 	for _, op := range ops {
+		if err := CheckOp(e.Type, op); err != nil {
+			return nil, nil, err
+		}
 		if err := applyOp(attrs, op, tracker); err != nil {
 			return nil, nil, err
 		}
+		root := rootOf(op.Path)
+		if _, seen := touched[root]; !seen {
+			roots = append(roots, root)
+		}
+		touched[root] = op
+	}
+	for _, root := range roots {
+		spec, typed := AttributeSpecOf(e.Type, root)
+		value, present := attrs[root]
+		if typed && present && !spec.Holds(value) {
+			return nil, nil, ErrInvalidOp{Op: touched[root], Reason: ReasonWrongKind}
+		}
 	}
 	return attrs, tracker.changes(e.Attributes, attrs), nil
+}
+
+// CheckOp says whether the verb and the path of an operation are well-formed
+// for an entity of a type, whatever the entity holds: a verb of C-02, a path in
+// its canonical form, not under a field of the entity and not below a scalar of
+// the type (C-02 v1.8 p. 2). State checks it at step 1, before it looks the
+// entity up, with the type the change set names; ApplyOps checks it again with
+// the type the entity has.
+//
+// The value is left to the verb: JSONCompatible is the rule for it, and inc
+// names a value past the range of an integer as not an integer. What depends
+// on what the entity holds — an inc on a text, an index past the end — is
+// ApplyOps' to find.
+func CheckOp(entityType string, op Op) error {
+	switch {
+	case op.Path == "":
+		return ErrInvalidOp{Op: op, Reason: ReasonEmptyPath}
+	case !CanonicalPath(op.Path):
+		return ErrInvalidOp{Op: op, Reason: ReasonBadPath}
+	}
+	root := rootOf(op.Path)
+	if slices.Contains(ReservedPaths, root) || strings.HasPrefix(root, "_") {
+		return ErrInvalidOp{Op: op, Reason: ReasonReservedPath}
+	}
+	if spec, typed := AttributeSpecOf(entityType, root); typed && spec.Scalar() && root != op.Path {
+		return ErrInvalidOp{Op: op, Reason: ReasonBelowScalar}
+	}
+	switch op.Op {
+	case OpSet, OpInc, OpAppend, OpRemove:
+	default:
+		return ErrInvalidOp{Op: op, Reason: ReasonUnknownOp}
+	}
+	return nil
 }
 
 func applyOp(attrs map[string]any, op Op, tracker *changeTracker) error {
 	tokens, err := splitPath(op.Path)
 	if err != nil {
 		return ErrInvalidOp{Op: op, Reason: ReasonBadPath}
-	}
-	if len(tokens) == 0 {
-		return ErrInvalidOp{Op: op, Reason: ReasonEmptyPath}
-	}
-	if slices.Contains(ReservedPaths, tokens[0]) || strings.HasPrefix(tokens[0], "_") {
-		return ErrInvalidOp{Op: op, Reason: ReasonReservedPath}
 	}
 	switch op.Op {
 	case OpSet:

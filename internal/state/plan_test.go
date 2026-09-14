@@ -11,9 +11,10 @@ import (
 
 // The status and the hit points of a change set are decided on the entity after
 // the operations, not on the path an operation named (review #2 of T-056,
-// Ma-3). Step 1 refuses a path below a scalar attribute on its own; these tests
-// call plan past step 1, so that the decision on the entity is held even where
-// a path slips through the grammar. They run without the laws of the world, so
+// Ma-3). Step 1 refuses a path below a scalar attribute on its own, and since
+// T-472 so does ApplyOps at step 7 for the type of the entity; these tests call
+// plan past step 1, so that the decision on the entity is held even where a
+// path slips through step 1. They run without the laws of the world, so
 // that every refusal here is the norm's and none is inv-02's: the process runs
 // State with them since T-471 (contexts_state.go).
 func TestTheStatusAndTheHitPointsAreReadOnTheEntity(t *testing.T) {
@@ -52,7 +53,12 @@ func TestTheStatusAndTheHitPointsAreReadOnTheEntity(t *testing.T) {
 		{"rest that writes status", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "status", Value: entity.StatusAlive}}, ReasonLevelViolation, "", "", false},
 		{"rest inside an encounter", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: 10}}, ReasonLawViolation, "", "", true},
 		{"rest inside an encounter that writes position", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: 10}, {Op: entity.OpSet, Path: "position", Value: "r"}}, ReasonLevelViolation, "", "", true},
-		{"rest inside an encounter writes hp as a text", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: "10"}}, ReasonLawViolation, "", "", true},
+		// C-02 v1.8a p. 3: what step 7 refuses is the form of the package and
+		// answers before the encounter; what it lets through — hp gone — is the
+		// kind of hp, asked after the encounter.
+		{"rest inside an encounter writes hp as a text", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: "10"}}, ReasonInvalidOp, "", "", true},
+		{"rest inside an encounter appends to hp", gw, "rest", []entity.Op{{Op: entity.OpAppend, Path: "hp", Value: 10}}, ReasonInvalidOp, "", "", true},
+		{"rest inside an encounter removes hp", gw, "rest", []entity.Op{{Op: entity.OpRemove, Path: "hp"}}, ReasonLawViolation, "", "", true},
 		{"rest inside an encounter below hp_max", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: 9}}, ReasonLawViolation, "", "", true},
 		{"abandoned by an agent", task, "death", []entity.Op{{Op: entity.OpSet, Path: "status", Value: entity.StatusAbandoned}}, ReasonLevelViolation, "", "", false},
 		{"rest up to hp_max", gw, "rest", []entity.Op{{Op: entity.OpSet, Path: "hp", Value: 10}}, "", "", "", false},

@@ -215,6 +215,9 @@ func joinOr(values []string) string {
 }
 
 func serve(opts serveOptions, stdout, stderr io.Writer) error {
+	if err := stateOverBus(opts.bus, opts.contexts); err != nil {
+		return err
+	}
 	contexts, err := runtime.New(opts.contexts)
 	if err != nil {
 		return err
