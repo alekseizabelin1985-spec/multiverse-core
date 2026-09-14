@@ -126,23 +126,37 @@ func (a *Applier) resendUnpublished(ctx context.Context, p *Proposal) error {
 
 // refuseUnfinishedPackage stops the world instead of sending the facts of a
 // package whose intent is still in the object store. An intent outlives its
-// package only when the writes of an atomic package were cut off between two
+// package when the writes of an atomic package were cut off between two
 // entities: some of them are written and carry the commit record, the others
 // are not. Sending the facts of the written ones would announce half of an
 // atomic package (§4.7), and the intent is rolled forward by recovery, not
 // here (§4.8, T-059). Nothing of the answer is published; the proposal stays
 // uncommitted and is decided again once the intent is gone (review #1 of
 // T-057, question 2; decision of the orchestrator).
+//
+// An intent whose package is written on every entity (finishedIn, writtenBy:
+// at to_version or past it, and for a change without a change the proposal in
+// the commit record or the history) is not unfinished: the package was written
+// whole — before the cut, or by the roll forward of recovery — and only the
+// removal of its intent failed, which does not stop the world (§9). The world
+// may have changed its entities since. Its facts are sent.
+//
+// The list of intents is asked with the attempts of a write: a single refusal
+// of the store would otherwise stop the world (acceptance of T-057).
 func (a *Applier) refuseUnfinishedPackage(ctx context.Context, p *Proposal) error {
 	if a.objects == nil {
 		return nil
 	}
-	intents, err := a.objects.ListIntents(context.WithoutCancel(ctx), a.worldID)
-	if err != nil {
+	var intents []*Intent
+	if err := a.withAttempts(ctx, p.ID, "list the intents", func(out context.Context) error {
+		var err error
+		intents, err = a.objects.ListIntents(out, a.worldID)
+		return err
+	}); err != nil {
 		return a.persistFailed(p, "the list of intents", err)
 	}
 	for _, in := range intents {
-		if in.ProposalID != p.ID {
+		if in.ProposalID != p.ID || a.finishedIn(in) {
 			continue
 		}
 		failure := fmt.Errorf("%w: %w: %w: the intent of proposal %s is still in the store, the package is not rolled forward",

@@ -26,7 +26,8 @@ func TestRunDispatches(t *testing.T) {
 		"help":             {[]string{"help"}, cli.ExitOK},
 		"no arguments":     {nil, cli.ExitUsage},
 		"unknown command":  {[]string{"nope"}, cli.ExitUsage},
-		"reserved command": {[]string{"world", "init"}, cli.ExitUsage},
+		"reserved command": {[]string{"blueprint", "validate"}, cli.ExitUsage},
+		"world status of a world nobody initialized": {[]string{"world", "status", "--store=memory"}, cli.ExitFindings},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -56,7 +57,7 @@ func TestEnvCheckOnTheShippedExample(t *testing.T) {
 func TestReservedNamesAreHeld(t *testing.T) {
 	registry := commands()
 	for _, name := range []string{
-		"world", "blueprint", "record",
+		"blueprint", "record",
 		"golden", "llm", "memory", "report", "trace",
 	} {
 		cmd, ok := registry.Lookup(name)
@@ -74,7 +75,7 @@ func TestReservedNamesAreHeld(t *testing.T) {
 // works must not be listed as reserved.
 func TestImplementedCommandsHaveNoOwnerMark(t *testing.T) {
 	registry := commands()
-	for _, name := range []string{"contracts", "env", "laws", "privacy", "storage", "version"} {
+	for _, name := range []string{"contracts", "env", "laws", "privacy", "storage", "version", "world"} {
 		cmd, ok := registry.Lookup(name)
 		if !ok {
 			t.Fatalf("%s is not registered", name)

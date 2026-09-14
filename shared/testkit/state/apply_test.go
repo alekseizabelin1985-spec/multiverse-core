@@ -682,10 +682,9 @@ func TestTheLargestSafeNumberIsApplied(t *testing.T) {
 func TestCreateWithANumberPastTheRangeIsInvalidOp(t *testing.T) {
 	fake, bus, _ := world(t)
 	ev := createProposal("prop-seed", "player-Q", "Кью")
-	ev.Payload["attributes"] = map[string]any{
-		entity.AttrStatus: entity.StatusAlive,
-		"rolls":           map[string]any{"seed": float64(1 << 53)},
-	}
+	attrs := characterAttributes("player-Q")
+	attrs["rolls"] = map[string]any{"seed": float64(1 << 53)}
+	ev.Payload["attributes"] = attrs
 
 	apply(t, fake, ev)
 
@@ -705,10 +704,9 @@ func TestCreateWithANumberPastTheRangeIsInvalidOp(t *testing.T) {
 func TestTheAttributesOfACreateAreCheckedBeforeTheWorld(t *testing.T) {
 	fake, bus, _ := world(t)
 	ev := createProposal("prop-seed-dup", playerA, "Вася")
-	ev.Payload["attributes"] = map[string]any{
-		entity.AttrStatus: entity.StatusAlive,
-		"seed":            float64(-(1 << 53)),
-	}
+	attrs := characterAttributes(playerA)
+	attrs["seed"] = float64(-(1 << 53))
+	ev.Payload["attributes"] = attrs
 
 	apply(t, fake, ev)
 
@@ -877,9 +875,23 @@ func createProposal(proposalID, id, name string) eventbus.Event {
 				"entity": map[string]any{"id": id, "type": entity.TypePlayer},
 				"name":   name,
 			},
-			"attributes": map[string]any{entity.AttrStatus: entity.StatusAlive},
+			"attributes": characterAttributes(id),
 			"cause":      "create",
 		})
+}
+
+// characterAttributes are the attributes of a new character as the gateway
+// proposes them: everything data-model.md §3.3 requires, which State checks
+// on a create since T-472.
+func characterAttributes(id string) map[string]any {
+	return map[string]any{
+		entity.AttrHP: 10, entity.AttrHPMax: 10, entity.AttrAtk: 2, entity.AttrDef: 12,
+		entity.AttrDmg: "d6", entity.AttrFlee: "2", entity.AttrStatus: entity.StatusAlive,
+		entity.AttrPosition:  "outside:" + worldID,
+		entity.AttrScope:     map[string]any{"id": id, "type": "solo"},
+		entity.AttrActorKind: entity.ActorKindCI,
+		entity.AttrInventory: []any{},
+	}
 }
 
 // assertRefusal checks the last refusal on the topic: the reason C-02 names,

@@ -249,6 +249,59 @@ func create(proposalID string, r entity.Ref, name string, attrs map[string]any) 
 }
 
 func createdBy(by proposer, proposalID, cause string, r entity.Ref, name string, attrs map[string]any) eventbus.Event {
+	return createdAsIs(by, proposalID, cause, r, name, withRequired(r, attrs))
+}
+
+// withRequired is attrs with every attribute data-model.md §3 requires of the
+// type that attrs leaves out, at the value of the fixtures of the dark forest
+// (§4.10). State refuses a create without them (C-02 v1.8 p. 2, T-472), and a
+// test of something else names only the attributes it is about.
+func withRequired(r entity.Ref, attrs map[string]any) map[string]any {
+	defaults := map[string]map[string]any{
+		entity.TypeWorld: {
+			entity.AttrLawsVersion: "v1", entity.AttrWeather: "fog", entity.AttrTimeOfDay: "night", entity.AttrDay: 1,
+			entity.AttrBlueprintRef: "global-dark-forest-world@1.0", entity.AttrLocale: "ru",
+		},
+		entity.TypeRegion: {
+			entity.AttrDescription: "a dark forest", entity.AttrNPCIDs: []any{}, entity.AttrRespawnTTL: "24h",
+			entity.AttrEncounterChance: 0.25, entity.AttrPlayersPresent: []any{}, entity.AttrBlueprintRef: "domain-dark-forest@1.0",
+		},
+		entity.TypePlayer: {
+			entity.AttrHP: 10, entity.AttrHPMax: 10, entity.AttrAtk: 2, entity.AttrDef: 12, entity.AttrDmg: "d6",
+			entity.AttrFlee: "2", entity.AttrStatus: entity.StatusAlive, entity.AttrPosition: "outside:" + world,
+			entity.AttrScope: map[string]any{"id": r.ID, "type": "solo"}, entity.AttrInventory: []any{},
+			entity.AttrActorKind: entity.ActorKindCI,
+		},
+		entity.TypeNPC: {
+			entity.AttrKind: "wolf", entity.AttrRegionID: "dark-forest-01", entity.AttrHP: 10, entity.AttrHPMax: 10,
+			entity.AttrAtk: 3, entity.AttrDef: 11, entity.AttrDmg: "d4", entity.AttrStatus: entity.StatusAlive,
+			entity.AttrPosition: "dark-forest-01", entity.AttrLoot: []any{},
+		},
+		entity.TypeGroup: {
+			entity.AttrLeaderID: nil, entity.AttrMembers: []any{}, entity.AttrPosition: "outside:" + world,
+			entity.AttrScope: map[string]any{"id": r.ID, "type": "group"}, entity.AttrState: entity.GroupStateForming,
+		},
+		entity.TypeEncounter: {
+			entity.AttrRegionID: "dark-forest-01", entity.AttrScope: map[string]any{"id": "player-A", "type": "solo"},
+			entity.AttrParticipants: []any{}, entity.AttrNPCs: []any{}, entity.AttrState: entity.EncounterStateActive,
+			entity.AttrRoundSeq: 1,
+		},
+	}[r.Type]
+	if len(defaults) == 0 {
+		return attrs
+	}
+	out := make(map[string]any, len(attrs)+len(defaults))
+	for name, value := range defaults {
+		out[name] = value
+	}
+	for name, value := range attrs {
+		out[name] = value
+	}
+	return out
+}
+
+// createdAsIs is entity.create.proposed with exactly the attributes given.
+func createdAsIs(by proposer, proposalID, cause string, r entity.Ref, name string, attrs map[string]any) eventbus.Event {
 	var opts []eventbus.DeriveOption
 	if by.level != "" {
 		opts = append(opts, eventbus.WithAgent(eventbus.AgentRef{ID: "agent:" + by.level, Level: by.level, Blueprint: "test"}))

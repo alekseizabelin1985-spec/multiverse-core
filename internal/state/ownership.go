@@ -11,7 +11,8 @@ import (
 
 // The kinds of proposer State tells apart (state-and-mechanics.md §4.1). An
 // agent proposes under the level of its blueprint; the rows of the ownership
-// table for gateway, author and system are proposers without an agent.
+// table for gateway, author and system are proposers without an agent. The row
+// system is reserved and empty (C-02 v1.8 p. 6): nobody proposes under it.
 const (
 	ProposerAgent   = "agent"
 	ProposerGateway = contracts.ProposerGateway
@@ -29,7 +30,8 @@ type Proposer struct {
 
 // agentLevels are the levels an agent may propose under. An agent that names
 // gateway, author or system as its level does not get their rights: those rows
-// belong to proposers without an agent.
+// belong to proposers without an agent, and the row system, reserved and empty,
+// gives no rights to anybody.
 var agentLevels = []string{
 	contracts.ProposerGlobal, contracts.ProposerDomain, contracts.ProposerTask,
 	contracts.ProposerObject, contracts.ProposerMonitor,
