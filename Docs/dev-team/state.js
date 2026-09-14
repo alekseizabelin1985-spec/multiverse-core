@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T09:48:11+03:00",
+  "updatedAt": "2026-09-14T10:04:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3018,21 +3018,21 @@ window.DEVTEAM_STATE =
         {
           "id": "T-058",
           "title": "bootstrap.go + mvctl world init/status",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:01:16+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T10:04:13+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.6",
-          "spentMinutes": 0,
+          "spentMinutes": 416,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-058.md"
         },
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
@@ -3228,13 +3228,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-472",
           "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:01:16+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T10:04:13+03:00",
           "reviewIterations": 1,
           "wave": 1,
-          "spentMinutes": 0,
+          "spentMinutes": 407,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-472.md"
         },
@@ -4736,11 +4736,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-315",
           "title": "e2e бота на фейках",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.9",
           "spentMinutes": 0,
@@ -11086,7 +11086,7 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "Итерация 2 на слитом дереве",
       "startedAt": "2026-09-14T09:37:35+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:04:13+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -11106,7 +11106,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Ревью #1: восстановление State",
       "startedAt": "2026-09-14T09:37:35+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:04:13+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -11126,6 +11126,26 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Приёмка T-058, отметка EPIC-001, T-475",
       "startedAt": "2026-09-14T09:48:11+03:00",
+      "finishedAt": "2026-09-14T10:04:13+03:00"
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Итерация 2: Ma-1, решения архитектора, слияния",
+      "startedAt": "2026-09-14T10:04:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-315",
+      "action": "Приёмка T-315",
+      "startedAt": "2026-09-14T10:04:13+03:00",
       "finishedAt": null
     }
   ],
@@ -15593,6 +15613,36 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-315 · просмотр system-architect#2: место e2e бота cmd/telegram-bot/e2e/ и правило cmd-telegram-bot-e2e подтверждены (вопрос 2 T-470 закрыт), ownership.md поправлен; C-08 v1.5a — порядок доставок между топиками не гарантирован (внутри топика — порядок топика), обязанность паузы клиента после раннег"
+    },
+    {
+      "at": "2026-09-14T10:04:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 · отметки владельцев (tech-lead#3): EPIC-004 readmodel/apply_test.go — одобрено (пробное дерево с кончиком EPIC-004 зелёное, ErrCorruptFact на факты State не срабатывает; З-25 readmodel.opFor для индекса EPIC-004); EPIC-001 contexts_state_test.go (по назначению оркестратора) — одобрено, мутант"
+    },
+    {
+      "at": "2026-09-14T10:04:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 слита: коммит 15b2d10, sync с эпиком без конфликтов, слитое дерево зелёное (build, vet, тесты entity/state/gateway/testkit/multiverse/mvctl, env через go test -c, e2e, lint, contracts check), ветка запушена, слита в epic/EPIC-002-state-mechanics (5fc9b26), эпик запушен. Итераций ревью — 1. Вре"
+    },
+    {
+      "at": "2026-09-14T10:04:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 принята tech-lead#2 с отметкой EPIC-001 (.golangci.yml cmd-mvctl-world, main_test.go; мутанты L2/L3 пойманы); N-4 и причина отказа для оператора — в T-475. Заведена T-475 «mvctl world init --bus kafka» (M, подволна 1.7, после T-059, блокирует T-063), индекс 0.1.9. Итераций ревью — 2. Коммит 58"
+    },
+    {
+      "at": "2026-09-14T10:04:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 · ревью #1 (code-reviewer#4): вернуть — 0/1/3/2. Ma-1 roll-forward интента объявляет state_divergence, если сущность пакета изменилась после неудачного DeleteIntent (зонд подтвердил), и пишет по одной до проверки; Mi-1 ложный log_gap при dead letter на курсоре — решение оркестратора: бэклог C-"
+    },
+    {
+      "at": "2026-09-14T10:04:13+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-315 · ревью #2 (code-reviewer#3): принять — 0/0/0/1; ложного degraded при штатной работе нет, окно тишины e2e по устройству не флакает, мутанты красные. Приёмка — tech-lead#3 (с отметкой EPIC-001 по .golangci.yml по назначению оркестратора)."
     }
   ],
   "blockers": [],
