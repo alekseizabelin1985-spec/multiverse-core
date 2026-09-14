@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:49:37+03:00",
+  "updatedAt": "2026-09-14T11:53:38+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3264,10 +3264,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
           "assignee": "developer#1",
-          "startedAt": "2026-09-14T11:20:42+03:00"
+          "startedAt": "2026-09-14T11:20:42+03:00",
+          "reviewIterations": 1
         }
       ],
       "defects": [],
@@ -11361,7 +11362,7 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "mvctl world init --bus kafka",
       "startedAt": "2026-09-14T11:20:42+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:53:38+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -11391,6 +11392,26 @@ window.DEVTEAM_STATE =
       "task": "T-480",
       "action": "Регрессия Stop FakeGateway после T-473",
       "startedAt": "2026-09-14T11:49:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-475",
+      "action": "Ревью #1: world init --bus kafka",
+      "startedAt": "2026-09-14T11:53:38+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-475",
+      "action": "Решения по T-475",
+      "startedAt": "2026-09-14T11:53:38+03:00",
       "finishedAt": null
     }
   ],
@@ -16044,6 +16065,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние P (EPIC-004 → develop) отложено: make ci BASE=develop на df47003 — test-e2e красный, TestAFakeGatewayStartsAndStopsWithinASecond 2,3–2,5 с при пороге 1 с, 5 из 5 при изолированном прогоне (не флак). Регрессия T-473 (grace 2 с в Dispatcher.Stop на membus); тест не под -short, поэт"
+    },
+    {
+      "at": "2026-09-14T11:53:38+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 выполнена TEAM-1/developer#1: mvctl world init --bus kafka предлагает по Redpanda только сущности без объекта в entities-{world} (state.WithObjects), ждёт ответы и просит снапшот seq 0 через admin-маршрут с телом {\"reason\":\"bootstrap\"} (400 invalid_reason/invalid_body); --force и --store memor"
     }
   ],
   "blockers": [],
