@@ -48,9 +48,11 @@ func newSwarm() runtime.Context {
 }
 
 // flagged is the fake as the flag mounts it: the fake itself, plus a refusal
-// that names the setting which asked for it. What the fake reads at start —
-// rules/ under the working directory — is not in the image of the platform,
-// and "open rules/dark-forest.yaml" alone does not tell an operator that it is
+// that names the setting which asked for it. What the fake reads at start is
+// rules/dark-forest.yaml under the working directory, not the book
+// MV_RULES_PATH names for state; the image of the platform carries it there
+// (T-471), a process started elsewhere may not, and "open
+// rules/dark-forest.yaml" alone does not tell an operator that it is
 // MV_SWARM_FAKE=true that needs it (review #1 of T-255, Mi-1).
 type flagged struct{ *swarm.FakeContext }
 
@@ -60,8 +62,9 @@ func (f flagged) Start(ctx context.Context, deps runtime.Deps) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, fs.ErrNotExist):
-		return fmt.Errorf("%s=true: the stub reads rules/ from the working directory of the process, "+
-			"and the image of the platform has none: %w", env.SwarmFake.Name(), err)
+		return fmt.Errorf("%s=true: the stub reads rules/dark-forest.yaml from the working directory of the "+
+			"process, not the path %s names, and the file is not there: %w",
+			env.SwarmFake.Name(), env.RulesPath.Name(), err)
 	default:
 		return fmt.Errorf("%s=true: %w", env.SwarmFake.Name(), err)
 	}

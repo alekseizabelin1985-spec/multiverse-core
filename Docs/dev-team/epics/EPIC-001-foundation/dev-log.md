@@ -8941,3 +8941,44 @@ Mi-1 + N-1: фикстура `bad-ollama-wrapped` (`"${OLLAMA_KEEP_ALIVE:--1}m"`
 - **Mi-2, N-1…N-4.** Контейнеры §3 скалярами не считаются; названа T-472; C-05 v1.8a в заголовке карточки; в таблице адресов строк с `@` в пути пока нет (C-15 и ADR-005 одинаково); переполнение — у `int` 32-битной платформы; `MV_ANTHROPIC_API_KEY` в композицию пока не передаётся — строка для T-469.
 - **Проверки.** CRLF у всех изменённых файлов, NUL и BOM нет; C-15 и ADR-005 совпадают построчно; дифф `infrastructure.md` — одна строка; `gitleaks dir --redact` по копии — no leaks found, копия удалена по точному пути.
 - Код не менялся. Не коммитил.
+
+<!-- dev-log T-469 -->
+## devops-engineer#1 · T-469 · переменные шлюза и `MV_ANTHROPIC_API_KEY` в compose, правило 9 `compose-lint`, форма передачи · 2026-09-14
+
+Ветка `task/T-469-compose-gateway-vars` от `epic/EPIC-001-foundation` (`105f116`), Opus. Таблицы прогонов и мутантов — карточка `tasks/T-469.md`, «Выполнение».
+- **Расхождение.** В базе нет T-306/T-307: `epic/EPIC-004-gateway-bot` не слит в `develop`. В манифесте ветки только четыре `MV_GATEWAY_*` T-305, и правило 8 отвергло бы умолчание необъявленного имени. Передано четыре из десяти. Шесть строк compose и шесть строк `READERS` для синхронизации перечислены в карточке; без них правило 9 краснит синхронизацию (проба D1).
+- **Что сделано.**
+  - `docker-compose.yml`: `gateway` — `MV_GM_PATH` и четыре переменные T-305 с умолчаниями манифеста; `core` — `MV_ANTHROPIC_API_KEY: ${…:-}` и `MV_OLLAMA_URL: ${…:-}`; `MV_CORE_ADMIN_CLIENTS:` перенесена из `core` в `x-platform-env`, её читает любой процесс (`runtime.AdminOnly`). Шапка: форма передачи и правило 9.
+  - `scripts/compose-lint.sh`, правило 9: переменная читателя доходит до каждого сервиса, где читатель поднят (`--contexts` в `command`, бот — по `entrypoint`). Источник — явная таблица `READERS` / `NOT_IN_CONTAINERS` в скрипте, `Tooling()` читается из манифеста. Дрейф таблицы и манифеста в обе стороны — отказ. Go-манифест и §16 п. 5 не менялись (решение оркестратора).
+  - Правило 8: совет — `${MV_X:-<умолчание>}` (секрет `${…:-}`, обязательная `:?`); ключ без значения — только списки допуска `EMPTY_IS_NOBODY`.
+  - Фикстуры: `bad-reach-gateway`, `bad-reach-llm-secret`, `bad-reach-bot` (9), `bad-default-form` (8), `good-reach-host-only`; `bad-nodefault-in-command` без `--contexts`; строки в `README.md`.
+- **Проверки.** `bash -n` — ok. `make compose-lint` — ok, 15 сервисов, 9 правил; fixtures 68 bad/13 good. `mvctl env check` — 74, exit 0. Модель `config` с пробой: 11 пар доходят; без строки и с пустой строкой — умолчание манифеста; печатались только ключи. Мутанты K0 (первым), M1–M3 — KILLED; D1 — красный. `gitleaks dir --redact` по копии — no leaks. Go не менялся.
+- **Для system-architect**: §3.1.1 п. 3 (снять оговорку T-470), п. 8 (форма), новый п. 9, «9 rules»; §16 п. 5 — правило формы и пометка вместо `NOT_IN_CONTAINERS`; списки допуска на общую форму или нет.
+- Не коммитил, `.env` не открывал.
+
+<!-- dev-log T-469 iteration 2 -->
+## devops-engineer#1 · T-469 · итерация 2: шесть `MV_GATEWAY_*` T-306/T-307, Mi-1…Mi-3, N-1, N-2 ревью #1 · 2026-09-14
+
+База `e9c9ce9`: EPIC-004 → `develop` (`c015797`) → EPIC-001 (`5768cef`) → T-469. Opus. Таблицы — карточка `tasks/T-469.md`, «Итерация 2 (devops)».
+- **Шесть переменных.** `gateway` получает `MV_GATEWAY_SESSION_IDLE` (`30m`), `TURN_TIMEOUT` (`60s`), `CHARACTER_WAIT` (`2s`), `CHARACTER_DEADLINE` (`60s`), `DELIVERY_LEASE` (`30s`), `DELIVERY_TTL` (`24h`). Умолчания сверены с `vars.go` текущего дерева. В `READERS` шесть строк `gateway`. В `.github/ci.env` блок `gateway` дополнен десятью `MV_GATEWAY_*`; compose их не требует. Модель `config`: проба, без строки и с пустой строкой — все `ok`, печатались только ключи.
+- **Mi-1.** Ветка `env_file` в `passed()` удалена. Ключи берутся из `environment` итоговой модели (туда compose переносит `env_file`) и из сырых чтений. Линтер файлы переменных не открывает. Шапка и карточка поправлены; добавлена фикстура `good-reach-env-file.yml` и файл при ней `.vars`.
+- **Mi-2.** Фикстуры `bad-reach-all` и `bad-reach-unknown-context`; мутанты MA и MB — KILLED.
+- **Mi-3.** Фикстура `bad-secret-anthropic-literal` (правило 3, значение `placeholder`, `expect-absent`). `gitleaks` по ней — no leaks.
+- **N-1.** `Makefile:275`: «nine house rules».
+- **N-2.** Аргументы процесса — хвост `entrypoint /multiverse` плюс `command`; при повторе `--contexts` действует последний, как в Go `flag`. Выбран разбор, а не отказ. Фикстура `bad-reach-entrypoint`, мутанты MD и ME — KILLED.
+- **Проверки.** `bash -n` — ok. `make compose-lint` — ok, 9 правил; fixtures 72 bad/14 good. `mvctl env check` — 80, exit 0. Мутанты: K0 первым, MA–ME — KILLED. `gitleaks dir --redact` по копии изменённых файлов — no leaks. Scratch `t469i2-*` удалён по точным путям.
+- **Попутно.** Ветка `env_file` правила 4 мертва по той же причине, поломки нет. Вынесено в бэклог.
+- Не коммитил, `.env` не открывал.
+
+<!-- dev-log T-469 acceptance -->
+## tech-lead#1 · T-469 · приёмка: итерация 2 без ревью #2, Mi-1…Mi-3, N-1, N-2 закрыты · 2026-09-14
+
+Рабочая папка `.worktrees/T-469`, ветка `task/T-469-compose-gateway-vars`, база `e9c9ce9`, Opus. Подробно — карточка `tasks/T-469.md`, «Приёмка (tech-lead)».
+- **Решение: принять**, статус `done`. Итераций ревью — 1; итерацию 2 принял без ревью #2 по поручению оркестратора (в ревью #1 только Minor и Nit).
+- **DoD.** 1, 2, 4, 6–8 подтверждены прогонами. DoD 3 и 5 закрыты решением оркестратора: таблица в скрипте, форма `${MV_X:-умолчание}`. Строки для `infrastructure.md` §3.1.1 и `contracts.md` §16 п. 5 system-architect внесёт после слияния.
+- **Проверки.** `bash -n` — ok. `make compose-lint` — rc=0, 9 правил, фикстуры 72 bad / 14 good. `mvctl env check` — 80, exit 0. `make secrets-scan` — no leaks. `go build ./... && go vet ./...` — exit 0. Модель `config` с пробой: 16 пар «сервис — ключ» доходят; без строки и с пустой строкой — умолчание манифеста; печатались только ключи. Мутанты K0 (первым), MC, MF — KILLED; scratch `t469tl-*` удалён по точным путям.
+- **Умолчания.** Десять `MV_GATEWAY_*`, `MV_GM_PATH`, `MV_OLLAMA_URL` сверены с `shared/env/vars.go`.
+- **`MV_CORE_ADMIN_CLIENTS` в `x-platform-env`** — приемлемо: единственный читатель `AdminOnly` (часы replay), один список на все процессы; сужение у `gateway` и `memory` без `ci-harness` соответствует SEC-12. Строка runbook и release notes — передача.
+- **T-471.** Рецепт встречи в `develop`: `"MV_RULES_PATH": ("state", "swarm")` в `READERS`, причина `MV_SWARM_FAKE` без фразы про `rules/` в образе, строки в `good-reach-host-only` и `bad-reach-all`.
+- **Индекс.** `tasks.md` 0.1.6: T-469 `done`, ветка фактическая, «восемь» → «десять», п. 1 передачи T-470 отмечен выполненным.
+- Не коммитил, `.env` не открывал, контейнеры и 127.0.0.1:8888 не трогал.

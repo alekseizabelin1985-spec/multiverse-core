@@ -41,10 +41,12 @@ type worker struct {
 }
 
 // job is one proposal handed to the worker and the channel its answer comes
-// back on.
+// back on — or, with fn set, a task that has to see the world between two
+// proposals, such as a snapshot.
 type job struct {
 	ctx   context.Context
 	ev    eventbus.Event
+	fn    func() error
 	reply chan error
 }
 
@@ -67,10 +69,29 @@ func (w *worker) start() {
 			case <-w.quit:
 				return
 			case j := <-w.jobs:
+				if j.fn != nil {
+					j.reply <- j.fn()
+					continue
+				}
 				j.reply <- w.run(j)
 			}
 		}
 	}()
+}
+
+// do runs fn on the worker, between two proposals, and waits for it. A task
+// that cannot be handed over because the worker has ended — or ctx ends first —
+// is not run.
+func (w *worker) do(ctx context.Context, fn func() error) error {
+	reply := make(chan error, 1)
+	select {
+	case w.jobs <- job{ctx: ctx, fn: fn, reply: reply}:
+	case <-w.done:
+		return w.stoppedErr()
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return <-reply
 }
 
 // submit hands one proposal to the worker and waits for its answer. It does not

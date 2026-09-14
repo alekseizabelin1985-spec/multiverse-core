@@ -4,7 +4,8 @@ import "slices"
 
 // Proposers of entity changes: the three agent levels of the swarm, the two
 // reserved levels of C-13, and the three non-agent proposers (the gateway on
-// behalf of a person, the author through mvctl, the bootstrap of a world).
+// behalf of a person, the author through mvctl — the bootstrap of a world
+// included — and system, a row reserved without a publisher, C-02 v1.8 p. 6).
 const (
 	ProposerGateway = "gateway"
 	ProposerAuthor  = "author"
@@ -52,8 +53,9 @@ type OwnershipRule struct {
 //
 // Two conditions of §4.6 do not fit the shape of the rule and stay with State,
 // which checks them on top of the table:
-//   - gateway may write hp of a player only with cause=rest, only outside an
-//     encounter and only up to hp_max;
+//   - gateway may write hp of a player only with cause=rest, and a rest writes
+//     nothing but hp, only outside an encounter and exactly to hp_max (C-02
+//     v1.8 p. 3);
 //   - gateway may write status of a player only as the transition
 //     alive → abandoned with cause=forget (C-02 v1.2), and abandoned is
 //     terminal like dead.
@@ -133,13 +135,12 @@ var ownershipRules = []OwnershipRule{
 		Causes:      []string{"init", "author"},
 		Create:      true,
 	},
-	{
-		Proposer:    ProposerSystem,
-		EntityTypes: []string{AnyType},
-		Paths:       []string{AnyPath},
-		Causes:      []string{"init", "author"},
-		Create:      true,
-	},
+	// Reserved and empty on purpose (C-02 v1.8 p. 6): no publisher proposes as
+	// system in MVP-1 — the bootstrap of a world proposes as the author — and a
+	// row with the rights of "*" and no publisher is a trap, since the first
+	// envelope matched to it would get the rights of the author in silence. A
+	// future system mechanism brings a row with a meaning of its own.
+	{Proposer: ProposerSystem},
 	// Reserved by C-13 and empty on purpose: the object agents of Living
 	// Worlds and the monitor agent propose nothing until their spawn flag is
 	// turned on, and an empty rule refuses everything.

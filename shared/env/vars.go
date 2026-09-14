@@ -161,6 +161,15 @@ var (
 	StateWorlds = Declare("MV_STATE_WORLDS", "dark-forest-world",
 		"comma separated worlds the context state serves, one worker each; "+
 			"proposals of any other world are passed over")
+	// RulesPath is read by cmd/multiverse when it builds the context state:
+	// State checks the laws the rule book switches on and does not start
+	// without them (EPIC-002 design.md §4.3, T-471). The default is relative
+	// on purpose: a process started from the repository root finds rules/
+	// there, and the image of the platform carries rules/ in its working
+	// directory (build/Dockerfile).
+	RulesPath = Declare("MV_RULES_PATH", "rules/dark-forest.yaml",
+		"rule book of the mechanics (C-03, ADR-012) whose invariants the context "+
+			"state holds every world to; relative to the working directory of the process")
 	GMPath = Declare("MV_GM_PATH", "agent",
 		"game master path; the feature flag of the migration off the legacy orchestrator (S5)",
 		OneOf("agent", "legacy"))

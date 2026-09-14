@@ -136,10 +136,15 @@ func memoryOptions() serveOptions {
 // It also gives the gateway context a data directory of the test: since T-303
 // the gateway of --contexts=all is real and opens its SQLite files at start,
 // and the default /data of the manifest is no place for a test.
+//
+// And it gives the context state the rule book of the tree: since T-471 state
+// does not start without its laws, and the default rules/dark-forest.yaml is
+// relative to a working directory that is not the root of the tree here.
 func onLoopback(t *testing.T) {
 	t.Helper()
 	t.Setenv(env.CoreAddr.Name(), "127.0.0.1:0")
 	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t))
+	withTheRuleBook(t)
 	clearVar(t, env.BusValidateOnRead.Name())
 }
 
