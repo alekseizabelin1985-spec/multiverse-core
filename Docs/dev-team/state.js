@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:17:38+03:00",
+  "updatedAt": "2026-09-14T10:18:34+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2678,6 +2678,14 @@ window.DEVTEAM_STATE =
           "spentMinutes": 101,
           "timeLog": [],
           "card": "epics/EPIC-001-foundation/tasks/T-470.md"
+        },
+        {
+          "id": "T-476",
+          "title": "degraded в make health и документах, e2e бота в test-race",
+          "status": "in_progress",
+          "assignee": "devops-engineer#1",
+          "startedAt": "2026-09-14T10:18:34+03:00",
+          "card": "epics/EPIC-001-foundation/tasks/T-476.md"
         }
       ],
       "defects": [],
@@ -11178,6 +11186,16 @@ window.DEVTEAM_STATE =
       "action": "Ревью #2: e2e соло",
       "startedAt": "2026-09-14T10:05:47+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-476",
+      "action": "degraded в make health, e2e бота в test-race",
+      "startedAt": "2026-09-14T10:18:34+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -15692,6 +15710,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-315 принята tech-lead#3 (DoD построчно, отметка EPIC-001 по .golangci.yml cmd-telegram-bot-e2e по назначению оркестратора); бэклог З-26…З-32 (З-25 зарезервирован отметкой T-472); индекс 0.1.13. Итераций ревью — 2. Итоговый коммит e0a463b поверх wip c9f84b1 и слияния эпика 7f0ff6b, ветка запушена, "
+    },
+    {
+      "at": "2026-09-14T10:18:34+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "Заведена и запущена T-476 (devops-engineer#1, counters.task = 476): make health и документы считают degraded работающим процессом (решение system-architect#1 по T-059: мир uninitialized → degraded, проба принимает degraded; Makefile DEGRADED_STRICT, infrastructure.md §2.2/§2.3/§7.2, README/runbook) "
     }
   ],
   "blockers": [],
