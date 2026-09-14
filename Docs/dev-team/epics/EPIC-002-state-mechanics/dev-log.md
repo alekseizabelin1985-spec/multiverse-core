@@ -921,3 +921,102 @@
   - e2e — ok; `contracts check` — 65/8/58; `env check` — 81;
   - `make test` — exit 0 (без race), `internal/state` 89,7 %, `internal/mechanics` 96,5 %, `internal/replay` 100 %;
   - стенд I1-α ×3 — 9/9 PASS.
+
+## developer#1 · T-475 · `mvctl world init --bus kafka` и хвост ревью #2 T-058 · 2026-09-14
+
+Подробности — карточка `tasks/T-475.md`, раздел «Выполнение (developer)». Ветка `task/T-475-world-init-kafka` от `77d06ff`. Коммитов и `git add` нет.
+- **Сделано.**
+  - `cmd/mvctl/internal/world/kafka.go`, `core.go` (новые) — путь `--bus kafka`: бакеты, указатель, `/health` `core`, `Bootstrap` с `WithObjects`, `POST` admin-маршрута с `{"reason":"bootstrap"}`, предупреждения после снапшота;
+  - `world.go` — `Command.OpenBus`, `Command.CoreURL`, `OpenBus` по манифесту;
+  - `init.go` — разветвление путей, `snapshotOutcome` (N-3), `errors.Join` (N-4), `--force` над неразборчивым указателем, `details.refusal`;
+  - `status.go` — подсказка `--bus kafka` для `minio`;
+  - `internal/state/bootstrap.go` — `WithObjects`, `Refusal`; `admin.go` — тело `SnapshotRequest`; `store.go` — `ReadLatest` помечает `ErrUndecodable`.
+- **Решения:**
+  - `reason=bootstrap` — необязательное тело маршрута `{"reason": "admin"|"bootstrap"}`, иначе `400 invalid_reason`/`invalid_body`, без тела — `admin`. КД этого не называл, нужно подтверждение system-architect;
+  - правило объектов — опцией `WithObjects(Store)`: журнал для «уже создано» при ней не читается;
+  - `--force` на kafka → `exit 2` с процедурой КД §4.10 (в); `--store memory` → `exit 2`; `--rules` не читается;
+  - до публикаций — `GET /health` `core` (находка `core`), чтобы не ждать 10 с и не оставлять предложения в журнале;
+  - после 200 — `/health` (`snapshot_event_failed`) и `reason` указателя → предупреждения, `exit 0`.
+- **Тесты:**
+  - CLI — State `core` в процессе теста на общем `membus`, хранилище стенда, маршрут на `runtime.HTTP` 127.0.0.1:0, двойники маршрута на `httptest`;
+  - `internal/state` — три теста правила объектов, `Refusal`, тело маршрута, неразборчивый указатель.
+- **Интеграция** (1 прогон): `TestInitOverKafkaOnRedpandaAndMinIO` — PASS, 53 с. `exit 0`, seq 0 `bootstrap`, `state_hash` фикстуры, курсор 11 = курсор State `core`; `world status --store minio` — тот же хэш; повтор — `exit 2`. Контейнеров testcontainers до и после нет.
+- **Мутанты** (копия `scratchpad/t475-mut`, удалена по точному пути): K0 зелёный до и после; 18 мутантов красные, в том числе «решать по журналу», W2 и N-4.
+- **Прогоны:**
+  - build/vet (+`-tags integration`) — 0;
+  - `go test -short -count=1 ./...` — ok;
+  - e2e — ok; lint — 0 issues; `contracts check` — 65/8/58; `env check` — 81;
+  - `make test` — exit 0, `internal/state` 90,2 %, `cmd/mvctl/internal/world` 89,7 %.
+
+  Стенд не запускался, живой стек, `.env` и `:8888` не трогались.
+- **Открытые вопросы** (system-architect): тело `reason` и ограничение `bootstrap` миром без указателя — в КД §4.9–§4.10; комментарий `Bootstrap` об `opts`; описание `MV_CORE_URL`.
+
+## system-architect#1 · T-475 · решения по вопросам исполнителя · 2026-09-14
+
+Подробности — карточка `tasks/T-475.md`, раздел «Решения system-architect»; КД `state-and-mechanics.md` — «Правка T-475», §4.9, §4.10, §20. Ветка `task/T-475-world-init-kafka`, рабочая копия; коммитов и `git add` нет, код, `review.md`, `contracts.md` не менялись.
+- **Тело admin-маршрута** `{"reason": "admin"|"bootstrap"}`, `400 invalid_reason`/`invalid_body` — подтверждено, внесено в §4.9 с полным перечнем ответов.
+- **`bootstrap` над инициализированным миром** — риск есть: потери данных нет, но при двух одновременных `world init --bus kafka` второй пишет `seq 1, reason=bootstrap` и завершается `0`. Решение: `bootstrap` только у мира без `latest.json`, проверка в State на worker'е, `409 world_initialized`. **Итерация 2 T-475** — `snapshot.go`, `admin.go`, тесты (а)–(д), случай маршрута в `kafka_test.go`, мутанты B2a–B2d.
+- **Комментарий `Bootstrap`** — переписан: `opts` задают ожидание и источник «уже создано» (`WithObjects`), `*Refusal`.
+- **Голый `mvctl world init`** идёт в стек — соответствует КД (`--bus` = `MV_BUS`); ужесточения нет, защищают предусловия; §4.10 (з).
+- **`MV_CORE_URL`** — строка бэклога EPIC-001 (`vars.go`, `.env.example`, эталон `infrastructure.md` §4.2), не эта ветка.
+- **Отступления 3–5** приняты: `/health` `core` до предложений, `ErrUndecodable` у указателя, новые файлы.
+- **Бэклог:** EPIC-001 — описание `MV_CORE_URL`; EPIC-002→EPIC-004 — маршрут снапшота в `admin` OpenAPI; EPIC-002 — отказ над миром с объектами не от bootstrap; T-063 — стендовые проверки; tech-writer — раздел runbook.
+- **Проверка:** `git merge-file` КД против `77d06ff`, `b071ec6`, `faff9c8` (база CRLF) — 0 конфликтов.
+
+## developer#1 · T-475 · итерация 2: решения system-architect и ревью #1 · 2026-09-14
+
+Подробности — карточка `tasks/T-475.md`, раздел «Итерация 2 (developer)». Коммитов и `git add` нет.
+- **Сделано по system-architect п. 2:**
+  - `internal/state/snapshot.go` — `ErrWorldInitialized`; снапшот `bootstrap` только у мира без `latest.json`, проверка на worker'е до сброса счёта фактов;
+  - `admin.go` — `409 world_initialized`;
+  - тесты (а)–(д) и случай `409` в `kafka_test.go`.
+- **Ревью #1:**
+  - Mi-1 — сверка `worlds.<world>.entities` в `/health` State `core` с `Created+Skipped` и признака `uninitialized` перед `POST`: находка `core`, снапшот не запрашивается; тест по зонду P1 (6 и 4 объекта);
+  - N-1 — адрес `core` печатается через `Redacted()`;
+  - N-2 — предупреждение, если в health нет контекста `state`;
+  - N-3 — тесты предела тела 4 КБ и `{"reason": ""}`.
+- **Мутанты** (копия `scratchpad/t475i2-mut`, удалена по точному пути): K0 зелёный до и после; B2a, B2b, B2c, B2d, R409, M1, N1, N2, N3a, N3b — все красные.
+- **Прогоны:**
+  - build/vet (+`-tags integration`) — 0;
+  - `go test -short -count=1 ./...` — ok;
+  - e2e — ok; lint — 0 issues; `contracts check` — 65/8/58;
+  - `make test` — exit 0, `internal/state` 90,2 %;
+  - DoD-команда пути memory — вывод прежний.
+- **Интеграция** — один прогон, путь изменился: PASS за 20 с. Контейнеров testcontainers до и после нет.
+- **В бэклог, не делалось:** раздел runbook «Создать мир на стеке», описание `MV_CORE_URL` (EPIC-001), отказ пути kafka при объектах не от bootstrap.
+
+## tech-lead#2 · T-475 · приёмка · 2026-09-14
+
+Подробности — карточка `tasks/T-475.md`, раздел «Приёмка (tech-lead)». Коммитов, `git add` и правок кода нет.
+- **Решение: принято.**
+  - DoD выполнен построчно; стендовая часть передана T-063 строкой DoD.
+  - Ревью #1 code-reviewer#1 — «принять» (0/0/1/3), в карточку перенесено.
+  - Итерация 2 принята без ревью #2 по назначению оркестратора.
+  - `done` — после «Учёт времени» и слияния.
+- **Решения system-architect проверены по коду:**
+  - `bootstrap` пишется только миру без `latest.json`;
+  - проверка идёт на worker'е мира, до сброса счёта фактов;
+  - `ErrWorldInitialized` → `409 world_initialized`, ничего не пишется.
+  - Тесты (а)–(д) есть. Мутанты B2a–B2d и R409 повторены — красные; мутант приёмки B2e (отказ помечает снапшот неудачным) — красный. Тест (а) на `Applier` принят.
+- **Пробел теста:** ветка «иная ошибка чтения указателя» при `bootstrap` не покрыта — мутант B2f зелёный. Бэклог, строка 6, не возврат.
+- **Итерация 2** — принята:
+  - Mi-1, условие «меньше», мутант M1b красный;
+  - N-1, `Redacted`, мутант N1b красный;
+  - N-2 и N-3.
+- **Смена умолчания:** голый `mvctl world init` идёт в стек. Для T-063 и runbook — строка «Передать» и строка бэклога 1.
+- **КД:** в §4.10 (д) нет шага сверки Mi-1. Правка — system-architect, бэклог, строка 7.
+- **Индекс v0.1.11:**
+  - T-475: статус, исполнитель, «Файлы», пометки DoD, строка приёмки;
+  - подраздел «Бэклог по приёмке T-475» — 7 строк;
+  - строка DoD T-063;
+  - строка T-475 в §4.
+- **Прогоны:**
+  - gofmt — пусто; build/vet (+`-tags integration`) — 0; lint (+`--build-tags integration`) — 0 issues;
+  - `go test -short -count=1 ./...` — ok, «Access is denied» не было;
+  - e2e — ok; `contracts check` — 65/8/58;
+  - `make test` — exit 0 (без race): `internal/state` 90,2 %, `cmd/mvctl/internal/world` 89,7 %;
+  - DoD-команда пути memory с `--force` и без — вывод T-058; `gitleaks dir` по изменённым файлам — no leaks.
+- **Пробное слияние** (копии scratchpad: `git archive` кончика плюс файлы T-475):
+  - `7be1f3d` и `d403679` — общих файлов нет, 0 конфликтов;
+  - build/vet и `go test -short ./internal/state/... ./cmd/mvctl/...` — ok;
+  - `tasks.md` и КД на кончике не менялись, поэтому ожидаемого конфликта версий нет.

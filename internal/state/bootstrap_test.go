@@ -53,12 +53,20 @@ func newBootstrapStand(t *testing.T) *bootstrapStand {
 	t.Helper()
 	sources := testkit.Deterministic(t, "t058")
 	eventbus.SetRegistry(contracts.Default())
+	return newBootstrapStandOver(t, sources, objstore.NewMemoryWithClock(testkit.Wall()))
+}
+
+// newBootstrapStandOver is a State started over objects that may hold a world
+// already, on a journal of its own: the restart of a core. The sources of the
+// events are installed once per test, so that the identifiers of the two runs
+// do not repeat.
+func newBootstrapStandOver(t *testing.T, sources testkit.Sources, objects *objstore.Memory) *bootstrapStand {
+	t.Helper()
 	rules, err := mechanics.Load(rulesBook)
 	if err != nil {
 		t.Fatalf("rules: %v", err)
 	}
 	bus := newBus(t)
-	objects := objstore.NewMemoryWithClock(testkit.Wall())
 	if err := state.EnsureWorldBuckets(context.Background(), objects, world); err != nil {
 		t.Fatalf("buckets: %v", err)
 	}
@@ -665,4 +673,187 @@ func copyFixtures(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+// --- the rule of objects (§4.10, the path of --bus kafka (b); T-475) ---
+
+// restartedOver is the State of a core restarted over the objects the stand s
+// wrote, on a journal of its own, with the snapshots of the world removed: the
+// objects of the entities are all that is left of the world. drop runs between
+// the Stop of the first State and the Start of the second.
+func restartedOver(t *testing.T, sources testkit.Sources, s *bootstrapStand, drop ...string) *bootstrapStand {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
+	defer cancel()
+	if err := s.state.Stop(ctx); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	bucket := objstore.SnapshotsBucket(world)
+	infos, err := s.objects.List(ctx, bucket, state.Component+"/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, info := range infos {
+		if err := s.objects.Delete(ctx, bucket, info.Key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, key := range drop {
+		if err := s.objects.Delete(ctx, objstore.EntitiesBucket(world), key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return newBootstrapStandOver(t, sources, s.objects)
+}
+
+// The objects of all six entities are there and the journal holds none of their
+// facts: nothing is proposed, every entity is skipped.
+func TestBootstrapWithObjectsProposesNothingTheStoreHolds(t *testing.T) {
+	sources := testkit.Deterministic(t, "t475")
+	eventbus.SetRegistry(contracts.Default())
+	first := newBootstrapStandOver(t, sources, objstore.NewMemoryWithClock(testkit.Wall()))
+	first.bootstrap(t)
+	s := restartedOver(t, sources, first)
+
+	result, err := state.Bootstrap(context.Background(), s.deps, world, fixturesDir, state.WithObjects(state.NewObjectStore(s.objects)))
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if len(result.Created) != 0 || !reflect.DeepEqual(result.Skipped, bootstrapOrder) {
+		t.Errorf("created %v, skipped %v; want every entity skipped", result.Created, result.Skipped)
+	}
+	if got := len(onTopic(t, s.bus, state.TypeCreateProposed)); got != 0 {
+		t.Errorf("%d proposals on a journal without facts, over a store that holds the world", got)
+	}
+}
+
+// The store is empty and the journal holds the entity.created of the same
+// proposal_id from a world that is gone: every entity is proposed and created.
+func TestBootstrapWithObjectsIgnoresTheFactsOfTheJournal(t *testing.T) {
+	sources := testkit.Deterministic(t, "t475")
+	eventbus.SetRegistry(contracts.Default())
+	first := newBootstrapStandOver(t, sources, objstore.NewMemoryWithClock(testkit.Wall()))
+	first.bootstrap(t)
+	stopCtx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
+	defer cancel()
+	if err := first.state.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	empty := objstore.NewMemoryWithClock(testkit.Wall())
+	if err := state.EnsureWorldBuckets(context.Background(), empty, world); err != nil {
+		t.Fatal(err)
+	}
+	second := state.New(state.Config{Worlds: []string{world}, Timers: sources.Timers, Objects: empty, SnapshotEvery: -1})
+	deps := runtime.Deps{Bus: first.bus, Journal: first.bus, Contracts: contracts.Default(), Clock: sources.Clock}
+	if err := second.Start(context.Background(), deps); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
+		defer cancel()
+		_ = second.Stop(ctx)
+	})
+	if got := len(onTopic(t, first.bus, state.TypeCreated)); got != len(bootstrapOrder) {
+		t.Fatalf("%d entity.created on the journal before the bootstrap, want the %d of the world gone", got, len(bootstrapOrder))
+	}
+	proposedBefore := len(onTopic(t, first.bus, state.TypeCreateProposed))
+
+	result, err := state.Bootstrap(context.Background(), deps, world, fixturesDir, state.WithObjects(state.NewObjectStore(empty)))
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if !reflect.DeepEqual(result.Created, bootstrapOrder) || len(result.Skipped) != 0 {
+		t.Errorf("created %v, skipped %v; want every entity created", result.Created, result.Skipped)
+	}
+	if got := len(onTopic(t, first.bus, state.TypeCreateProposed)) - proposedBefore; got != len(bootstrapOrder) {
+		t.Errorf("%d proposals, want one per entity despite the old facts", got)
+	}
+}
+
+// A bootstrap cut off without a pointer left the world and the region: only
+// the entities without an object are proposed.
+func TestBootstrapWithObjectsProposesWhatIsMissing(t *testing.T) {
+	sources := testkit.Deterministic(t, "t475")
+	eventbus.SetRegistry(contracts.Default())
+	first := newBootstrapStandOver(t, sources, objstore.NewMemoryWithClock(testkit.Wall()))
+	first.bootstrap(t)
+	var missing []string
+	for _, ref := range bootstrapOrder[2:] {
+		missing = append(missing, ref.Type+"/"+ref.ID+".json")
+	}
+	s := restartedOver(t, sources, first, missing...)
+
+	result, err := state.Bootstrap(context.Background(), s.deps, world, fixturesDir, state.WithObjects(state.NewObjectStore(s.objects)))
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if !reflect.DeepEqual(result.Skipped, bootstrapOrder[:2]) || !reflect.DeepEqual(result.Created, bootstrapOrder[2:]) {
+		t.Errorf("created %v, skipped %v; want %v created and %v skipped",
+			result.Created, result.Skipped, bootstrapOrder[2:], bootstrapOrder[:2])
+	}
+	if got := len(onTopic(t, s.bus, state.TypeCreateProposed)); got != len(bootstrapOrder)-2 {
+		t.Errorf("%d proposals, want the %d entities without an object", got, len(bootstrapOrder)-2)
+	}
+}
+
+// objectsRefused is a Store whose objects cannot be read.
+type objectsRefused struct{ state.Store }
+
+func (objectsRefused) GetEntity(context.Context, string, string, string) (*entity.Entity, error) {
+	return nil, errors.New("the store refused to read")
+}
+
+// A store that cannot be read ends the bootstrap before anything is proposed:
+// what is created cannot be told.
+func TestBootstrapWithObjectsThatCannotBeRead(t *testing.T) {
+	bus, deps := bareDeps(t)
+	_, err := state.Bootstrap(context.Background(), deps, world, fixturesDir, state.WithObjects(objectsRefused{}))
+	if !errors.Is(err, state.ErrBootstrap) || !strings.Contains(err.Error(), "the store refused to read") {
+		t.Errorf("err %v, want ErrBootstrap with the error of the store", err)
+	}
+	if got := len(onTopic(t, bus, state.TypeCreateProposed)); got != 0 {
+		t.Errorf("%d proposals over a store that could not be read", got)
+	}
+}
+
+// A refusal carries what State said of it (C-02 details): the operator reads the
+// law the entity broke, not only that it was refused (acceptance of T-058, 3.1).
+func TestBootstrapNamesTheDetailsOfARefusal(t *testing.T) {
+	s := newBootstrapStand(t)
+	broken := copyFixtures(t)
+	path := filepath.Join(broken, "npc.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(body), `"position": "dark-forest-01"`,
+		`"position": "nowhere"`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = state.Bootstrap(context.Background(), s.deps, world, broken)
+	var refusal *state.Refusal
+	if !errors.Is(err, state.ErrBootstrap) || !errors.As(err, &refusal) {
+		t.Fatalf("err %v, want ErrBootstrap with a *state.Refusal", err)
+	}
+	invariant, _ := refusal.Details["invariant_id"].(string)
+	if refusal.Entity != bootstrapOrder[2] || refusal.Reason != string(state.ReasonLawViolation) ||
+		invariant == "" || refusal.EventID == "" {
+		t.Fatalf("refusal %+v, want wolf-alpha refused law_violation with its invariant_id", refusal)
+	}
+	if want := "npc/wolf-alpha refused law_violation (invariant_id " + invariant + ")"; !strings.Contains(err.Error(), want) {
+		t.Errorf("err %q does not say %q", err, want)
+	}
+}
+
+func TestARefusalNamesEveryDetailInOrder(t *testing.T) {
+	refusal := &state.Refusal{Entity: entity.Ref{ID: "player-A", Type: entity.TypePlayer}, Reason: "version_conflict",
+		Details: map[string]any{"expected_version": 2, "actual_version": 3}, EventID: "e-1"}
+	if got, want := refusal.Error(), "player/player-A refused version_conflict (actual_version 3, expected_version 2) (event e-1)"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
+	bare := &state.Refusal{Entity: entity.Ref{ID: "dark-forest-01", Type: entity.TypeRegion}, Reason: "level_violation", EventID: "e-2"}
+	if got, want := bare.Error(), "region/dark-forest-01 refused level_violation (event e-2)"; got != want {
+		t.Errorf("%q, want %q", got, want)
+	}
 }

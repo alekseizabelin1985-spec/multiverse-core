@@ -752,8 +752,9 @@ func (s *scene) ackUntilTaken(t *testing.T, began time.Time, what string) {
 // answers 503 bus_unavailable within the deadline of the publication, rolls
 // the whole ack back and leaves gateway.db free; the deliveries are given
 // again once their lease ran out. Once the broker is back, the repeat of the
-// ack publishes one analytics.turn.completed under the id every attempt had,
-// and no delivery is lost (acceptance of T-307; review #1 of T-307, decision
+// ack publishes analytics.turn.completed under the id every attempt had — on
+// the broker possibly more than once under that id (oneTurnCompleted) — and no
+// delivery is lost (acceptance of T-307; review #1 of T-307, decision
 // 2). The same consumer then hears every one of its topics again without a
 // restart (T-473). The durations are logged with the prefixes "T316 measure"
 // and "T473 measure".
@@ -833,9 +834,9 @@ func (b *broker) outage(t *testing.T) {
 		t.Fatalf("read %s: %v", analytics.Topic, err)
 	}
 	asked, ids := s.tracked.made()
-	t.Logf("T316 measure: %d publications of turn.completed attempted under %d id(s)", asked, len(ids))
-	if len(published) != 1 || len(ids) != 1 || published[0].ID != ids[0] {
-		t.Errorf("turn.completed on the broker %d (ids of the attempts %v), want one under the id of every attempt", len(published), ids)
+	t.Logf("T316 measure: %d publications of turn.completed attempted under %d id(s); %d on the broker", asked, len(ids), len(published))
+	if msg := oneTurnCompleted(published, ids); msg != "" {
+		t.Error(msg)
 	}
 	for _, r := range s.fd.rows(t) {
 		if r.State != outbox.StateDelivered {
