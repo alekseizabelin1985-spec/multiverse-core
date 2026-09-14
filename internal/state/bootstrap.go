@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -63,16 +66,19 @@ type BootstrapResult struct {
 	// Created are the entities State created on this run.
 	Created []entity.Ref `json:"created"`
 	// Skipped are the entities already there: created by an earlier bootstrap
-	// whose fact is in the journal, or refused duplicate_entity.
+	// whose fact is in the journal — or whose object is in the store, with
+	// WithObjects — or refused duplicate_entity.
 	Skipped []entity.Ref `json:"skipped"`
 }
 
-// BootstrapOption changes how a bootstrap waits.
+// BootstrapOption changes how a bootstrap waits, or where it learns what is
+// already created.
 type BootstrapOption func(*bootstrapOptions)
 
 type bootstrapOptions struct {
 	timers  clock.Timers
 	timeout time.Duration
+	objects Store
 }
 
 // WithAnswerTimers sets the timers the wait for an answer is measured on. The
@@ -81,6 +87,61 @@ type bootstrapOptions struct {
 // reason as Config.Timers). A test passes manual timers.
 func WithAnswerTimers(timers clock.Timers) BootstrapOption {
 	return func(o *bootstrapOptions) { o.timers = timers }
+}
+
+// WithObjects has the entity objects of the world in objects decide what is
+// already created, instead of the journal (§4.10, the path of --bus kafka,
+// (b)): an entity with an object is not proposed and is skipped, an entity
+// without one is proposed. The objects are only read.
+//
+// It is the rule of a bootstrap against the State of a running core, over a
+// journal that outlives the command and keeps system_events for 30 days. A
+// bootstrap cut off and repeated after the retention would find no fact and
+// wait for an answer State never gives — the repeat of an applied proposal is
+// dropped (§4.5 p. 2) — and after the buckets of a world were cleared, old
+// facts would mark as created what is no longer there. The objects are what
+// State recovers the world from.
+func WithObjects(objects Store) BootstrapOption {
+	return func(o *bootstrapOptions) { o.objects = objects }
+}
+
+// Refusal is the refusal of State that ended a bootstrap (C-02,
+// entity.update.rejected): the entity, the reason, the details State gave —
+// invariant_id, expected_version, actual_version — and the id of the event.
+// Bootstrap returns it wrapped together with ErrBootstrap, so that the operator
+// reads why, not only that.
+type Refusal struct {
+	Entity  entity.Ref     `json:"entity"`
+	Reason  string         `json:"reason"`
+	Details map[string]any `json:"details,omitempty"`
+	EventID string         `json:"event_id"`
+}
+
+func (r *Refusal) Error() string {
+	text := r.Entity.Type + "/" + r.Entity.ID + " refused " + r.Reason
+	if len(r.Details) > 0 {
+		keys := make([]string, 0, len(r.Details))
+		for key := range r.Details {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		pairs := make([]string, 0, len(keys))
+		for _, key := range keys {
+			pairs = append(pairs, fmt.Sprintf("%s %v", key, r.Details[key]))
+		}
+		text += " (" + strings.Join(pairs, ", ") + ")"
+	}
+	return text + " (event " + r.EventID + ")"
+}
+
+// refusalOf reads the refusal of ref out of entity.update.rejected.
+func refusalOf(ref entity.Ref, answer eventbus.Event) *Refusal {
+	reason, _ := answer.Path().GetString("reason")
+	refusal := &Refusal{Entity: ref, Reason: reason, EventID: answer.ID}
+	if details, ok := answer.Payload["details"].(map[string]any); ok && len(details) > 0 {
+		refusal.Details = details
+	}
+	return refusal
 }
 
 // BootstrapProposalID is the deterministic proposal_id of the entity of a
@@ -190,10 +251,12 @@ func BootstrapProposal(worldID string, e *entity.Entity) eventbus.Event {
 // It is idempotent. An entity whose entity.created of the same proposal_id is
 // already in the journal is not proposed again: State drops a repeat of an
 // applied proposal without an answer (§4.5 p. 2), and there would be nothing to
-// wait for. An entity State refuses duplicate_entity — there already, the
-// window and its commit record no longer naming the bootstrap — is skipped as
-// well. Any other refusal, or no answer within BootstrapTimeout, ends the
-// bootstrap with ErrBootstrap; what was created stays.
+// wait for. With WithObjects it is the object of the entity in the store that
+// says so, and the journal is not read for it. An entity State refuses
+// duplicate_entity — there already, the window and its commit record no longer
+// naming the bootstrap — is skipped as well. Any other refusal (a *Refusal), or
+// no answer within BootstrapTimeout, ends the bootstrap with ErrBootstrap; what
+// was created stays.
 //
 // deps needs Bus and Journal, one transport for both.
 func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir string, opts ...BootstrapOption) (BootstrapResult, error) {
@@ -213,7 +276,12 @@ func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir stri
 	if err != nil {
 		return result, fmt.Errorf("%w: the end of %s: %w", ErrBootstrap, eventbus.TopicSystemEvents, err)
 	}
-	created, err := createdBefore(ctx, deps.Journal, worldID, end)
+	var created map[string]bool
+	if options.objects != nil {
+		created, err = createdInObjects(ctx, options.objects, worldID, fixtures)
+	} else {
+		created, err = createdBefore(ctx, deps.Journal, worldID, end)
+	}
 	if err != nil {
 		return result, err
 	}
@@ -253,9 +321,9 @@ func Bootstrap(ctx context.Context, deps runtime.Deps, worldID, fixturesDir stri
 			result.Created = append(result.Created, ref)
 			continue
 		}
-		reason, _ := answer.Path().GetString("reason")
-		if reason != string(ReasonDuplicateEntity) {
-			return result, fmt.Errorf("%w: %s/%s refused %s (event %s)", ErrBootstrap, ref.Type, ref.ID, reason, answer.ID)
+		refusal := refusalOf(ref, answer)
+		if refusal.Reason != string(ReasonDuplicateEntity) {
+			return result, fmt.Errorf("%w: %w", ErrBootstrap, refusal)
 		}
 		result.Skipped = append(result.Skipped, ref)
 	}
@@ -279,6 +347,24 @@ func createdBefore(ctx context.Context, journal eventbus.Journal, worldID string
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: read %s: %w", ErrBootstrap, eventbus.TopicSystemEvents, err)
+	}
+	return created, nil
+}
+
+// createdInObjects are the proposal identifiers of the fixture entities that
+// have an object in entities-{world}. A world whose bucket is not there yet has
+// nothing created.
+func createdInObjects(ctx context.Context, objects Store, worldID string, fixtures []*entity.Entity) (map[string]bool, error) {
+	created := map[string]bool{}
+	for _, e := range fixtures {
+		_, err := objects.GetEntity(ctx, worldID, e.Type, e.ID)
+		switch {
+		case err == nil:
+			created[BootstrapProposalID(worldID, e.Ref())] = true
+		case errors.Is(err, ErrNotFound), errors.Is(err, objstore.ErrNoBucket):
+		default:
+			return nil, fmt.Errorf("%w: read the object of %s/%s: %w", ErrBootstrap, e.Type, e.ID, err)
+		}
 	}
 	return created, nil
 }

@@ -67,7 +67,10 @@ func (c Command) runStatus(args []string, stdout, stderr io.Writer) int {
 	// A world nobody initialized has no latest.json, and on a store nobody
 	// prepared for it not even the bucket.
 	if errors.Is(err, state.ErrNoSnapshot) || errors.Is(err, objstore.ErrNoBucket) {
-		hint := "run mvctl world init"
+		// A world in the store of a deployment is created only through the
+		// State of the running core (§4.10): the in-process path writes the
+		// memory store and nothing else.
+		hint := "run mvctl world init --bus kafka while core is running"
 		if *store == StoreMemory {
 			// The memory store is born empty with every command: a world init
 			// over it is not seen here, and the answer must not suggest it was lost.

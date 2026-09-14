@@ -32,10 +32,16 @@ var (
 
 // stand is `mvctl world` over one memory object store that outlives a run, so
 // that a second run sees what the first one wrote, and counts how often a store
-// was opened.
+// was opened. The store of a deployment (--store minio) is the same memory
+// store: the path of --bus kafka and the core of the test share it.
 type stand struct {
 	objects *objstore.Memory
 	opened  int
+	kinds   []string
+	// busOpened counts the buses the path of --bus kafka opened.
+	busOpened int
+	// core is the core the last startCore built.
+	core *testCore
 	// wrap, when set, puts a store of the test in front of the memory store.
 	wrap func(objstore.Client) objstore.Client
 }
@@ -45,7 +51,8 @@ func newStand() *stand { return &stand{objects: objstore.NewMemory()} }
 func (s *stand) command() Command {
 	return Command{OpenStore: func(kind string) (objstore.Client, error) {
 		s.opened++
-		if kind != StoreMemory {
+		s.kinds = append(s.kinds, kind)
+		if kind != StoreMemory && kind != StoreMinIO {
 			return nil, fmt.Errorf("the test opens the memory store only, not %q", kind)
 		}
 		if s.wrap != nil {
@@ -334,6 +341,14 @@ type refusingStore struct {
 	objstore.Client
 	deleteRefused func(bucket, key string) bool
 	listRefused   func(bucket string) bool
+	getRefused    func(bucket, key string) bool
+}
+
+func (s *refusingStore) Get(ctx context.Context, bucket, key string) ([]byte, error) {
+	if s.getRefused != nil && s.getRefused(bucket, key) {
+		return nil, fmt.Errorf("get refused: %s/%s", bucket, key)
+	}
+	return s.Client.Get(ctx, bucket, key)
 }
 
 func (s *refusingStore) Delete(ctx context.Context, bucket, key string) error {
@@ -348,24 +363,6 @@ func (s *refusingStore) List(ctx context.Context, bucket, prefix string) ([]objs
 		return nil, fmt.Errorf("list refused: %s", bucket)
 	}
 	return s.Client.List(ctx, bucket, prefix)
-}
-
-// --bus kafka waits for the admin route of T-059 (acceptance of T-057): it says
-// so, and does nothing — no store opened, no proposal published.
-func TestInitOverKafkaSaysThereIsNoAdminRoute(t *testing.T) {
-	s := newStand()
-	r := s.run("init", "--world", world, "--fixtures", fixturesDir, "--bus", BusKafka, "--store", StoreMemory)
-	if r.code != cli.ExitUsage {
-		t.Fatalf("exit %d, want %d\nstderr: %s", r.code, cli.ExitUsage, r.stderr)
-	}
-	for _, want := range []string{"admin route", "/v1/admin/state/{world}/snapshot", "T-059", "nothing was done"} {
-		if !strings.Contains(r.stderr, want) {
-			t.Errorf("stderr does not say %q: %s", want, r.stderr)
-		}
-	}
-	if s.opened != 0 {
-		t.Errorf("the store was opened %d times", s.opened)
-	}
 }
 
 // A bootstrap State refuses leaves no latest.json behind — neither the
