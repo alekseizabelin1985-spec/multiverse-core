@@ -31,13 +31,21 @@ type Turn struct {
 // internal/gateway/turns). Begin names the turn an action is about to become:
 // it opens the session of the scope when there is none and reserves the number
 // of the turn, so that no other action of the scope gets it even when this
-// batch fails to publish and is repeated later (§5.5); it stores no turn, so an
-// action whose publication fails leaves no turn behind. Accepted records the
-// turn of a published action and Rejected an action refused by its
-// preconditions.
+// batch fails to publish and is repeated later (§5.5); it stores no turn.
+//
+// Accepted records the turn of an action right before its player.* event is
+// published, so that the facts and the narrative of the action, which the bus
+// may deliver before the publication returns, find their turn (§5.5). A repeat
+// for the same event records nothing more. Withdrawn takes the turn back when
+// the bus did not acknowledge that event: an action the client is told to
+// repeat leaves no turn behind. Acked records the moment the whole batch was
+// acknowledged and the client answered 202. Rejected records an action refused
+// by its preconditions.
 type Turns interface {
 	Begin(ctx context.Context, t Turn) (api.TurnRef, error)
 	Accepted(ctx context.Context, t Turn, ref api.TurnRef, eventID string) error
+	Withdrawn(ctx context.Context, ref api.TurnRef, eventID string) error
+	Acked(ctx context.Context, eventID string, at time.Time) error
 	Rejected(ctx context.Context, t Turn, code string) error
 }
 

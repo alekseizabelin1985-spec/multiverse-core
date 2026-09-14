@@ -74,7 +74,7 @@ func (f *fixture) dispatcher(t *testing.T, bus eventbus.Bus, effects map[string]
 		bus = f.bus
 	}
 	d, err := consumer.New(consumer.Config{
-		Bus: bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock,
+		Bus: bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
 		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), Effects: effects,
 	})
 	if err != nil {
@@ -514,5 +514,217 @@ func TestSweepForgetsAMarkByItsAgeAlone(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT COUNT(*) FROM processed_events WHERE event_id = 'young'`); n != 1 {
 		t.Error("a mark within the retention was swept below the bound on the count")
+	}
+}
+
+// tailJournal publishes one more event right after the catch-up read the end of
+// topic: the tail that arrives between End and the subscriptions.
+type tailJournal struct {
+	*membus.Bus
+	topic string
+	tail  eventbus.Event
+	once  sync.Once
+	t     *testing.T
+}
+
+func (j *tailJournal) End(ctx context.Context, topic string) (int64, error) {
+	end, err := j.Bus.End(ctx, topic)
+	if err == nil && topic == j.topic {
+		j.once.Do(func() {
+			if err := j.Publish(ctx, j.tail); err != nil {
+				j.t.Errorf("publish the tail: %v", err)
+			}
+		})
+	}
+	return end, err
+}
+
+// The catch-up reads each topic to the End it saw and only then goes live
+// (component §11.2, C-01 v1.1). The tail published after End reaches the
+// gateway through the subscription, and the subscription repeating the
+// catch-up takes no effect twice (component §16 p. 7).
+func TestTheCatchUpGoesLiveAtTheEndAndTheTailTakesItsEffectsOnce(t *testing.T) {
+	f := newFixture(t, membus.Chaos{})
+	events := []eventbus.Event{created("player-A", 10), updated("player-A", 2, 10, 8)}
+	f.publish(t, events...)
+	tail := updated("player-A", 3, 8, 5)
+	journal := &tailJournal{Bus: f.bus, topic: eventbus.TopicSystemEvents, tail: tail, t: t}
+
+	var mu sync.Mutex
+	seen := map[string]int{}
+	effect := func(_ context.Context, _ *sql.Tx, ev eventbus.Event, _ readmodel.Result) error {
+		mu.Lock()
+		defer mu.Unlock()
+		seen[ev.ID]++
+		return nil
+	}
+	d, err := consumer.New(consumer.Config{
+		Bus: f.bus, Journal: journal, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
+		Log:     slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		Effects: map[string][]consumer.Effect{readmodel.TypeEntityCreated: {effect}, readmodel.TypeEntityUpdated: {effect}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Live() {
+		t.Fatal("live before Start")
+	}
+	f.start(t, d, nil)
+	if !d.Live() {
+		t.Fatal("not live after the catch-up")
+	}
+	if end := d.Ends()[eventbus.TopicSystemEvents]; end != 2 {
+		t.Errorf("the catch-up read system_events to %d, want the End it saw, 2", end)
+	}
+	eventually(t, "the tail to arrive through the subscription", func() bool {
+		offset, _ := f.cursor(t, eventbus.TopicSystemEvents)
+		return offset == 2
+	})
+	// Let the subscription repeat what it has; nothing more may happen.
+	eventually(t, "the projection to hold the tail", func() bool {
+		c, _ := f.model.Character("player-A")
+		return c.Version == 3
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	for _, ev := range append(events, tail) {
+		if seen[ev.ID] != 1 {
+			t.Errorf("effects of %s ran %d times, want once", ev.ID, seen[ev.ID])
+		}
+	}
+	if n := f.count(t, `SELECT COUNT(*) FROM processed_events`); n != 3 {
+		t.Errorf("%d events marked processed, want 3", n)
+	}
+}
+
+// A topic no snapshot names is caught up from its effects cursor before Start
+// returns: the effects the gateway had not taken when it stopped happen before
+// its first request, not whenever the subscription gets to them.
+func TestATopicWithAnEffectsCursorIsCaughtUpBeforeTheSubscriptions(t *testing.T) {
+	f := newFixture(t, membus.Chaos{})
+	scope := &eventbus.ScopeRef{ID: "player-A", Type: "solo"}
+	first, second := combatEvent("c-1", scope), combatEvent("c-2", scope)
+	f.publish(t, first, second)
+	if _, err := f.db.ExecContext(context.Background(),
+		`INSERT INTO cursors (topic, "offset", event_id, updated_at) VALUES (?, 0, ?, '2026-09-13T11:00:00.000000000Z')`,
+		eventbus.TopicGameEvents, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int32
+	var got []string
+	var mu sync.Mutex
+	effect := func(_ context.Context, _ *sql.Tx, ev eventbus.Event, _ readmodel.Result) error {
+		calls.Add(1)
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, ev.ID)
+		return nil
+	}
+	d := f.dispatcher(t, &quietBus{Bus: f.bus}, map[string][]consumer.Effect{"combat.decided": {effect}})
+	f.start(t, d, map[string]int64{eventbus.TopicSystemEvents: 0})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 || got[0] != second.ID {
+		t.Errorf("when Start returned the effects ran for %v, want only the event past the cursor", got)
+	}
+	if end, ok := d.Ends()[eventbus.TopicGameEvents]; !ok || end != 2 {
+		t.Errorf("game_events read to %d (%v), want 2", end, ok)
+	}
+	if _, ok := d.Ends()[eventbus.TopicNarrativeOutput]; ok {
+		t.Error("a topic with neither a snapshot cursor nor an effects cursor was read by the catch-up")
+	}
+}
+
+func combatEvent(id string, scope *eventbus.ScopeRef) eventbus.Event {
+	ev := eventbus.NewRoot("combat.decided", contracts.SourceSwarm, world, scope, eventbus.ActorSystem, map[string]any{
+		"encounter": map[string]any{"entity": map[string]any{"id": "enc-1", "type": entity.TypeEncounter}},
+		"round":     map[string]any{"seq": 1}, "action": "attack",
+		"attacker": map[string]any{"entity": map[string]any{"id": "player-A", "type": entity.TypePlayer}},
+		"defender": map[string]any{"entity": map[string]any{"id": "wolf-1", "type": entity.TypeNPC}},
+		"outcome":  map[string]any{"hit": true, "natural": 15, "damage": 3},
+		"hp":       map[string]any{"defender_before": 10, "defender_after": 7, "defender_max": 10},
+		"rolls":    []any{}, "rules_version": "1", "phase1_mode": "rules",
+	})
+	ev.Meta.CorrelationID = "act-" + id
+	ev.Meta.Agent = &eventbus.AgentRef{ID: "encounter-wolf:solo:player-A", Level: "task", Blueprint: "encounter-wolf"}
+	return ev
+}
+
+func stateSnapshotEvent(seq int) eventbus.Event {
+	return eventbus.NewRoot(readmodel.TypeSnapshotCreated, contracts.SourceState, world, nil, eventbus.ActorSystem, map[string]any{
+		"component": "state",
+		"snapshot": map[string]any{"id": fmt.Sprintf("state:%s:%06d", world, seq), "seq": seq, "taken_at": "2026-09-13T12:00:00Z",
+			"cursor": map[string]any{"system_events": seq}, "laws_version": "v1",
+			"state_hash": "sha256:" + strings.Repeat("0", 64), "size_bytes": 1, "key": fmt.Sprintf("state/20260913T120000Z-%06d.json", seq)},
+	})
+}
+
+// / The repair of stale entities in the subscription runs with a snapshot.created
+// the projection has not seen, before the event moves the cursor of the
+// projection or the effects cursor. In the catch-up it runs once, with the last
+// announcement Repairs accepts, after the journal was read: the earlier
+// announcements and the one Repairs refuses are not read from, and the
+// subscription repeating the catch-up repairs nothing again (component §11.2;
+// Mi-1 of review #1 of T-309).
+func TestTheRepairRunsBeforeTheCursorsMove(t *testing.T) {
+	f := newFixture(t, membus.Chaos{})
+	refused := stateSnapshotEvent(3)
+	refused.World = &eventbus.WorldRef{Entity: eventbus.EntityRef{ID: "another-world", Type: entity.TypeWorld}}
+	second := stateSnapshotEvent(2)
+	f.publish(t, created("player-A", 10), stateSnapshotEvent(1), second, refused)
+	type call struct {
+		id                          string
+		positioned                  bool
+		offset, projection, effects int64
+		hasEffects                  bool
+	}
+	var mu sync.Mutex
+	var calls []call
+	d, err := consumer.New(consumer.Config{
+		Bus: f.bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
+		Log:     slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		Repairs: func(ev eventbus.Event) bool { return ev.World != nil && ev.World.Entity.ID == world },
+		Repair: func(ctx context.Context, ev eventbus.Event) {
+			pos, positioned := eventbus.PositionFromContext(ctx)
+			cursors, err := consumer.Cursors(ctx, f.db)
+			if err != nil {
+				t.Errorf("cursors in the repair: %v", err)
+			}
+			effects, has := cursors[eventbus.TopicSystemEvents]
+			mu.Lock()
+			defer mu.Unlock()
+			calls = append(calls, call{ev.ID, positioned, pos.Offset, f.model.Cursor()[eventbus.TopicSystemEvents], effects, has})
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.start(t, d, nil)
+	mu.Lock()
+	caughtUp := append([]call(nil), calls...)
+	mu.Unlock()
+	if len(caughtUp) != 1 || caughtUp[0].id != second.ID || caughtUp[0].projection != 4 {
+		t.Fatalf("repairs of the catch-up = %+v, want one with the last announcement of the world, after the journal was read", caughtUp)
+	}
+
+	late := stateSnapshotEvent(5)
+	f.publish(t, late)
+	eventually(t, "the repair of the snapshot published after the start", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(calls) >= 2
+	})
+	eventually(t, "the subscription to reach the end", func() bool {
+		offset, _ := f.cursor(t, eventbus.TopicSystemEvents)
+		return offset == 4
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) != 2 {
+		t.Fatalf("repairs = %+v, want the catch-up and the late announcement only", calls)
+	}
+	c := calls[1]
+	if c.id != late.ID || !c.positioned || c.offset != 4 || c.projection > c.offset || (c.hasEffects && c.effects >= c.offset) {
+		t.Errorf("repair in the subscription = %+v, want offset 4 before either cursor moved", c)
 	}
 }

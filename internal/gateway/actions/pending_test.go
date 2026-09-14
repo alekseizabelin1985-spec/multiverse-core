@@ -183,6 +183,37 @@ func TestABudgetThatRunsOutHoldsTheBatch(t *testing.T) {
 	}
 }
 
+// The budget runs out while player.* is being published: 503 bus_unavailable,
+// and the turn recorded ahead of the action is taken back on a context the
+// budget does not cancel — on the context of the decision the delete would fail
+// in gateway.db and leave a turn that times out for nothing (review #2 of
+// T-308, Mi-1).
+func TestABudgetThatRunsOutOnTheActionTakesTheTurnBack(t *testing.T) {
+	f := newFixture(t, options{})
+	hanging := make(chan struct{})
+	f.bus.setHooks(func(ctx context.Context, ev eventbus.Event) error {
+		if ev.Type != actions.TypeEnteredRegion {
+			return nil
+		}
+		close(hanging)
+		<-ctx.Done()
+		return context.Cause(ctx)
+	}, nil)
+	cmd := actions.Command{PlayerID: playerA, ActionKey: "k", Type: api.ActionEnter, Target: forest, ActorKind: api.ActorHuman}
+	answer := make(chan actions.Answer, 1)
+	go func() { answer <- f.svc.Submit(context.Background(), cmd) }()
+	<-hanging
+	f.clock.Advance(api.RequestTimeout)
+	if a := <-answer; code(a) != api.CodeBusUnavailable {
+		t.Fatalf("answer = %d %s, want 503 bus_unavailable", a.Status, code(a))
+	}
+	action := f.bus.attempted()[0].ID
+	if f.turns.recorded(action) || len(f.turns.withdrawnOn) != 1 || f.turns.withdrawnOn[0] != nil {
+		t.Errorf("turn stands %v, taken back on contexts %v; want it taken back once on a context that is not done",
+			f.turns.recorded(action), f.turns.withdrawnOn)
+	}
+}
+
 // P3 of review #1. The request ends after the last publication: the turn and
 // the key are recorded all the same, and the repeat answers the kept 202.
 func TestAHangUpAfterTheLastPublicationKeepsTheKey(t *testing.T) {
@@ -338,8 +369,10 @@ func TestARequestThatGivesUpWaitingForItsPlayerDecidesNothing(t *testing.T) {
 }
 
 // Mi-6 of review #2, probe P4. The budget of the decision runs out between the
-// last publication and the key: the turn and the key are recorded all the
-// same, and the repeat answers the kept 202 without a second player.*.
+// last publication and the key: the acknowledgement of the turn and the key are
+// recorded all the same, and the repeat answers the kept 202 without a second
+// player.*. The turn itself was recorded before the action went out (review #1
+// of T-308, Mi-1); what the budget could lose now is its acked_at.
 func TestABudgetThatRunsOutAfterTheLastPublicationKeepsTheKey(t *testing.T) {
 	f := newFixture(t, options{})
 	var decision context.Context
@@ -367,8 +400,9 @@ func TestABudgetThatRunsOutAfterTheLastPublicationKeepsTheKey(t *testing.T) {
 		t.Fatalf("after the budget ran out: key stored %v, accepted turns %v; want the key and one turn",
 			keyStored(t, f, playerA, "k"), f.turns.accepted)
 	}
-	if err := f.turns.acceptedOn[0]; err != nil {
-		t.Errorf("the turn was recorded on a context that is done (%v); a turn in gateway.db would be lost", err)
+	if len(f.turns.ackedOn) != 1 || f.turns.ackedOn[0] != nil {
+		t.Errorf("acknowledgements recorded on contexts %v; want one on a context that is not done, or acked_at in gateway.db is lost",
+			f.turns.ackedOn)
 	}
 	f.bus.setHooks(nil, nil)
 	again := submit(t, f, cmd)
