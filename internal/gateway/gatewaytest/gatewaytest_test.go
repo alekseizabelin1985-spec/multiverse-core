@@ -25,6 +25,7 @@ import (
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
 	"multiverse-core.io/shared/testkit/gateway"
+	"multiverse-core.io/shared/testkit/gateway/sqlitedir"
 	"multiverse-core.io/shared/testkit/state"
 	"multiverse-core.io/shared/testkit/swarm"
 )
@@ -105,8 +106,12 @@ func TestAFakeGatewayStartsAndStopsWithinASecond(t *testing.T) {
 // What a test passed stays the test's: its data directory is not removed and
 // its bus is not closed; the variables reach the gateway, and the directory of
 // the manifest does not (the process environment is never read).
+//
+// The directory is sqlitedir.Temp and not t.TempDir: the store refuses a data
+// directory wider than 0700, and t.TempDir makes its directory 0777 less the
+// umask, 0755 on Linux (T-482).
 func TestAFakeGatewayLeavesWhatTheTestPassed(t *testing.T) {
-	dir := t.TempDir()
+	dir := sqlitedir.Temp(t)
 	bus := newBus(t)
 	g, err := gatewaytest.Start(gatewaytest.Config{Dir: dir, Bus: bus, Mode: runtime.ModeReplay,
 		Vars: map[string]string{"MV_GATEWAY_DATA_DIR": filepath.Join(dir, "elsewhere")}})
