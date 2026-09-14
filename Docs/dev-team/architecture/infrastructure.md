@@ -10,6 +10,8 @@
 - путь `Docs/ops/runbook.md` в §9, §9.8 и §10 пишется с заглавной;
 - уточнены §0 (`prod` и бот), §2.2 (все цели с `$(COMPOSE)`) и §2.4 (запрет из T-004).
 
+**Правка T-471** (2026-09-14, system-architect#1): §4.2 — в эталон `.env.example` добавлены `MV_STATE_WORLDS` (T-055) и `MV_RULES_PATH` (T-471); комментарий над `MV_SWARM_FAKE` говорит, что заглушка читает `rules/dark-forest.yaml` рабочего каталога, а не `MV_RULES_PATH`.
+
 **Изменения v0.3** (сведение 2, `consolidation.md` §10 U-8…U-12 и §13 строка devops; ADR-005 дополнение 2 п. 1–9; `overview.md` §13/§18.1). Точечная правка: разделы, не связанные с LLM-рантаймом, CODEOWNERS и MinIO-форком, оставлены без изменений.
 1. **LLM-рантайм по умолчанию — нативный `llama-server` (llama.cpp) на `127.0.0.1:1234`**, вне compose; Ollama — опциональный второй рантайм (U-8, ADR-005 доп. 2 п. 1/7). `scripts/llm-server.ps1` + `.sh`, `make llm-up / llm-down / llm-health`; `make up` процесс не поднимает, только проверяет health — §6 (переписан), §2.2, §1.1–§1.4.
 2. `.env.example`: `MV_LLM_PROVIDER=openai_compat`, `MV_LLM_URL`, `MV_LLM_API_KEY` (пусто локально), `MV_LLM_CLOUD_ENABLED=false` (гейт по host, не по имени провайдера); `MV_OLLAMA_URL` и блок `OLLAMA_*` — только при `MV_LLM_PROVIDER=ollama`, из обязательных убраны — §4.2, §4.4.
@@ -536,9 +538,11 @@ MV_CORE_ADDR=:8090                   # /health и /v1/admin/* (D-7; сервер
 MV_CORE_ADMIN_CLIENTS=operator,mvctl,ci-harness # X-Client-Id, допущенные к /v1/admin/* (ADR-009 п. 9)
 MV_MEMORY_URL=http://memory:8082     # пусто = память выключена (деградация FR-035)
 MV_SNAPSHOT_EVERY_FACTS=200          # снапшот State каждые N фактов
+MV_STATE_WORLDS=dark-forest-world    # миры контекста state через запятую; по worker'у на мир (T-055)
+MV_RULES_PATH=rules/dark-forest.yaml # законы мира для state; без файла state не стартует; путь от рабочей папки процесса (T-471)
 MV_GM_PATH=agent                     # agent|legacy — фича-флаг миграции GM (S5)
 MV_LAWS_BREACH_PHASE=false
-# временный флаг точки I1-α: заглушка Phase 1 вместо роя; удаляется с хуком в T-256
+# временный флаг точки I1-α: заглушка Phase 1 вместо роя; читает rules/dark-forest.yaml рабочего каталога, не MV_RULES_PATH; удаляется с хуком в T-256
 MV_SWARM_FAKE=false                  # true|false; compose флаг в контейнеры не передаёт
 
 # ===== llm (рантайм по умолчанию — нативный llama-server, ADR-005 доп. 2) =====

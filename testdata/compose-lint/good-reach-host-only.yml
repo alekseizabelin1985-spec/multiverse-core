@@ -55,6 +55,7 @@ services:
       - MV_CORE_ADMIN_CLIENTS
       - MV_GM_PATH=${MV_GM_PATH:-agent}
       - MV_MEMORY_URL=${MV_MEMORY_URL:-}
+      - MV_RULES_PATH=${MV_RULES_PATH:-rules/dark-forest.yaml}
   probe:
     image: multiverse-core:${MV_IMAGE_TAG:-dev}
     command: ["health"]

@@ -1763,6 +1763,10 @@ READERS = {
     # internal/state, laws.
     "MV_SNAPSHOT_EVERY_FACTS": ("state",),
     "MV_STATE_WORLDS": ("state",),
+    # state reads it (cmd/multiverse/contexts_state.go, T-471); swarm is assigned
+    # it by EPIC-002 design.md §4.3, and until it reads the variable the hook of
+    # MV_SWARM_FAKE reads rules/dark-forest.yaml of the working directory instead.
+    "MV_RULES_PATH": ("state", "swarm"),
     "MV_LAWS_BREACH_PHASE": ("laws",),
     "MV_MEMORY_URL": ("swarm",),
     # the context llm (C-15).
@@ -1798,9 +1802,9 @@ NOT_IN_CONTAINERS = {
     "MV_BACKUP_AGE_RECIPIENT": "the public key `age` encrypts links.db to on the host, "
                                "after `docker cp` (infrastructure.md §9); no process reads it",
     "MV_SWARM_FAKE": "the temporary hook of I1-α (cmd/multiverse/fake_contexts.go, removed "
-                     "by T-256) for a process started by hand; the stub reads rules/ under "
-                     "the working directory, which the image does not carry, and "
-                     "infrastructure.md §4.2 says compose does not pass the flag",
+                     "by T-256) for a process started by hand; the image carries rules/ in its "
+                     "working directory since T-471, but infrastructure.md §4.2 says "
+                     "compose does not pass the flag",
 }
 
 rows = set(READERS) | set(NOT_IN_CONTAINERS)
