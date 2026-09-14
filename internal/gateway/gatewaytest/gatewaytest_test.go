@@ -60,6 +60,7 @@ func TestAFakeGatewayStartsAndStopsWithinASecond(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
+	started := wall.Now()
 	if !strings.HasPrefix(g.URL, "http://127.0.0.1:") {
 		t.Errorf("URL = %q, want loopback", g.URL)
 	}
@@ -80,11 +81,16 @@ func TestAFakeGatewayStartsAndStopsWithinASecond(t *testing.T) {
 	if _, err := os.Stat(store.GatewayPath(g.Dir)); err != nil {
 		t.Errorf("gateway.db in the data directory: %v", err)
 	}
+	closing := wall.Now()
 	if err := g.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
+	// The phases are named so that a run over the threshold says where the
+	// time went: Start opens and migrates two SQLite files, and on a loaded
+	// machine that alone takes most of the second (T-480).
 	if took := wall.Now().Sub(began); took > time.Second {
-		t.Errorf("start and stop took %s, want at most 1s", took)
+		t.Errorf("start and stop took %s, want at most 1s: Start %s, the requests %s, Close %s",
+			took, started.Sub(began), closing.Sub(started), wall.Now().Sub(closing))
 	}
 	if _, err := os.Stat(g.Dir); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("data directory after Close: %v, want removed", err)
