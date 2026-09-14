@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T09:07:42+03:00",
+  "updatedAt": "2026-09-14T09:09:58+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3018,7 +3018,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-058",
           "title": "bootstrap.go + mvctl world init/status",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
@@ -10976,7 +10976,7 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Ревью #1: bootstrap, world init/status",
       "startedAt": "2026-09-14T03:28:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:09:58+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -11036,6 +11036,16 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Итерация 2: ключ пути, оракул свойство-теста",
       "startedAt": "2026-09-14T09:07:42+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "Итерация 2: store memory, очистка при --force",
+      "startedAt": "2026-09-14T09:09:58+03:00",
       "finishedAt": null
     }
   ],
@@ -15437,6 +15447,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-472 · ревью #1 (code-reviewer#3): принять — 0/0/3/3. Грамматика перенесена без потерь, таблица видов совпадает с data-model §3, издатели на кончиках EPIC-003/004 передают полный набор атрибутов, патч на кончике EPIC-004 зелёный. Mi-1 обратное направление таблицы, Mi-2 свойство-тест проверяет путь "
+    },
+    {
+      "at": "2026-09-14T09:09:58+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 · ревью #1 (code-reviewer#1): вернуть — 0/1/4/2. Ma-1 --bus memory --store minio пишет в MinIO снапшот с курсором исчезающего журнала (совпадает с решением system-architect#1); Mi-1 сбой после записи latest.json отвечает как провал bootstrap; Mi-2 не закреплено чтение ответов только после End;"
     }
   ],
   "blockers": [],
