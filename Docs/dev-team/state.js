@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T13:59:55+03:00",
+  "updatedAt": "2026-09-14T14:17:36+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -16380,6 +16380,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние R (постоянное разрешение): epic/EPIC-001-foundation → develop (6e3f11f) — T-482. make ci по EPIC-001: lint, contracts, secrets-scan, privacy-scan, vuln, compose-lint, scripts-parity 113/0, backup-prune-test — зелёные; test-race SKIPPED (нет cgo); пакеты cmd/telegram-bot/internal/"
+    },
+    {
+      "at": "2026-09-14T14:17:36+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "CI на GitHub для контрольного слияния R (34835897737): unit, e2e, race, scripts-parity, security, contracts, compose-lint — success; integration — failure только на OutboxWhileTheBrokerIsAway (дубль turn.completed, исправлено в T-483, ещё не в develop). Исправления T-482 на Linux подтверждены."
+    },
+    {
+      "at": "2026-09-14T14:17:36+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние S (постоянное разрешение): epic/EPIC-004-gateway-bot → develop (5851a06: T-478, T-480, T-483) и epic/EPIC-002-state-mechanics → develop (163f7e6: T-475). make ci по обоим эпикам — обходным скриптом для Windows (test exe updates/render/env через go test -c): lint, test -short, пок"
     }
   ],
   "blockers": [
