@@ -104,6 +104,14 @@ ROUTER ?=
 # so `up`, `deploy` and `rollback` call it with LLM_STRICT=0 (§6.3).
 LLM_STRICT ?= 1
 
+# The same for a process that answers `degraded`: it runs (HTTP 200, §7.2), and
+# what it asks for is not fixed by a restart — core with a world `uninitialized`
+# until `mvctl world init`, a gateway with a stale projection. The operator's own
+# `make health` still counts it against the exit code; `up`, `deploy` and
+# `rollback` call it with DEGRADED_STRICT=0, so a fresh stack does not fail the
+# target that brought it up (State design §19, T-059, T-476).
+DEGRADED_STRICT ?= 1
+
 # Compose reads .env by itself; make does not. The targets that hand MV_LLM_* to
 # a native process therefore load the file the same way `make run-local` does
 # (§4.3, §6.2). Values with backslashes (D:\Models\...) must be quoted in .env —
@@ -197,6 +205,14 @@ test-e2e: ## End to end in one process, in-memory bus
 # this file as CP1251 (T-403).
 RACE_PKGS := ./shared/eventbus/... ./shared/testkit/... ./shared/runtime/... ./shared/clock/...
 RACE_COUNT ?= 3
+# The e2e sets, run once under the detector by the second command of the
+# target. The bot's e2e (three goroutines of the bot and the gateway in one
+# process) belongs here and not in RACE_PKGS: every file of
+# cmd/telegram-bot/e2e carries `//go:build e2e`, so without the tag the pattern
+# matches no packages, and `go test` only warns — the first command would check
+# nothing and stay green (decision on T-315, T-476). One variable for the log
+# line and the run, as with RACE_PKGS.
+RACE_E2E_PKGS := ./test/e2e/... ./cmd/telegram-bot/e2e/...
 RACE_OPTIONAL :=
 
 .PHONY: test-race
@@ -226,8 +242,8 @@ test-race: ## Race detector, repeated, over the concurrent packages and e2e (CI 
 	# GOFLAGS=-buildvcs=false, and the log must show what the child build of
 	# e2e really gets, not a shorthand of it (review #2 of T-401, N-7).
 	e2e_goflags="$$GOFLAGS -race"
-	echo "test-race: GOFLAGS='$$e2e_goflags' go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/..."
-	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m ./test/e2e/...
+	echo "test-race: GOFLAGS='$$e2e_goflags' go test -race -tags e2e -count=1 -timeout 10m $(RACE_E2E_PKGS)"
+	GOFLAGS="$$e2e_goflags" go test -race -tags e2e -count=1 -timeout 10m $(RACE_E2E_PKGS)
 
 # `mvctl blueprint validate blueprints/` joins this target together with the
 # command itself, in EPIC-003: the name is reserved in
@@ -343,7 +359,7 @@ minio-image: ## MinIO built from source (ADR-021 variant B); ~5 min the first ti
 .PHONY: up
 up: $(if $(filter legacy,$(ACTIVE_PROFILE_LIST)),legacy-src) ## Start the stack and wait for it; the LLM is checked, never started
 	@$(COMPOSE) up -d --wait
-	$(MAKE) --no-print-directory health LLM_STRICT=0
+	$(MAKE) --no-print-directory health LLM_STRICT=0 DEGRADED_STRICT=0
 
 .PHONY: legacy-src
 legacy-src: ## Export the as-is sources of the `legacy` profile from LEGACY_SRC_REF
@@ -380,15 +396,34 @@ logs: ## Follow the log of one service: make logs SERVICE=core
 	@$(COMPOSE) logs -f --tail=200 $(SERVICE)
 
 .PHONY: health
-health: ## /health of every process plus the LLM and the age of the backup
+health: ## /health of every process (ok, degraded, FAIL), the LLM, the age of the backup; DEGRADED_STRICT=0 accepts degraded
 	@rc=0
 	printf '%-16s %s\n' SERVICE STATUS
+	# The table shows the real status, not the HTTP code (T-476): `degraded` is
+	# HTTP 200 exactly like `ok` (§7.2), so a code-only check printed `ok` for a
+	# process that waits for the operator. The status is the first "status" key
+	# of the body: runtime.Status and the bot both encode it first, and the
+	# details after it may carry statuses of their own. `degraded` counts
+	# against the exit code only with DEGRADED_STRICT=1. Every capture ends in
+	# `|| true`: the recipe runs under -e and pipefail, and an unreachable
+	# service is a row of the table, not the end of the target.
 	for probe in "gateway http://127.0.0.1:8088/health" \
 		"memory http://127.0.0.1:8082/health" \
 		"telegram-bot http://127.0.0.1:8089/health"; do
 		set -- $$probe
-		if code=$$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$$2" 2>/dev/null) && [ "$$code" = 200 ]; then
+		out=$$(curl -s --max-time 5 -w '\n%{http_code}' "$$2" 2>/dev/null) || true
+		code=$$(printf '%s\n' "$$out" | tail -n 1) || true
+		status=$$(printf '%s\n' "$$out" | grep -o '"status"[[:space:]]*:[[:space:]]*"[a-z_]*"' | head -n 1 | sed 's/.*"\([a-z_]*\)"$$/\1/') || true
+		if [ "$$code" = 200 ] && [ "$$status" = ok ]; then
 			printf '%-16s ok\n' "$$1"
+		elif [ "$$code" = 200 ] && [ "$$status" = degraded ]; then
+			printf '%-16s degraded\n' "$$1"
+			if [ "$(DEGRADED_STRICT)" = 1 ]; then
+				rc=1
+			fi
+		elif [ "$$code" = 200 ]; then
+			printf '%-16s FAIL (200, status %s)\n' "$$1" "$${status:-unreadable}"
+			rc=1
 		elif $(COMPOSE) ps --services 2>/dev/null | grep -qx "$$1"; then
 			printf '%-16s FAIL (%s)\n' "$$1" "$${code:-unreachable}"
 			rc=1
@@ -405,12 +440,29 @@ health: ## /health of every process plus the LLM and the age of the backup
 	# `stat C:/Program Files/Git/multiverse: no such file`. The service is fine;
 	# only the probe is broken, so `make up` reported FAIL on a healthy core.
 	# The variable is unknown to Linux shells and ignored there (T-403).
-	if MSYS_NO_PATHCONV=1 $(COMPOSE) exec -T core /multiverse health --url http://127.0.0.1:8090/health >/dev/null 2>&1; then
+	#
+	# The row is the word the probe prints on stdout, not a literal `ok`
+	# (T-476). The word decides and not the exit code: the probe prints the
+	# status it read either way, and exits 0 on `degraded` only since T-059
+	# (State design §19) — before it, 1. Reading the word keeps the row right
+	# on both sides of that change. Anything but `ok` or `degraded`, an empty
+	# line included (503, no answer, no container), is FAIL.
+	core_status=$$(MSYS_NO_PATHCONV=1 $(COMPOSE) exec -T core /multiverse health --url http://127.0.0.1:8090/health 2>/dev/null | tr -d '\r' | head -n 1) || true
+	case "$$core_status" in
+	ok)
 		printf '%-16s ok\n' core
-	else
-		printf '%-16s FAIL\n' core
+		;;
+	degraded)
+		printf '%-16s degraded\n' core
+		if [ "$(DEGRADED_STRICT)" = 1 ]; then
+			rc=1
+		fi
+		;;
+	*)
+		printf '%-16s FAIL%s\n' core "$${core_status:+ (status $$core_status)}"
 		rc=1
-	fi
+		;;
+	esac
 	if ! $(MAKE) --no-print-directory llm-health; then
 		if [ "$(LLM_STRICT)" = 1 ]; then
 			rc=1
@@ -579,7 +631,7 @@ deploy: ci backup image ## Full check, backup, image, then up with the sha tag
 		grep '^MV_IMAGE_TAG=' .env > .env.previous
 	fi
 	MV_IMAGE_TAG=$(GIT_SHA) $(COMPOSE) up -d --wait
-	$(MAKE) --no-print-directory health LLM_STRICT=0
+	$(MAKE) --no-print-directory health LLM_STRICT=0 DEGRADED_STRICT=0
 
 .PHONY: rollback
 rollback: ## Bring the previous image tag back (§8)
@@ -588,7 +640,7 @@ rollback: ## Bring the previous image tag back (§8)
 	[ -n "$$tag" ] || { echo "rollback: .env.previous has no MV_IMAGE_TAG" >&2; exit 1; }
 	echo "rollback: MV_IMAGE_TAG=$$tag"
 	MV_IMAGE_TAG=$$tag $(COMPOSE) up -d --wait
-	$(MAKE) --no-print-directory health LLM_STRICT=0
+	$(MAKE) --no-print-directory health LLM_STRICT=0 DEGRADED_STRICT=0
 
 # -----------------------------------------------------------------------------
 # Housekeeping
