@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:05:47+03:00",
+  "updatedAt": "2026-09-14T10:17:38+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4736,14 +4736,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-315",
           "title": "e2e бота на фейках",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:12:11+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T10:17:38+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.9",
-          "spentMinutes": 0,
+          "spentMinutes": 419,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-315.md"
         },
@@ -11147,7 +11147,7 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "Приёмка T-315",
       "startedAt": "2026-09-14T10:04:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:17:38+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -15686,6 +15686,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-313 · итерация 2 (developer#1): Ma-1 — недетерминирован FakeNarrator (горутина на подписку), шлюз берёт первый нарратив по офсету; нарративы хода и событие открытия встречи сравниваются набором; Ma-2 — счёт копий и сравнение тел по topic/id; Mi-1 — поля механики проверяются отдельно; Mi-2 — «шаг о"
+    },
+    {
+      "at": "2026-09-14T10:17:38+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-315 принята tech-lead#3 (DoD построчно, отметка EPIC-001 по .golangci.yml cmd-telegram-bot-e2e по назначению оркестратора); бэклог З-26…З-32 (З-25 зарезервирован отметкой T-472); индекс 0.1.13. Итераций ревью — 2. Итоговый коммит e0a463b поверх wip c9f84b1 и слияния эпика 7f0ff6b, ветка запушена, "
     }
   ],
   "blockers": [],
