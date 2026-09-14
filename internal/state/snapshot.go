@@ -173,10 +173,16 @@ func (a *Applier) snapshot(ctx context.Context, reason string, cause *eventbus.E
 		"size_bytes", size, "duration_ms", a.clock.Now().Sub(began).Milliseconds())
 	a.rotate(out)
 	if err := a.pub.Publish(out, a.snapshotCreated(pointer, cause)); err != nil {
+		// Not published again (§9): the snapshot is written and its readers
+		// read the pointer. /health tells of it until a snapshot.created goes
+		// out (snapshot_event_failed; N-4 of review #1 of T-057).
+		err = fmt.Errorf("state: snapshot %s is written, snapshot.created is not: %w", pointer.Snapshot.ID, err)
+		a.setSnapshotEventFailure(err)
 		a.log.Error("snapshot.created did not go out; the snapshot is written", "seq", pointer.Snapshot.Seq,
 			"err", err, "handled", true)
-		return pointer, fmt.Errorf("state: snapshot %s is written, snapshot.created is not: %w", pointer.Snapshot.ID, err)
+		return pointer, err
 	}
+	a.setSnapshotEventFailure(nil)
 	return pointer, nil
 }
 
@@ -219,7 +225,7 @@ func (a *Applier) writeSnapshot(ctx context.Context, reason string) (*LatestPoin
 		Seq:           seq,
 		Key:           SnapshotKey(takenAt, seq),
 		TakenAt:       takenAt,
-		Cursor:        map[string]int64{eventbus.TopicSystemEvents: a.cursor},
+		Cursor:        map[string]int64{eventbus.TopicSystemEvents: a.cursor.Load()},
 		LawsVersion:   laws,
 		RulesVersion:  a.rulesVersion,
 		StateHash:     entity.StateHash(entities),
@@ -327,17 +333,32 @@ func newest(ids []string, n int) []string {
 }
 
 // SnapshotHealth is what /health tells of the snapshots of a world: the last
-// one written and the failure of the last attempt since, if any.
+// one written — or the one recovery started from — and the failure of the last
+// attempt since, if any.
 func (a *Applier) SnapshotHealth() (*LatestPointer, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lastSnapshot, a.snapshotErr
 }
 
+// SnapshotEventFailure is the failure of snapshot.created of the last snapshot
+// written, or nil once one went out.
+func (a *Applier) SnapshotEventFailure() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.snapshotEventErr
+}
+
+func (a *Applier) setSnapshotEventFailure(err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.snapshotEventErr = err
+}
+
 func (a *Applier) setSnapshotWritten(pointer *LatestPointer) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.lastSnapshot, a.snapshotErr = pointer, nil
+	a.lastSnapshot, a.snapshotErr, a.snapshotSinceRecovery = pointer, nil, true
 }
 
 func (a *Applier) setSnapshotFailure(err error) {

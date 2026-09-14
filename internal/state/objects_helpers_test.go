@@ -30,6 +30,10 @@ type tracedObjects struct {
 	hold     func(key string) bool
 	held     chan string
 	timeline *timeline
+	// listHook and deleteHook, when set, decide the fate of a List and of a
+	// Delete before the store sees it.
+	listHook   func(bucket, prefix string) error
+	deleteHook func(bucket, key string) error
 }
 
 // holdUntilCancelled makes every write whose key hold accepts hang until its
@@ -119,11 +123,45 @@ func (o *tracedObjects) Put(ctx context.Context, bucket, key string, body []byte
 }
 
 func (o *tracedObjects) Delete(ctx context.Context, bucket, key string) error {
+	o.mu.Lock()
+	hook := o.deleteHook
+	o.mu.Unlock()
+	if hook != nil {
+		if err := hook(bucket, key); err != nil {
+			o.timeline.add("refused delete " + key)
+			return err
+		}
+	}
 	err := o.Memory.Delete(ctx, bucket, key)
 	if err == nil {
 		o.timeline.add("delete " + key)
 	}
 	return err
+}
+
+func (o *tracedObjects) List(ctx context.Context, bucket, prefix string) ([]objstore.ObjectInfo, error) {
+	o.mu.Lock()
+	hook := o.listHook
+	o.mu.Unlock()
+	if hook != nil {
+		if err := hook(bucket, prefix); err != nil {
+			o.timeline.add("refused list " + prefix)
+			return nil, err
+		}
+	}
+	return o.Memory.List(ctx, bucket, prefix)
+}
+
+func (o *tracedObjects) setDeleteHook(h func(bucket, key string) error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.deleteHook = h
+}
+
+func (o *tracedObjects) setListHook(h func(bucket, prefix string) error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.listHook = h
 }
 
 // entityObject reads the object of one entity as a restarted State would.
@@ -212,9 +250,11 @@ func (f *fixture) seedWorld(t *testing.T) {
 	f.seed(t, world, entity.TypeWorld, 1, map[string]any{"laws_version": "v1"})
 }
 
-// loadedFrom is the working set a restarted process would find in the object
-// store: every entity object of the world. It stands for the object branch of
-// recovery (§4.8) until T-059 writes recovery itself.
+// loadedFrom is the working set of a process that read the entity objects of
+// the world and did not recover it: no intent rolled forward, no fact of the
+// journal caught up. Since T-059 it stands only for a caller that skipped
+// recovery — the guard of an unfinished package is tested over it; a restart
+// is tested over Applier.Recover and Context.Start.
 func loadedFrom(t *testing.T, objects objstore.Client, worldIDs ...string) *memstore.Store {
 	t.Helper()
 	store := memstore.New()
