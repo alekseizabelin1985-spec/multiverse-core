@@ -128,12 +128,22 @@ type health struct {
 //
 // The gateway of --contexts=all is real since T-303 and opens its SQLite files
 // at start: the child gets a data directory of the test, not the default /data.
+//
+// State does not start without the laws of its rule book since T-471, and the
+// default rules/dark-forest.yaml is relative to the working directory the child
+// inherits, test/e2e: the child gets the rule book of the tree by its absolute
+// path.
 func emptyWorldEnv(t *testing.T) string {
 	t.Helper()
 	addr := freeAddress(t)
 	t.Setenv(env.CoreAddr.Name(), addr)
 	t.Setenv(env.SwarmFake.Name(), "false")
 	t.Setenv(env.GatewayDataDir.Name(), sqlitedir.Temp(t))
+	rules, err := filepath.Abs(filepath.Join("..", "..", "rules", "dark-forest.yaml"))
+	if err != nil {
+		t.Fatalf("the rule book of the tree: %v", err)
+	}
+	t.Setenv(env.RulesPath.Name(), rules)
 	return addr
 }
 

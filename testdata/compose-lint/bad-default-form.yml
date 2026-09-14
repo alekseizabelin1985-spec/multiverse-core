@@ -1,0 +1,17 @@
+# Rule 8 and the form of passing (T-469): `${MV_STATE_WORLDS}` with no modifier
+# hands the process an empty list of worlds when .env is silent — State then
+# refuses "names no world". The advice is the common form,
+# `${MV_X:-<the manifest's default>}`, and not a key with no value: that form
+# is kept for the allow-lists alone, whose empty value means nobody, and for
+# this variable it would hand the process the same empty value from an empty
+# line of .env. The service runs no context, so rule 9 has nothing to say.
+#
+# expect-rule: 8
+# expect-text: ${MV_STATE_WORLDS} has neither a default nor
+# expect-text: write ${MV_STATE_WORLDS:-dark-forest-world}, the form of passing (T-469)
+# expect-absent: key with no value
+services:
+  core:
+    image: multiverse-core:${MV_IMAGE_TAG:-dev}
+    environment:
+      MV_STATE_WORLDS: ${MV_STATE_WORLDS}

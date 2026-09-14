@@ -9,7 +9,7 @@
 //
 // It is also the store of the unit tests and of the replacement of
 // shared/testkit/state (T-056): a State without object storage. The object
-// store behind it (write-through, intents, snapshots) is T-057.
+// store behind it (write-through, intents, snapshots) is state.Store (T-057).
 package memstore
 
 import (

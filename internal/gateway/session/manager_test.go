@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -386,5 +387,47 @@ func TestNewChecksItsConfig(t *testing.T) {
 	m, err := session.New(session.Config{DB: openDB(t)})
 	if err != nil || m.Idle() != session.DefaultIdle {
 		t.Errorf("New with the defaults = %v, idle %v", err, m.Idle())
+	}
+}
+
+// OnEnded hears every end that was recorded, in live and in replay, and no end
+// the bus refused (the trigger of the snapshot, component §11.2).
+func TestOnEndedHearsEveryRecordedEnd(t *testing.T) {
+	for _, replay := range []bool{false, true} {
+		t.Run(map[bool]string{false: "live", true: "replay"}[replay], func(t *testing.T) {
+			f := newFixture(t, replay)
+			var ended []string
+			cfg := session.Config{DB: f.db, Bus: f.pub, OnEnded: func(s session.Session) {
+				ended = append(ended, s.ID+" "+s.EndReason)
+			}}
+			if replay {
+				cfg.Bus = nil
+			}
+			mgr, err := session.New(cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx := context.Background()
+			s, _, err := mgr.Touch(ctx, solo, world, "player-A", eventbus.ActorHuman, t0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !replay {
+				f.pub.set(true)
+				if _, err := mgr.Sweep(ctx, t0.Add(session.DefaultIdle)); !errors.Is(err, session.ErrPublish) {
+					t.Fatalf("Sweep with the bus down = %v", err)
+				}
+				if len(ended) != 0 {
+					t.Fatalf("an end the bus refused was heard: %v", ended)
+				}
+				f.pub.set(false)
+			}
+			if n, err := mgr.Sweep(ctx, t0.Add(session.DefaultIdle)); err != nil || n != 1 {
+				t.Fatalf("Sweep = %d %v", n, err)
+			}
+			if want := []string{s.ID + " " + session.EndIdle}; !slices.Equal(ended, want) {
+				t.Errorf("OnEnded heard %v, want %v", ended, want)
+			}
+		})
 	}
 }
