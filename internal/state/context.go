@@ -8,8 +8,9 @@
 // adds ownership, the laws of the world, the terminal status and deduplication
 // by last_change; T-057 the object store behind the working set (write-through,
 // intents) and the snapshots with their pointer (store.go, intent.go,
-// snapshot.go); recovery, the state section of /health and the admin route are
-// T-059.
+// snapshot.go); T-059 the recovery of a world before it takes a proposal, the
+// state section of /health and the admin route (recovery.go, health.go,
+// admin.go).
 package state
 
 import (
@@ -21,6 +22,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state/memstore"
@@ -34,15 +36,6 @@ import (
 
 // Name is the name of the context in --contexts.
 const Name = "state"
-
-// Group is the consumer group State reads system_events under.
-//
-// State reads through a subscription until recovery exists: ADR-011 p. 4 gives
-// it a cursor of its own — the cursor of its snapshot, caught up by the journal
-// — and that arrives with the snapshot and recovery (T-057, T-059). Until then
-// the world lives in memory only, and a group that resumes where it stopped is
-// the one reading that does not apply a proposal a second time after a restart.
-const Group = "core.state"
 
 // Config builds the context. Every field has a default.
 type Config struct {
@@ -67,29 +60,39 @@ type Config struct {
 	// nil checks none.
 	Invariants []mechanics.Invariant
 	// Objects is the object store every world of the context writes through
-	// to and snapshots into (§4.3, §4.9); nil keeps the worlds in memory only
-	// and writes no snapshot. The buckets of a world are created by mvctl
-	// world init (EnsureWorldBuckets), not here.
+	// to, snapshots into and is recovered from (§4.3, §4.8, §4.9); nil keeps
+	// the worlds in memory only, writes no snapshot and recovers nothing. The
+	// buckets of a world are created by mvctl world init (EnsureWorldBuckets),
+	// not here.
 	Objects objstore.Client
 	// SnapshotEvery is the number of applied facts per world between two
 	// snapshots; zero reads MV_SNAPSHOT_EVERY_FACTS when the context starts,
 	// below zero writes none on the count. It matters only with Objects.
 	SnapshotEvery int
 	// RulesVersion is the version of the rules of the process, recorded in
-	// every pointer (§4.4).
+	// every pointer (§4.4) and shown by /health.
 	RulesVersion string
 }
 
 // Context is State as a context of the process (runtime.Context).
 //
-// Its subscription is a mediator of delivery (C-01 v1.6): it hands each
-// proposal to the worker of its world, waits for the answer and returns the
-// error of the worker to the bus. A worker answers with an error only when its
-// world has stopped (ErrWorldStopped); an answer that does not go out is
-// published again by the worker itself (Applier.Apply). The event goes into
-// the window of the subscription only after the worker answered without an
-// error; remembered earlier, a redelivery would stop here and never reach the
-// worker.
+// State reads system_events with a cursor of its own, not under a consumer
+// group (ADR-011 p. 4, state-and-mechanics.md §4.8): Journal.Tail from the end
+// of the journal its recovery caught up to. With an object store every Start
+// rebuilds the worlds from it (Applier.Recover), so a Start after a Stop in the
+// same process is the restart of a process. Without one the worlds live in
+// memory and are not rebuilt: the first Start reads the journal from its first
+// offset, as a new consumer group would (C-01 v1.2), and a later Start goes on
+// from the event after the last one handled, so that a proposal whose handling
+// a Stop interrupted is read again.
+//
+// Its reading is a mediator of delivery (C-01 v1.6): it hands each proposal to
+// the worker of its world, waits for the answer and returns the error of the
+// worker to the bus. A worker answers with an error only when its world has
+// stopped (ErrWorldStopped); an answer that does not go out is published again
+// by the worker itself (Applier.Apply). The event goes into the window of the
+// reading only after the worker answered without an error; remembered earlier,
+// a redelivery would stop here and never reach the worker.
 type Context struct {
 	cfg   Config
 	store *memstore.Store
@@ -105,6 +108,9 @@ type Context struct {
 	cancel    context.CancelFunc
 	subDone   chan struct{}
 	subErr    error
+	// next is the offset of system_events after the last event the reading
+	// handled; the reading of a Start without an object store goes on from it.
+	next atomic.Int64
 }
 
 // New builds the context. Nothing is read and nothing is published until Start.
@@ -127,20 +133,25 @@ func (c *Context) Name() string { return Name }
 // over the bus (§7.3, C-14).
 func (c *Context) DependsOn() []string { return nil }
 
-// Start builds a worker per world and opens the subscription to system_events.
-// It returns as soon as the subscription runs; it lives until Stop.
+// Start recovers every world when there is an object store, builds a worker per
+// world and opens the reading of system_events. It returns as soon as the
+// reading runs; it lives until Stop.
 //
-// The lifetime of the subscription is the context's own, not the one Start was
+// Every world is recovered before the reading begins: the facts of the journal
+// are caught up and the intents rolled forward before a proposal is decided
+// (§4.8). A store or a journal that cannot be read fails the start; a snapshot
+// that does not read whole or a world that does not fit together stops that
+// world and fails /health instead.
+//
+// The lifetime of the reading is the context's own, not the one Start was
 // given: Stop cancels it, before the process closes the bus (C-01 v1.7,
 // ADR-023 p. 4).
 //
-// A context stopped once may be started again: the world, the windows of
-// identifiers and a world stopped on a failure stay, so a proposal that comes
-// again after the restart is recognised. It is refused while the run before is
-// still ending — a Stop that ran out of its context leaves the subscription or a
-// worker behind, and a second worker over the same world would be a second
-// writer (review #1 of T-055, Mi-2). The process starts each context once; the
-// second start is what a test of the shutdown needs.
+// A context stopped once may be started again. It is refused while the run
+// before is still ending — a Stop that ran out of its context leaves the
+// reading or a worker behind, and a second worker over the same world would be
+// a second writer (review #1 of T-055, Mi-2). The process starts each context
+// once; the second start is what a test of the shutdown needs.
 func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -148,10 +159,19 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		return errors.New("state: context already started")
 	}
 	if !c.previousRunEnded() {
-		return errors.New("state: the run before has not ended yet: its subscription or a worker is still busy")
+		return errors.New("state: the run before has not ended yet: its reading or a worker is still busy")
 	}
 	if deps.Bus == nil {
 		return errors.New("state: no bus in deps")
+	}
+	journal := deps.Journal
+	if journal == nil {
+		// A test hands one transport as the bus alone; the process fills both
+		// with it (C-01 v1.3).
+		journal, _ = deps.Bus.(eventbus.Journal)
+	}
+	if journal == nil {
+		return errors.New("state: no journal in deps")
 	}
 	switch {
 	case c.cfg.Log != nil:
@@ -177,39 +197,58 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		}
 	}
 
-	if c.appliers == nil {
-		c.appliers = make(map[string]*Applier, len(worlds))
+	from, store, appliers := c.next.Load(), c.store, c.appliers
+	if objects != nil {
+		// Each start is a restart: the worlds, their windows and a world
+		// stopped before are what the store and the journal say, not what this
+		// process remembers.
+		store, appliers = memstore.New(), nil
+		if from, err = journal.End(ctx, eventbus.TopicSystemEvents); err != nil {
+			return fmt.Errorf("state: end of %s: %w", eventbus.TopicSystemEvents, err)
+		}
+	}
+	if appliers == nil {
+		appliers = make(map[string]*Applier, len(worlds))
+	}
+	for _, world := range worlds {
+		if _, ok := appliers[world]; ok {
+			continue
+		}
+		applier, err := NewApplier(ApplierConfig{
+			WorldID: world, Store: store, Publisher: deps.Bus,
+			DedupCapacity: c.cfg.DedupCapacity, Timers: timers, Log: log,
+			Invariants: c.cfg.Invariants,
+			Objects:    objects, Clock: deps.Clock, SnapshotEvery: every,
+			RulesVersion: c.cfg.RulesVersion,
+		})
+		if err != nil {
+			return err
+		}
+		if objects != nil {
+			if _, err := applier.Recover(ctx, journal, from); err != nil {
+				return err
+			}
+		}
+		appliers[world] = applier
 	}
 	workers := make(map[string]*worker, len(worlds))
 	for _, world := range worlds {
-		applier, ok := c.appliers[world]
-		if !ok {
-			applier, err = NewApplier(ApplierConfig{
-				WorldID: world, Store: c.store, Publisher: deps.Bus,
-				DedupCapacity: c.cfg.DedupCapacity, Timers: timers, Log: log,
-				Invariants: c.cfg.Invariants,
-				Objects:    objects, Clock: deps.Clock, SnapshotEvery: every,
-				RulesVersion: c.cfg.RulesVersion,
-			})
-			if err != nil {
-				return err
-			}
-			c.appliers[world] = applier
-		}
-		w := newWorker(world, applier, log)
+		w := newWorker(world, appliers[world], log)
 		w.start()
 		workers[world] = w
 	}
 
 	subCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
+	c.store, c.appliers = store, appliers
 	c.workers, c.worlds, c.cancel, c.subDone, c.subErr, c.running = workers, worlds, cancel, done, nil, true
 	c.runLog = log
+	c.next.Store(from)
 	go func() {
 		defer close(done)
-		err := deps.Bus.Subscribe(subCtx, eventbus.TopicSystemEvents, Group, c.dispatch)
+		err := journal.Tail(subCtx, eventbus.TopicSystemEvents, from, c.dispatch)
 		if err != nil {
-			log.Error("subscription to system_events stopped", "err", err, "handled", false)
+			log.Error("reading of system_events stopped", "err", err, "handled", false)
 		}
 		// Only the run that owns done reports its error. Today the check
 		// always holds: Start does not begin a new run until done is closed,
@@ -222,11 +261,11 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 		}
 		c.mu.Unlock()
 	}()
-	log.Info("state running", "worlds", strings.Join(worlds, ","), "group", Group)
+	log.Info("state running", "worlds", strings.Join(worlds, ","), "from", from)
 	return nil
 }
 
-// previousRunEnded reports whether the subscription and every worker of the run
+// previousRunEnded reports whether the reading and every worker of the run
 // before have returned. The caller holds the lock.
 func (c *Context) previousRunEnded() bool {
 	if c.subDone != nil {
@@ -277,9 +316,20 @@ func (c *Context) worldsToServe() ([]string, error) {
 	return worlds, nil
 }
 
-// dispatch is the handler of the subscription: the mediator between the bus
-// and the workers (C-01 v1.6).
+// dispatch is the handler of the reading: the mediator between the bus and the
+// workers (C-01 v1.6). An event it handled without an error moves the offset a
+// later Start without an object store reads from past it.
 func (c *Context) dispatch(ctx context.Context, ev eventbus.Event) error {
+	if err := c.handle(ctx, ev); err != nil {
+		return err
+	}
+	if pos, ok := eventbus.PositionFromContext(ctx); ok && pos.Topic == eventbus.TopicSystemEvents {
+		c.next.Store(pos.Offset + 1)
+	}
+	return nil
+}
+
+func (c *Context) handle(ctx context.Context, ev eventbus.Event) error {
 	if !IsProposal(ev.Type) {
 		return nil
 	}
@@ -308,16 +358,15 @@ func (c *Context) dispatch(ctx context.Context, ev eventbus.Event) error {
 	return nil
 }
 
-// Stop cancels the subscription, waits until its handler has returned — the
-// proposal a worker holds is finished first — and stops the workers. The wait
-// is bounded by ctx, which the process gives runtime.StopTimeout (C-01 v1.7).
+// Stop cancels the reading, waits until its handler has returned — the proposal
+// a worker holds is finished first — and stops the workers. The wait is bounded
+// by ctx, which the process gives runtime.StopTimeout (C-01 v1.7).
 //
 // The cancellation also ends the attempts of a worker to publish an answer that
-// does not go out: its world stops with publish_failed, and the proposal is left
-// uncommitted rather than parked in dead_letters (Delivery.Deliver on a
-// cancelled context).
+// does not go out: its world stops with publish_failed, and the proposal is not
+// parked in dead_letters (Delivery.Deliver on a cancelled context).
 //
-// A subscription that ended on its own before Stop is what Stop reports.
+// A reading that ended on its own before Stop is what Stop reports.
 func (c *Context) Stop(ctx context.Context) error {
 	c.mu.Lock()
 	if !c.running {
@@ -337,7 +386,7 @@ func (c *Context) Stop(ctx context.Context) error {
 		for _, w := range workers {
 			w.signalStop()
 		}
-		return fmt.Errorf("state: stop: the subscription to %s did not return: %w", eventbus.TopicSystemEvents, ctx.Err())
+		return fmt.Errorf("state: stop: the reading of %s did not return: %w", eventbus.TopicSystemEvents, ctx.Err())
 	}
 	var errs []error
 	stopped := make([]string, 0, len(workers))
@@ -348,14 +397,14 @@ func (c *Context) Stop(ctx context.Context) error {
 		}
 		stopped = append(stopped, world)
 	}
-	// The shutdown snapshot (§4.9): the subscription has returned and the
-	// workers have ended, so nothing changes the worlds any more, and the bus
-	// is still open for snapshot.created — the process closes it after Stop
-	// (ADR-023 p. 4).
+	// The shutdown snapshot (§4.9): the reading has returned and the workers
+	// have ended, so nothing changes the worlds any more, and the bus is still
+	// open for snapshot.created — the process closes it after Stop (ADR-023
+	// p. 4). A world stopped on a failure, or not yet initialised, writes none.
 	if c.cfg.Objects != nil {
 		for _, world := range stopped {
 			applier := workers[world].applier
-			if applier.Stopped() != nil {
+			if applier.Stopped() != nil || applier.Uninitialized() {
 				continue
 			}
 			if _, err := applier.Snapshot(ctx, SnapshotShutdown); err != nil {
@@ -378,9 +427,9 @@ func (c *Context) Snapshot(ctx context.Context, worldID, reason string) (*Latest
 	c.mu.Unlock()
 	switch {
 	case !running:
-		return nil, errors.New("state: snapshot: the context is not running")
+		return nil, ErrNotRunning
 	case w == nil:
-		return nil, fmt.Errorf("state: snapshot: %s is not a world of this context", worldID)
+		return nil, fmt.Errorf("%w: %s", ErrUnknownWorld, worldID)
 	case c.cfg.Objects == nil:
 		return nil, ErrNoObjectStore
 	}
@@ -393,10 +442,17 @@ func (c *Context) Snapshot(ctx context.Context, worldID, reason string) (*Latest
 	return pointer, err
 }
 
+// ErrNotRunning is a snapshot asked of a context that is not running.
+var ErrNotRunning = errors.New("state: the context is not running")
+
+// ErrUnknownWorld is a world the context does not serve.
+var ErrUnknownWorld = errors.New("state: not a world of this context")
+
 // Health is what /health of the process reports for State: fail when a world
-// stopped — after a panic or an answer abandoned before it got out — or the
-// subscription ended on its own; degraded before Start, after Stop and while a
-// world publishes an answer again; ok otherwise.
+// stopped — after a panic, an answer abandoned before it got out, a snapshot
+// that does not read whole or a world that does not fit together — or the
+// reading ended on its own; degraded before Start, after Stop and while a world
+// is degraded (Applier.WorldHealth); ok otherwise.
 func (c *Context) Health() runtime.Status {
 	c.mu.Lock()
 	running, workers, worlds := c.running, c.workers, c.worlds
@@ -410,27 +466,12 @@ func (c *Context) Health() runtime.Status {
 	details := map[string]any{}
 	perWorld := make(map[string]any, len(worlds))
 	for _, world := range worlds {
-		section := map[string]any{"entities": c.store.Len(world), "status": runtime.StatusOK}
-		applier := workers[world].applier
-		last, snapshotErr := applier.SnapshotHealth()
-		if last != nil {
-			section["snapshot"] = map[string]any{"seq": last.Snapshot.Seq, "taken_at": last.Snapshot.TakenAt}
-		}
-		if err := applier.Stopped(); err != nil {
-			section["status"], section["err"], section["reason"] = runtime.StatusFail, err.Error(), stopReason(err)
+		worldStatus, section := workers[world].applier.WorldHealth()
+		switch {
+		case worldStatus == runtime.StatusFail:
 			status = runtime.StatusFail
-		} else if attempts := applier.Retrying(); attempts > 0 {
-			section["status"], section["publish_attempts_failed"] = runtime.StatusDegraded, attempts
-			if status == runtime.StatusOK {
-				status = runtime.StatusDegraded
-			}
-		} else if snapshotErr != nil {
-			// §9, "Ошибка записи снапшота": the world goes on, the snapshot is
-			// stale until the next trigger writes one.
-			section["status"], section["snapshot_stale"] = runtime.StatusDegraded, snapshotErr.Error()
-			if status == runtime.StatusOK {
-				status = runtime.StatusDegraded
-			}
+		case worldStatus == runtime.StatusDegraded && status == runtime.StatusOK:
+			status = runtime.StatusDegraded
 		}
 		perWorld[world] = section
 	}
@@ -451,21 +492,22 @@ func (c *Context) Health() runtime.Status {
 // same process that has to see what State decided. Consumers read the world
 // off the bus (C-02).
 func (c *Context) Get(worldID, id string) (*entity.Entity, bool) {
-	return c.store.Get(worldID, id)
+	c.mu.Lock()
+	store := c.store
+	c.mu.Unlock()
+	return store.Get(worldID, id)
 }
 
-// stopReason names why a world stopped, for /health.
-func stopReason(err error) string {
-	switch {
-	case errors.Is(err, ErrPublishFailed):
-		return "publish_failed"
-	case errors.Is(err, ErrPersistFailed):
-		return "persist_failed"
-	case errors.Is(err, errPanicked):
-		return "panic"
-	default:
-		return "stopped"
+// Recovery is what the last recovery of a world found; false for a world the
+// context has not built.
+func (c *Context) Recovery(worldID string) (Recovery, bool) {
+	c.mu.Lock()
+	applier := c.appliers[worldID]
+	c.mu.Unlock()
+	if applier == nil {
+		return Recovery{}, false
 	}
+	return applier.LastRecovery(), true
 }
 
 func sortedKeys[V any](m map[string]V) []string {

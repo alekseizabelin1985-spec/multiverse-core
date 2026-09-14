@@ -9,6 +9,7 @@ import (
 	"multiverse-core.io/internal/mechanics"
 	"multiverse-core.io/internal/state"
 	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -34,12 +35,46 @@ var (
 //
 // The book is read here, when serve builds the contexts, and not in an init,
 // for the reason newSwarm gives: the value is the operator's, not the linker's.
+//
+// The object store and the recovery come in together (T-059): State writes
+// through to the store MV_MINIO_* names and, at start, rebuilds its worlds from
+// it. Written apart they would not be safe — an empty memory over a store that
+// holds the world would overwrite an entity at version 1 and point latest.json
+// at half a world (acceptance of T-057).
 func newStateWithTheLaws() runtime.Context {
 	rules, err := loadTheRules(env.RulesPath.String())
 	if err != nil {
 		return lawless{err: err}
 	}
-	return state.New(state.Config{Invariants: rules.Invariants()})
+	objects, err := stateObjects()
+	if err != nil {
+		return lawless{err: err}
+	}
+	return state.New(state.Config{Invariants: rules.Invariants(), Objects: objects, RulesVersion: rules.Version})
+}
+
+// stateObjects is the object store of State; a test of the process puts its
+// own store here.
+var stateObjects = objectsFromEnv
+
+// objectsFromEnv is a client over MV_MINIO_*, or none without the keys: a
+// process on the memory bus runs without MinIO and keeps its worlds in memory,
+// as the gateway reads no snapshot then (internal/gateway objectStore). One key
+// without the other is a refusal naming both variables, never their values.
+func objectsFromEnv() (objstore.Client, error) {
+	access, secret := env.MinIOAccessKey.String(), env.MinIOSecretKey.String()
+	switch {
+	case access == "" && secret == "":
+		return nil, nil
+	case access == "" || secret == "":
+		return nil, fmt.Errorf("state: %s and %s are set together or not at all",
+			env.MinIOAccessKey.Name(), env.MinIOSecretKey.Name())
+	}
+	cfg, err := objstore.ConfigFromEnv()
+	if err != nil {
+		return nil, fmt.Errorf("state: %w", err)
+	}
+	return objstore.New(cfg)
 }
 
 // loadTheRules loads the rule book of the process. A relative path is relative

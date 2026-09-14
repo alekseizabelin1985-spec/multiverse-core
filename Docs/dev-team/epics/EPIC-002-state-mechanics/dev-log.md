@@ -646,3 +646,36 @@
 - **Прогоны:** `go test -short -count=1 ./shared/contracts/... ./internal/state/... ./cmd/mvctl/...` — ok; `./test/fixtures/... ./shared/testkit/state/... ./shared/eventbus/...` — ok; `contracts check` — 65 типов, exit 0.
 - **Nit:** метки `contract-change` в разделе T-057 индекса нет — проставить tech-lead#2.
 - **`design.md` §4.1 и §7** не правил (зона architect и tech-lead#2): точный текст правки v0.1.2 — в карточке, п. 5. Устаревшие имена стоят только в строках 64 и 123.
+
+## developer#2 · T-059 · recovery, `/health`, admin-маршрут · 2026-09-14
+
+Подробности — карточка `tasks/T-059.md`, раздел «Выполнение (developer)». Коммитов и `git add` нет.
+- **Способ чтения — курсор** (ADR-011 п. 4, КД §4.8): `Journal.Tail` с `End` после восстановления каждого мира; группа `core.state` снята. **T-474 получает полный объём (M).** Без хранилища State читает с офсета 0 при первом старте и с события после последнего обработанного — при следующем.
+- **`recovery.go`**: указатель → снапшот с проверкой (откат до K=5, все битые — `snapshot_corrupted`, мир не обслуживается) → окно `Restore` → догон фактов `[cursor, End)` по правилу C-02 v1.6 (`catchup.go`) с дополнением окна → сверка с объектами (висящая запись принимается без публикации; та же версия — id факта из журнала сохраняется, §18) → roll-forward интентов до приёма предложений → `analytics.replay.completed mode=recovery`. Разрыв журнала (первый офсет ≠ курсор или курсор > `End`) — мир из объектов, `degraded {log_gap}`.
+- **`/health` мира** (`health.go`): `snapshot {seq, taken_at, age_s}`, `snapshot_stale: age_s`, `pending_intents`, `publish_attempts_failed`, `snapshot_event_failed` (N-4), `world: uninitialized`, `reason` с `snapshot_corrupted`/`state_divergence`.
+- **`admin.go`**: `POST /v1/admin/state/{world}/snapshot` за `runtime.AdminOnly`. **`world.go`**: мир `uninitialized` (§18). **N-3**: `ErrNoBucket`/`ErrNotFound` не повторяются, `ListIntents` на досылке — с повторами, число повторов — в комментарии `persistPauses`. Интент записанного пакета не останавливает мир на повторе (`finishedIn`).
+- **Страж** `OneStateOverTheWorld` перенесён в `shared/testkit/state` — место на подтверждение tech-lead#1.
+- **`cmd/multiverse`** (через tech-lead#1): `contexts_state.go` — `Objects` (при заданных ключах MinIO) и `RulesVersion` одним изменением с восстановлением; `fake_contexts_test.go` — вызов общего стража; новый `contexts_state_recovery_test.go` — рестарт процесса над хранилищем, тот же `state_hash`.
+- **Отклонения**: битый снапшот не роняет `Start` — мир остановлен; admin-маршрут пускает без `X-Actor-Kind` (контракт `AdminOnly`); `analytics.consistency.violated` не публикуется — в реестре только издатель `mvctl`.
+- **Открыто для system-architect**: `log_gap` и повторная публикация факта, конверт досылки (Mi-3), `batch_size` (Mi-2), N-4, число повторов в КД §4.5 п. 11, строки КД §4.8/§9.
+- **Риск**: в compose `core` не проходит healthcheck до `mvctl world init` (мир `uninitialized` → `degraded`).
+- **Прогоны**: gofmt пусто; build/vet (+`-tags integration`) — 0; `go test -short ./...` — ok (кроме `cmd/mvctl/internal/env`: «Access is denied», обход `go test -c` — PASS); e2e — ok; lint — 0; `contracts check`/`env check` — exit 0; `make test` — exit 0, `internal/state` 89,1 %; стенд I1-α ×3 — 9/9. Мутанты M1–M18, K5–K7 — красные (M1 и M13 после уточнения тестов), C0 зелёный; копия удалена по точному пути. Интеграция MinIO не запускалась (не требуется DoD).
+
+## system-architect#1 · T-059 · решения по вопросам исполнителя и риску compose · 2026-09-14
+
+Подробности — карточка `tasks/T-059.md`, раздел «Решения system-architect»; КД `state-and-mechanics.md` — строка «Правка T-059» и §19. Коммитов, `git add` и правок кода нет.
+- **Вопросы:**
+  - `log_gap` — подтверждено с уточнением: факты, доставленные чтением с разрывом, отмечают `fact_event_id` у объектов с тем же `id`/`version`/`proposal_id`, остальным повтор досылает факт под первым id;
+  - конверт досылки — как в коде, без `contract-change` `shared/entity`;
+  - `batch_size` — применённые наборы;
+  - N-4 — `snapshot_event_failed` подтверждён;
+  - до 12 запросов и ≈ 3,7 с пауз внесены в КД §4.5 п. 11;
+  - страж в `shared/testkit/state` — подходит, подтверждает tech-lead#1.
+- **Отступления приняты:** битый снапшот останавливает мир, а не процесс; admin-маршрут по `X-Client-Id`; `analytics.consistency.violated` — после строки издателя `core/state` (бэклог EPIC-005, `contract-change`).
+- **Compose — вариант (б):** мир `uninitialized` остаётся `degraded`, проба `multiverse health` принимает `ok|degraded` (код 0), `fail` и прочее — код 1. Правка `health.go` — итерация 2 T-059 (просмотр tech-lead#1). `infrastructure.md` §2.2, §2.3, §7.2 и `Makefile` (`DEGRADED_STRICT`) — devops-engineer, точный текст в карточке. `docker-compose.yml` не меняется.
+- **Итерация 2:**
+  - отметка вышедших фактов при `log_gap`;
+  - проба `health.go`;
+  - отказ State без хранилища над шиной, которая переживает процесс;
+  - тесты решений 2 и 3.
+- **Проверки:** `git merge-file` КД против `.worktrees/T-058` и `.worktrees/T-472` (база `0345177` в CRLF) — 0 конфликтов, в том числе последовательно. `contracts.md` не менялся. Docker, `.env`, `:8888` не трогались.

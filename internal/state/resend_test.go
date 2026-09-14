@@ -14,6 +14,7 @@ import (
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/runtime"
 	"multiverse-core.io/shared/testkit"
+	teststate "multiverse-core.io/shared/testkit/state"
 )
 
 // --- a write under Stop and the facts sent after a restart ---
@@ -106,11 +107,17 @@ func TestStopDuringAWriteFinishesTheWriteAndItsFact(t *testing.T) {
 }
 
 // A fact whose entity is written but which never got out — the publication
-// failed until Stop — is published after a restart over what the object store
-// kept, once, under the id it was first derived with; the version does not
-// move and the entity is not written again (C-02 "Гарантии"; DoD T-057 from the
-// acceptance of T-056). For an atomic package the facts that did get out come
-// out again under their own ids, and no version is announced by two facts.
+// failed until Stop — is sent after a restart by the repeat of its proposal,
+// once, under the id it was first derived with; the version does not move and
+// the entity is not written again (C-02 "Гарантии"; DoD T-057 from the
+// acceptance of T-056). The restart is the recovery itself (T-059): the object
+// ahead of its fact is taken into the world without a publication, and the
+// fact goes out only when the proposal comes again (§18).
+//
+// For an atomic package the facts that did get out are in the journal: the
+// recovery catches them up and the world keeps their ids, so the repeat sends
+// the missing fact alone — exactly one wolf-alpha v2 and no second player-A v2
+// (§18, "Догон атомарного пакета"; acceptance of T-055).
 func TestAFactLostAfterItsWriteIsSentAfterARestart(t *testing.T) {
 	cases := map[string]struct {
 		sets    func(t *testing.T) eventbus.Event
@@ -134,17 +141,18 @@ func TestAFactLostAfterItsWriteIsSentAfterARestart(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			bus := rig(t)
-			objects := newTracedObjects(t, world)
-			c, manual := runningStored(t, bus, objects, -1)
-			publish(t, bus.Bus, createWorld(),
+			s := newStored(t)
+			c, _ := s.start(t)
+			s.answered(t, createWorld(),
 				create("prop-a", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10}),
 				create("prop-w", ref("wolf-alpha", entity.TypeNPC), "", map[string]any{"hp": 10}))
-			untilEnd(t, bus.Bus, 6)
+			if _, err := c.Snapshot(context.Background(), world, state.SnapshotAdmin); err != nil {
+				t.Fatalf("Snapshot: %v", err)
+			}
 
 			var attempts atomic.Int32
 			var tried atomic.Value
-			bus.setHook(func(_ context.Context, ev eventbus.Event) error {
+			s.bus.setHook(func(_ context.Context, ev eventbus.Event) error {
 				if ev.Type == state.TypeUpdated && subjectOf(ev) == tc.failing {
 					attempts.Add(1)
 					tried.Store(ev.ID)
@@ -152,33 +160,37 @@ func TestAFactLostAfterItsWriteIsSentAfterARestart(t *testing.T) {
 				}
 				return nil
 			})
-			publish(t, bus.Bus, tc.sets(t))
-			waitFor(t, "a second attempt", advancing(manual, func() bool { return attempts.Load() >= 2 }))
-			if object := objects.entityObject(t, world, entity.TypePlayer, "player-A"); object.Version != 2 ||
+			lost := tc.sets(t)
+			publish(t, s.bus.Bus, lost)
+			waitFor(t, "a second attempt", advancing(s.sources.Clock, func() bool { return attempts.Load() >= 2 }))
+			if object := s.objects.entityObject(t, world, entity.TypePlayer, "player-A"); object.Version != 2 ||
 				object.LastChange.ProposalID != "prop-lost" || object.LastChange.FactEventID != "" {
 				t.Fatalf("the object of player-A %+v, want v2 under prop-lost without a fact id", object)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
-			defer cancel()
-			if err := c.Stop(ctx); err != nil {
+			if err := stop(c); err != nil {
 				t.Fatalf("Stop: %v", err)
 			}
-			before := answersTo(t, bus.Bus, "prop-lost")
-			writes := len(objects.timeline.all())
+			before := answersTo(t, s.bus.Bus, "prop-lost")
+			writes := len(s.objects.timeline.all())
 
-			bus.setHook(nil)
-			restarted := state.NewOver(state.Config{Worlds: []string{world}, Objects: objects, SnapshotEvery: -1},
-				loadedFrom(t, objects.Memory, world))
-			if err := restarted.Start(context.Background(), runtime.Deps{Bus: bus}); err != nil {
-				t.Fatalf("Start of the restarted process: %v", err)
+			s.bus.setHook(nil)
+			restarted, _ := s.start(t)
+			rec := recoveryOf(t, restarted)
+			if rec.Accepted != 1 || rec.EventsReplayed != len(before) || rec.Failure != nil {
+				t.Errorf("recovery %+v, want the object of %s taken in and %d facts caught up", rec, tc.failing, len(before))
 			}
-			t.Cleanup(func() {
-				ctx, cancel := context.WithTimeout(context.Background(), runtime.StopTimeout)
-				defer cancel()
-				_ = restarted.Stop(ctx)
-			})
-			waitFor(t, "the lost fact after the restart", func() bool {
-				for _, ev := range answersTo(t, bus.Bus, "prop-lost") {
+			if got := answersTo(t, s.bus.Bus, "prop-lost"); len(got) != len(before) {
+				t.Fatalf("%d answers to prop-lost after the recovery, want %d: recovery sends no fact", len(got), len(before))
+			}
+			raw, err := json.Marshal(lost)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.bus.Append(eventbus.TopicSystemEvents, raw); err != nil {
+				t.Fatal(err)
+			}
+			waitFor(t, "the lost fact after the repeat", func() bool {
+				for _, ev := range answersTo(t, s.bus.Bus, "prop-lost") {
 					if subjectOf(ev) == tc.failing {
 						return true
 					}
@@ -186,16 +198,16 @@ func TestAFactLostAfterItsWriteIsSentAfterARestart(t *testing.T) {
 				return false
 			})
 
-			byEntity := idsByEntity(answersTo(t, bus.Bus, "prop-lost"))
+			byEntity := idsByEntity(answersTo(t, s.bus.Bus, "prop-lost"))
 			if ids := byEntity[tc.failing]; len(ids) != 1 || ids[0] != tried.Load() {
 				t.Errorf("facts of %s %v, want one under the id it was first tried with, %v", tc.failing, ids, tried.Load())
 			}
 			for _, ev := range before {
-				if again := byEntity[subjectOf(ev)]; len(again) != 2 || again[1] != ev.ID {
-					t.Errorf("the fact of %s out before the restart as %s came out again as %v", subjectOf(ev), ev.ID, again)
+				if again := byEntity[subjectOf(ev)]; len(again) != 1 || again[0] != ev.ID {
+					t.Errorf("the fact of %s out before the restart as %s is on the bus as %v, want it once", subjectOf(ev), ev.ID, again)
 				}
 			}
-			if steps := objects.timeline.all()[writes:]; len(steps) != 0 {
+			if steps := s.objects.timeline.all()[writes:]; len(steps) != 0 {
 				t.Errorf("writes after the restart %q, want none", steps)
 			}
 			for id := range byEntity {
@@ -204,8 +216,8 @@ func TestAFactLostAfterItsWriteIsSentAfterARestart(t *testing.T) {
 					t.Errorf("%s at v%d with fact %q, want v2 and the id of its fact", id, e.Version, e.LastChange.FactEventID)
 				}
 			}
-			assertOneFactPerVersion(t, bus.Bus)
-			if letters, _ := bus.DeadLetters(); len(letters) != 0 {
+			teststate.OneStateOverTheWorld(t, allOn(t, s.bus.Bus, eventbus.TopicSystemEvents))
+			if letters, _ := s.bus.DeadLetters(); len(letters) != 0 {
 				t.Errorf("dead letters %v, want none", letters)
 			}
 		})
@@ -248,7 +260,8 @@ func TestAFactSentAgainKeepsItsFirstIDUnderANewEvent(t *testing.T) {
 		&state.Intent{ProposalID: "prop-elsewhere", World: world}); err != nil {
 		t.Fatal(err)
 	}
-	second := newStoredFixtureOver(t, objects, state.ApplierConfig{Store: loadedFrom(t, objects.Memory, world)})
+	second := newStoredFixtureOver(t, objects, state.ApplierConfig{})
+	second.recover(t)
 	second.apply(t, again)
 	facts := second.journal.ofType(state.TypeUpdated)
 	if len(facts) != 1 || facts[0].ID != tried {
@@ -274,6 +287,11 @@ func TestAFactSentAgainKeepsItsFirstIDUnderANewEvent(t *testing.T) {
 // intent is rolled forward publishes nothing — half of an atomic package is not
 // announced — writes nothing, and stops the world with persist_failed (review
 // #1 of T-057, question 2; decision of the orchestrator).
+//
+// A restart rolls the intent forward before the world takes a proposal (T-059,
+// TestAnUnfinishedPackageIsRolledForwardBeforeItsRepeat), so this is the guard
+// of a caller that did not recover: the working set is the entity objects
+// alone.
 func TestARepeatOfAnUnfinishedPackageSendsNoFact(t *testing.T) {
 	first, objects := newStoredFixture(t, state.ApplierConfig{})
 	first.seed(t, "player-A", entity.TypePlayer, 1, map[string]any{"hp": 10})
@@ -319,8 +337,8 @@ func TestARepeatOfAnUnfinishedPackageSendsNoFact(t *testing.T) {
 }
 
 // The same holds for a create: the entity written, its entity.created never
-// out, the create delivered again to a State over the object store — the fact
-// is published under its first id and nothing is written.
+// out, the create delivered again to a State recovered over the object store —
+// the fact is published under its first id and nothing is written.
 func TestACreatedFactLostAfterItsWriteIsSent(t *testing.T) {
 	first, objects := newStoredFixture(t, state.ApplierConfig{})
 	born := create("prop-born", ref("player-A", entity.TypePlayer), "", map[string]any{"hp": 10})
@@ -334,9 +352,9 @@ func TestACreatedFactLostAfterItsWriteIsSent(t *testing.T) {
 	if err := first.applier.Apply(cancelled, born); !errors.Is(err, state.ErrPublishFailed) {
 		t.Fatalf("Apply = %v, want publish_failed", err)
 	}
+	second := newStoredFixtureOver(t, objects, state.ApplierConfig{})
+	second.recover(t)
 	writes := len(objects.timeline.all())
-
-	second := newStoredFixtureOver(t, objects, state.ApplierConfig{Store: loadedFrom(t, objects.Memory, world)})
 	second.apply(t, born)
 	facts := second.journal.ofType(state.TypeCreated)
 	if len(facts) != 1 || facts[0].ID != tried {
