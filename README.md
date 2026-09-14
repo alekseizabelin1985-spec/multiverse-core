@@ -60,8 +60,17 @@ make llm-up                         # старт нативного llama-server
                                      # платформа стартует и без LLM (деградация нарратива, FR-080)
 make minio-image                    # сборка своего образа MinIO из исходников (~5 мин первый раз)
 make up                             # docker compose up -d --wait + make health (не строго по LLM)
-make health                         # таблица статусов gateway/core/memory/LLM + возраст бэкапа
+make health                         # таблица gateway/memory/telegram-bot/core: ok / degraded / FAIL / -
+                                     # (- — сервис не поднят); затем make llm-health и возраст бэкапа
 ```
+
+> **`core degraded` на свежем стеке — ожидаемо.** После первого `make up` мир ещё
+> не создан, и `make health` показывает `core degraded` до `mvctl world init`
+> (с `--bus kafka` — после T-475); затем `ok`. `degraded` — работающий процесс:
+> контейнер `healthy`, `make up` не падает (зовёт `make health` с
+> `DEGRADED_STRICT=0`). Отдельный `make health` строже и на `degraded` выходит с
+> кодом ≠ 0; `make health DEGRADED_STRICT=0` принимает его
+> ([`infrastructure.md`](Docs/dev-team/architecture/infrastructure.md) §2.2, §7.2).
 
 `make up` поднимает набор сервисов по умолчанию (`redpanda`, `minio`, `gateway`, `core`,
 плюс одноразовые init-контейнеры `redpanda-init`/`minio-init`, которые создают топики и
