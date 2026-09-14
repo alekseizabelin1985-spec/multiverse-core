@@ -380,10 +380,22 @@ func TestChangeJSONRoundTrip(t *testing.T) {
 // the state hash ApplyOps produced, and is empty exactly when that hash did not
 // move. The generator is seeded, so a failure is the same failure on every run.
 func TestCatchingUpOnChangedReproducesTheState(t *testing.T) {
+	// The paths mix what the grammar and the table of kinds allow with what
+	// they refuse: inventory.0 and tags.1 are second spellings of elements
+	// (probe U-1 of T-056), dmg.formula and status.x go below a scalar of a
+	// character, and hp and status take values of every kind.
+	//
+	// refused is the oracle for the paths, written out by hand rather than
+	// asked of CanonicalPath or of the table: a check by the function under
+	// test is blind to that function breaking. The lists hold two elements,
+	// because on a list of one remove inventory.0 lands on the same hash under
+	// either rule of catching up and probe U-1 cannot show.
+	refused := map[string]bool{"inventory.0": true, "tags.1": true, "status.x": true, "dmg.formula": true}
 	paths := []string{
 		entity.AttrHP, entity.AttrStatus, entity.AttrDiedAt, "kills", "banner", "banner.colour",
 		"tags", "tags[0]", "tags[1]", entity.AttrInventory, "inventory[0]", "inventory[0].kind",
 		"inventory[1]", "fresh", "fresh.deep", "fresh.list", entity.AttrDmg, "dmg.formula", "banner.colour.shade",
+		"inventory.0", "tags.1", "status.x",
 	}
 	// Values are decoded afresh for every operation: ApplyOps stores the value
 	// it was given, and a map shared between runs would be edited by the
@@ -407,16 +419,16 @@ func TestCatchingUpOnChangedReproducesTheState(t *testing.T) {
 		return decoded
 	}
 
-	applied, empty := 0, 0
-	for run := range 4000 {
+	applied, empty, elementsRemoved := 0, 0, 0
+	for run := range 8000 {
 		base := map[string]any{
 			entity.AttrHP:        float64(6),
 			entity.AttrHPMax:     float64(10),
 			entity.AttrStatus:    entity.StatusAlive,
 			entity.AttrDiedAt:    nil,
 			entity.AttrDmg:       "d6",
-			"tags":               []any{"wounded"},
-			entity.AttrInventory: []any{map[string]any{"item_id": "item-1", "kind": "wolf-pelt"}},
+			"tags":               []any{"wounded", "hunted"},
+			entity.AttrInventory: []any{map[string]any{"item_id": "item-1", "kind": "wolf-pelt"}, map[string]any{"item_id": "item-4", "kind": "rope"}},
 			"banner":             map[string]any{"colour": "green"},
 		}
 		ops := make([]entity.Op, 1+pick(4))
@@ -437,6 +449,14 @@ func TestCatchingUpOnChangedReproducesTheState(t *testing.T) {
 		attrs, changed, err := entity.ApplyOps(e, ops)
 		if err != nil {
 			continue
+		}
+		for _, op := range ops {
+			if refused[op.Path] {
+				t.Fatalf("run %d: ops %+v applied with %q, which C-02 v1.8 p. 2 refuses", run, ops, op.Path)
+			}
+			if op.Op == entity.OpRemove && op.Value == nil && strings.HasSuffix(op.Path, "]") {
+				elementsRemoved++
+			}
 		}
 		applied++
 		after := entity.Clone(e)
@@ -461,8 +481,9 @@ func TestCatchingUpOnChangedReproducesTheState(t *testing.T) {
 	}
 	// A generator that only produces refused proposals, or only no-ops, would
 	// make the property vacuous.
-	if applied < 1000 || empty == applied {
-		t.Fatalf("applied %d proposals, %d of them empty: the generator does not exercise the property", applied, empty)
+	if applied < 1000 || empty == applied || elementsRemoved < 50 {
+		t.Fatalf("applied %d proposals, %d of them empty, %d removals of an element: the generator does not exercise the property",
+			applied, empty, elementsRemoved)
 	}
 }
 

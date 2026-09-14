@@ -242,6 +242,28 @@ func TestTheMatrixOfRefusals(t *testing.T) {
 				return createdBy(proposer{source: contracts.SourceTestkitGateway}, "p", "create",
 					ref("player-D", entity.TypePlayer), "", character(entity.StatusAlive, outside))
 			}},
+		// --- invalid_op: the attributes of a create against data-model.md §3 (T-472) ---
+		{name: "gateway: a character created without inventory", want: state.ReasonInvalidOp, entity: "player-D",
+			proposal: func(*testing.T) eventbus.Event {
+				attrs := withRequired(ref("player-D", entity.TypePlayer), character(entity.StatusAlive, outside))
+				delete(attrs, entity.AttrInventory)
+				return createdAsIs(gateway, "p", "create", ref("player-D", entity.TypePlayer), "", attrs)
+			}},
+		{name: "gateway: a character created with hp as a text", want: state.ReasonInvalidOp, entity: "player-D",
+			proposal: func(*testing.T) eventbus.Event {
+				return createdBy(gateway, "p", "create", ref("player-D", entity.TypePlayer), "",
+					merge(character(entity.StatusAlive, outside), entity.AttrHP, "10"))
+			}},
+		{name: "domain: an encounter created with a state that is an object", want: state.ReasonInvalidOp, entity: "enc-2",
+			proposal: func(*testing.T) eventbus.Event {
+				return createdBy(agentOf("domain"), "p", "spawn", ref("enc-2", entity.TypeEncounter), "",
+					merge(encounter(entity.EncounterStateActive, "", "wolf-alpha"), entity.AttrState, map[string]any{"x": 1}))
+			}},
+		{name: "gateway: a character created with a null flee, which does not run", entity: "player-D",
+			proposal: func(*testing.T) eventbus.Event {
+				return createdBy(gateway, "p", "create", ref("player-D", entity.TypePlayer), "",
+					merge(character(entity.StatusAlive, outside), entity.AttrFlee, nil))
+			}},
 		{name: "domain: an encounter created with cause=spawn", entity: "enc-2",
 			proposal: func(*testing.T) eventbus.Event {
 				return createdBy(agentOf("domain"), "p", "spawn", ref("enc-2", entity.TypeEncounter), "",
@@ -320,10 +342,23 @@ func TestTheMatrixOfRefusals(t *testing.T) {
 			proposal: func(t *testing.T) eventbus.Event {
 				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", 5.5)))
 			}},
-		{name: "gateway: rest inside an encounter writes hp as a text: the encounter is checked before the kind", want: state.ReasonLawViolation, entity: "player-A",
+		// C-02 v1.8a p. 3: step 7 (ApplyOps) answers before the encounter —
+		// since T-472 a value of another kind at the root of hp is its to refuse
+		// — and the kind of hp it lets through, hp gone, after the encounter.
+		{name: "gateway: rest inside an encounter writes hp as a text: step 7 answers before the encounter", want: state.ReasonInvalidOp, entity: "player-A",
 			arrange: inTheFight,
 			proposal: func(t *testing.T) eventbus.Event {
 				return proposed(t, gateway, "p", "rest", true, one(playerA, setOp("hp", "10")))
+			}},
+		{name: "gateway: rest inside an encounter appends to hp: step 7 answers before the encounter", want: state.ReasonInvalidOp, entity: "player-A",
+			arrange: inTheFight,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, op(entity.OpAppend, "hp", 10)))
+			}},
+		{name: "gateway: rest inside an encounter removes hp: the encounter is checked before the kind", want: state.ReasonLawViolation, entity: "player-A",
+			arrange: inTheFight,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "rest", true, one(playerA, op(entity.OpRemove, "hp", nil)))
 			}},
 		{name: "gateway: rest of a character without hp_max", want: state.ReasonLawViolation, entity: "player-A", law: "inv-02",
 			arrange: func(t *testing.T, f *fixture) {
@@ -427,6 +462,19 @@ func TestTheMatrixOfRefusals(t *testing.T) {
 		{name: "global: weather.x of the world", want: state.ReasonInvalidOp, entity: world,
 			proposal: func(t *testing.T) eventbus.Event {
 				return proposed(t, agentOf("global"), "p", "tick", true, one(ref(world, entity.TypeWorld), setOp("weather.x", "rain")))
+			}},
+		// died_at is a scalar of an NPC and not an attribute of a character
+		// (§3.3): the form lets died_at.x of a player through, and the row of
+		// the task gives no such path (C-02 v1.8b p. 2, condition И2-2).
+		{name: "task: died_at.x of a living character, not a scalar of its type", want: state.ReasonLevelViolation, entity: "player-A",
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, agentOf("task"), "p", "combat", true, one(playerA, setOp("died_at.x", "2026-09-14T00:00:00Z")))
+			}},
+		// Step 1 reads the scalars of the type the change set names: the form
+		// answers before the rights, which the gateway has none of over a world.
+		{name: "gateway: weather.x of the world, the form before the rights", want: state.ReasonInvalidOp, entity: world,
+			proposal: func(t *testing.T) eventbus.Event {
+				return proposed(t, gateway, "p", "move", true, one(ref(world, entity.TypeWorld), setOp("weather.x", "rain")))
 			}},
 		{name: "domain: respawn_ttl.x of a region", want: state.ReasonInvalidOp, entity: forestRegion,
 			proposal: func(t *testing.T) eventbus.Event {
@@ -735,6 +783,27 @@ func TestALooseLawBreakRefusesOnlyItsChangeSet(t *testing.T) {
 	}
 	if batch := f.get(t, "wolf-alpha").LastChange.BatchSize; batch != 1 {
 		t.Errorf("batch_size %d, want 1 applied", batch)
+	}
+}
+
+// TestAPathBelowAScalarRefusesALoosePackageWhole: a path below a scalar is the
+// form of the package (C-02 v1.8 p. 2), so even with atomic=false the whole
+// proposal gets one invalid_op at step 1 and the legal change set beside it is
+// not applied. Step 7 would refuse only its own change set (review #1 of T-472,
+// Mi-3).
+func TestAPathBelowAScalarRefusesALoosePackageWhole(t *testing.T) {
+	f := forest(t)
+	f.apply(t, update(t, "p", "author", false,
+		one(playerA, setOp("status.x", entity.StatusDead)),
+		one(wolf, incOp("hp", -1))))
+
+	all := f.journal.all()
+	if got := strings.Join(types(all), ","); got != "entity.update.rejected" {
+		t.Fatalf("published %s, want one refusal of the whole proposal", got)
+	}
+	assertRejected(t, all[0], "p", state.ReasonInvalidOp, "player-A")
+	if f.get(t, "player-A").Version != 1 || f.get(t, "wolf-alpha").Version != 1 {
+		t.Error("a change set of a refused proposal was applied")
 	}
 }
 

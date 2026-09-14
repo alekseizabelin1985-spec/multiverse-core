@@ -3,7 +3,7 @@
 Модель сущности мира: то, что State хранит в объектном хранилище, что несёт снапшот и что
 проецируют все read-model. Типизированные операции (`ops`) и канонический хэш состояния.
 
-Контракт: `Docs/dev-team/architecture/contracts.md` **C-02 v1.4** ·
+Контракт: `Docs/dev-team/architecture/contracts.md` **C-02 v1.8** (запись пути и виды атрибутов — п. 2, T-472) ·
 `architecture/components/state-and-mechanics.md` §3 · `analysis/data-model.md` §3 ·
 ADR-011, ADR-013. Схемы событий — `schemas/events/entity.*.v1.json`.
 Изменение публичного API этого пакета — **только через системного архитектора**
@@ -14,9 +14,9 @@ ADR-011, ADR-013. Схемы событий — `schemas/events/entity.*.v1.json
 | Файл | Содержимое |
 |---|---|
 | `entity.go` | `Entity`, `HistoryEntry`, `LastChange`, `Ref`, `New`, `Clone`, `CheckVersion`/`ErrVersionConflict`, `Commit`, `SetFactEventID` |
-| `ops.go` | `OpKind`, `Op`, `Change`, `ChangeSet`, `Propose`, `ApplyOps`, `ErrInvalidOp`, `ReservedPaths` |
-| `path.go` | грамматика путей на запись (`splitPath`, `setIn`, `deleteIn`); чтение делегировано `shared/jsonpath` |
-| `attrs.go` | типизированные геттеры всех атрибутов `data-model.md` §3 (`Flee` читает и текст `"+2"` фикстур, и число `flee: 2` правил; дробь, `bool` и число вне `int64` возвращает текстом, на котором формула падает, как на `"abc"`) |
+| `ops.go` | `OpKind`, `Op`, `Change`, `ChangeSet`, `Propose`, `ApplyOps`, `CheckOp`, `ErrInvalidOp`, `ReservedPaths` |
+| `path.go` | каноническая запись пути `CanonicalPath` (C-02 v1.8 п. 2); запись по пути (`splitPath`, `setIn`, `deleteIn`); чтение делегировано `shared/jsonpath` |
+| `attrs.go` | типизированные геттеры всех атрибутов `data-model.md` §3 (`Flee` читает и текст `"+2"` фикстур, и число `flee: 2` правил; дробь, `bool` и число вне `int64` возвращает текстом, на котором формула падает, как на `"abc"`); таблица видов атрибутов `data-model.md` §3 по типам (`ValueKind`, `AttributeSpec`, `AttributeSpecOf`) и проверка атрибутов создания `CheckAttributes`/`ErrInvalidAttribute` |
 | `types.go` | константы типов, статусов, `actor_kind`, состояний группы и встречи, имена атрибутов |
 | `hash.go` | `CanonicalJSON`, `StateHash` |
 
@@ -80,9 +80,33 @@ e.SetFactEventID(fact.ID)
 то же число, что `3.0` из JSON. Поэтому повторный `append` трофея-структуры — no-op (inv-03), а
 `remove` числа из списка, пришедшего по проводу, действительно убирает его (T-050).
 
-Пути — грамматика `shared/jsonpath` (`a.b[0].c`). Зарезервированы `ReservedPaths`
-(`id`, `type`, `world_id`, `version`, `created_at`, `updated_at`, `last_event_id`, `history`,
-`last_change`, `schema_version`) и любой путь с ведущим `_`.
+**Запись пути (C-02 v1.8 п. 2, T-472).** Путь операции — только в канонической записи
+(`entity.CanonicalPath`): ключи через одну точку; индекс элемента — только `[n]` после ключа, `n` — `0` или
+до девяти цифр без ведущего нуля (`a[0][1]`); ключ не пуст, без `.`, `[`, `]` и не записан как десятичное
+целое любой длины — `^[+-]?[0-9]+$` (`inventory.0`, `a.+1`, `a.-1`, `a.99999999999999999999` недопустимы;
+`a.1e3` допустим). Проверка — шаблоном, не `strconv.Atoi`: граница переполнения `Atoi` зависит от размера
+`int` платформы, и форма пакета разошлась бы между машинами (C-02 v1.8b, NFR-061). Иначе — `invalid_op` с `ReasonBadPath` или
+`ReasonEmptyPath`. `shared/jsonpath` терпимее (`status.`, `inventory.0` для него — второе написание), поэтому
+проверка стоит до чтения и записи. Зарезервированы `ReservedPaths` (`id`, `type`, `world_id`, `version`,
+`created_at`, `updated_at`, `last_event_id`, `history`, `last_change`, `schema_version`) и любой путь с
+ведущим `_`.
+
+**Виды атрибутов.** Таблица `data-model.md` §3 по типам сущности — в `attrs.go`: вид значения
+(`KindText`, `KindInteger`, `KindNumber`, `KindTime` — RFC 3339, `KindDuration` — `"24h"`, `KindRef`,
+`KindEnum`, `KindModifier` — «int / формула» боевых статов, `KindOpen` — контейнер или `scope`), обязательность
+и допустимость `null` (у необязательных, а из обязательных — у `leader_id`; `flee` необязателен: «`null` или отсутствие — не убегает», §3.3). Тип берётся из
+`Entity.Type`; атрибут вне таблицы своего типа и тип вне таблицы не типизированы — модель открыта.
+`ApplyOps` отвергает путь ниже скаляра (`status.x`, `hp[0]` — `ReasonBelowScalar`) и после всех операций —
+значение чужого вида в корне затронутого скаляра (`set hp "10"`, `set hp {x: 999}`, `set state {…}` —
+`ReasonWrongKind`). Удалённый скаляр — не чужой вид: его отсутствие решает норма State. Значение
+сравнивается в проводной форме: `10` из Go и `10.0` с шины — одно целое. Перечисление проверяется как
+текст: принадлежность словарю (`weather` — словарь блупринта) — вопрос мира, не формы.
+
+`CheckOp(type, op)` — та же проверка формы без сущности: глагол, запись пути, зарезервированный корень,
+путь ниже скаляра типа. Её зовёт шаг 1 State с типом, который называет набор изменений.
+`CheckAttributes(type, attrs)` проверяет атрибуты создания: все обязательные атрибуты типа есть, каждый
+типизированный — своего вида (`ErrInvalidAttribute`; у State — `invalid_op`). Имя сущности живёт в
+`Entity.Name` и среди атрибутов не требуется.
 
 `changed[]` строится **после** всех ops: для каждого затронутого пути сущность «как была»
 сравнивается с копией «как стала» — отсюда и первый `old`, и последний `new`, и то, что
@@ -112,11 +136,15 @@ e.SetFactEventID(fact.ID)
 заменяя объектом промежуточный узел, которого нет или который не контейнер (как `set`); для `a[n]` при
 `n == len(a)` — дописать элемент простым добавлением, без дедупликации (`null` по пути списка — это
 отсутствующий список); `a[n]` с `n > len(a)` в факте State не бывает, это повреждённый факт
-(`state_divergence`); `new` нет — удалить путь, если он есть. Свойство «догон по `changed[]` после JSON
+(`state_divergence`); путь не в канонической записи — тоже повреждённый факт (C-02 v1.8 п. 2:
+State публикует только канонические пути; проверка — `entity.CanonicalPath`); `new` нет — удалить путь,
+если он есть. Свойство «догон по `changed[]` после JSON
 туда-обратно даёт тот же `StateHash`, что `ApplyOps`» закреплено `TestChangedFormPerOperation` и
 `TestCatchingUpOnChangedReproducesTheState`; решения правила — именованными векторами
 `TestChangedReportsTheAncestorAProposalCreated`, `TestCatchingUpAppendsWithoutDeduplication`,
-`TestCatchingUpSkipsAPathAnEarlierEntryAlreadyRemoved`, `TestCatchingUpRefusesAnElementPastTheEndOfItsList`.
+`TestCatchingUpSkipsAPathAnEarlierEntryAlreadyRemoved`, `TestCatchingUpRefusesAnElementPastTheEndOfItsList`,
+`TestCatchingUpRefusesAPathNotInItsCanonicalForm`; вектор зонда У-1 T-056 (`remove inventory.0` на списке из
+трёх) — `TestTheRemovalOfAnElementIsSpelledWithBrackets`.
 
 Пустой `changed` — не ошибка: версия не растёт, факт публикуется с `changed: []`
 (ход засчитан, UC-011 E2). Инвариант «`changed[]` непуст ⇔ `state_hash` сдвинулся» закреплён
@@ -175,7 +203,8 @@ status` в то же значение у живой сущности — ход 
 
 ## Что пакет намеренно не делает
 
-- не проверяет обязательные атрибуты при создании (`state-and-mechanics.md` §4.5, создание — State);
+- не решает, применять ли создание: `CheckAttributes` говорит, что атрибуты не годятся, а отказ публикует State (§4.5);
+- не проверяет, что ссылка указывает на существующую сущность и что перечисление взято из своего словаря;
 - не даёт геттера `last_session_ended_at` (§3.3): атрибут — проекция `analytics.session.ended` и
   по модели может жить в game-service;
 - не знает `OwnershipRules` и инвариантов (`shared/contracts`, `internal/mechanics`);
