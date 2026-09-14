@@ -6,8 +6,10 @@
 // T-055 is the pipeline: the working set in memory (memstore), the Applier and
 // its versions, one worker per world, and the context the process runs. T-056
 // adds ownership, the laws of the world, the terminal status and deduplication
-// by last_change; the object store, intents and snapshots are T-057; recovery,
-// the state section of /health and the admin route T-059.
+// by last_change; T-057 the object store behind the working set (write-through,
+// intents) and the snapshots with their pointer (store.go, intent.go,
+// snapshot.go); recovery, the state section of /health and the admin route are
+// T-059.
 package state
 
 import (
@@ -26,6 +28,7 @@ import (
 	"multiverse-core.io/shared/entity"
 	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
+	"multiverse-core.io/shared/objstore"
 	"multiverse-core.io/shared/runtime"
 )
 
@@ -63,6 +66,18 @@ type Config struct {
 	// p. 8), from the rule set of the process (mechanics.Rules.Invariants);
 	// nil checks none.
 	Invariants []mechanics.Invariant
+	// Objects is the object store every world of the context writes through
+	// to and snapshots into (§4.3, §4.9); nil keeps the worlds in memory only
+	// and writes no snapshot. The buckets of a world are created by mvctl
+	// world init (EnsureWorldBuckets), not here.
+	Objects objstore.Client
+	// SnapshotEvery is the number of applied facts per world between two
+	// snapshots; zero reads MV_SNAPSHOT_EVERY_FACTS when the context starts,
+	// below zero writes none on the count. It matters only with Objects.
+	SnapshotEvery int
+	// RulesVersion is the version of the rules of the process, recorded in
+	// every pointer (§4.4).
+	RulesVersion string
 }
 
 // Context is State as a context of the process (runtime.Context).
@@ -153,6 +168,14 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	if timers == nil {
 		timers = clock.RealTimers{}
 	}
+	var objects Store
+	every := 0
+	if c.cfg.Objects != nil {
+		objects = NewObjectStore(c.cfg.Objects)
+		if every, err = c.snapshotEvery(); err != nil {
+			return err
+		}
+	}
 
 	if c.appliers == nil {
 		c.appliers = make(map[string]*Applier, len(worlds))
@@ -165,6 +188,8 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 				WorldID: world, Store: c.store, Publisher: deps.Bus,
 				DedupCapacity: c.cfg.DedupCapacity, Timers: timers, Log: log,
 				Invariants: c.cfg.Invariants,
+				Objects:    objects, Clock: deps.Clock, SnapshotEvery: every,
+				RulesVersion: c.cfg.RulesVersion,
 			})
 			if err != nil {
 				return err
@@ -217,6 +242,19 @@ func (c *Context) previousRunEnded() bool {
 		}
 	}
 	return true
+}
+
+// snapshotEvery is the count of facts between two snapshots: the configuration,
+// or MV_SNAPSHOT_EVERY_FACTS when it names none.
+func (c *Context) snapshotEvery() (int, error) {
+	if c.cfg.SnapshotEvery != 0 {
+		return c.cfg.SnapshotEvery, nil
+	}
+	every, err := env.SnapshotEveryFacts.Int()
+	if err != nil {
+		return 0, fmt.Errorf("state: %w", err)
+	}
+	return every, nil
 }
 
 // worldsToServe is the list of worlds, without blanks and repeats, in the order
@@ -302,15 +340,57 @@ func (c *Context) Stop(ctx context.Context) error {
 		return fmt.Errorf("state: stop: the subscription to %s did not return: %w", eventbus.TopicSystemEvents, ctx.Err())
 	}
 	var errs []error
+	stopped := make([]string, 0, len(workers))
 	for _, world := range sortedKeys(workers) {
 		if err := workers[world].stop(ctx); err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		stopped = append(stopped, world)
+	}
+	// The shutdown snapshot (§4.9): the subscription has returned and the
+	// workers have ended, so nothing changes the worlds any more, and the bus
+	// is still open for snapshot.created — the process closes it after Stop
+	// (ADR-023 p. 4).
+	if c.cfg.Objects != nil {
+		for _, world := range stopped {
+			applier := workers[world].applier
+			if applier.Stopped() != nil {
+				continue
+			}
+			if _, err := applier.Snapshot(ctx, SnapshotShutdown); err != nil {
+				errs = append(errs, fmt.Errorf("state: shutdown snapshot of %s: %w", world, err))
+			}
 		}
 	}
 	c.mu.Lock()
 	subErr := c.subErr
 	c.mu.Unlock()
 	return errors.Join(append([]error{subErr}, errs...)...)
+}
+
+// Snapshot writes a snapshot of one world now, on the worker of that world
+// between two proposals (§4.9): the admin route and the bootstrap of a world
+// (T-058, T-059) ask for one with their reason.
+func (c *Context) Snapshot(ctx context.Context, worldID, reason string) (*LatestPointer, error) {
+	c.mu.Lock()
+	running, w := c.running, c.workers[worldID]
+	c.mu.Unlock()
+	switch {
+	case !running:
+		return nil, errors.New("state: snapshot: the context is not running")
+	case w == nil:
+		return nil, fmt.Errorf("state: snapshot: %s is not a world of this context", worldID)
+	case c.cfg.Objects == nil:
+		return nil, ErrNoObjectStore
+	}
+	var pointer *LatestPointer
+	err := w.do(ctx, func() error {
+		var err error
+		pointer, err = w.applier.Snapshot(ctx, reason)
+		return err
+	})
+	return pointer, err
 }
 
 // Health is what /health of the process reports for State: fail when a world
@@ -332,11 +412,22 @@ func (c *Context) Health() runtime.Status {
 	for _, world := range worlds {
 		section := map[string]any{"entities": c.store.Len(world), "status": runtime.StatusOK}
 		applier := workers[world].applier
+		last, snapshotErr := applier.SnapshotHealth()
+		if last != nil {
+			section["snapshot"] = map[string]any{"seq": last.Snapshot.Seq, "taken_at": last.Snapshot.TakenAt}
+		}
 		if err := applier.Stopped(); err != nil {
 			section["status"], section["err"], section["reason"] = runtime.StatusFail, err.Error(), stopReason(err)
 			status = runtime.StatusFail
 		} else if attempts := applier.Retrying(); attempts > 0 {
 			section["status"], section["publish_attempts_failed"] = runtime.StatusDegraded, attempts
+			if status == runtime.StatusOK {
+				status = runtime.StatusDegraded
+			}
+		} else if snapshotErr != nil {
+			// §9, "Ошибка записи снапшота": the world goes on, the snapshot is
+			// stale until the next trigger writes one.
+			section["status"], section["snapshot_stale"] = runtime.StatusDegraded, snapshotErr.Error()
 			if status == runtime.StatusOK {
 				status = runtime.StatusDegraded
 			}
@@ -368,6 +459,8 @@ func stopReason(err error) string {
 	switch {
 	case errors.Is(err, ErrPublishFailed):
 		return "publish_failed"
+	case errors.Is(err, ErrPersistFailed):
+		return "persist_failed"
 	case errors.Is(err, errPanicked):
 		return "panic"
 	default:

@@ -33,8 +33,15 @@ FROM gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c
 # F-4c (T-010) and telegram-bot in EPIC-004, without touching this file.
 COPY --from=builder /out/ /
 # The data directories the binaries read (blueprints/, rules/, laws/, config/)
-# are added by the tasks that create them: F-10 (rules, fixtures) and EPIC-003
-# (blueprints, laws, absolute limits).
+# are added by the tasks that read them; EPIC-003 adds blueprints, laws and the
+# absolute limits.
+# rules/: the context state does not start without the laws of the rule book
+# MV_RULES_PATH names, rules/dark-forest.yaml relative to the working directory
+# by default (T-471). The working directory is set here rather than inherited
+# from the base image, so that the default resolves to the copy below whatever
+# the image under it says.
+WORKDIR /home/nonroot
+COPY rules/ ./rules/
 # MV_GATEWAY_DATA_DIR of compose (T-303): links.db holds player identifiers,
 # and the store refuses a directory open to the group or others (ADR-019 p. 1).
 # Owned by nonroot (65532) with 0700, so the process can create its files, and

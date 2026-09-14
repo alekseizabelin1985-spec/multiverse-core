@@ -39,13 +39,22 @@ func TestOwnershipRulesCoverEveryProposer(t *testing.T) {
 	}
 
 	// object and monitor are reserved and empty: an empty rule refuses
-	// everything, which is what a disabled spawn flag must mean.
+	// everything, which is what a disabled spawn flag must mean. system is
+	// reserved and empty as well (C-02 v1.8 p. 6): it has no publisher in
+	// MVP-1, the bootstrap of a world proposes as the author, and a row of "*"
+	// would hand the rights of the author to the first envelope matched to it.
+	reserved := map[string]string{
+		ProposerObject:  "until C-13 is implemented",
+		ProposerMonitor: "until C-13 is implemented",
+		ProposerSystem:  "until a system mechanism brings a row of its own (C-02 v1.8 p. 6)",
+	}
 	for _, rule := range rules {
-		if rule.Proposer != ProposerObject && rule.Proposer != ProposerMonitor {
+		until, ok := reserved[rule.Proposer]
+		if !ok {
 			continue
 		}
 		if len(rule.EntityTypes) != 0 || len(rule.Paths) != 0 || len(rule.Causes) != 0 || rule.Create {
-			t.Errorf("%s must stay empty until C-13 is implemented: %+v", rule.Proposer, rule)
+			t.Errorf("%s must stay empty %s: %+v", rule.Proposer, until, rule)
 		}
 	}
 }

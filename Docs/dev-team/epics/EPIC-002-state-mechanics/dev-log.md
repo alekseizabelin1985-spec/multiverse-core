@@ -484,3 +484,165 @@
 - **Не делалось.** Норма rest по ответу 5 (`hp == hp_max`, только `hp`) и строка `system` по ответу 7 — отдельной задачей после слияния C-02 v1.8, по решению оркестратора.
 - **Мутанты** (`scratchpad/t056-mut4`, без `-overlay`, контрольный первым, удалена по точному пути): U1a, U1b, M5, U2a, U2b, M1, M2 — все красные.
 - **Прогоны** (go1.26, windows/amd64): `gofmt -l` пусто; `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — 0; три теста стенда ×20 — ok; e2e — ok; `golangci-lint run ./...` — 0 issues; `mvctl contracts check`, `env check` — 0; `make test` — exit 0 (`internal/state` 94,9 %). Docker, `.env`, стенд `:8888` не трогались.
+
+### developer#3 · T-471 · законы мира в процессе, норма rest `hp == hp_max`, пустая строка `system` (C-02 v1.8) · 2026-09-14
+
+Подробности — карточка `tasks/T-471.md`, «Выполнение (developer)».
+- **Что сделано.** `cmd/multiverse` строит State с законами из `MV_RULES_PATH`: имя и умолчание `rules/dark-forest.yaml` взяты из `design.md` §4.3 и §7. Если книга не загрузилась, контекст `lawless` отказывает в `Start`, и отказ называет переменную, путь, рабочую папку и причину. Образ несёт `rules/` (`WORKDIR /home/nonroot`). Норма rest: путь только `hp` на шаге 6, затем встреча, вид `hp` и значение; `hp < hp_max` → `level_violation`, `hp > hp_max` или без `hp_max` → inv-02. Строка `system` в `ownership.go` пуста. Тесты процесса и e2e получают абсолютный путь к книге дерева (`onLoopback`, `emptyWorldEnv`).
+- **Решения.** Книга читается в фабрике контекста: `internal/state/context.go` рядом с T-057 не трогал. Строка T-056 «rest, стирающий `encounter_id`» ожидает `level_violation` (путь раньше встречи); чтение встречи до операций держит прямой тест `restRefusal`. «rest below zero» ожидает `level_violation`.
+- **Мутанты** (`scratchpad/t471-mutants`, без `-overlay`, базовый прогон и контрольный первыми, удалена по точному пути): C0, M1–M14 — все красные. M8 сначала выжил, после строки «rest до 0 без `hp_max`» тоже красный.
+- **Прогоны** (go1.26, windows/amd64): `gofmt -l` пусто; `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — 0; три теста стенда ×20 — ok, три прогона подряд — ok; e2e — ok; `golangci-lint run ./...` — 0 issues; `mvctl env check`, `contracts check` — 0; `make test` — exit 0 (`internal/state` 95,1 %). Кончик EPIC-004 с патчем T-471 в scratch-клоне: `internal/gateway/actions`, `shared/testkit/gateway`, `cmd/multiverse` — ok, клон удалён по точному пути. Docker-сборка не запускалась, `.env` и стенд `:8888` не трогались.
+- **Не снималось.** Пометки «Код расходится до T-471» в `contracts.md` и КД §4.1, §4.6 снимает system-architect после слияния.
+
+### developer#3 · T-471 · итерация 2 по ревью #1 (0 Major, 2 Minor) · 2026-09-14
+
+Подробности — карточка `tasks/T-471.md`, «Итерация 2 (developer)».
+- **Mi-1.** Сервису `core` в `docker-compose.yml` передаётся `MV_RULES_PATH: ${MV_RULES_PATH:-rules/dark-forest.yaml}`. Умолчание совпадает с манифестом, правило 8 `compose-lint` зелёное.
+- **Mi-2.** Тексты «в образе нет `rules/`» исправлены в трёх местах: `.env.example`, `fake_contexts.go` (комментарий и текст отказа — теперь «not the path MV_RULES_PATH names»), комментарий `fake_contexts_test.go`. Ожидание теста дополнено именем `MV_RULES_PATH`. Хук T-255 правился по разрешению оркестратора, нужна отметка tech-lead EPIC-003.
+- **Передать.** Рецепт для второй из T-469/T-471 в `develop`: строка `READERS` `"MV_RULES_PATH": ("state", "swarm")`, передача в `core` (уже есть), новая причина у `MV_SWARM_FAKE` в `NOT_IN_CONTAINERS`.
+- **Прогоны** (go1.26, windows/amd64): `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./cmd/multiverse/... ./internal/state/... ./shared/env/...` — ok; e2e — ok; `golangci-lint run ./...` — 0 issues; `mvctl env check` — 0; `make compose-lint` — exit 0 (8 правил, фикстуры 64/12; только `docker compose config`, без контейнеров; `.env` в папке нет). Docker-образ, `.env` и `:8888` не трогались.
+
+### tech-lead#2 · T-471 · приёмка и отметка владельца EPIC-003 · 2026-09-14
+
+Подробности — карточка `tasks/T-471.md`, разделы «Отметка владельца EPIC-003 (tech-lead#2)» и «Приёмка».
+- **Решение.** Принято. DoD закрыт построчно. Смена ожиданий двух строк T-056 («rest, стирающий `encounter_id`», «rest ниже нуля» → `level_violation`) следует из C-02 v1.8 п. 3. Итерация 2 (Mi-1, Mi-2) принята по коду без ревью #2. Статус `done` — после отметки tech-lead#1, просмотра system-architect и «Учёт времени».
+- **Отметка владельца EPIC-003** по `cmd/multiverse/fake_contexts{,_test}.go`: есть. Текст отказа и комментарии верны по коду заглушки (`DefaultRulesPath`, пустой `ContextConfig`), ожидание теста только усилено. Кончик EPIC-003 эти файлы не меняет.
+- **Прогоны** (go1.26.8, windows/amd64): `go build ./... && go vet ./...` — 0; `go test -short -count=1 ./...` — 0 (48 пакетов, `updates` без обхода); e2e — ok; `golangci-lint run ./...` — 0 issues; `mvctl env check`, `contracts check` — 0; `make test` — exit 0 (`internal/state` 95,1 %); стенд I1-α три раза подряд — PASS; мутант M1 (`-overlay`) — красный. Пробное `git merge-file` с кончиками EPIC-002 `0e1aa7e` и EPIC-003 `f4c2fcd` — чисто. Scratch `t471tl-*` удалён по точным путям. Docker, `.env` и стенд `:8888` не трогались.
+- **До слияния в эпик.** Отметка tech-lead#1 (`cmd/multiverse/**`, `build/Dockerfile`, `shared/env/vars.go`, `.env.example`, `docker-compose.yml`, `test/e2e/empty_world_test.go`, выбор `MV_RULES_PATH`; по индексу — ещё `shared/contracts/ownership{,_test}.go` и хук `fake_contexts{,_test}.go`). Просмотр system-architect по `shared/contracts/ownership.go`. «Учёт времени». `make ci BASE=develop` целиком.
+- **Передать.**
+  - Для второй из T-469/T-471 в `develop`: строка `READERS` `"MV_RULES_PATH": ("state", "swarm")` и новая причина `MV_SWARM_FAKE`.
+  - system-architect: снять пометки «Код расходится до T-471», поправить эталон `.env.example` в `infrastructure.md` §4.2.
+  - Бэклог EPIC-003: рой и фейк читают `MV_RULES_PATH`.
+  - T-472: ожидание inv-02 → `invalid_op` в тесте процесса.
+- **Наблюдение.** Один прогон `TestTheProcessRunsTheFightsOfIAlpha` занял 22,3 с при обычных ~1 с; в повторах не воспроизвелось.
+
+### tech-lead#1 · T-471 · отметка владельца EPIC-001 · 2026-09-14
+
+Подробности — карточка `tasks/T-471.md`, раздел «Отметка владельца EPIC-001 (tech-lead#1)».
+- **Решение.** Отметка поставлена, блокирующих замечаний нет. Файлы: `cmd/multiverse/contexts_state{,_test}.go`, `serve_test.go`, `fake_contexts{,_test}.go`, `build/Dockerfile`, `shared/env/vars.go`, `.env.example`, `docker-compose.yml`, `test/e2e/empty_world_test.go`; `shared/contracts/ownership{,_test}.go` — только стиль и тесты.
+- **`MV_RULES_PATH`** с умолчанием `rules/dark-forest.yaml` подтверждено: `_PATH` для одного файла, читателей по §4.3 два (`state`, `swarm`). `withTheRuleBook` остаётся в `contexts_state_test.go`.
+- **Compose и `make up`** не ломаются. `state` запускает только `core`, переменная ему передаётся, образ несёт `rules/`, а бинарь и книга приходят одним образом.
+- **Dockerfile.** Конфиг закреплённого digest distroless `:nonroot`, прочитанный из реестра без Docker: `WorkingDir: /home/nonroot`, `User: 65532`. `WORKDIR` ничего не сдвигает; `ENTRYPOINT`, `/data` и пробы абсолютны.
+- **Слияние с T-469.** Рецепт полный, проверен в scratch-копии `311689c` + патч T-471. Без рецепта — одно нарушение правила 9; с рецептом — `9 rules` ok, фикстуры 72/14. Без строки в `good-reach-host-only.yml` фикстура красная; строка в `bad-reach-all.yml` нужна, чтобы заголовок фикстуры оставался верным. Поправка к рецепту T-469: хук `MV_SWARM_FAKE` не читает `MV_RULES_PATH`. `swarm` стоит в строке `READERS` по `design.md` §4.3 и с T-256 не уходит, комментарий над строкой — по карточке T-471.
+- **Н-1.** `-count=5`: 1,17 · 1,28 · 1,01 · 0,79 · 1,09 с, PASS ×5, 22,3 с не повторилось.
+- **Прогоны** (go1.26.8, windows/amd64): build+vet — 0; `go test -short` по `cmd/multiverse`, `shared/env`, `shared/contracts` — ok; e2e — ok; `golangci-lint` — 0 issues; `mvctl env check` — 0; `make compose-lint` — exit 0 (8 правил, 64/12). Scratch `t471tl1-*` удалён по точным путям. Docker, `.env` и `:8888` не трогались.
+
+### system-architect#1 · T-471 · просмотр: строка `system`, порядок отдыха, пометки «Код расходится до T-471», вопросы T-309 · 2026-09-14
+
+Подробности — карточка `tasks/T-471.md`, «Просмотр system-architect».
+- **Вердикт.** Одобрено. Строка `system` пуста, константа осталась. Тесты (1)–(5) соответствуют C-02 v1.8 п. 6 и ответу 7 просмотра T-056.
+- **Порядок отдыха.** `append hp` во встрече получает `invalid_op` раньше встречи, и это форма пакета (шаг 7, `ApplyOps`). В C-02 v1.8a п. 3 порядок записан так: шаг 6 → шаг 7 → встреча → вид `hp` → значение. Там же следствие T-472: значение чужого вида в корне `hp` отвергает шаг 7.
+- **Пометки.** Сверены с кодом и сняты: в `contracts.md` (C-02: «Связка», «Причина отказа по связке», «Издатель bootstrap», п. 3, п. 6) и в КД State (§4.1, §4.6 — строка `system` и «Отдых»). `contracts.md` → v0.16. В КД — отдельная строка «Правка T-471» без номера версии (v0.4 занят T-057). `git merge-file` с КД `.worktrees/T-057` в обоих порядках слияния — 0 конфликтов.
+- **`infrastructure.md` §4.2.** Добавлены `MV_STATE_WORLDS` и `MV_RULES_PATH`, обновлён комментарий над `MV_SWARM_FAKE`. `gitleaks dir` по копии рабочей копии — чисто до и после правки, `.gitleaksignore` не менялся.
+- **T-309.** C-14 v1.4: сигнала State ждёт только рой. `snapshot.created` в replay публикует только State, тип в сравнение NFR-061 не входит. Открытый вопрос EPIC-002: предложения, опубликованные, пока State не поднят, при восстановлении остаются без ответа (варианты A/B в карточке). Правка КД State §7.3 — отдельно, текст в карточке.
+- Код не менялся. Scratch `t471sa-*` удалён по точным путям. Docker, `.env` и `:8888` не трогались.
+
+## developer#2 · T-057 · `state`: хранилище за рабочим набором, интенты, снапшоты, ротация, `latest.json` · 2026-09-14
+
+Ветка `task/T-057-state-objstore-snapshots` (от `3452816`), TEAM-1, Opus. Подробности, таблица DoD → тесты и мутанты — карточка `tasks/T-057.md`, «Выполнение (developer)». Коммитов нет.
+- **Что сделано.** `internal/state`:
+  - `store.go` — `Store` §4.3 над `shared/objstore`, `EnsureWorldBuckets`;
+  - `intent.go` — запись до фактов, интент атомарного пакета из нескольких сущностей, повтор ×3, `persist_failed`;
+  - `snapshot.go` — снапшот с окном ≤ 1000 и курсором, указатель, ротация K=5, `snapshot.created` с миром;
+  - `dedup.go` — досылка факта при пустом `fact_event_id` под первым id;
+  - `apply.go`, `context.go`, `worker.go` — порядок «запись → публикация → память», курсор, счёт фактов, снапшот при `Stop`, `Context.Snapshot`, `/health` (`persist_failed`, `snapshot`).
+  
+  `shared/contracts/registry_state.go`: `WorldRequired` у `snapshot.created` (C-14 v1.3). Общий код — нужны просмотр system-architect и отметка tech-lead#1, уведомление tech-lead EPIC-003/004.
+- **Решения по ходу.**
+  - Решение Ma-1 T-055 (повтор того же события до `Stop`) сохранено и для фактов после записи. Объекты при этом могут опережать память, досылка идёт по `last_change`.
+  - Снапшот пишется на worker'е синхронно, ради порядка `snapshot.created` в replay (отступление от ADR-011 п. 6).
+  - Блок объекта снапшота — как фикстура seq 0 (с `rules_version`, `entities_count`, `reason`).
+  - Интент — только `atomic=true` (ADR-013 п. 4).
+  - Переменная — существующая `MV_SNAPSHOT_EVERY_FACTS`.
+  - HTTP-маршрут снапшота оставлен T-059.
+- **Не сделано по DoD.** Правка КД §9 «ошибка `Publish` до PUT» через system-architect до кода и выбор имени поля `/health` — вопросы в карточке. Оставлено `publish_attempts_failed`.
+- **Мутанты** (`scratchpad/t057-mut`, без `-overlay`, контрольный первым, копия удалена по точному пути): M1–M8, S1–S14, R1–R5 — все красные.
+  - M6 в первой редакции теста краснел только по таймауту — тест дополнен.
+  - S6 в первой редакции не собрался — переписан.
+  - M8 краснеет после того, как тестовое хранилище, как клиент сервера, стало отказывать отменённому контексту.
+- **Прогоны** (go1.26, windows/amd64):
+  - `gofmt -l` — пусто; `go build ./... && go vet ./...` — 0;
+  - `go test -short -count=1 ./...` — ok; e2e — ok;
+  - `golangci-lint run ./...` — 0 issues;
+  - `mvctl contracts check`, `env check` — 0;
+  - `make test` — exit 0: `internal/state` 91,1 %, флейк не проявился;
+  - интеграция — один прогон `TestTheStoreOfStateOnMinIO` на `MINIO_IMAGE` (образ был локально) — PASS; контейнеров testcontainers после прогона нет.
+  
+  `make test-integration`, Docker-стек, `.env` и стенд `:8888` не трогались.
+
+## system-architect#1 · T-057 · решения по вопросам исполнителя и просмотр общего кода · 2026-09-14
+
+Подробности — карточка `tasks/T-057.md`, «Решения system-architect».
+- **Вопросы.**
+  1. КД §9 приведён к коду: ошибка `Publish` ответа — повтор того же события до `Stop`, затем `publish_failed`; после PUT — досылка повтором предложения.
+  2. Поле `/health` — `publish_attempts_failed`.
+  3. §4.4 приведён к фикстуре: только `size_bytes` лишь в указателе.
+  4. Синхронный снапшот принят, ADR-011 п. 6 заменён дополнением 2026-09-14.
+  5. Мир без `latest.json` — T-059, правило «отказ до записи» в КД §18.
+- **Отступления.** `MV_SNAPSHOT_EVERY_FACTS`, маршрут в T-059, интент только при `atomic=true` — подтверждены. `snapshot_stale` текстом ошибки — временно, возраст доводит T-059.
+- **Общий код.** `registry_state.go` (`WorldRequired` у `snapshot.created`) одобрен. Шлюз T-309 ставит мир в конверте, у EPIC-003 издателя пока нет — условие передано через оркестратора.
+- **Итерация 2.** `WithScope(nil)` у выведенного `snapshot.created`; `size_bytes` и `duration_ms` в логе снапшота; две ссылки в комментариях.
+- **Правило для T-059.** Одна публикация факта через рестарт: recovery принимает висящий объект без публикации. Догон атомарного пакета — по объектам, а не по интенту и не через `state_divergence`.
+- **Документы.** КД State v0.4 (§4.4, §4.8–§4.10, §9, §18), ADR-011 — дополнение 2026-09-14. `contracts.md` не менялся. Слияние КД с кончиком эпика проверено `git merge-file` — без конфликтов. Кода, коммитов и `git add` нет.
+
+### developer#2 · T-057 · итерация 2: пункты system-architect и ревью #1 (0/0/4/4) · 2026-09-14
+
+Подробности — карточка `tasks/T-057.md`, «Итерация 2 (developer)». Коммитов нет.
+- **Что сделано.**
+  - `snapshot.created` по счёту: без `scope` (`WithScope(nil)`), с тем же конвертом, что у `admin`/`shutdown` (`actor_kind system`) — SA 1, N-1.
+  - Лог снапшота несёт `size_bytes` и `duration_ms` — SA 2; две ссылки в комментариях — SA 3.
+  - Снапшот ограничен `SnapshotTimeout` = 10 с на таймерах `Config.Timers` и больше не снимает отмену: зависшее хранилище не держит `Stop` — Mi-1.
+  - Досылка берёт `cause` из записи коммита — Mi-3; конверт не хранится, вопрос к T-059.
+  - Досылка при живом интенте этого `proposal_id` ничего не публикует и останавливает мир `persist_failed` — вопрос 2, решение оркестратора.
+  - Тест ротации на восемь снапшотов — Mi-4; лишняя строка теста удалена — N-2.
+  - Mi-2 — код не менялся, `batch_size` записанной сущности = число применённых наборов, §18 молчит — вопрос.
+- **Мутанты** (`scratchpad/t057i2-mut`, без `-overlay`, контрольный первым, копия удалена по точному пути): I1–I10 — все красные.
+  - I5 (без срока) краснеет по таймауту `go test`.
+  - I3 и I9 в первой редакции не собрались — переписаны.
+- **Прогоны** (go1.26, windows/amd64):
+  - `gofmt -l` пусто; build/vet (в том числе `-tags integration`) — 0;
+  - `go test -short -count=1 ./...` — ok, кроме `cmd/telegram-bot/internal/updates`: Windows «Access is denied» на `test.test.exe`, обход `go test -c -o` — PASS;
+  - e2e — ok; `golangci-lint` — 0 issues; `mvctl contracts check` — 0;
+  - `make test` — exit 0, `internal/state` 91,4 %.
+  
+  Интеграция MinIO не повторялась: код записи не менялся. Docker-стек, `.env`, `:8888` не трогались.
+
+## tech-lead#2 · T-057 · приёмка · 2026-09-14
+
+Подробности — карточка `tasks/T-057.md`, разделы «Ревью (code-reviewer)» (ссылка на ревью #1) и «Приёмка». Коммитов, `git add` и слияний нет.
+- **Решение: принято.** Условие до слияния — отметка tech-lead#1 по `shared/contracts/registry_state.go` (§16 п. 8), её запрашивает оркестратор. Итерация 2 принята без ревью #2, закрытие каждого пункта проверено по коду.
+- **Mi-1.** `SnapshotTimeout` = 10 с. Таймер — `a.timers.After`, это `clock.Timers` из `state.Config.Timers`: по умолчанию `RealTimers`, а не `Deps.Timers` (`NullTimers` в replay), поэтому срок держится и в replay. Вызовов `time.*` из запрета forbidigo в `internal/state` нет, lint — 0.
+- **Вопрос 2 ревьюера.** `persist_failed` при живом интенте того же `proposal_id` принят. Перечень причин `fail` — §18 п. 2; по сути это незавершённая запись, класс строки §9 «Ошибка PUT», реакция — рестарт и roll-forward. `state_divergence` и `publish_failed` по смыслу не подходят.
+  Оговорки ушли в DoD T-059: интент после неудачного `DeleteIntent` без roll-forward остановит мир тем же путём; `ListIntents` на пути досылки — без повторов.
+- **Индекс v0.1.6.** T-057 — статус, «Файлы», интент «`atomic=true` и > 1», `MV_SNAPSHOT_EVERY_FACTS`, строка приёмки. T-058 — три строки: курсор seq 0, `--force`, `--bus kafka`. T-059 — восемь строк:
+  - правила §18;
+  - `/health`: `snapshot_stale: age_s`, `pending_intents`;
+  - N-3, N-4;
+  - тесты досылки на восстановлении и roll-forward до приёма предложений;
+  - конверт досылки;
+  - `batch_size`;
+  - подключение хранилища и восстановления в `cmd/multiverse` одним изменением.
+- **Прогоны** (go1.26.8, windows/amd64):
+  - `gofmt -l` пусто; build/vet (в том числе `-tags integration ./internal/state/...`) — 0;
+  - `go test -short -count=1 ./...` — ok, кроме `updates` («Access is denied»); обход `go test -c -o scratchpad/t057tl-upd.exe` — PASS, exe удалён по точному пути;
+  - e2e — ok; `golangci-lint` — 0 issues; `contracts check` — 65 типов, exit 0; `env check` — exit 0;
+  - `make test` — exit 0, `internal/state` 91,4 %.
+
+  Интеграция не запускалась.
+- **Пробное слияние с T-471** (только чтение `.worktrees/T-471`):
+  - код — общих файлов нет. Слитое дерево в копии `scratchpad/t057tl-merged`: build, vet, тесты затронутых пакетов, e2e, `contracts`/`env check`, lint — зелёные. Один сбой по времени `shared/testkit/gateway` (окно 200 мс под нагрузкой) при повторе ×3 не проявился;
+  - КД `state-and-mechanics.md` (`git merge-file` против текущей копии T-471 со снятыми пометками) — 0 конфликтов;
+  - `tasks.md` — 2 конфликта (строка версии и строка changelog v0.1.6), рецепт — в карточке;
+  - `dev-log.md` и `review.md` — дописи в конец, драйвер `appendtail`.
+
+  Копии удалены по точному пути. Docker, `.env`, `:8888` не трогались.
+
+## tech-lead#1 · T-057 · отметка владельца `shared/contracts` по `registry_state.go` · 2026-09-14
+
+Подробности — карточка `tasks/T-057.md`, раздел «Отметка владельца EPIC-001 (tech-lead#1)». Коммитов, `git add` и правок кода нет.
+- **Решение: отметка поставлена** (§16 п. 8). `WorldRequired` у `snapshot.created` — ровно C-14 v1.3 (помощник `worldRequired`, издатели и потребители без изменений), с v1.4 не расходится: State публикует с миром и в live, и в replay.
+- **Издатели.** На кончиках `develop`, `epic/EPIC-001…004` издателя `snapshot.created` в коде нет; `registry_state.go` везде совпадает с базой `3452816`. Из рабочих папок издатель есть только у T-309 (шлюз, `NewRoot` с миром, без `WorldID` писатель не строится). В `internal/{swarm,laws,llm,memory}` издателей нет.
+- **Фикстуры и тесты.** `testdata/fixtures/events/snapshot.created.v1.*` — только payload, мир ставит `contracts check`; `validate_test.go`, `test/fixtures`, `shared/testkit/state` строят событие с миром. Правок не нужно.
+- **Прогоны:** `go test -short -count=1 ./shared/contracts/... ./internal/state/... ./cmd/mvctl/...` — ok; `./test/fixtures/... ./shared/testkit/state/... ./shared/eventbus/...` — ok; `contracts check` — 65 типов, exit 0.
+- **Nit:** метки `contract-change` в разделе T-057 индекса нет — проставить tech-lead#2.
+- **`design.md` §4.1 и §7** не правил (зона architect и tech-lead#2): точный текст правки v0.1.2 — в карточке, п. 5. Устаревшие имена стоят только в строках 64 и 123.
