@@ -34,11 +34,15 @@ multiverse-core/
 ├── cmd/
 │   ├── multiverse/             # бинарник платформы: serve (--contexts/--mode/--bus/--recording;
 │   │                            # то же без подкоманды), health --url, db backup|check, version
-│   └── mvctl/                  # CLI оператора: contracts, env, storage, privacy, version (реализованы);
-│                                # world, blueprint, laws, record, golden, llm, memory, report, trace
-│                                # зарезервированы под будущие эпики (cmd/mvctl/main.go — реестр)
+│   ├── mvctl/                  # CLI оператора: contracts, env, storage, privacy, world, version (реализованы);
+│   │                            # blueprint, laws, record, golden, llm, memory, report, trace
+│   │                            # зарезервированы под будущие эпики (cmd/mvctl/main.go — реестр)
+│   └── telegram-bot/            # бот Telegram — клиент шлюза по HTTP (C-08); e2e — cmd/telegram-bot/e2e
 ├── internal/
-│   └── mechanics/              # типы механики C-03, Load(rules/*.yaml), формулы, RNG
+│   ├── mechanics/              # типы механики C-03, Load(rules/*.yaml), формулы, RNG
+│   ├── state/                  # контекст State: предложения, законы, objstore, снапшоты, восстановление
+│   └── gateway/                # контекст шлюза: HTTP API, сессии, ходы, outbox, consumer, снапшот;
+│                                # gatewaytest — FakeGateway (настоящий шлюз in-process для тестов)
 ├── shared/                     # общий код единого модуля (не отдельные Go-модули)
 │   ├── eventbus/                # конверт события (Meta, World, Scope), Bus/Journal, DLQ, kafka
 │   │   └── membus/               # вторая реализация Bus/Journal в памяти (--bus=memory, unit-тесты)
@@ -55,7 +59,7 @@ multiverse-core/
 │   └── testkit/                  # contract-тест шины, фейки для тестов и e2e
 │       ├── contract/              # contract-тест шины: membus и kafka одним набором проверок
 │       ├── state/, mechanics/     # FakeState, FixedMechanics (заглушки до EPIC-002)
-│       ├── gateway/, swarm/       # Harness, FakeNarrator (заглушки до EPIC-003/004)
+│       ├── gateway/, swarm/       # Harness и HTTPHarness, FakeNarrator
 │       └── containers.go, versions.go
 ├── schemas/events/              # JSON-схемы событий — источник для shared/contracts
 ├── rules/dark-forest.yaml        # детерминированная механика (Load, формулы, статы)
@@ -116,7 +120,7 @@ make logs SERVICE=<имя>         # docker compose logs -f --tail=200
 # Тесты
 make test                       # go test -short -race ./... + порог покрытия internal/*
 make test-integration           # testcontainers: Redpanda, MinIO (наш образ), Qdrant, Neo4j
-make test-e2e                   # e2e в одном процессе, --bus=memory
+make test-e2e                   # e2e в одном процессе, --bus=memory (test/e2e и cmd/telegram-bot/e2e)
 make contracts                  # mvctl contracts check / env check + валидность JSON-схем
 make ci / make ci-full          # всё из CI (без Docker) / с test-integration
 make lint                       # golangci-lint run
@@ -221,7 +225,9 @@ for _, path := range acc.GetAllPaths() { fmt.Println(path) }
 
 До реализации своих эпиков команды используют общие заглушки на in-memory шине
 `shared/eventbus/membus`: `testkit/state.FakeState`, `testkit/mechanics.FixedMechanics`,
-`testkit/gateway.Harness`, `testkit/swarm.FakeNarrator`. Сигнатуры заглушек совпадают
+`testkit/gateway.Harness`, `testkit/swarm.FakeNarrator`. Для e2e через HTTP настоящего шлюза —
+`internal/gateway/gatewaytest.FakeGateway` и `testkit/gateway.HTTPHarness` (один харнесс на шлюз;
+e2e бота: `go test -tags e2e ./cmd/telegram-bot/e2e/`). Сигнатуры заглушек совпадают
 с целевыми реализациями — замена не требует правок у потребителей (проверяется
 компиляцией тестов-потребителей). `membus` — не заглушка, а вторая реализация
 `Bus`/`Journal` (C-01) и транспорт `--bus=memory`, поэтому живёт рядом с kafka-адаптером,

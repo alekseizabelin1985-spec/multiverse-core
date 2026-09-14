@@ -1,6 +1,6 @@
 # Задачи EPIC-001 «Фундамент» (волна 0)
 
-Версия 0.1.6 · 2026-09-14 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
+Версия 0.1.7 · 2026-09-14 · tech-lead#1 (TEAM-1, тимлид проекта) · статус: к G3.
 **Правки сведения 3** (`architecture/consolidation.md` §14, `contracts.md` v0.4, `infrastructure.md` v0.3; внесено tech-lead#1): T-001 (F-1 — IDE-каталоги), T-004 (F-6a — `MINIO_REPO`/`LLAMACPP_BUILD`/`LLM_MODEL_DEFAULT`, `extra_hosts`, форк MinIO), T-006 (F-4b-1 — `Spec.Publishers`, строка gateway в `OwnershipRules`, `cause=forget`), T-007 (F-5 — `MV_LLM_*`, условные `OLLAMA_*`), T-008 (F-6b — `llm-server.*`, `make llm-*`, правило `compose-lint`), T-012 (F-7 — CODEOWNERS), T-013 (F-8 — `prompts.jsonl`, порядок E→C→A), T-017 (F-10d — `replay.completed`, `abandoned`), §0 (F-6 +0,5), §9 п. 1. Структура подволн и состав задач не менялись.
 **Правки ревизии контрактов T-416** (`contracts.md` v0.7; ADR-025 подтверждён, ADR-026, ADR-027; внесено tech-lead#1 2026-09-11): T-006 — пометка «таблица владения — единственная истина»; T-413 — пункты T-416 п. 15–16; §8 — `mvctl report`; §9 п. 4 — пометка. Новые задачи T-417 и T-418 завёл оркестратор. Добавленные пункты помечены «(T-416, 2026-09-11)», отменённые — «заменено (T-416)» и не удалены.
 **Правки 2026-09-13 (tech-lead#1, приёмка T-461; версия 0.1.2)**: добавлены разделы T-460 (`in_progress`), T-461 (`done`) и T-463 (`todo`). Статусы T-400, T-403, T-404, T-408–T-412, T-414, T-417, T-418 и T-439 в заголовках разделов приведены к `state.js` (`todo` → `done`; бэклог приёмки T-456, п. 4). Тексты этих разделов не менялись.
@@ -8,6 +8,7 @@
 **Правки 2026-09-13 (tech-lead#1, приёмка T-464; версия 0.1.4)**: добавлены разделы T-464 (`done`, раздела не было — карточку создал исполнитель по поручению оркестратора) и T-469 (`todo`, номер выдан оркестратором). Тексты прочих разделов не менялись.
 **Правки 2026-09-14 (tech-lead#1, приёмка T-470; версия 0.1.5 — после 0.1.4 приёмки T-464)**: добавлен раздел T-470 (`done`; раздела не было — задачу system-architect завёл оркестратор). В раздел T-468 внесён объём по C-15 v1.6 (передача T-470); строки для T-469 — в разделе T-470. T-466 (C-01 v1.11, КД State §6.1, §6.2) оркестратор закрыл как покрытую T-470; раздела T-466 в индексе нет. Тексты прочих разделов не менялись.
 **Правки 2026-09-14 (tech-lead#1, приёмка T-469; версия 0.1.6)**: T-469 — `done`; в разделе T-469 ветка приведена к факту (`task/T-469-compose-gateway-vars`), «восемь `MV_GATEWAY_*`» заменено на десять (добавлены две переменные T-307), добавлены итог приёмки, передача и бэклог. В разделе T-470 отмечен п. 1 передачи для T-469. Тексты прочих разделов не менялись.
+**Правки 2026-09-14 (tech-lead#1, приёмка T-476; версия 0.1.7)**: T-476 — `done`. В разделе T-476 проверка слияния T-059 заменена поиском коммита слияния задачи (`git log --merges … | grep -F 'Merge task/T-059-'`): прежний `grep T-059` по журналу `develop` находил служебные коммиты. Добавлены итог приёмки, передача, бэклог и ссылка на отметку по файлам EPIC-001 из T-059. Тексты прочих разделов не менялись.
 Команда TEAM-1 · ветка `epic/EPIC-001-foundation` (от `integration/mvp-1`, создана после F-0, коммит `744fb10`) · волна 0 · G2 утверждён 2026-09-09.
 Основание: `epics/EPIC-001-foundation/design.md` v0.1 (§4 подволны, §5 заглушки v0, §10 тестируемость); `architecture/infrastructure.md` v0.2 (§2.1–§2.5, §3.1–§3.4, §4.5, §4.6, §6.4, §10 чек-лист); `architecture/components/foundation.md` v0.2 (§1–§12, §14); `architecture/contracts.md` v0.2 (C-01, C-02, C-03, C-04, C-05, C-06, C-13, C-14, §17); `plan/epics.md` v0.2 §6; `plan/decomposition-review.md` §2, §3.3, §5.3; `plan/teams.md` §4; `plan/ownership.md` v0.2; ADR-001, ADR-004, ADR-007, ADR-009, ADR-010, ADR-011, ADR-012, ADR-013, ADR-021.
 
@@ -1479,3 +1480,37 @@
   - Mi-1…Mi-3, N-1, N-2 закрыты. `make compose-lint` — 9 правил, фикстуры 72 bad / 14 good; `mvctl env check` — 80, exit 0. Мутанты приёмки K0 (первым), MC, MF — KILLED.
   - Передать (подробно — карточка): строки `infrastructure.md` §3.1.1 и `contracts.md` §16 п. 5 — system-architect после слияния; рецепт встречи с T-471 (`MV_RULES_PATH` в `READERS`, причина `MV_SWARM_FAKE`, две фикстуры); строка runbook и release notes про `MV_CORE_ADMIN_CLIENTS`; `make secrets-scan` после коммита.
 - **Бэклог (из T-469, 2026-09-14)**: мёртвая ветка `env_file` правила 4; сверка строк `READERS` по документам с кодом (Go-тест); пометка читателя в манифесте вместо таблицы — system-architect.
+
+### T-476: Devops — `degraded` как работающий процесс в `make health` и документах; e2e бота в `test-race` · Размер: S · Статус: done · Волна 1 (бэклог)
+- **Причина (оркестратор, 2026-09-14)**:
+  - решение system-architect#1 по T-059 (EPIC-002), «Риск compose: решение (б)» и «Пункт для devops-engineer»: мир `uninitialized` отдаёт `/health degraded`, проба `multiverse health` отвечает 0 на `ok` и `degraded` (правка пробы — в T-059), а `make health`, `infrastructure.md` §2.2, §2.3, §7.2, `README.md` и runbook — эта задача;
+  - решение system-architect#2 по T-315 (EPIC-004): e2e бота `./cmd/telegram-bot/e2e/...` (тег `e2e`) — во второй команде `test-race`, не в `RACE_PKGS`; строки `infrastructure.md` §3.
+- **Ветка**: `task/T-476-health-degraded-make` от `epic/EPIC-001-foundation` (`e7adb6d`, содержит `develop` с T-469), папка `.worktrees/T-476`.
+- **Зависит от (порядок слияния; решение оркестратора, вариант (а), 2026-09-14)**: T-476 сливается в `epic/EPIC-001-foundation` сразу после приёмки. `epic/EPIC-001-foundation` → `develop` не раньше, чем в `develop` есть T-059 (EPIC-002) и T-315 (EPIC-004).
+  1. **T-059 (EPIC-002)** — документы (`infrastructure.md` §2.3, §7.2, `README.md`, runbook) описывают пробу T-059: без неё в `develop` они опишут пробу раньше, чем она так работает. Строка `core` в `make health` читает слово пробы и верна по обе стороны T-059, порядка она не требует.
+  2. **T-315 (EPIC-004)** — каталог `cmd/telegram-bot/e2e` есть только в `epic/EPIC-004-gateway-bot`. Без него шаблон в `go test` — не предупреждение, а отказ (`[setup failed]`, код 1), и задание CI `race` на `develop` покраснело бы.
+  - **Проверка перед слиянием эпика в `develop`:** `git ls-tree develop cmd/telegram-bot/e2e` не пуст и `git log --merges --oneline develop | grep -F 'Merge task/T-059-'` не пуст. Искать коммит слияния задачи, а не номер: `grep T-059` по всему журналу `develop` уже находит служебные коммиты `chore(dev-team)`, хотя T-059 не слита (поправлено приёмкой tech-lead#1, 2026-09-14).
+  - **Почему локальный `make ci` этого не покажет:** без cgo `test-race` пишет `SKIPPED` и до `go test` не доходит. Отказ `[setup failed]` проявится только в задании CI `race` после push в `develop`.
+- **Файлы**: `Makefile` (цели `health`, `up`, `deploy`, `rollback`, `test-race`), `Docs/dev-team/architecture/infrastructure.md` (§2.2, §2.3, §3.1, §7.2, §8, §9.1), `README.md`, `Docs/ops/runbook.md`. `docker-compose.yml`, `cmd/multiverse`, `.env.example` не меняются.
+- **Описание**: подробно — карточка `tasks/T-476.md`.
+- **DoD** (полностью — карточка):
+  1. `DEGRADED_STRICT ?= 1` рядом с `LLM_STRICT`; `make health` печатает настоящий статус (`ok`/`degraded`/`FAIL`) у `core` (слово пробы) и у `gateway`/`memory`/`telegram-bot` (поле `status` тела); `degraded` даёт `rc=1` только при `DEGRADED_STRICT=1`; `up`, `deploy`, `rollback` передают `DEGRADED_STRICT=0`.
+  2. `test-race`: вторая команда и её `echo` содержат `./test/e2e/... ./cmd/telegram-bot/e2e/...` с `-tags e2e`; `RACE_PKGS` не меняется.
+  3. `infrastructure.md` §2.2, §2.3, §7.2 — тексты решения по T-059; §2.2/§3.1 — строки `make test-race` и задания `race`.
+  4. `README.md` и runbook: после свежего `make up` `core` — `degraded` до `mvctl world init`.
+  5. Прогоны: `make help`, `make -n test-race`, `go list -tags e2e ./cmd/telegram-bot/e2e/...`, `make compose-lint`, `make secrets-scan`; контейнеры не поднимаются, `make health` против стека не запускается.
+  6. dev-log, карточка; `.env` не открывался.
+- **Метка**: нет. `contracts.md` и Go-код не меняются.
+- **Исполнитель**: devops-engineer#1 (TEAM-1, Opus). Ревью — code-reviewer#2. Карточка — `tasks/T-476.md`.
+- **(приёмка tech-lead#1, 2026-09-14)** Принята. Ревью #1 (0/0/2/2), итераций ревью — 1; итерацию 2 проверила приёмка, без ревью #2 (решение оркестратора). DoD 1–6 подтверждены: `make help`, `make -n test-race`, `make compose-lint` (72/14), `make secrets-scan`, `go build ./... && go vet ./...` — зелёные; `go list -tags e2e ./cmd/telegram-bot/e2e/...` — rc=1, ожидаемо до T-315.
+  - Mi-1, Mi-2, N-1, N-2 закрыты. Порядок (вариант (а)) в карточке и индексе — один текст.
+  - Правка приёмки: проверка T-059 `git log --oneline develop | grep T-059` уже находила 6 служебных коммитов `chore(dev-team)`, хотя T-059 не слита. Заменена на `git log --merges --oneline develop | grep -F 'Merge task/T-059-'` (0 для T-059; контроль T-057 — 1).
+  - Передать: T-476 → `epic/EPIC-001-foundation` сейчас; эпик → `develop` — когда не пусты обе проверки; `make secrets-scan` после коммита, до push.
+  - Отметка по файлам EPIC-001 из T-059 (`health.go`, `main_test.go`, `serve.go`, `contexts_state.go`, `contexts_state_recovery_test.go`, `fake_contexts_test.go`, `shared/testkit/state/guard.go`) — карточка T-476, раздел «Отметка по файлам EPIC-001 из T-059». Согласовано предварительно, место стража `OneStateOverTheWorld` в `shared/testkit/state` подтверждено; финальный `serve.go` — по завершении итерации 3 T-059.
+- **Бэклог (из T-476, 2026-09-14)**:
+  1. system-architect: пример JSON в `infrastructure.md` §7.2 — `ok|degraded|fail` вместо `down`, «503 для `down`» → «503 для `fail`».
+  2. devops: `make health` зовёт пробу `core` без `--url` (адрес из `MV_CORE_ADDR` контейнера, как healthcheck compose, T-408).
+  3. devops, после T-315 в `develop`: страж «шаблон `RACE_PKGS`/`RACE_E2E_PKGS` без пакетов — отказ» (`go list` с тегом по каждому шаблону).
+  4. devops (ревью #1): `$(COMPOSE) ps --services | grep -qx` под `pipefail` может дать 141 и показать поднятый сервис как `-`; заменить на `grep -x … >/dev/null`.
+  5. devops (ревью #1): у `docker compose exec -T core /multiverse health` нет своего тайм-аута; решать вместе с п. 2.
+  6. system-architect (приёмка): `infrastructure.md` §2.2, строка `make health` — среди причин кода ≠ 0 нет недоступного LLM при `LLM_STRICT=1`; вместе с п. 1.

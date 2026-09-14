@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:06:58+03:00",
+  "updatedAt": "2026-09-14T12:22:03+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3264,7 +3264,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:20:42+03:00",
@@ -5045,11 +5045,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:02:05+03:00",
-          "reviewIterations": 1
+          "reviewIterations": 2
         },
         {
           "id": "T-479",
@@ -5060,11 +5060,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-480",
           "title": "FakeGateway останавливается за 1 с после T-473",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T11:49:37+03:00",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-480.md",
-          "reviewIterations": 1
+          "reviewIterations": 1,
+          "finishedAt": "2026-09-14T12:22:03+03:00",
+          "spentMinutes": 28
         },
         {
           "id": "T-481",
@@ -11429,7 +11431,7 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Итерация 2: сбой публикации в OnMechanics",
       "startedAt": "2026-09-14T12:06:02+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:22:03+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -11439,7 +11441,7 @@ window.DEVTEAM_STATE =
       "task": "T-480",
       "action": "Ревью #1: диагностика FakeGateway",
       "startedAt": "2026-09-14T12:06:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:22:03+03:00"
     },
     {
       "instance": "developer#1",
@@ -11449,6 +11451,26 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "Итерация 2: 409 bootstrap, сверка с core",
       "startedAt": "2026-09-14T12:06:58+03:00",
+      "finishedAt": "2026-09-14T12:22:03+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-475",
+      "action": "Приёмка T-475",
+      "startedAt": "2026-09-14T12:22:03+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-478",
+      "action": "Ревью #2: SAVEPOINT, Sweep",
+      "startedAt": "2026-09-14T12:22:03+03:00",
       "finishedAt": null
     }
   ],
@@ -16144,6 +16166,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-475 · ревью #1 (code-reviewer#1): принять — 0/0/1/3. Mi-1: снапшот пишется из памяти State core, а «что предлагать» решают объекты — без сверки возможен bootstrap-снапшот неполного мира (зонд P1, нарушение процедуры §4.10 (в)); N-1 MV_CORE_URL через Redacted(); N-2 health без state — предупреждени"
+    },
+    {
+      "at": "2026-09-14T12:15:49+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние P (постоянное разрешение): epic/EPIC-004-gateway-bot → develop (95f624c) — T-313, T-315, T-473 (и ранее не слитые T-308, T-309, T-316). make ci BASE=develop повторён в спокойное окно — rc=0 (scripts-parity 113/0), secrets-scan чист, пересечений с файлами владельца нет. После слия"
+    },
+    {
+      "at": "2026-09-14T12:22:03+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-480 принята tech-lead#3 (DoD, прогоны, З-42 — счёт попыток removeDir и wall.Now один раз). Итераций ревью — 1. Коммит, ветка запушена, слита в epic/EPIC-004-gateway-bot (34cf5b5), эпик запушен. Время — 28 мин."
+    },
+    {
+      "at": "2026-09-14T12:22:03+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 · итерация 2 (developer#1): ErrWorldInitialized на worker'е мира и 409 world_initialized (тесты (а)–(д), гонка двух вызовов, B2a–B2d красные); Mi-1 сверка сущностей State core с Created+Skipped до снапшота; N-1 Redacted; N-2 предупреждение без state в health; N-3 тесты тела. Интеграция — PASS "
+    },
+    {
+      "at": "2026-09-14T12:22:03+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 · итерация 2 (developer#1): завершение хода в OnMechanics внутри SAVEPOINT — сбой публикации turn.completed откатывает только завершение, эффект и механика фиксируются, ход дозавершает следующий Sweep или повтор механики с тем же id; N-1, N-4…N-6; КД §7.7 — фраза на подтверждение architect#3. "
     }
   ],
   "blockers": [],
