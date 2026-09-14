@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:04:14+03:00",
+  "updatedAt": "2026-09-14T12:06:02+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5045,7 +5045,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "review",
+          "status": "in_progress",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:02:05+03:00",
@@ -11378,7 +11378,7 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Ревью #1: ход после механики",
       "startedAt": "2026-09-14T11:42:48+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:06:02+03:00"
     },
     {
       "instance": "architect#3",
@@ -11419,6 +11419,16 @@ window.DEVTEAM_STATE =
       "action": "Решения по T-475",
       "startedAt": "2026-09-14T11:53:38+03:00",
       "finishedAt": "2026-09-14T12:04:14+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-478",
+      "action": "Итерация 2: сбой публикации в OnMechanics",
+      "startedAt": "2026-09-14T12:06:02+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -16095,6 +16105,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "T-480: падение TestAFakeGatewayStartsAndStopsWithinASecond не воспроизводится (developer#3: 0,04–0,87 с даже под нагрузкой 16 процессов; оркестратор повторно на df47003 — 5/5 PASS 0,03–0,11 с). Прежние 5/5 падений по 2,5 с совпали с интеграционным прогоном T-475 (testcontainers Redpanda+MinIO) и e2e"
+    },
+    {
+      "at": "2026-09-14T12:06:02+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 · ревью #1 (code-reviewer#3): принять — 0/0/1/6. Засада при enter, отказ State, rest во встрече — штатный ход I1 до дедлайна не висит; транзакции и счётчики верны; пробное слияние с df47003 зелёное. Риск: OnMechanics публикует turn.completed в транзакции consumer — сбой аналитики откатывает эф"
     }
   ],
   "blockers": [],
