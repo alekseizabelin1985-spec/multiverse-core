@@ -74,6 +74,26 @@ func (s *Store) Put(worldID string, entities ...*entity.Entity) error {
 	return nil
 }
 
+// Replace makes the entities given the whole world: every entity of the world
+// that is not among them is gone. Recovery rebuilds a world with it
+// (state-and-mechanics.md §4.8). Like Put, it replaces all or nothing.
+func (s *Store) Replace(worldID string, entities ...*entity.Entity) error {
+	if worldID == "" {
+		return errors.New("memstore: replace: no world")
+	}
+	world := make(map[string]*entity.Entity, len(entities))
+	for i, e := range entities {
+		if e == nil || e.ID == "" {
+			return fmt.Errorf("memstore: replace %s: entity %d has no identifier", worldID, i)
+		}
+		world[e.ID] = entity.Clone(e)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.worlds[worldID] = world
+	return nil
+}
+
 // List returns copies of the entities of a world in the (type, id) order of a
 // snapshot and of the state hash (§3.3, §4.4).
 func (s *Store) List(worldID string) []*entity.Entity {

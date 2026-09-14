@@ -20,7 +20,15 @@ const healthTimeout = 3 * time.Second
 
 // runHealth implements "multiverse health --url <addr>": the healthcheck of
 // the distroless image, which has neither shell nor curl (infrastructure.md
-// §2.3). It exits 0 when the endpoint answers 200 with status ok.
+// §2.3). It exits 0 when the endpoint answers 200 with status ok or degraded,
+// and 1 otherwise: fail (503), another code, an address that does not answer,
+// a body that does not read, a status outside the three.
+//
+// degraded is a process that works (infrastructure.md §7.2): a world waiting
+// for mvctl world init, a model that is away. Its container is healthy, or
+// make up --wait and depends_on: service_healthy would wait for what no restart
+// mends. The strict view of the operator is make health (state-and-mechanics.md
+// §19, T-059).
 func runHealth(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("multiverse health", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -37,10 +45,12 @@ func runHealth(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	_, _ = fmt.Fprintln(stdout, status.Status)
-	if status.Status != runtime.StatusOK {
+	switch status.Status {
+	case runtime.StatusOK, runtime.StatusDegraded:
+		return 0
+	default:
 		return 1
 	}
-	return 0
 }
 
 // defaultHealthURL turns the listen address of the process into one a client

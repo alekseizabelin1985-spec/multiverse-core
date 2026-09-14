@@ -19,6 +19,10 @@ import (
 // ErrNotFound is an entity or a snapshot object the store does not hold.
 var ErrNotFound = errors.New("state: not found in the store")
 
+// ErrUndecodable is an object of the store that is there but does not read as
+// what its key says it is: a snapshot object cut short or overwritten.
+var ErrUndecodable = errors.New("state: undecodable object")
+
 // ErrNoSnapshot is a world without latest.json: no snapshot was ever written
 // for it (state-and-mechanics.md §4.8).
 var ErrNoSnapshot = errors.New("state: no snapshot")
@@ -66,11 +70,18 @@ type Store interface {
 // package that changes more than one entity is about to write, put before the
 // first entity and removed after the last (ADR-013 p. 4, §4.7). A restart that
 // finds one rolls the package forward (T-059).
+//
+// AppliedAt is the instant the package was applied at, which the commit record
+// of an entity rolled forward keeps, so that its fact sent later carries the
+// applied_at of the entities written before the cut (T-059). An intent written
+// before the field existed reads as the zero instant, and the fact then takes
+// the instant of the proposal at hand.
 type Intent struct {
 	ProposalID      string         `json:"proposal_id"`
 	ProposalEventID string         `json:"proposal_event_id"`
 	World           string         `json:"world"`
 	Cause           string         `json:"cause"`
+	AppliedAt       time.Time      `json:"applied_at,omitzero"`
 	Changes         []IntentChange `json:"changes"`
 }
 
@@ -281,7 +292,7 @@ func (s *objectStore) ReadSnapshot(ctx context.Context, worldID, key string) (*S
 	}
 	var snap Snapshot
 	if err := json.Unmarshal(body, &snap); err != nil {
-		return nil, fmt.Errorf("state: decode %s/%s: %w", bucket, key, err)
+		return nil, fmt.Errorf("%w: decode %s/%s: %w", ErrUndecodable, bucket, key, err)
 	}
 	return &snap, nil
 }
