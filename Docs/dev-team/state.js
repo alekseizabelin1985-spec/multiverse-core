@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:12:11+03:00",
+  "updatedAt": "2026-09-14T03:24:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4644,7 +4644,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
           "finishedAt": null,
@@ -10888,7 +10888,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Итерация 3 по ревью #1",
       "startedAt": "2026-09-14T02:53:26+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:24:37+03:00"
     },
     {
       "instance": "architect#3",
@@ -10948,6 +10948,16 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "e2e бота на фейках",
       "startedAt": "2026-09-14T03:12:11+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-309",
+      "action": "Приёмка T-309",
+      "startedAt": "2026-09-14T03:24:37+03:00",
       "finishedAt": null
     }
   ],
@@ -15283,6 +15293,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "Запущены: T-313 (e2e соло solo-30/death/flee-fail, developer#1) и T-315 (e2e бота на FakeUpdateSource/FakeSender/FakeGateway, developer#2) от кончика EPIC-004 585de13."
+    },
+    {
+      "at": "2026-09-14T03:24:37+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние N2 (постоянное разрешение): epic/EPIC-002-state-mechanics → develop (a14d0a0) — T-471, T-057 (и синхронизация с правилом 9). make ci BASE=develop с scripts-parity -jobs 1 — rc=0 (113 passed), secrets-scan чист, пересечений с файлами владельца нет; develop собирается, тесты state/"
+    },
+    {
+      "at": "2026-09-14T03:24:37+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Уведомление tech-lead EPIC-003 и EPIC-004 (через журнал, по передаче T-057/T-471): snapshot.created требует мир в конверте (WorldRequired, C-14 v1.3); в replay snapshot.created публикует только State (C-14 v1.4); законы процесса читаются из MV_RULES_PATH, хук MV_SWARM_FAKE читает rules/dark-forest.y"
     }
   ],
   "blockers": [],
