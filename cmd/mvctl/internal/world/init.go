@@ -33,33 +33,52 @@ const initTimeout = 2 * time.Minute
 
 // InitResult is what `mvctl world init` did: the details of its JSON report.
 type InitResult struct {
-	World     string                `json:"world"`
-	Bus       string                `json:"bus"`
-	Store     string                `json:"store"`
+	World string `json:"world"`
+	Bus   string `json:"bus"`
+	Store string `json:"store"`
+	// Core is the address of the core whose State created the world, on the
+	// path of --bus kafka.
+	Core      string                `json:"core,omitempty"`
 	Bootstrap state.BootstrapResult `json:"bootstrap"`
-	Snapshot  *state.SnapshotMeta   `json:"snapshot,omitempty"`
+	// Refusal is the refusal of State that ended the bootstrap, with its
+	// details (invariant_id, expected_version, actual_version).
+	Refusal  *state.Refusal      `json:"refusal,omitempty"`
+	Snapshot *state.SnapshotMeta `json:"snapshot,omitempty"`
 	// Warnings are what went wrong after latest.json was written: the world is
 	// initialized all the same (state-and-mechanics.md §4.10, exit codes).
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// initArgs are the flags of `mvctl world init` once parsed.
+type initArgs struct {
+	world, fixtures, bus, store, rules string
+	force, asJSON                      bool
+}
+
+const initCommand = "world init"
+
 // runInit implements `mvctl world init` (state-and-mechanics.md §4.10, "Правила
 // `world init`"): the buckets of the world, a refusal over a world that already
-// has latest.json, the clean-up of --force, the bootstrap from the fixtures and
-// the snapshot State writes of it.
+// has latest.json, the bootstrap from the fixtures and the snapshot State writes
+// of it — by a State inside the command over the memory bus, or by the State of
+// the running core over Redpanda.
 func (c Command) runInit(args []string, stdout, stderr io.Writer) int {
-	const command = "world init"
+	command := initCommand
 	flags := cli.FlagSet("mvctl "+command, stderr)
 	worldID := flags.String("world", env.WorldID.String(), "world to create (default "+env.WorldID.Name()+")")
 	fixtures := flags.String("fixtures", DefaultFixtures, "directory of the fixture entities")
 	bus := flags.String("bus", env.Bus.String(),
-		"bus State answers on: memory runs State inside this command, kafka asks the running core (default "+env.Bus.Name()+")")
+		"bus State answers on: memory runs State inside this command, kafka asks the running core "+
+			"(brokers "+env.KafkaBrokers.Name()+", core "+env.CoreURL.Name()+") (default "+env.Bus.Name()+")")
 	store := flags.String("store", "",
-		"object store; with --bus memory only memory (the default), whose objects are gone when the command ends")
+		"object store; with --bus memory only memory (the default), whose objects are gone when the command ends; "+
+			"with --bus kafka only minio (the default), the store of the deployment")
 	rules := flags.String("rules", env.RulesPath.String(),
-		"rule book the in-process State holds the world to (default "+env.RulesPath.Name()+")")
+		"rule book the in-process State holds the world to; not read with --bus kafka, "+
+			"where the running core holds the world to its own (default "+env.RulesPath.Name()+")")
 	force := flags.Bool("force", false,
-		"create the world again: the objects of State of the world are removed first (entities and state snapshots)")
+		"create the world again: the objects of State of the world are removed first (entities and state snapshots); "+
+			"with --bus memory only")
 	asJSON := flags.Bool("json", false, "print the report as JSON")
 	if code, ok := cli.Parse(flags, args); !ok {
 		return code
@@ -70,21 +89,23 @@ func (c Command) runInit(args []string, stdout, stderr io.Writer) int {
 	if *worldID == "" {
 		return usage(stderr, command, "no world: pass --world or set %s", env.WorldID.Name())
 	}
+	a := initArgs{world: *worldID, fixtures: *fixtures, bus: *bus, store: *store, rules: *rules,
+		force: *force, asJSON: *asJSON}
 	switch *bus {
 	case BusMemory:
+		return c.initInMemory(a, stdout, stderr)
 	case BusKafka:
-		// The snapshot of a world on the bus of a deployment is written by the
-		// State of the running core, asked over its admin route, which T-059
-		// brings (state-and-mechanics.md §4.9). Without it the entities would
-		// be proposed and no snapshot written: a half-initialized world whose
-		// next init is not refused. So nothing is done at all.
-		return usage(stderr, command,
-			"--bus kafka needs the admin route of State (POST /v1/admin/state/{world}/snapshot, T-059), "+
-				"which this build does not have: nothing was done; use --bus memory")
+		return c.initOverKafka(a, stdout, stderr)
 	default:
 		return usage(stderr, command, "unknown bus %q, expected %s or %s", *bus, BusMemory, BusKafka)
 	}
-	storeKind := *store
+}
+
+// initInMemory is `mvctl world init --bus memory`: State inside the command,
+// over the memory bus and the memory store.
+func (c Command) initInMemory(a initArgs, stdout, stderr io.Writer) int {
+	command := initCommand
+	storeKind := a.store
 	if storeKind == "" {
 		storeKind = StoreMemory
 	}
@@ -100,81 +121,105 @@ func (c Command) runInit(args []string, stdout, stderr io.Writer) int {
 	}
 
 	report := cli.NewReport(command)
-	book, err := mechanics.Load(*rules)
+	book, err := mechanics.Load(a.rules)
 	if err != nil {
-		report.Add(CheckRules, *rules, err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+		report.Add(CheckRules, a.rules, err.Error())
+		return report.Write(stdout, stderr, a.asJSON)
 	}
-	if _, err := state.LoadFixtures(*worldID, *fixtures); err != nil {
-		report.Add(CheckFixtures, *fixtures, err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+	if _, err := state.LoadFixtures(a.world, a.fixtures); err != nil {
+		report.Add(CheckFixtures, a.fixtures, err.Error())
+		return report.Write(stdout, stderr, a.asJSON)
 	}
 	client, err := c.OpenStore(storeKind)
 	if err != nil {
 		report.Add(CheckStore, storeKind, err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+		return report.Write(stdout, stderr, a.asJSON)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), initTimeout)
 	defer cancel()
-	if err := state.EnsureWorldBuckets(ctx, client, *worldID); err != nil {
+	if err := state.EnsureWorldBuckets(ctx, client, a.world); err != nil {
 		report.Add(CheckStore, storeKind, err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+		return report.Write(stdout, stderr, a.asJSON)
 	}
-	pointer, err := state.NewObjectStore(client).ReadLatest(ctx, *worldID)
+	pointer, err := state.NewObjectStore(client).ReadLatest(ctx, a.world)
 	switch {
-	case err == nil && !*force:
+	case err == nil && !a.force:
 		_, _ = fmt.Fprintf(stderr,
 			"mvctl %s: the world %s is initialized: %s/%s points at snapshot %d (%s); pass --force to initialize it again\n",
-			command, *worldID, objstore.SnapshotsBucket(*worldID), state.PointerKey,
+			command, a.world, objstore.SnapshotsBucket(a.world), state.PointerKey,
 			pointer.Snapshot.Seq, pointer.Snapshot.Reason)
 		return cli.ExitUsage
+	case errors.Is(err, state.ErrUndecodable) && !a.force:
+		// A pointer that does not read is still a pointer: the world may be
+		// there, and creating it again is the operator's choice (§4.10).
+		report.Addf(CheckStore, storeKind, "%v; the world is not created over it: pass --force to create it again", err)
+		return report.Write(stdout, stderr, a.asJSON)
+	case errors.Is(err, state.ErrUndecodable):
+		// --force removes the pointer anyway, and reads nothing of it.
 	case err != nil && !errors.Is(err, state.ErrNoSnapshot):
 		report.Add(CheckStore, storeKind, err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+		return report.Write(stdout, stderr, a.asJSON)
 	}
-	if *force {
-		if err := clearWorld(ctx, client, *worldID); err != nil {
+	if a.force {
+		if err := clearWorld(ctx, client, a.world); err != nil {
 			report.Add(CheckStore, storeKind, err.Error())
-			return report.Write(stdout, stderr, *asJSON)
+			return report.Write(stdout, stderr, a.asJSON)
 		}
 	}
 
-	result := InitResult{World: *worldID, Bus: *bus, Store: storeKind}
-	run := initInProcess(ctx, client, *worldID, *fixtures, book)
+	result := InitResult{World: a.world, Bus: a.bus, Store: storeKind}
+	run := initInProcess(ctx, client, a.world, a.fixtures, book)
 	result.Bootstrap, result.Snapshot = run.bootstrap, run.snapshot
 	for _, warning := range run.warnings {
 		result.Warnings = append(result.Warnings, warning.Error())
 	}
-	report.Details = result
+	report.Details = &result
 	if run.err != nil {
 		check := CheckBootstrap
 		if errors.Is(run.err, errSnapshot) {
 			check = CheckSnapshot
 		}
-		report.Add(check, *worldID, run.err.Error())
-		return report.Write(stdout, stderr, *asJSON)
+		result.Refusal = refusalIn(run.err)
+		report.Add(check, a.world, run.err.Error())
+		return report.Write(stdout, stderr, a.asJSON)
 	}
-	snap := run.snapshot
-	report.Linef("world %s: entities created %d, skipped %d", *worldID,
+	return writeInitialized(report, &result, storeLine(storeKind), stdout, stderr, a.asJSON)
+}
+
+// writeInitialized reports a world whose latest.json is written: the lines of
+// the snapshot, and the warnings of what went wrong after it.
+func writeInitialized(report *cli.Report, result *InitResult, where string, stdout, stderr io.Writer, asJSON bool) int {
+	snap, worldID := result.Snapshot, result.World
+	report.Details = result
+	report.Linef("world %s: entities created %d, skipped %d", worldID,
 		len(result.Bootstrap.Created), len(result.Bootstrap.Skipped))
 	report.Linef("snapshot: seq %d, reason %s, key %s/%s", snap.Seq, snap.Reason,
-		objstore.SnapshotsBucket(*worldID), snap.Key)
+		objstore.SnapshotsBucket(worldID), snap.Key)
 	report.Linef("entities_count: %d", snap.EntitiesCount)
 	report.Linef("state_hash: %s", snap.StateHash)
 	report.Linef("rules_version: %s", snap.RulesVersion)
 	report.Linef("cursor.%s: %d", eventbus.TopicSystemEvents, snap.Cursor[eventbus.TopicSystemEvents])
-	report.Line(storeLine(storeKind))
-	report.Summary = "world " + *worldID + " initialized in the " + storeKind + " store"
+	report.Line(where)
+	report.Summary = "world " + worldID + " initialized in the " + result.Store + " store"
 	// A warning does not change the exit code: latest.json is written, and a
 	// second init would be refused as initialized (§4.10, exit codes). It goes
 	// to stderr, next to the findings, so that it is not lost in the lines.
-	if !*asJSON {
+	if !asJSON {
 		for _, warning := range result.Warnings {
-			_, _ = fmt.Fprintf(stderr, "mvctl %s: warning: the world is initialized, but %s\n", command, warning)
+			_, _ = fmt.Fprintf(stderr, "mvctl %s: warning: the world is initialized, but %s\n", initCommand, warning)
 		}
 	}
-	return report.Write(stdout, stderr, *asJSON)
+	return report.Write(stdout, stderr, asJSON)
+}
+
+// refusalIn is the refusal of State among the causes of err, or nil.
+func refusalIn(err error) *state.Refusal {
+	var refusal *state.Refusal
+	if errors.As(err, &refusal) {
+		return refusal
+	}
+	return nil
 }
 
 // storeLine says where the world is, for the reader of the text report.
@@ -290,8 +335,10 @@ func initInProcess(ctx context.Context, client objstore.Client, worldID, fixture
 			stopped := fmt.Errorf("stop the in-process state: %w", err)
 			if run.snapshot != nil {
 				run.warnings = append(run.warnings, stopped)
-			} else if run.err == nil {
-				run.err = stopped
+			} else {
+				// A State that refused the bootstrap and then did not stop says
+				// both (review #2 of T-058, N-4); errSnapshot stays in the chain.
+				run.err = errors.Join(run.err, stopped)
 			}
 		}
 	}()
@@ -301,22 +348,30 @@ func initInProcess(ctx context.Context, client objstore.Client, worldID, fixture
 		run.err = withHealth(err, world)
 		return run
 	}
-	pointer, err := world.Snapshot(ctx, worldID, state.SnapshotBootstrap)
-	if pointer != nil {
-		// Written, with snapshot.created or without: the world is initialized
-		// (Applier.Snapshot returns the pointer of a written snapshot whose
-		// event did not go out).
-		meta := pointer.Snapshot
-		run.snapshot = &meta
-		if err != nil {
-			run.warnings = append(run.warnings, err)
-		}
-		return run
-	}
-	if err != nil {
-		run.err = fmt.Errorf("%w: %w", errSnapshot, err)
+	var warning error
+	run.snapshot, warning, run.err = snapshotOutcome(world.Snapshot(ctx, worldID, state.SnapshotBootstrap))
+	if warning != nil {
+		run.warnings = append(run.warnings, warning)
 	}
 	return run
+}
+
+// snapshotOutcome decides what a snapshot asked of State means for world init
+// (§4.10, exit codes): a pointer is a written latest.json, and the world is
+// initialized whatever else went wrong — a snapshot.created that did not go
+// out is a warning. Without a pointer the error is the failure of the
+// snapshot. Applier.Snapshot returns the pointer together with the error of an
+// event that did not go out; the admin route answers 200 in that case and
+// /health says snapshot_event_failed.
+func snapshotOutcome(pointer *state.LatestPointer, err error) (snapshot *state.SnapshotMeta, warning, failure error) {
+	if pointer != nil {
+		meta := pointer.Snapshot
+		return &meta, err, nil
+	}
+	if err == nil {
+		err = errors.New("the State wrote no snapshot and said nothing")
+	}
+	return nil, nil, fmt.Errorf("%w: %w", errSnapshot, err)
 }
 
 // withHealth adds what State says of itself to a bootstrap that failed: a
