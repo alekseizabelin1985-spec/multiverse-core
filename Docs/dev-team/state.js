@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T09:09:58+03:00",
+  "updatedAt": "2026-09-14T09:11:31+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4708,11 +4708,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-313",
           "title": "e2e соло: solo-30, death, flee-fail",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.9",
           "spentMinutes": 0,
@@ -10946,7 +10946,7 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "e2e соло: solo-30, death, flee-fail",
       "startedAt": "2026-09-14T03:12:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:11:31+03:00"
     },
     {
       "instance": "developer#2",
@@ -11046,6 +11046,26 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Итерация 2: store memory, очистка при --force",
       "startedAt": "2026-09-14T09:09:58+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "Ревью #1: e2e соло",
+      "startedAt": "2026-09-14T09:11:31+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#3",
+      "role": "architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "Решения по T-313 и T-315",
+      "startedAt": "2026-09-14T09:11:31+03:00",
       "finishedAt": null
     }
   ],
@@ -15453,6 +15473,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-058 · ревью #1 (code-reviewer#1): вернуть — 0/1/4/2. Ma-1 --bus memory --store minio пишет в MinIO снапшот с курсором исчезающего журнала (совпадает с решением system-architect#1); Mi-1 сбой после записи latest.json отвечает как провал bootstrap; Mi-2 не закреплено чтение ответов только после End;"
+    },
+    {
+      "at": "2026-09-14T09:11:31+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313 выполнена TEAM-3/developer#1: e2e соло solo-30 (30 ходов, один turn.completed на ход, --chaos=duplicate даёт тот же журнал), death (гибель на 46-м ходу, /start, 409 character_dead), flee-fail — через HTTP настоящего шлюза (FakeGateway) с FakeState и swarm.FakeContext на одной membus, clock.Man"
     }
   ],
   "blockers": [],
