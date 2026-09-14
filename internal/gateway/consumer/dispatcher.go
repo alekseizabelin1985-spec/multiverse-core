@@ -42,6 +42,48 @@ var Topics = []string{
 // one links.db uses: two stamps compare as text.
 const timeLayout = "2006-01-02T15:04:05.000000000Z"
 
+// The subscription of a topic that ended is started again after a pause, and
+// the pause doubles from ResubscribeFirst up to ResubscribeCeiling while the
+// subscriptions keep ending (T-473).
+//
+// A broker that is restarted answers again in about two seconds (T-316: 1.5 to
+// 1.9 s), so the first pause is short. It cannot spin: a failing subscription
+// of the kafka adapter spends seconds of its own before it returns, because
+// kafka-go joins the group three times with a pause of 5 s before it reports.
+// The ceiling bounds what the pause adds to the deafness after the broker is
+// back, on top of the join of the group (T-316: 29.8 s), and it bounds the log
+// of a long outage to a line per topic every quarter of a minute or so.
+const (
+	ResubscribeFirst   = time.Second
+	ResubscribeCeiling = 15 * time.Second
+)
+
+// RestoredAfter is how long a subscription started again has to run without
+// ending before its topic counts as heard again, when no event came through it
+// sooner. The Bus does not say when a consumer group has joined: Subscribe
+// blocks from the call to the end. A broker holds the join of a new member
+// until the members from before the outage rejoin or their rebalance timeout
+// runs out — 30 s in kafka-go, 29.8 s measured by T-316 — and kafka-go gives
+// the request 5 s more; a subscription alive past both has, as a rule, joined.
+// It is a rule and not a proof: a join refused meanwhile reaches Subscribe only
+// after kafka-go retried it, and the topic is reported down again then.
+const RestoredAfter = 35 * time.Second
+
+// StopTransportGrace is how long Stop waits for the subscriptions to return
+// once no handler runs. A transport that listens to its context returns in
+// milliseconds — the kafka adapter leaves the group on the way (T-316: 73 ms)
+// — and the next start of the group does not wait for a member that never
+// left. A reader of kafka-go that is joining its group does not return before
+// the join does (T-316: 29.7 s), longer than runtime.StopTimeout; Stop leaves
+// it to end by itself, which it can do without harm: no handler of it runs any
+// more (see Stop).
+const StopTransportGrace = 2 * time.Second
+
+// errEndedSilently is the end of a subscription that returned nil while its
+// context was alive: nothing but Stop ends a subscription of the dispatcher,
+// so the topic is not heard any more, whatever the transport meant by nil.
+var errEndedSilently = errors.New("the subscription returned without an error before Stop")
+
 // Effect is a side effect of one event. It writes through tx and nothing else:
 // gateway.db has one connection, which tx holds, and what it writes commits
 // with the mark "processed" and the cursor or not at all. An error rolls the
@@ -53,14 +95,20 @@ const timeLayout = "2006-01-02T15:04:05.000000000Z"
 // encounter in what it writes.
 type Effect func(ctx context.Context, tx *sql.Tx, ev eventbus.Event, res readmodel.Result) error
 
-// Config builds a dispatcher. Every field but Effects is required.
+// Config builds a dispatcher. Every field but Effects, Repair and Repairs is
+// required.
 type Config struct {
 	Bus     eventbus.Bus
 	Journal eventbus.Journal
 	DB      *sql.DB
 	Model   *readmodel.Model
 	Clock   clock.Clock
-	Log     *slog.Logger
+	// Timers pace the subscriptions started again, the wait for them to count
+	// as restored and the grace of Stop: waits of the transport, which decide
+	// no event. A decision of the domain — a deadline of an effect, a lease —
+	// does not go on them (C-01 v1.12, "Ожидания транспорта у потребителя").
+	Timers clock.Timers
+	Log    *slog.Logger
 	// Effects are the side effects per event type, run in order.
 	Effects map[string][]Effect
 	// Repair, when set, is the repair of stale entities from the snapshot of
@@ -95,15 +143,39 @@ type Dispatcher struct {
 	announcement *eventbus.Event
 	cancel       context.CancelFunc
 	running      sync.WaitGroup
-	failure      error
+	// subscriptions is the state of the subscription of every topic.
+	subscriptions map[string]*subscription
+	// stopping is set by Stop once the subscriptions are cancelled: a handler
+	// of a subscription no longer starts. handling counts the handlers of the
+	// subscriptions that run, and idle closes when Stop finds them none.
+	stopping bool
+	handling int
+	idle     chan struct{}
+	idleDone bool
+}
+
+// subscription is where the subscription of one topic stands.
+type subscription struct {
+	// attempt numbers the subscriptions of the topic: 0 is the one Start
+	// makes, every one started again after an end is the next.
+	attempt int
+	// heard says the running attempt takes events: the one of Start from the
+	// beginning, one started again once an event came through it or it ran
+	// for RestoredAfter.
+	heard bool
+	// down is why the topic is not heard: the end of the last attempt, until
+	// one started again is heard.
+	down error
 }
 
 // New checks the configuration.
 func New(cfg Config) (*Dispatcher, error) {
-	if cfg.Bus == nil || cfg.Journal == nil || cfg.DB == nil || cfg.Model == nil || cfg.Clock == nil || cfg.Log == nil {
-		return nil, errors.New("consumer: Bus, Journal, DB, Model, Clock and Log are required")
+	if cfg.Bus == nil || cfg.Journal == nil || cfg.DB == nil || cfg.Model == nil || cfg.Clock == nil ||
+		cfg.Timers == nil || cfg.Log == nil {
+		return nil, errors.New("consumer: Bus, Journal, DB, Model, Clock, Timers and Log are required")
 	}
-	return &Dispatcher{cfg: cfg, done: make(map[string]int64), ends: make(map[string]int64)}, nil
+	return &Dispatcher{cfg: cfg, done: make(map[string]int64), ends: make(map[string]int64),
+		subscriptions: make(map[string]*subscription)}, nil
 }
 
 // Start loads the effects cursors, catches the projection and the effects up
@@ -124,7 +196,8 @@ func New(cfg Config) (*Dispatcher, error) {
 // twice: the effects cursor and processed_events stop it (component §16 p. 7).
 //
 // The subscriptions run under a context of their own, cancelled by Stop and
-// by nothing else: the bus closing does not cancel a handler (C-01 v1.7).
+// by nothing else: the bus closing does not cancel a handler (C-01 v1.7). A
+// subscription that ends before Stop is started again (see subscribe).
 func (d *Dispatcher) Start(ctx context.Context, from map[string]int64) error {
 	if err := d.loadCursors(ctx); err != nil {
 		return err
@@ -171,6 +244,9 @@ func (d *Dispatcher) Start(ctx context.Context, from map[string]int64) error {
 	d.mu.Lock()
 	d.cancel = cancel
 	d.live = true
+	for _, topic := range Topics {
+		d.subscriptions[topic] = &subscription{heard: true}
+	}
 	d.mu.Unlock()
 	for _, topic := range Topics {
 		d.running.Add(1)
@@ -209,22 +285,173 @@ func (d *Dispatcher) Ends() map[string]int64 {
 	return out
 }
 
+// subscribe keeps the subscription of topic until Stop. Whatever ends it
+// before Stop — an error of the transport, or nil while ctx is alive — the
+// topic is reported down, and after a pause on Timers the topic is subscribed
+// again; the other topics go on. A bus that refuses with eventbus.ErrClosed is
+// a stop: it will not take a subscription again.
+//
+// The effects of an event the transport delivers again after the new
+// subscription joins are not taken twice: the effects cursor and
+// processed_events stop them, as after any redelivery.
 func (d *Dispatcher) subscribe(ctx context.Context, topic string) {
 	defer d.running.Done()
-	err := d.cfg.Bus.Subscribe(ctx, topic, Group, d.Handle)
-	if err == nil || ctx.Err() != nil {
-		return
+	failures := 0
+	for attempt := 0; ; attempt++ {
+		ended := make(chan struct{})
+		if attempt > 0 {
+			go d.settle(ctx, topic, attempt, ended)
+		}
+		err := d.cfg.Bus.Subscribe(ctx, topic, Group, d.handler(topic, attempt))
+		close(ended)
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errEndedSilently
+		}
+		if d.end(topic, attempt, err) {
+			failures = 0
+		}
+		if errors.Is(err, eventbus.ErrClosed) {
+			d.cfg.Log.Error("consumer: subscription refused by a closed bus, not subscribing again",
+				slog.String("topic", topic), slog.String("error", err.Error()))
+			return
+		}
+		pause := resubscribePause(failures)
+		failures++
+		d.cfg.Log.Error("consumer: subscription ended, subscribing again after a pause",
+			slog.String("topic", topic), slog.String("error", err.Error()), slog.Duration("pause", pause))
+		if !d.wait(ctx, pause) {
+			return
+		}
 	}
-	d.cfg.Log.Error("consumer: subscription ended", slog.String("topic", topic), slog.String("error", err.Error()))
-	d.mu.Lock()
-	if d.failure == nil {
-		d.failure = fmt.Errorf("consumer: subscription to %s: %w", topic, err)
-	}
-	d.mu.Unlock()
 }
 
-// Stop cancels the subscriptions and waits for their handlers to return, or
-// for ctx to end. The databases stay open: the caller closes them after Stop.
+// resubscribePause is the pause after the n-th end in a row, n from 0.
+func resubscribePause(n int) time.Duration {
+	pause := ResubscribeFirst
+	for range n {
+		if pause >= ResubscribeCeiling/2 {
+			return ResubscribeCeiling
+		}
+		pause *= 2
+	}
+	return min(pause, ResubscribeCeiling)
+}
+
+// wait waits for pause on Timers and says whether the subscription goes on:
+// Stop ends the wait at once. A pause that ran out in the same moment Stop
+// cancelled ctx does not go on either: select picks either ready case, and a
+// Subscribe after Stop would make the kafka adapter start joining the group
+// (review #1 of T-473, Mi-2).
+func (d *Dispatcher) wait(ctx context.Context, pause time.Duration) bool {
+	timer := d.cfg.Timers.After(pause)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C():
+		return ctx.Err() == nil
+	}
+}
+
+// settle counts the attempt heard once it ran for RestoredAfter without
+// ending. An event that comes through it sooner does the same (handler).
+func (d *Dispatcher) settle(ctx context.Context, topic string, attempt int, ended <-chan struct{}) {
+	timer := d.cfg.Timers.After(RestoredAfter)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+	case <-ended:
+	case <-timer.C():
+		d.heard(topic, attempt)
+	}
+}
+
+// handler is the handler of one attempt: it marks the topic heard and hands
+// the event to Handle, unless Stop has begun. What it refuses then stays
+// uncommitted and is delivered again after the restart.
+func (d *Dispatcher) handler(topic string, attempt int) eventbus.Handler {
+	return func(ctx context.Context, ev eventbus.Event) error {
+		if !d.enter() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			return errors.New("consumer: stopped")
+		}
+		defer d.leave()
+		d.heard(topic, attempt)
+		return d.Handle(ctx, ev)
+	}
+}
+
+// heard marks the running attempt of topic as taking events and clears the
+// reason the topic was down.
+func (d *Dispatcher) heard(topic string, attempt int) {
+	d.mu.Lock()
+	s := d.subscriptions[topic]
+	if s == nil || s.attempt != attempt || s.heard {
+		d.mu.Unlock()
+		return
+	}
+	s.heard = true
+	restored := s.down != nil
+	s.down = nil
+	d.mu.Unlock()
+	if restored {
+		d.cfg.Log.Info("consumer: subscription restored", slog.String("topic", topic))
+	}
+}
+
+// end records the end of an attempt of topic and moves the topic to the next
+// one. It says whether the attempt had been heard: the pauses start from the
+// first again after a subscription that took events.
+func (d *Dispatcher) end(topic string, attempt int, err error) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	s := d.subscriptions[topic]
+	heard := s.attempt == attempt && s.heard
+	s.attempt, s.heard, s.down = attempt+1, false, err
+	return heard
+}
+
+func (d *Dispatcher) enter() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.stopping {
+		return false
+	}
+	d.handling++
+	return true
+}
+
+func (d *Dispatcher) leave() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.handling--
+	d.closeIdle()
+}
+
+// closeIdle closes idle once Stop has begun and no handler runs; d.mu is held.
+func (d *Dispatcher) closeIdle() {
+	if d.stopping && d.handling == 0 && !d.idleDone {
+		close(d.idle)
+		d.idleDone = true
+	}
+}
+
+// Stop cancels the subscriptions, waits for their handlers to return and then
+// for the subscriptions themselves, no longer than StopTransportGrace, or for
+// ctx to end. The databases stay open: the caller closes them after Stop.
+//
+// A handler of a subscription does not start once Stop has begun, so after
+// Stop returns nothing of the dispatcher touches the databases, whether or not
+// every subscription has returned. A subscription still inside the transport
+// after the grace — a reader of kafka-go joining its group — is left to end by
+// itself and is not started again; waiting for it would take the budget of
+// the stop of the process (runtime.StopTimeout, T-316: 29.7 s). Only handlers
+// still running when ctx ends make Stop return an error.
 func (d *Dispatcher) Stop(ctx context.Context) error {
 	d.mu.Lock()
 	cancel := d.cancel
@@ -233,25 +460,58 @@ func (d *Dispatcher) Stop(ctx context.Context) error {
 		return nil
 	}
 	cancel()
-	stopped := make(chan struct{})
+	d.mu.Lock()
+	if !d.stopping {
+		d.stopping, d.idle = true, make(chan struct{})
+		d.closeIdle()
+	}
+	idle := d.idle
+	d.mu.Unlock()
+
+	returned := make(chan struct{})
 	go func() {
 		d.running.Wait()
-		close(stopped)
+		close(returned)
 	}()
+	// A handler that is not running is not late, even when ctx has already
+	// expired by the time Stop is called: idle is looked at before the
+	// deadline, which select would otherwise pick at random (N-4 of review #1
+	// of T-473).
 	select {
-	case <-stopped:
-		return nil
-	case <-ctx.Done():
-		return fmt.Errorf("consumer: subscriptions did not stop: %w", ctx.Err())
+	case <-idle:
+	default:
+		select {
+		case <-returned:
+			return nil
+		case <-idle:
+		case <-ctx.Done():
+			return fmt.Errorf("consumer: handlers of the subscriptions did not stop: %w", ctx.Err())
+		}
 	}
+	grace := d.cfg.Timers.After(StopTransportGrace)
+	defer grace.Stop()
+	select {
+	case <-returned:
+		return nil
+	case <-grace.C():
+	case <-ctx.Done():
+	}
+	d.cfg.Log.Warn("consumer: subscriptions left to end inside the transport, no handler of theirs runs")
+	return nil
 }
 
-// Err is the first subscription that ended with an error, if any: the gateway
-// no longer hears that topic.
+// Err says why the gateway does not hear a topic now: the end of the
+// subscription of the first topic, in the order of Topics, that has not been
+// restored yet. Nil when every topic is heard.
 func (d *Dispatcher) Err() error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.failure
+	for _, topic := range Topics {
+		if s := d.subscriptions[topic]; s != nil && s.down != nil {
+			return fmt.Errorf("consumer: subscription to %s: %w", topic, s.down)
+		}
+	}
+	return nil
 }
 
 // Handle is the handler of every subscription and of the catch-up. An error

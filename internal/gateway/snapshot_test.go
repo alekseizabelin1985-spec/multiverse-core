@@ -169,16 +169,28 @@ func TestTheShutdownSnapshotIsWrittenAfterEverythingStopped(t *testing.T) {
 }
 
 // Stop keeps within the deadline it is given: a store that does not answer
-// the write of the snapshot costs the deadline, an error and nothing more, and
-// the databases are closed. The wipe a blocked /forget left is finished before
-// the snapshot, so the hanging store does not leave the external ID in
-// links.db (Mi-2 of review #1 of T-309, ADR-019 addendum p. 1).
+// the write of the snapshot costs half of what was left of the deadline and a
+// warning, not an error of Stop, and the databases are closed. The wipe a
+// blocked /forget left is finished before the snapshot, so the hanging store
+// does not leave the external ID in links.db (Mi-2 of review #1 of T-309,
+// ADR-019 addendum p. 1; acceptance of T-309, component §11.2).
 func TestAStoreThatDoesNotAnswerDoesNotHoldTheStop(t *testing.T) {
+	const deadline = 2 * time.Second
+	var (
+		mu      sync.Mutex
+		writeBy time.Time
+		cut     time.Time
+	)
 	objects := &hookedStore{Client: snapshotStore(t, nil), onPut: func(ctx context.Context, _ string) error {
+		by, _ := ctx.Deadline()
 		<-ctx.Done()
+		mu.Lock()
+		writeBy, cut = by, clock.Real{}.Now()
+		mu.Unlock()
 		return ctx.Err()
 	}}
-	r := startWith(t, runtime.ModeLive, sqlitedir.Temp(t), objects)
+	logs := &syncLog{}
+	r := startOpts(t, runtime.ModeLive, sqlitedir.Temp(t), options{objects: objects, log: logs})
 	consent(t, r.client, externalID)
 	if err := gateway.SetLinksBusyTimeout(r.ctx, 0); err != nil {
 		t.Fatal(err)
@@ -191,15 +203,34 @@ func TestAStoreThatDoesNotAnswerDoesNotHoldTheStop(t *testing.T) {
 	if !gateway.CompactionPending(r.ctx) || occurrences(t, r.dir, externalID) == 0 {
 		t.Fatal("control: no wipe is pending, Stop has nothing to finish")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
 	began := clock.Real{}.Now()
+	ctx, cancel := context.WithDeadline(context.Background(), began.Add(deadline))
+	defer cancel()
 	err := r.ctx.Stop(ctx)
-	if took := (clock.Real{}).Now().Sub(began); took > 3*time.Second {
-		t.Errorf("Stop took %v with a deadline of 300 ms", took)
+	if took := (clock.Real{}).Now().Sub(began); took > deadline {
+		t.Errorf("Stop took %v with a deadline of %v", took, deadline)
 	}
-	if err == nil || !strings.Contains(err.Error(), "snapshot") {
-		t.Errorf("Stop = %v, want the snapshot it could not write", err)
+	if err != nil {
+		t.Errorf("Stop = %v, want a snapshot not written to be a warning only", err)
+	}
+	mu.Lock()
+	by, at := writeBy, cut
+	mu.Unlock()
+	if at.IsZero() {
+		t.Fatal("control: the snapshot of the shutdown did not reach the store")
+	}
+	// Stop takes half of its deadline from its own first line, a moment after
+	// began: by is began + deadline/2 plus half of that moment. The margin
+	// keeps the check off the resolution of the monotonic clock, which is a
+	// tick on Windows and nanoseconds on Linux (Ma-1 of review #1 of T-473);
+	// the whole rest of the deadline (began + deadline) is still far outside.
+	const margin = 50 * time.Millisecond
+	if by.Sub(began) > deadline/2+margin || at.Sub(began) > deadline/2+deadline/4 {
+		t.Errorf("the write of the snapshot had until %v and was cut %v after Stop began, want half of the %v of Stop",
+			by.Sub(began), at.Sub(began), deadline)
+	}
+	if !strings.Contains(logs.String(), `"level":"WARN","msg":"snapshot at the shutdown not written"`) {
+		t.Errorf("no warning of the snapshot not written in the log:\n%s", logs.String())
 	}
 	if !gateway.DatabasesClosed(r.ctx) {
 		t.Error("Stop left the databases open")

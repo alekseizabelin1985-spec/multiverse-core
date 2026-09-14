@@ -74,7 +74,7 @@ func (f *fixture) dispatcher(t *testing.T, bus eventbus.Bus, effects map[string]
 		bus = f.bus
 	}
 	d, err := consumer.New(consumer.Config{
-		Bus: bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock,
+		Bus: bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
 		Log: slog.New(slog.NewJSONHandler(io.Discard, nil)), Effects: effects,
 	})
 	if err != nil {
@@ -559,7 +559,7 @@ func TestTheCatchUpGoesLiveAtTheEndAndTheTailTakesItsEffectsOnce(t *testing.T) {
 		return nil
 	}
 	d, err := consumer.New(consumer.Config{
-		Bus: f.bus, Journal: journal, DB: f.db, Model: f.model, Clock: f.clock,
+		Bus: f.bus, Journal: journal, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
 		Log:     slog.New(slog.NewJSONHandler(io.Discard, nil)),
 		Effects: map[string][]consumer.Effect{readmodel.TypeEntityCreated: {effect}, readmodel.TypeEntityUpdated: {effect}},
 	})
@@ -681,7 +681,7 @@ func TestTheRepairRunsBeforeTheCursorsMove(t *testing.T) {
 	var mu sync.Mutex
 	var calls []call
 	d, err := consumer.New(consumer.Config{
-		Bus: f.bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock,
+		Bus: f.bus, Journal: f.bus, DB: f.db, Model: f.model, Clock: f.clock, Timers: f.clock.Timers(),
 		Log:     slog.New(slog.NewJSONHandler(io.Discard, nil)),
 		Repairs: func(ev eventbus.Event) bool { return ev.World != nil && ev.World.Entity.ID == world },
 		Repair: func(ctx context.Context, ev eventbus.Event) {

@@ -261,8 +261,18 @@ func (c *Context) Start(ctx context.Context, deps runtime.Deps) error {
 	if err != nil {
 		return errors.Join(fmt.Errorf("gateway: %w", err), gatewayDB.Close(), linksDB.Close())
 	}
+	// The pauses of the consumer between its subscriptions are a property of
+	// the connection to the broker, not domain time, like the redeliveries of
+	// the bus (C-01 v1.4) and the wait of a long-poll (C-01 v1.8): the null
+	// timers of a replay would never subscribe again and never end the grace of
+	// its Stop. In live mode they are Deps.Timers.
+	subscriptionTimers := deps.Timers
+	if deps.Mode == runtime.ModeReplay {
+		subscriptionTimers = clock.RealTimers{}
+	}
 	dispatcher, err := consumer.New(consumer.Config{
-		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock, Log: log,
+		Bus: deps.Bus, Journal: deps.Journal, DB: gatewayDB, Model: model, Clock: deps.Clock,
+		Timers: subscriptionTimers, Log: log,
 		Effects: consumer.MergeEffects(map[string][]consumer.Effect{
 			readmodel.TypeEntityCreated:  {svc.chars.OnCreated},
 			readmodel.TypeUpdateRejected: {svc.chars.OnRejected},
@@ -613,13 +623,17 @@ func (c *Context) sweep(ctx context.Context, clk clock.Clock, timers clock.Timer
 // comes after everything that changes what it records has stopped, while the
 // bus is still open for its snapshot.created; it is skipped when the sweeper
 // or the writer did not stop, because either may still hold the only
-// connection of gateway.db. The databases are closed even when something does
-// not stop before the deadline of ctx: a context that is not started again
-// must not keep its files open (Windows locks them).
+// connection of gateway.db. Its write has a deadline of its own, a share of
+// the deadline of Stop (shutdownSnapshotContext), and a
+// snapshot not written is a warning, not an error of Stop (component §11.2).
+// The databases are closed even when something does not stop before the
+// deadline of ctx: a context that is not started again must not keep its
+// files open (Windows locks them).
 //
 // The lock of the context is held only to take the context out of service:
 // Health answers fail at once while Stop waits (R2-N-3 of review #2 of T-303).
 func (c *Context) Stop(ctx context.Context) error {
+	began := clock.Real{}.Now()
 	c.mu.Lock()
 	if !c.started {
 		c.mu.Unlock()
@@ -668,9 +682,14 @@ func (c *Context) Stop(ctx context.Context) error {
 			errs = append(errs, err)
 		}
 		if stopped {
-			if err := snaps.write(ctx, snapshot.ReasonShutdown); err != nil {
-				log.Error("snapshot at the shutdown", slog.String("error", err.Error()))
-				errs = append(errs, fmt.Errorf("gateway: snapshot at the shutdown: %w", err))
+			// The snapshot of the shutdown is an audit (component §11.2): one
+			// not written costs a warning, and neither the rest of this Stop
+			// nor the other contexts of the process, which share the deadline.
+			writeCtx, cancel := shutdownSnapshotContext(ctx, began, snaps.budget)
+			err := snaps.write(writeCtx, snapshot.ReasonShutdown)
+			cancel()
+			if err != nil {
+				log.Warn("snapshot at the shutdown not written", slog.String("error", err.Error()))
 			}
 		}
 	}
@@ -683,9 +702,32 @@ func (c *Context) Stop(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
+// shutdownSnapshotContext is the context of the snapshot of the shutdown. Its
+// write ends by the middle of the deadline of Stop, taken from began, the
+// moment Stop began, and lasts no more than budget, the SnapshotWriteBudget of
+// any write. The second half is what the closing of the databases and the
+// contexts stopped after the gateway get: runtime.StopTimeout is one deadline
+// for the whole process. The deadline of ctx is a moment of the wall clock, so
+// the moments are taken on it, in replay too.
+func shutdownSnapshotContext(ctx context.Context, began time.Time, budget time.Duration) (context.Context, context.CancelFunc) {
+	by := clock.Real{}.Now().Add(budget)
+	if deadline, ok := ctx.Deadline(); ok {
+		by = minTime(by, began.Add(deadline.Sub(began)/2))
+	}
+	return context.WithDeadline(ctx, by)
+}
+
+func minTime(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
+}
+
 // Health is the /health of the gateway (component §11.4): fail before Start,
 // after Stop and when either database fails its check; degraded while a
-// /forget waits for its compaction, while a subscription is down, while the
+// /forget waits for its compaction, while a subscription is down (from its end
+// until one started again is heard, consumer.Dispatcher.Err), while the
 // projection is stale, when the snapshot of State could not be loaded — the
 // store configured wrong, unreadable, the snapshot not checking — and when the
 // snapshot of the gateway is corrupted, could not be written, or cannot be
