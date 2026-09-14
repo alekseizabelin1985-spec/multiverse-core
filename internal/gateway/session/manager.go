@@ -70,6 +70,13 @@ type Config struct {
 	// Idle is MV_GATEWAY_SESSION_IDLE; zero is DefaultIdle.
 	Idle time.Duration
 	Log  *slog.Logger
+	// OnEnded, when set, is told of every session that ended, after its end is
+	// recorded and published — the trigger of the snapshot of the gateway
+	// (component §11.2). It runs under the lock of the manager and, for an end
+	// inside a transaction of the caller, while that transaction holds the
+	// only connection of gateway.db: it must return at once and must not read
+	// gateway.db.
+	OnEnded func(Session)
 }
 
 // Session is one row of sessions.
@@ -312,6 +319,9 @@ func (m *Manager) end(ctx context.Context, s Session, reason string, at time.Tim
 		_, undo := m.cfg.DB.ExecContext(context.WithoutCancel(ctx),
 			`UPDATE sessions SET state = ?, ended_at = NULL, end_reason = NULL WHERE id = ?`, StateActive, s.ID)
 		return errors.Join(err, undo)
+	}
+	if m.cfg.OnEnded != nil {
+		m.cfg.OnEnded(s)
 	}
 	return nil
 }

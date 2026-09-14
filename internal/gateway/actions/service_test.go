@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -319,14 +321,19 @@ func TestAReplacementThatIsNoTextIsRefused(t *testing.T) {
 	}
 }
 
-// 503 bus_unavailable when a publication fails: the key is not stored and the
-// turn is not recorded, so the client repeats with the same key and the action
-// is taken then (C-08, component §5.5).
+// 503 bus_unavailable when a publication fails: the key is not stored, so the
+// client repeats with the same key and the action is taken then (C-08,
+// component §5.5). An action event the bus did not acknowledge takes its turn
+// back; a proposal that fails after the action went out leaves the turn of the
+// action, whose narrative is coming (review #1 of T-308, Mi-1).
 func TestAFailedPublicationKeepsNothing(t *testing.T) {
-	for _, failing := range []string{actions.TypeEnteredRegion, actions.TypeUpdateProposed} {
-		t.Run(failing, func(t *testing.T) {
+	for _, tc := range []struct {
+		failing  string
+		turnLeft bool
+	}{{actions.TypeEnteredRegion, false}, {actions.TypeUpdateProposed, true}} {
+		t.Run(tc.failing, func(t *testing.T) {
 			f := newFixture(t, options{})
-			f.bus.setFail(func(ev eventbus.Event) bool { return ev.Type == failing })
+			f.bus.setFail(func(ev eventbus.Event) bool { return ev.Type == tc.failing })
 			cmd := actions.Command{PlayerID: playerA, ActionKey: "k-enter", Type: api.ActionEnter, Target: forest}
 			a := submit(t, f, cmd)
 			if a.Status != http.StatusServiceUnavailable || code(a) != api.CodeBusUnavailable {
@@ -335,8 +342,13 @@ func TestAFailedPublicationKeepsNothing(t *testing.T) {
 			if _, found, err := f.keys.Lookup(context.Background(), playerA, "k-enter", f.clock.Now()); err != nil || found {
 				t.Fatalf("key stored after a failed publication: %v %v", found, err)
 			}
-			if len(f.turns.accepted) != 0 || len(f.turns.rejected) != 0 {
-				t.Fatalf("turns recorded: accepted %v, rejected %v", f.turns.accepted, f.turns.rejected)
+			action := f.bus.attempted()[0].ID
+			if f.turns.recorded(action) != tc.turnLeft || len(f.turns.rejected) != 0 {
+				t.Fatalf("turn of %s stands %v, want %v; withdrawn %v, rejected %v", action, f.turns.recorded(action), tc.turnLeft,
+					f.turns.withdrawn, f.turns.rejected)
+			}
+			if len(f.turns.acked) != 0 {
+				t.Errorf("acknowledged turns %v after a failure", f.turns.acked)
 			}
 			f.bus.setFail(nil)
 			a = submit(t, f, cmd)
@@ -346,8 +358,106 @@ func TestAFailedPublicationKeepsNothing(t *testing.T) {
 			if a.Accepted.Turn.Seq != 1 {
 				t.Errorf("the failed action took a turn: seq %d", a.Accepted.Turn.Seq)
 			}
+			if !f.turns.recorded(a.Accepted.CorrelationID) || !slices.Equal(f.turns.acked, []string{a.Accepted.CorrelationID}) {
+				t.Errorf("after the repeat: turn stands %v, acknowledged %v", f.turns.recorded(a.Accepted.CorrelationID), f.turns.acked)
+			}
 			if _, found, _ := f.keys.Lookup(context.Background(), playerA, "k-enter", f.clock.Now()); !found {
 				t.Error("key not stored after the accepted repeat")
+			}
+		})
+	}
+}
+
+// The turn stands before the player.* event reaches the bus (component §5.5;
+// review #1 of T-308, Mi-1): the bus delivers asynchronously, and a narrative
+// handled before the turn was written would find no turn to complete. The
+// events before the action — gm.created of the legacy path — go out before the
+// turn, and the acknowledgement is recorded once the batch is out.
+func TestTheTurnIsRecordedBeforeTheActionIsPublished(t *testing.T) {
+	for _, gmPath := range []string{eventbus.GMPathAgent, eventbus.GMPathLegacy} {
+		t.Run(gmPath, func(t *testing.T) {
+			f := newFixture(t, options{gmPath: gmPath})
+			var standing []string
+			f.bus.setHooks(func(_ context.Context, ev eventbus.Event) error {
+				standing = append(standing, ev.Type+":"+strconv.FormatBool(f.turns.recorded(ev.ID))+":"+strconv.Itoa(len(f.turns.acked)))
+				return nil
+			}, nil)
+			a := submit(t, f, actions.Command{PlayerID: playerA, ActionKey: "k", Type: api.ActionEnter, Target: forest})
+			if a.Status != http.StatusAccepted {
+				t.Fatalf("answer = %d %s", a.Status, code(a))
+			}
+			want := []string{actions.TypeEnteredRegion + ":true:0", actions.TypeUpdateProposed + ":false:0"}
+			if gmPath == eventbus.GMPathLegacy {
+				want = append([]string{actions.TypeGMCreated + ":false:0"}, want...)
+			}
+			if !slices.Equal(standing, want) {
+				t.Errorf("publications (type:its own turn stands:acknowledged) = %v, want %v", standing, want)
+			}
+			if !slices.Equal(f.turns.acked, []string{a.Accepted.CorrelationID}) {
+				t.Errorf("acknowledged %v, want the action once", f.turns.acked)
+			}
+		})
+	}
+}
+
+// A turn that cannot be recorded publishes no action: 500 internal, no key, and
+// the batch is held, so the repeat publishes the same action once the store is
+// back. A budget that ran out before the turn was written is answered the same
+// way as any other failure of the store: the bus is up, and 503
+// bus_unavailable would send the reference client back into the same busy
+// gateway.db (component §5.5, decision of architect#3 on T-308).
+func TestATurnThatCannotBeRecordedPublishesNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		code   string
+		fail   func(f fixture, entered chan<- struct{}) func(ctx context.Context) error
+	}{
+		{"the store fails", http.StatusInternalServerError, api.CodeInternal,
+			func(fixture, chan<- struct{}) func(context.Context) error {
+				return func(context.Context) error { return errors.New("gateway.db: disk I/O error") }
+			}},
+		{"the store reports its deadline", http.StatusInternalServerError, api.CodeInternal,
+			func(fixture, chan<- struct{}) func(context.Context) error {
+				return func(context.Context) error { return fmt.Errorf("turns: begin: %w", context.DeadlineExceeded) }
+			}},
+		{"the budget runs out in the store", http.StatusInternalServerError, api.CodeInternal,
+			func(f fixture, entered chan<- struct{}) func(context.Context) error {
+				return func(ctx context.Context) error {
+					close(entered)
+					<-ctx.Done()
+					return errors.New("sqlite: interrupted")
+				}
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, options{})
+			entered := make(chan struct{})
+			f.turns.mu.Lock()
+			f.turns.failAccepted = tc.fail(f, entered)
+			f.turns.mu.Unlock()
+			cmd := actions.Command{PlayerID: playerA, ActionKey: "k", Type: api.ActionLook}
+			answer := make(chan actions.Answer, 1)
+			go func() { answer <- submit(t, f, cmd) }()
+			var a actions.Answer
+			select {
+			case a = <-answer:
+			case <-entered:
+				f.clock.Advance(api.RequestTimeout)
+				a = <-answer
+			}
+			if a.Status != tc.status || code(a) != tc.code {
+				t.Fatalf("answer = %d %s, want %d %s", a.Status, code(a), tc.status, tc.code)
+			}
+			if n := len(f.bus.attempted()); n != 0 || keyStored(t, f, playerA, "k") || f.svc.Pending() != 1 {
+				t.Fatalf("%d publications, key stored %v, pending %d; want none, no key, one batch", n, keyStored(t, f, playerA, "k"), f.svc.Pending())
+			}
+			f.turns.mu.Lock()
+			f.turns.failAccepted = nil
+			f.turns.mu.Unlock()
+			a = submit(t, f, cmd)
+			if a.Status != http.StatusAccepted || count(f.bus.published(), actions.TypeLooked) != 1 || !f.turns.recorded(a.Accepted.CorrelationID) {
+				t.Errorf("repeat = %d %s, published %v", a.Status, code(a), types(f.bus.published()))
 			}
 		})
 	}

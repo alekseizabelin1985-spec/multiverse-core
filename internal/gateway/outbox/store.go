@@ -274,6 +274,29 @@ func (s *Store) ReleaseExpiredLeases(ctx context.Context, now time.Time) (int, e
 	return int(n), nil
 }
 
+// Pending counts the pending deliveries and returns how old the oldest of
+// them is at now by created_at; zero age for an empty queue, and never a
+// negative one (component §11.4: outbox_pending, outbox_oldest_age_s). It is a
+// read of /health: ctx bounds the wait for the only connection.
+func (s *Store) Pending(ctx context.Context, now time.Time) (int, time.Duration, error) {
+	var (
+		count  int
+		oldest sql.NullString
+	)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), MIN(created_at) FROM deliveries WHERE state = 'pending'`).
+		Scan(&count, &oldest); err != nil {
+		return 0, 0, fmt.Errorf("outbox: pending: %w", err)
+	}
+	if !oldest.Valid {
+		return count, 0, nil
+	}
+	created, err := parseTime(oldest.String)
+	if err != nil {
+		return 0, 0, fmt.Errorf("outbox: pending: %w", err)
+	}
+	return count, max(now.Sub(created), 0), nil
+}
+
 // Expire drops the pending deliveries past their expires_at.
 func (s *Store) Expire(ctx context.Context, now time.Time) (int, error) {
 	return s.exec(ctx, "expire", `UPDATE deliveries SET state = 'dropped', leased_until = NULL
