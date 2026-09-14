@@ -5,9 +5,11 @@
 // A turn is a row of turns in gateway.db. An accepted action becomes a turn
 // with the deadline MV_GATEWAY_TURN_TIMEOUT; the facts of its mechanics and
 // its narrative move it on, and the acknowledgement of the narrative by its
-// last recipient completes it. A turn past its deadline times out. An action
-// refused by its preconditions is a turn too: it is published at once with
-// status=rejected.
+// last recipient completes it — once its mechanics is recorded too, when the
+// action has Phase 1 (component §7.7). A turn past its deadline times out,
+// unless its narrative reached every recipient and only its mechanics is
+// missing (Sweep). An action refused by its preconditions is a turn too: it is
+// published at once with status=rejected.
 //
 // The tracker implements actions.Turns for the service of actions. The steps
 // that follow the facts — OnMechanics, OnNarrative, OnDelivered — take the
@@ -22,11 +24,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"multiverse-core.io/internal/gateway/actions"
 	"multiverse-core.io/internal/gateway/api"
+	"multiverse-core.io/internal/gateway/outbox"
 	"multiverse-core.io/internal/gateway/session"
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
@@ -77,6 +82,50 @@ const (
 	GeneratedByTemplate = "template"
 	GeneratedByNone     = "none"
 )
+
+// phase1 are the actions whose turn has a Phase 1 — the column "Phase 1" of
+// api-contracts.md §1.4 — each with the type of the event that is its
+// mechanics: the decision of a fight or a flight, the fact of State of a move
+// or a rest. A turn of one of them completes only once that mechanics is
+// recorded (component §7.7); look, say and defend have none and complete by
+// the acknowledgement of their narrative.
+//
+// The type is fixed because a fight has mechanics on two topics — the decision
+// on game_events, the facts of State it causes on system_events — and C-01
+// orders neither against the other: the first of any of them would make
+// result_event_id depend on which topic the consumer read first. The decision
+// is the result the player is told (component §7.2), and the facts of a
+// fight are applied without a delivery.
+var phase1 = map[string]string{
+	api.ActionEnter:  outbox.TypeEntityUpdated,
+	api.ActionLeave:  outbox.TypeEntityUpdated,
+	api.ActionAttack: outbox.TypeCombatDecided,
+	api.ActionFlee:   outbox.TypeCombatDecided,
+	api.ActionRest:   outbox.TypeEntityUpdated,
+}
+
+// hasPhase1 reports whether the turn of an action waits for its mechanics.
+func hasPhase1(actionType string) bool {
+	_, ok := phase1[actionType]
+	return ok
+}
+
+// notMechanicsOf are the actions with Phase 1 whose mechanics is not an event
+// of type typ, sorted: the turns of those actions do not record it.
+func notMechanicsOf(typ string) []any {
+	out := make([]string, 0, len(phase1))
+	for action, mechanics := range phase1 {
+		if mechanics != typ {
+			out = append(out, action)
+		}
+	}
+	slices.Sort(out)
+	args := make([]any, 0, len(out))
+	for _, action := range out {
+		args = append(args, action)
+	}
+	return args
+}
 
 // DB is what a step of a turn writes through: the database or the transaction
 // of the caller.
@@ -253,20 +302,58 @@ func (t *Tracker) Rejected(ctx context.Context, turn actions.Turn, code string) 
 }
 
 // OnMechanics records the fact of Phase 1 of a turn: the first combat.decided
-// or entity.updated of its correlation. q is the transaction of the consumer.
+// or entity.updated of its correlation — for an action with Phase 1, the first
+// of the type of its mechanics (phase1). A turn whose narrative every
+// recipient has already acknowledged was waiting for it and completes here,
+// with the narrative_at of that acknowledgement (component §7.7). q is the
+// transaction of the consumer.
+//
+// The completion does not fail the effect of the mechanics: when
+// analytics.turn.completed is not published, the completion alone is rolled
+// back, the mechanics stays recorded, and the next Sweep publishes the turn
+// under the same id. Failing the effect would repeat it on the bus and, after
+// the repeats, send it to dead letters with the text of the mechanics the
+// player is owed — a text lost for a counter (component §5.5, §7.7).
 func (t *Tracker) OnMechanics(ctx context.Context, q DB, ev eventbus.Event, at time.Time) error {
 	pa := ev.Path()
-	phase1, _ := pa.GetString("phase1_mode")
+	mode, _ := pa.GetString("phase1_mode")
 	lod, _ := pa.GetString("lod")
-	if _, err := q.ExecContext(ctx, `UPDATE turns SET mechanics_at = COALESCE(mechanics_at, ?),
+	others := notMechanicsOf(ev.Type)
+	args := append([]any{formatTime(at), ev.ID, nullable(mode), nullable(lod), StatusAccepted, StatusMechanicsApplied,
+		ev.CorrelationID(), StatusAccepted, StatusMechanicsApplied, StatusNarrated}, others...)
+	res, err := q.ExecContext(ctx, `UPDATE turns SET mechanics_at = COALESCE(mechanics_at, ?),
 		result_event_id = COALESCE(result_event_id, ?), phase1_mode = COALESCE(phase1_mode, ?), lod = COALESCE(lod, ?),
 		status = CASE WHEN status = ? THEN ? ELSE status END
-		WHERE correlation_id = ? AND status IN (?, ?, ?)`,
-		formatTime(at), ev.ID, nullable(phase1), nullable(lod), StatusAccepted, StatusMechanicsApplied,
-		ev.CorrelationID(), StatusAccepted, StatusMechanicsApplied, StatusNarrated); err != nil {
+		WHERE correlation_id = ? AND status IN (?, ?, ?)`+notIn("action_type", len(others)), args...)
+	if err != nil {
 		return fmt.Errorf("turns: mechanics of %s: %w", ev.CorrelationID(), err)
 	}
-	return nil
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return err
+	}
+	return t.completeByMechanics(ctx, q, ev.CorrelationID())
+}
+
+// completeByMechanics completes a turn that waited for its mechanics inside a
+// savepoint of q, and rolls the savepoint back when the publication fails:
+// what q wrote before stays, and so does the mechanics of the turn.
+func (t *Tracker) completeByMechanics(ctx context.Context, q DB, correlationID string) error {
+	if _, err := q.ExecContext(ctx, `SAVEPOINT turn_completion`); err != nil {
+		return fmt.Errorf("turns: completion of %s: %w", correlationID, err)
+	}
+	err := t.completeDelivered(ctx, q, correlationID, nil)
+	if errors.Is(err, ErrPublish) {
+		if _, rollback := q.ExecContext(ctx, `ROLLBACK TO turn_completion`); rollback != nil {
+			return errors.Join(err, rollback)
+		}
+		t.cfg.Log.LogAttrs(ctx, slog.LevelWarn, "turns: a turn is left to the sweeper: its completion was not published",
+			slog.String("correlation_id", correlationID), slog.String("error", err.Error()), slog.Bool("handled", true))
+		err = nil
+	}
+	if _, release := q.ExecContext(ctx, `RELEASE turn_completion`); release != nil {
+		return errors.Join(err, fmt.Errorf("turns: completion of %s: %w", correlationID, release))
+	}
+	return err
 }
 
 // OnNarrative records the narrative.output of a turn: what generated it, the
@@ -323,77 +410,131 @@ func (t *Tracker) OnNarrative(ctx context.Context, q DB, ev eventbus.Event, reci
 	if recipients > 0 {
 		return nil
 	}
-	return t.completeDelivered(ctx, q, ev.CorrelationID(), t.cfg.Clock.Now())
+	now := t.cfg.Clock.Now()
+	return t.completeDelivered(ctx, q, ev.CorrelationID(), &now)
 }
 
 // OnDelivered counts one delivery of the narrative of a turn acknowledged at
-// at. The acknowledgement of the last recipient completes the turn: its
-// narrative_at is that moment, and analytics.turn.completed goes out with
-// status ok, or degraded when a template told the narrative. q is the
-// transaction of the caller; a failure to publish fails it, so the
-// acknowledgement is repeated and the completion with it.
+// at. The acknowledgement of the last recipient records narrative_at, that
+// moment, and completes the turn: analytics.turn.completed goes out with
+// status ok, or degraded when a template told the narrative. A turn with
+// Phase 1 whose mechanics is not recorded yet stays narrated, and OnMechanics
+// or Sweep completes it (component §7.7). q is the transaction of the caller;
+// a failure to publish fails it, so the acknowledgement is repeated and the
+// completion with it.
+//
+// Deliveries are counted up to the recipients: a turn waiting for its
+// mechanics does not count the delivery of a second narrative of its
+// correlation, which a turn completed by the acknowledgement before it would
+// not have counted either.
 func (t *Tracker) OnDelivered(ctx context.Context, q DB, correlationID string, at time.Time) error {
 	if _, err := q.ExecContext(ctx, `UPDATE turns SET delivered_count = COALESCE(delivered_count, 0) + 1
-		WHERE correlation_id = ? AND status = ?`, correlationID, StatusNarrated); err != nil {
+		WHERE correlation_id = ? AND status = ? AND COALESCE(delivered_count, 0) < COALESCE(recipients_count, 0)`,
+		correlationID, StatusNarrated); err != nil {
 		return fmt.Errorf("turns: delivery of %s: %w", correlationID, err)
 	}
-	return t.completeDelivered(ctx, q, correlationID, at)
+	return t.completeDelivered(ctx, q, correlationID, &at)
 }
 
 // completeDelivered completes a narrated turn whose every recipient has its
-// narrative, at at.
-func (t *Tracker) completeDelivered(ctx context.Context, q DB, correlationID string, at time.Time) error {
+// narrative. acked is the moment the last of them acknowledged it, recorded as
+// narrative_at when the turn has none yet; nil is a step that is not an
+// acknowledgement — the mechanics of a turn waiting for it.
+func (t *Tracker) completeDelivered(ctx context.Context, q DB, correlationID string, acked *time.Time) error {
 	row, found, err := load(ctx, q, correlationID)
 	if err != nil || !found || row.Status != StatusNarrated || row.DeliveredCount < row.RecipientsCount {
 		return err
 	}
-	status, counts := StatusCompleted, session.Counts{}
-	if row.GeneratedBy == GeneratedByTemplate {
-		status, counts.Degraded = StatusDegraded, 1
+	if row.NarrativeAt == nil && acked != nil {
+		if _, err := q.ExecContext(ctx, `UPDATE turns SET narrative_at = ? WHERE correlation_id = ?`,
+			formatTime(*acked), correlationID); err != nil {
+			return fmt.Errorf("turns: narrative of %s delivered: %w", correlationID, err)
+		}
+		row.NarrativeAt = acked
 	}
-	return t.finish(ctx, q, row, status, &at, counts)
+	if row.NarrativeAt == nil || (hasPhase1(row.ActionType) && row.MechanicsAt == nil) {
+		return nil
+	}
+	status, counts := narratedOutcome(row)
+	return t.finish(ctx, q, row, status, counts)
 }
 
-// Sweep times out the open turns whose deadline passed by now and publishes
-// each of them with status=timeout; it returns how many it closed. It also
-// forgets the reserved numbers of the sessions that are no longer active.
+// Sweep closes the open turns whose deadline passed by now and publishes each
+// of them; it returns how many it closed. A turn whose narrative every
+// recipient has acknowledged, and which waited for its mechanics in vain — a
+// proposal State refused, a lost event — completes with the status of its
+// narrative, without the fields of the mechanics, and is logged: the player has
+// had it all (component §7.7). Every other turn past its deadline times out.
+//
+// A turn that has all it waited for — its narrative delivered, its mechanics
+// recorded — and is still open, because OnMechanics could not publish its
+// completion, is completed whatever its deadline, with its mechanics. Sweep
+// also forgets the reserved numbers of the sessions that are no longer active.
 func (t *Tracker) Sweep(ctx context.Context, now time.Time) (int, error) {
-	ids, err := t.expired(ctx, now)
+	ids, err := t.due(ctx, now)
 	if err != nil {
 		return 0, err
 	}
 	closed := 0
 	var errs []error
 	for _, id := range ids {
-		timedOut := false
+		var finished *Row
 		err := t.inTx(ctx, func(tx *sql.Tx) error {
 			row, found, err := load(ctx, tx, id)
 			if err != nil || !found || !open(row.Status) {
 				return err
 			}
-			timedOut = true
-			return t.finish(ctx, tx, row, StatusTimeout, nil, session.Counts{Failed: 1})
+			finished = &row
+			if !delivered(row) {
+				return t.finish(ctx, tx, row, StatusTimeout, session.Counts{Failed: 1})
+			}
+			status, counts := narratedOutcome(row)
+			return t.finish(ctx, tx, row, status, counts)
 		})
 		switch {
 		case err != nil:
 			errs = append(errs, err)
-		case timedOut:
+		case finished != nil:
 			closed++
+			if delivered(*finished) && finished.MechanicsAt == nil {
+				t.cfg.Log.LogAttrs(ctx, slog.LevelWarn, "turns: a delivered turn completed without its mechanics",
+					slog.String("correlation_id", finished.CorrelationID), slog.String("action_type", finished.ActionType),
+					slog.Bool("handled", true))
+			}
 		}
 	}
 	return closed, errors.Join(append(errs, t.forgetEnded(ctx))...)
 }
 
-// finish moves a turn to its final status, counts it in its session and
-// publishes it, all within q.
-func (t *Tracker) finish(ctx context.Context, q DB, row Row, status string, narrativeAt *time.Time, counts session.Counts) error {
-	var at any
-	if narrativeAt != nil {
-		at = formatTime(*narrativeAt)
-		row.NarrativeAt = narrativeAt
+// notIn is the condition "column is none of n parameters", empty for none.
+func notIn(column string, n int) string {
+	if n == 0 {
+		return ""
 	}
-	if _, err := q.ExecContext(ctx, `UPDATE turns SET status = ?, narrative_at = COALESCE(?, narrative_at) WHERE correlation_id = ?`,
-		status, at, row.CorrelationID); err != nil {
+	return " AND " + column + " NOT IN (?" + strings.Repeat(", ?", n-1) + ")"
+}
+
+// delivered reports whether every recipient of the narrative of an open turn
+// has acknowledged it: only a turn waiting for its mechanics stays open so.
+func delivered(row Row) bool {
+	return row.Status == StatusNarrated && row.DeliveredCount >= row.RecipientsCount && row.NarrativeAt != nil
+}
+
+// narratedOutcome is the final status of a turn whose narrative reached its
+// recipients, and what it adds to the counters of its session: degraded when a
+// template told it.
+func narratedOutcome(row Row) (string, session.Counts) {
+	if row.GeneratedBy == GeneratedByTemplate {
+		return StatusDegraded, session.Counts{Degraded: 1}
+	}
+	return StatusCompleted, session.Counts{}
+}
+
+// finish moves a turn to its final status, counts it in its session and
+// publishes it, all within q. The turn keeps the narrative_at it has recorded.
+func (t *Tracker) finish(ctx context.Context, q DB, row Row, status string, counts session.Counts) error {
+	if _, err := q.ExecContext(ctx, `UPDATE turns SET status = ? WHERE correlation_id = ?`,
+		status, row.CorrelationID); err != nil {
 		return fmt.Errorf("turns: finish %s: %w", row.CorrelationID, err)
 	}
 	if err := session.CountTurn(ctx, q, row.SessionID, counts); err != nil {
@@ -403,18 +544,24 @@ func (t *Tracker) finish(ctx context.Context, q DB, row Row, status string, narr
 	return t.publish(ctx, Completed(row))
 }
 
-func (t *Tracker) expired(ctx context.Context, now time.Time) ([]string, error) {
-	rows, err := t.cfg.DB.QueryContext(ctx, `SELECT correlation_id FROM turns WHERE status IN (?, ?, ?) AND deadline_at <= ?
-		ORDER BY deadline_at, correlation_id`, StatusAccepted, StatusMechanicsApplied, StatusNarrated, formatTime(now))
+// due are the open turns Sweep closes at now: those past their deadline, and
+// the narrated ones that have their narrative delivered and their mechanics
+// recorded — left open by a completion that was not published.
+func (t *Tracker) due(ctx context.Context, now time.Time) ([]string, error) {
+	rows, err := t.cfg.DB.QueryContext(ctx, `SELECT correlation_id FROM turns WHERE status IN (?, ?, ?) AND (deadline_at <= ?
+		OR (status = ? AND mechanics_at IS NOT NULL AND narrative_at IS NOT NULL
+			AND COALESCE(delivered_count, 0) >= COALESCE(recipients_count, 0)))
+		ORDER BY deadline_at, correlation_id`, StatusAccepted, StatusMechanicsApplied, StatusNarrated, formatTime(now),
+		StatusNarrated)
 	if err != nil {
-		return nil, fmt.Errorf("turns: expired turns: %w", err)
+		return nil, fmt.Errorf("turns: turns due: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	var ids []string
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("turns: expired turns: %w", err)
+			return nil, fmt.Errorf("turns: turns due: %w", err)
 		}
 		ids = append(ids, id)
 	}
