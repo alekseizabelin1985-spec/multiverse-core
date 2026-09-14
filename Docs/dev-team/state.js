@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:10:48+03:00",
+  "updatedAt": "2026-09-14T11:20:42+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3049,14 +3049,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T11:20:42+03:00",
           "reviewIterations": 3,
           "wave": 1,
           "subwave": "1.6",
-          "spentMinutes": 0,
+          "spentMinutes": 494,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-059.md"
         },
@@ -3264,8 +3264,10 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "todo",
-          "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md"
+          "status": "in_progress",
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-14T11:20:42+03:00"
         }
       ],
       "defects": [],
@@ -11298,7 +11300,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Ревью #3",
       "startedAt": "2026-09-14T10:52:46+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:20:42+03:00"
     },
     {
       "instance": "tech-lead#1",
@@ -11338,6 +11340,16 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Приёмка T-473",
       "startedAt": "2026-09-14T11:10:48+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-475",
+      "action": "mvctl world init --bus kafka",
+      "startedAt": "2026-09-14T11:20:42+03:00",
       "finishedAt": null
     }
   ],
@@ -15955,6 +15967,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-473 · итерация 3 (developer#3): Mi-5 ожидание PreparingRebalance через DescribeGroups, N-6 оговорка README и проверка Close в stopRightAfterStart, N-7 сторож Stop(expired), N-8 цифры README. Интеграционный прогон ok 173,4 с, контейнеры убраны. Приёмка — tech-lead#3 (без ревью #3), текст DoD для T-"
+    },
+    {
+      "at": "2026-09-14T11:20:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 принята tech-lead#2: DoD закрыт (8 строк приёмки T-057, CanonicalPath из T-472), отступления (битый снапшот останавливает мир, доступ admin по X-Client-Id, consistency.violated не публикуется, log_gap не в replay.completed, /health в details.worlds.<id>) отражены в индексе; собственный курсор "
+    },
+    {
+      "at": "2026-09-14T11:20:42+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Запущена T-475 «mvctl world init --bus kafka» (developer#1) от 77d06ff: блокирует T-063; открытый вопрос — reason=admin у admin-маршрута против reason=bootstrap для world init. Идёт make ci по EPIC-002 для контрольного слияния O в develop (порядок: EPIC-002 → develop, затем EPIC-004 с T-313/T-315/T-"
     }
   ],
   "blockers": [],
