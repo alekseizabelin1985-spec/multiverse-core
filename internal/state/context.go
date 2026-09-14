@@ -424,7 +424,8 @@ func (c *Context) Stop(ctx context.Context) error {
 
 // Snapshot writes a snapshot of one world now, on the worker of that world
 // between two proposals (§4.9): the admin route and the bootstrap of a world
-// (T-058, T-059) ask for one with their reason.
+// (T-058, T-059) ask for one with their reason. Reason bootstrap is refused
+// with ErrWorldInitialized for a world that has latest.json (Applier.Snapshot).
 func (c *Context) Snapshot(ctx context.Context, worldID, reason string) (*LatestPointer, error) {
 	c.mu.Lock()
 	running, w := c.running, c.workers[worldID]
