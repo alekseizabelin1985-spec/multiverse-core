@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:41:01+03:00",
+  "updatedAt": "2026-09-14T03:46:54+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4650,14 +4650,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-309",
           "title": "Снапшот gateway, live/replay, полный /health",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T03:46:54+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.10",
-          "spentMinutes": 0,
+          "spentMinutes": 143,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-309.md"
         },
@@ -4736,11 +4736,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-315",
           "title": "e2e бота на фейках",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.9",
           "spentMinutes": 0,
@@ -5014,8 +5014,10 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "todo",
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md"
+          "status": "in_progress",
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T03:46:54+03:00"
         }
       ],
       "defects": [],
@@ -10954,7 +10956,7 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "e2e бота на фейках",
       "startedAt": "2026-09-14T03:12:11+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:46:54+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -10964,7 +10966,7 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Приёмка T-309",
       "startedAt": "2026-09-14T03:24:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:46:54+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -11004,6 +11006,26 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Просмотр contract-change T-472",
       "startedAt": "2026-09-14T03:34:40+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-315",
+      "action": "Ревью #1: e2e бота",
+      "startedAt": "2026-09-14T03:46:54+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Переподписка consumer шлюза",
+      "startedAt": "2026-09-14T03:46:54+03:00",
       "finishedAt": null
     }
   ],
@@ -15375,6 +15397,24 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Решение оркестратора по вопросу system-architect#1: вариант A — отдельная задача T-475 EPIC-002 «mvctl world init --bus kafka» после T-059, блокирует T-063 (стендовая строка «T-058 (часть)» переходит к ней). counters.task = 475; раздел заводит tech-lead#2 при приёмке T-058."
+    },
+    {
+      "at": "2026-09-14T03:46:54+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 принята tech-lead#3 (итерация 3 без ревью #2): DoD закрыт с решениями architect#3, мутанты A0–A7 на слитом дереве красные; отступления Mi-2 от КД (срок снапшота — весь остаток Stop, Error вместо Warn) приняты, приведение — строка DoD T-473; «Withdrawn при старте» — З-20 (architect#3), не при с"
+    },
+    {
+      "at": "2026-09-14T03:46:54+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-315 выполнена TEAM-3/developer#2: e2e бота в cmd/telegram-bot/e2e (тег e2e) на updates.Fake, записывающих отправителях и gatewaytest.FakeGateway с FakeState/FakeEncounter/FakeNarrator — основной сценарий с golden-записью ×3, SEC-06/07/10, 429/503; пауза после раннего пустого ответа, deliver.NewAck"
+    },
+    {
+      "at": "2026-09-14T03:46:54+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "Запущена T-473 (переподписка consumer шлюза после сбоя брокера, developer#3) от кончика EPIC-004 6b67fec; интеграция Redpanda — не больше 3 прогонов, docker pause только своего контейнера."
     }
   ],
   "blockers": [],
