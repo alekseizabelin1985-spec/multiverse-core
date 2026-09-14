@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:44:37+03:00",
+  "updatedAt": "2026-09-14T10:52:46+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2682,7 +2682,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-476",
           "title": "degraded в make health и документах, e2e бота в test-race",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T10:18:34+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-476.md",
@@ -3047,11 +3047,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 2,
+          "reviewIterations": 3,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -11254,7 +11254,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Итерация 3: stateOverBus, from = to в roll-forward",
       "startedAt": "2026-09-14T10:34:28+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:52:46+03:00"
     },
     {
       "instance": "tech-lead#3",
@@ -11284,6 +11284,26 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "Итерация 2: документы и порядок слияния",
       "startedAt": "2026-09-14T10:44:37+03:00",
+      "finishedAt": "2026-09-14T10:52:46+03:00"
+    },
+    {
+      "instance": "code-reviewer#4",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Ревью #3",
+      "startedAt": "2026-09-14T10:52:46+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-476",
+      "action": "Приёмка T-476, отметка по T-059",
+      "startedAt": "2026-09-14T10:52:46+03:00",
       "finishedAt": null
     }
   ],
@@ -15853,6 +15873,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-473 · итерация 2 (developer#3): Ma-1 допуск в тесте срока снапшота (200 повторов ok), Mi-2 проверка ctx после паузы (M12), Mi-3 тест настенных таймеров replay (R2 красный), Mi-4 интеграционный тест 164,7 с, N-2…N-5 (флак groupRestart — ожидание офсета группы). Mi-1 опровергнут замером: Kafka.Close"
+    },
+    {
+      "at": "2026-09-14T10:52:46+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 · итерация 3 (developer#2): Ma-2 — глобальная шина удалена, stateOverBus(bus, names) в serve до runtime.New (S1, S2 красные); Mi-4 — writtenBy: from = to записано только по last_change/истории с предложением интента (зонд P3 дописывает, W1–W3 красные); N-3…N-5. Прогоны зелёные, стенд I1-α 9/9."
+    },
+    {
+      "at": "2026-09-14T10:52:46+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-476 · итерация 2 (devops-engineer#1): порядок слияния единообразно в карточке и индексе, runbook про LLM_STRICT, таблица статусов в README/runbook, причина зависимости от T-059. Приёмка — tech-lead#1 (с отметкой по файлам EPIC-001 из T-059)."
     }
   ],
   "blockers": [],
