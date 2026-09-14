@@ -272,7 +272,7 @@ vuln: ## govulncheck over the module
 	@govulncheck ./...
 
 .PHONY: compose-lint
-compose-lint: ## The eight house rules of the compose files (§3.1.1), then the linter's own fixtures
+compose-lint: ## The nine house rules of the compose files (§3.1.1), then the linter's own fixtures
 	@scripts/compose-lint.sh
 	# A rule that quietly stopped firing looks exactly like a clean file, and a
 	# fixture rejected by another rule proves nothing about its own: every

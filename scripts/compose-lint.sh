@@ -10,7 +10,7 @@
 # the owner's machine and pulling a container to parse a document would be a
 # strange dependency for a linter.
 #
-# The eight rules:
+# The nine rules:
 #   1. every image has an explicit tag, never `latest`, and every third-party
 #      image comes from a variable declared in build/versions.env (NFR-071);
 #   2. every published port is bound to 127.0.0.1 (SEC-13); the init containers,
@@ -82,7 +82,35 @@
 #        that escape followed by a real `$MV_X` (N-1, N-6). A YAML comment is
 #        not interpolated and is not read (N-5);
 #      - a name the manifest does not declare, or declares retired, is
-#        rejected too — that is also what makes a parse miss loud.
+#        rejected too — that is also what makes a parse miss loud;
+#   9. a variable a context reads reaches every service that runs the context
+#      (T-469; the class of T-055, T-310 and T-305 — a variable declared in
+#      the manifest and never passed to its container, whose process then
+#      silently takes the manifest's default whatever .env says):
+#      - what a service runs is read from the resolved model: the platform
+#        process with the contexts of `--contexts=a,b` (or `--contexts a,b`,
+#        `all` meaning every one) in the rest of an entrypoint /multiverse and
+#        in its command — the last `--contexts` wins, as in the Go flag
+#        package — and the Telegram bot by the entrypoint /telegram-bot. A
+#        service with neither is not this rule's; a context the rule does not
+#        know is refused by name;
+#      - who reads a variable is the explicit table READERS below — contexts,
+#        `process` for cmd/multiverse whatever its contexts, `telegram-bot` for
+#        the bot. A variable that is read but never passed to a container is in
+#        NOT_IN_CONTAINERS, with the reason; the variables the manifest marks
+#        Tooling() are the host's and are left out by that mark. The table is
+#        a list in this file and not a new mark of shared/env: that would be a
+#        change of contracts.md §16 p. 5 (the orchestrator's decision, T-469);
+#      - every variable the manifest declares is in exactly one of the two
+#        tables or marked Tooling(), and every name of the tables is declared
+#        and not retired: a new Declare without a row fails here, so the next
+#        variable cannot be forgotten the way those three were;
+#      - a service passes a variable when its `environment` has the key, as
+#        written (with a value or without) or in the resolved model — which is
+#        where compose puts the variables of an `env_file`; the linter never
+#        opens an env file of a service itself.
+#        The form of the value is the business of rules 3 and 8; the refusal
+#        names the service, the variable, its reader and the form to add.
 #
 # Where the values come from. Rules 1-6 read the resolved model, `docker
 # compose config --format json` over every file and profile at once. Rules 3, 7
@@ -101,18 +129,26 @@
 # brace. Keys are not interpolated by compose and are not read as text. A place
 # is named by its path in the model (`services.core.environment.MV_X`), and a
 # finding repeated by an anchor merged into several services is reported once,
-# with every place.
+# with every place. Rule 9 reads both: what a service runs from the resolved
+# model, the keys it passes from the uninterpolated reads — a key with no value
+# that .env leaves unset is still a line of the file (T-469).
 #
-# Rule 8, the shape of the fix it asks for: pass the variable through as a key
-# with no value (`MV_X:` in a mapping, `- MV_X` in a list). Compose then sets it
-# from .env when .env has it — empty included, which for an allow-list means
-# nobody — and leaves it out of the container when .env is silent, so the
-# manifest's default applies. `${MV_X}` and `${MV_X:-}` are NOT that: both hand
+# Rule 8, the shape of the fix it asks for — the form of passing (T-469): write
+# `${MV_X:-<the manifest's default>}`, `${MV_X:-}` for an optional secret and
+# `${MV_X:?...}` for a required variable. Compose then hands the process the
+# value of .env when .env holds one, and the manifest's default both when .env
+# is silent and when its line is empty; the value is visible in `docker compose
+# config`, and it is the form of the neighbours. `${MV_X}` is NOT that: it hands
 # the process an empty value, and shared/env treats set-to-empty as a value —
-# which is why rule 8 rejects both whenever the manifest's default is not empty.
-# Inside a longer string — a `command:`, a quoted text — there is no key to
-# leave without a value, so the advice there is different (N-5): repeat the
-# manifest's default or require the variable with `:?`.
+# which is why rule 8 rejects it whenever the manifest's default is not empty.
+# The one exception is the allow-lists of EMPTY_IS_NOBODY: for them an empty
+# line in .env is a value, nobody, and `:-` would replace it with the default,
+# so they stay a key with no value (`MV_X:` in a mapping, `- MV_X` in a list) —
+# compose sets it from .env when .env has it, empty included, and leaves it out
+# of the container when .env is silent (T-411). Rule 8 accepts both forms; only
+# the advice differs. Inside a longer string — a `command:`, a quoted text —
+# there is no key to leave without a value, so the advice there is different
+# (N-5): repeat the manifest's default or require the variable with `:?`.
 #
 # Rule 7 in full, because it is the one that is easy to break by accident:
 # `docker compose` interpolates a file WHOLE, before it filters by profile, so
@@ -1297,6 +1333,38 @@ manifest = dict(re.findall(r'\bDeclare\(\s*"(MV_[A-Z0-9_]+)"\s*,\s*"([^"\\]*)"',
 retired = set(re.findall(r'\bDeclareDeprecated\(\s*"(MV_[A-Z0-9_]+)"', manifest_src))
 if not manifest:
     fail(8, f"no Declare(\"MV_...\", ...) found in {MANIFEST}; nothing to compare the defaults with")
+
+GO_STRING = re.compile(r'"(?:[^"\\\n]|\\.)*"|`[^`]*`')
+
+
+def declarations(src):
+    """name -> the options of its Declare(...) call, the string literals
+    blanked: `Tooling()` or `Required()` inside a description is text, not a
+    mark. The call ends at its balanced closing parenthesis, counted outside
+    the strings. A call that does not close leaves its tail to the end of the
+    source — a mark after it is then misread, and `go build` has refused the
+    file long before this."""
+    blank = GO_STRING.sub('""', src)
+    found = {}
+    for m in re.finditer(r'\bDeclare\(\s*""', blank):
+        depth, i = 1, m.end()
+        while i < len(blank) and depth:
+            depth += {"(": 1, ")": -1}.get(blank[i], 0)
+            i += 1
+        found[m.start()] = blank[m.end():i]
+    # The names come from the source with its strings intact, in the same order.
+    names = re.findall(r'\bDeclare\(\s*"(MV_[A-Z0-9_]+)"', src)
+    calls = [found[k] for k in sorted(found)]
+    return dict(zip(names, calls)) if len(names) == len(calls) else {}
+
+
+declared_calls = declarations(manifest_src)
+if manifest and not declared_calls:
+    fail(9, f"the Declare calls of {MANIFEST} cannot be told apart; the marks Tooling() "
+            "and Required() are unknown, so rule 9 cannot tell a host variable from a "
+            "variable of a container")
+TOOLING = {n for n, call in declared_calls.items() if re.search(r"\bTooling\(\)", call)}
+REQUIRED = {n for n, call in declared_calls.items() if re.search(r"\bRequired\(\)", call)}
 # Third-party variables the manifest gives a default of its own, and only the
 # ones the contract names: contracts.md §16 p. 5 speaks of OLLAMA_*. COMPOSE_*
 # carry defaults in infra.go too, but they are compose's own settings — compose
@@ -1392,6 +1460,32 @@ def unknown(where, name):
     return False
 
 
+# The allow-lists whose EMPTY value is a value — nobody (T-411). For them, and
+# only them, the form of passing is a key with no value: `${MV_X:-d}` would
+# replace the empty line of .env with the default and admit the default list.
+# Whether they move to the common form as well is the system architect's to
+# decide (T-469); until then the advice keeps them as they are.
+EMPTY_IS_NOBODY = {
+    "MV_GATEWAY_CLIENT_IDS",
+    "MV_GATEWAY_ACTOR_KIND_CLIENTS",
+    "MV_CORE_ADMIN_CLIENTS",
+}
+
+
+def passing_form(name, default):
+    """The form of passing a platform variable to a container (T-469): the
+    manifest's default behind `:-`, empty for an optional secret, `:?` for a
+    required variable, and a key with no value for an allow-list of
+    EMPTY_IS_NOBODY."""
+    if name in EMPTY_IS_NOBODY:
+        return f"{name}: (a key with no value)"
+    if name in REQUIRED or name in MUST_BE_REQUIRED:
+        return f"${{{name}:?set {name} in .env}}"
+    if is_secret(name):
+        return f"${{{name}:-}}"
+    return f"${{{name}:-{default}}}"
+
+
 def fix_for(name, default, whole):
     """What to write instead. A key with no value exists only where the
     interpolation IS the value of an environment key; inside a command or a
@@ -1400,9 +1494,17 @@ def fix_for(name, default, whole):
     default, not ours (contracts.md §16 p. 5)."""
     if not name.startswith("MV_"):
         return f"write ${{{name}:-{default}}}, the default of {EXTERNALS}"
+    if whole and name in EMPTY_IS_NOBODY:
+        return ("pass it through as a key with no value: for this allow-list an empty "
+                "line in .env is a value, nobody, which `:-` would replace with the "
+                "default, and with .env silent the manifest's default applies (T-411)")
+    if whole and (name in REQUIRED or name in MUST_BE_REQUIRED):
+        return (f"write {passing_form(name, default)}, the form of passing of a required "
+                "variable (T-469): compose refuses to start without it")
     if whole:
-        return ("pass it through as a key with no value, so that .env decides and "
-                "the manifest's default applies when .env is silent")
+        return (f"write {passing_form(name, default)}, the form of passing (T-469): the "
+                "value of .env when it holds one, the manifest's default when .env is "
+                "silent or its line is empty")
     return (f"it is part of a larger string here (a command, a quoted text), where "
             f"a key with no value is not available: repeat the manifest's default, "
             f"${{{name}:-{default}}}, or require it with ${{{name}:?...}}")
@@ -1609,6 +1711,211 @@ for compose_path, raw in raw_models:
 flush()
 
 # --------------------------------------------------------------------------
+# Rule 9 — a variable a context reads reaches every service that runs it
+# --------------------------------------------------------------------------
+# Who reads a platform variable inside a container (T-469). A reader is a
+# context of cmd/multiverse/contexts.go, PROCESS — cmd/multiverse itself, which
+# reads the variable whatever --contexts it runs — or BOT, the binary of
+# cmd/telegram-bot. The source of a row is the code where the reader exists
+# (`env.<Var>` in internal/<context>, cmd/multiverse, shared/runtime,
+# shared/objstore, shared/logging, cmd/telegram-bot) and the component
+# document where the context is still the /health stub of contexts.go: llm,
+# laws and swarm read nothing yet, and their rows are what their components
+# assign them (swarm-llm-laws.md, C-15). A row lists every reader, not only the
+# one whose service happens to carry the line today.
+PROCESS = "process"
+BOT = "telegram-bot"
+CONTEXTS = {"state", "mechanics", "laws", "llm", "swarm", "gateway", "memory"}
+READERS = {
+    # cmd/multiverse and shared/logging, whatever the contexts.
+    "MV_ENV": (PROCESS, BOT),
+    "MV_LOG_LEVEL": (PROCESS, BOT),
+    "MV_LOG_FORMAT": (PROCESS, BOT),
+    "MV_MODE": (PROCESS,),
+    "MV_BUS": (PROCESS,),
+    "MV_BUS_VALIDATE_ON_READ": (PROCESS,),
+    "MV_KAFKA_BROKERS": (PROCESS,),
+    "MV_CORE_ADDR": (PROCESS,),
+    # shared/runtime.AdminOnly: /v1/admin/* of any context, the replay clock.
+    "MV_CORE_ADMIN_CLIENTS": (PROCESS,),
+    # shared/objstore: the snapshots of state, the backups of the gateway.
+    "MV_MINIO_ENDPOINT": ("state", "gateway"),
+    "MV_MINIO_ACCESS_KEY": ("state", "gateway"),
+    "MV_MINIO_SECRET_KEY": ("state", "gateway"),
+    "MV_MINIO_USE_SSL": ("state", "gateway"),
+    "MV_WORLD_ID": ("gateway",),
+    # internal/gateway (context.go).
+    "MV_GATEWAY_DATA_DIR": ("gateway",),
+    "MV_GATEWAY_CLIENT_IDS": ("gateway",),
+    "MV_GATEWAY_ACTOR_KIND_CLIENTS": ("gateway",),
+    "MV_CORE_URL": ("gateway",),
+    "MV_GATEWAY_RATE_ACTIONS_PER_MIN": ("gateway",),
+    "MV_GATEWAY_RATE_ACTIONS_BURST": ("gateway",),
+    "MV_GATEWAY_INPUT_FILTER": ("gateway",),
+    "MV_GATEWAY_ENCOUNTER_GRACE": ("gateway",),
+    "MV_GATEWAY_SESSION_IDLE": ("gateway",),
+    "MV_GATEWAY_TURN_TIMEOUT": ("gateway",),
+    "MV_GATEWAY_CHARACTER_WAIT": ("gateway",),
+    "MV_GATEWAY_CHARACTER_DEADLINE": ("gateway",),
+    "MV_GATEWAY_DELIVERY_LEASE": ("gateway",),
+    "MV_GATEWAY_DELIVERY_TTL": ("gateway",),
+    "MV_GM_PATH": ("gateway", "swarm"),
+    # internal/state, laws.
+    "MV_SNAPSHOT_EVERY_FACTS": ("state",),
+    "MV_STATE_WORLDS": ("state",),
+    "MV_LAWS_BREACH_PHASE": ("laws",),
+    "MV_MEMORY_URL": ("swarm",),
+    # the context llm (C-15).
+    "MV_LLM_PROVIDER": ("llm",),
+    "MV_LLM_URL": ("llm",),
+    "MV_LLM_API_KEY": ("llm",),
+    "MV_LLM_NUM_CTX": ("llm",),
+    "MV_LLM_STORE_PROMPTS": ("llm",),
+    "MV_LLM_CLOUD_ENABLED": ("llm",),
+    "MV_LLM_CLOUD_ALLOW_EXTERNAL_PLAYERS": ("llm",),
+    "MV_LLM_CLOUD_BUDGET_USD_PER_DAY": ("llm",),
+    "MV_ANTHROPIC_API_KEY": ("llm",),
+    "MV_OLLAMA_URL": ("llm",),
+    # the context memory (EPIC-005).
+    "MV_QDRANT_ADDR": ("memory",),
+    "MV_NEO4J_URI": ("memory",),
+    "MV_NEO4J_USER": ("memory",),
+    "MV_NEO4J_PASSWORD": ("memory",),
+    "MV_EMBED_MODEL": ("memory",),
+    # cmd/telegram-bot/internal/config.
+    "MV_TELEGRAM_BOT_TOKEN": (BOT,),
+    "MV_TELEGRAM_ALLOWED_USER_IDS": (BOT,),
+    "MV_TELEGRAM_GATEWAY_URL": (BOT,),
+    "MV_TELEGRAM_POLL_TIMEOUT_S": (BOT,),
+    "MV_TELEGRAM_HEALTH_ADDR": (BOT,),
+    "MV_TELEGRAM_ACTION_KEY_SALT": (BOT,),
+    "MV_TELEGRAM_COMMANDS_PER_MIN": (BOT,),
+}
+# Declared, not Tooling(), and still never passed to a container — each with
+# the reason. Whether these become a mark of the manifest is the system
+# architect's question (contracts.md §16 p. 5, T-469).
+NOT_IN_CONTAINERS = {
+    "MV_BACKUP_AGE_RECIPIENT": "the public key `age` encrypts links.db to on the host, "
+                               "after `docker cp` (infrastructure.md §9); no process reads it",
+    "MV_SWARM_FAKE": "the temporary hook of I1-α (cmd/multiverse/fake_contexts.go, removed "
+                     "by T-256) for a process started by hand; the stub reads rules/ under "
+                     "the working directory, which the image does not carry, and "
+                     "infrastructure.md §4.2 says compose does not pass the flag",
+}
+
+rows = set(READERS) | set(NOT_IN_CONTAINERS)
+for name in sorted(set(manifest) - TOOLING - rows):
+    fail(9, f"{name} is declared in {MANIFEST} but rule 9 does not know who reads it: add "
+            "it to READERS of scripts/compose-lint.sh with the contexts (or `process`, "
+            "`telegram-bot`) that read it, or to NOT_IN_CONTAINERS with the reason it "
+            "never reaches a container")
+for name in sorted(rows - set(manifest)):
+    what = "declared retired" if name in retired else "not declared"
+    fail(9, f"{name} is in the table of rule 9 but {what} in {MANIFEST}; the table and "
+            "the manifest have drifted apart")
+for name in sorted(rows & TOOLING):
+    fail(9, f"{name} is marked Tooling() in {MANIFEST}, a variable of the host, and is "
+            "also in the table of rule 9; one of the two is wrong")
+for name in sorted(set(READERS) & set(NOT_IN_CONTAINERS)):
+    fail(9, f"{name} is both in READERS and in NOT_IN_CONTAINERS of rule 9")
+for name, readers in sorted(READERS.items()):
+    for reader in readers:
+        if reader not in CONTEXTS | {PROCESS, BOT}:
+            fail(9, f"{name}: the reader {reader!r} of rule 9 is neither a context "
+                    f"({', '.join(sorted(CONTEXTS))}) nor `{PROCESS}` or `{BOT}`")
+
+CONTEXTS_FLAG = re.compile(r"--?contexts(?:=(.*))?", re.S)
+
+
+def argv(value):
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return value.split()
+    return [str(v) for v in value]
+
+
+def runs(svc):
+    """(the readers a service runs, how the file says so, unknown contexts).
+
+    The arguments of the platform process are what compose hands it: the rest
+    of an `entrypoint` whose program is /multiverse, then `command` (T-469
+    review #1 N-2). A flag given twice is read as the Go flag package reads it,
+    the last one wins — so the contexts a service runs are the ones of its last
+    `--contexts`. Another program in `entrypoint` has its `command` read as
+    before: the platform image starts /multiverse only when nothing replaces
+    it."""
+    command = argv(svc.get("command"))
+    entrypoint = argv(svc.get("entrypoint"))
+    program = entrypoint[0].rsplit("/", 1)[-1] if entrypoint else ""
+    if program == BOT:
+        return {BOT}, f"entrypoint {entrypoint[0]}", []
+    args = (entrypoint[1:] if program == "multiverse" else []) + command
+    value = None
+    for n, arg in enumerate(args):
+        m = CONTEXTS_FLAG.fullmatch(arg)
+        if not m:
+            continue
+        value = m.group(1)
+        if value is None:
+            value = args[n + 1] if n + 1 < len(args) else ""
+    if value is None:
+        return set(), "", []
+    names = [c.strip() for c in value.split(",") if c.strip()]
+    shown = f"--contexts={value}"
+    if "all" in names:
+        return {PROCESS} | CONTEXTS, shown, []
+    return {PROCESS} | (set(names) & CONTEXTS), shown, [c for c in names if c not in CONTEXTS]
+
+
+def passed(name, svc):
+    """The keys a service passes: every key of its `environment` as written in
+    every file that defines the service — a key with no value that .env leaves
+    unset included — and every key of its `environment` in the resolved model.
+    The resolved model is where an `env_file` shows up: `docker compose config`
+    moves the variables of the file into `environment` and drops the key
+    `env_file` from the service (compose v5.2.0), so a variable passed that way
+    is found there and nowhere else. The linter never opens an env file of a
+    service itself: its path may be the operator's own .env (T-469 review #1
+    Mi-1)."""
+    resolved = svc.get("environment") or {}
+    if isinstance(resolved, list):
+        resolved = [m.group(1) for m in map(LISTED.fullmatch, map(str, resolved)) if m]
+    keys = {str(k) for k in resolved}
+    for _, raw in raw_models:
+        env = ((raw.get("services") or {}).get(name) or {}).get("environment")
+        if isinstance(env, dict):
+            keys |= {str(k) for k in env}
+        elif isinstance(env, list):
+            for entry_ in env:
+                m = LISTED.fullmatch(str(entry_))
+                if m:
+                    keys.add(m.group(1))
+    return keys
+
+
+for name, svc in sorted(services.items()):
+    readers, how, strangers = runs(svc)
+    for stranger in strangers:
+        fail(9, f"{name}: {how} names the context {stranger!r}, which rule 9 does not know "
+                f"({', '.join(sorted(CONTEXTS))}); a new context comes with its rows in READERS")
+    if not readers:
+        continue
+    have = passed(name, svc)
+    for var in sorted(READERS):
+        if var not in manifest or var in TOOLING:
+            continue  # the drift is reported above
+        whose = sorted(set(READERS[var]) & readers)
+        if not whose or var in have:
+            continue
+        whose = ["the process itself (cmd/multiverse)" if r == PROCESS else
+                 f"the binary {r}" if r == BOT else f"the context {r}" for r in whose]
+        fail(9, f"{name}: {var} is read by {', '.join(whose)}, which this service runs "
+                f"({how}), but its environment does not pass it: the value of .env never "
+                "reaches the container and the process silently takes the manifest's "
+                f"default; add {passing_form(var, manifest[var])}")
+
+# --------------------------------------------------------------------------
 if failures:
     print(
         f"compose-lint: {len(failures)} violation(s) in {', '.join(compose_paths)}",
@@ -1619,7 +1926,7 @@ if failures:
     sys.exit(1)
 
 print(
-    f"compose-lint: ok — {len(services)} services in {len(compose_paths)} file(s), 8 rules "
+    f"compose-lint: ok — {len(services)} services in {len(compose_paths)} file(s), 9 rules "
     f"(profiles resolved: {', '.join(sorted({p for s in services.values() for p in (s.get('profiles') or [])})) or 'none'})"
 )
 PY
