@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:44:38+03:00",
+  "updatedAt": "2026-09-14T12:57:24+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2699,10 +2699,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-482",
           "title": "CI на develop зелёный на Linux",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T12:24:59+03:00",
-          "card": "epics/EPIC-001-foundation/tasks/T-482.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-482.md",
+          "reviewIterations": 1
         }
       ],
       "defects": [],
@@ -5055,11 +5056,13 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "review",
+          "status": "done",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:02:05+03:00",
-          "reviewIterations": 2
+          "reviewIterations": 2,
+          "finishedAt": "2026-09-14T12:57:24+03:00",
+          "spentMinutes": 109
         },
         {
           "id": "T-479",
@@ -11481,7 +11484,7 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Ревью #2: SAVEPOINT, Sweep",
       "startedAt": "2026-09-14T12:22:03+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:57:24+03:00"
     },
     {
       "instance": "developer#2",
@@ -11491,6 +11494,26 @@ window.DEVTEAM_STATE =
       "task": "T-482",
       "action": "CI develop зелёный на Linux",
       "startedAt": "2026-09-14T12:24:59+03:00",
+      "finishedAt": "2026-09-14T12:57:24+03:00"
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Ревью #1: CI на Linux",
+      "startedAt": "2026-09-14T12:57:24+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Отметки EPIC-003 и EPIC-004",
+      "startedAt": "2026-09-14T12:57:24+03:00",
       "finishedAt": null
     }
   ],
@@ -16240,6 +16263,18 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Указание пользователя: по достижении первой версии (I1-α) — пауза; следующие шаги реализации пользователь назовёт сам. Решение оркестратора: доводятся текущие T-482 (CI develop на Linux) и T-478 (приёмка), затем контрольное слияние EPIC-002 (T-475) и EPIC-004 (T-478, T-480) в develop при зелёном CI;"
+    },
+    {
+      "at": "2026-09-14T12:57:24+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 принята tech-lead#3 (DoD, -count=10 -cpu=1,4 на итерации 2; отступления §7.7 и SAVEPOINT подтверждены architect#3; C-10 — T-481 заведена с карточкой; строки DoD T-479; З-43…З-46; индекс 0.1.17). Итераций ревью — 2. Коммит f9d5500, sync с эпиком (tasks.md: шапка 0.1.17, строка приёмки T-473 пер"
+    },
+    {
+      "at": "2026-09-14T12:57:24+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 выполнена developer#2: девять причин падений CI на Linux устранены — dispatch_test (манифест kafka, флаг memory), store/open_test (файл 0600), стенд testkit/gateway (ожидание по условию), дефект FakeEncounter.fold (поздний факт старого пакета откатывал hp — применять только при большей версии,"
     }
   ],
   "blockers": [
