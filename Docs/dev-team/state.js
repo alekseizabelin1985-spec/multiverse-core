@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:53:59+03:00",
+  "updatedAt": "2026-09-14T12:04:14+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -11418,7 +11418,7 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "Решения по T-475",
       "startedAt": "2026-09-14T11:53:38+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:04:14+03:00"
     }
   ],
   "events": [
@@ -16083,6 +16083,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-478 · решения architect#3: оба уточнения §7.7 приняты (механика по типу события — первое combat.decided для attack/flee, entity.updated для enter/leave/rest; счёт доставок до recipients_count), КД §7.7 дополнен; C-10 — вариант (б): нарратив хода — первый по офсету нужного kind (entry у enter/look,"
+    },
+    {
+      "at": "2026-09-14T12:04:14+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 · решения system-architect#1: тело admin-маршрута {\"reason\"} и коды 400 подтверждены (КД §4.9, §4.10, §20); риск ложного bootstrap при двух одновременных world init — итерация 2: reason=bootstrap только у мира без latest.json, проверка на worker'е мира, иначе 409 world_initialized (мутанты B2a"
+    },
+    {
+      "at": "2026-09-14T12:04:14+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "T-480: падение TestAFakeGatewayStartsAndStopsWithinASecond не воспроизводится (developer#3: 0,04–0,87 с даже под нагрузкой 16 процессов; оркестратор повторно на df47003 — 5/5 PASS 0,03–0,11 с). Прежние 5/5 падений по 2,5 с совпали с интеграционным прогоном T-475 (testcontainers Redpanda+MinIO) и e2e"
     }
   ],
   "blockers": [],
