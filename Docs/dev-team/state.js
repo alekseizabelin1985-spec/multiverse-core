@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T13:19:31+03:00",
+  "updatedAt": "2026-09-14T13:39:07+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2699,7 +2699,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-482",
           "title": "CI на develop зелёный на Linux",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T12:24:59+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-482.md",
@@ -5090,10 +5090,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-483",
           "title": "Дубль turn.completed в outbox после возврата брокера (CI integration)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T13:19:31+03:00",
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-483.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-483.md",
+          "reviewIterations": 1
         }
       ],
       "defects": [],
@@ -11532,7 +11533,7 @@ window.DEVTEAM_STATE =
       "task": "T-482",
       "action": "Итерация 2: Mi-1, Mi-2",
       "startedAt": "2026-09-14T13:19:31+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T13:39:07+03:00"
     },
     {
       "instance": "developer#3",
@@ -11542,6 +11543,26 @@ window.DEVTEAM_STATE =
       "task": "T-483",
       "action": "Дубль turn.completed в integration CI",
       "startedAt": "2026-09-14T13:19:31+03:00",
+      "finishedAt": "2026-09-14T13:39:07+03:00"
+    },
+    {
+      "instance": "tech-lead#1",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "Приёмка T-482",
+      "startedAt": "2026-09-14T13:39:07+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-483",
+      "action": "Ревью #1: дубль turn.completed",
+      "startedAt": "2026-09-14T13:39:07+03:00",
       "finishedAt": null
     }
   ],
@@ -16309,6 +16330,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-001",
       "role": "orchestrator",
       "text": "T-482 · отметки владельцев (tech-lead#2): EPIC-003 — правка FakeEncounter.fold соответствует C-02/C-05, закрыла и скрытый дефект дубля; EPIC-004 (по назначению оркестратора) — проверки не ослаблены, merge-file gatewaytest_test с T-480 без конфликтов. Ревью #1 (code-reviewer#2): вернуть — 0/1/2/1. Ma"
+    },
+    {
+      "at": "2026-09-14T13:39:07+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-482 · итерация 2 (developer#2): Mi-1 порядок чтения версии Harness до ожидания State, Mi-2 awk вместо grep под pipefail, N-1 freePort через listenFree; цель сужена до девяти причин (десятая — T-483). Приёмка — tech-lead#1 (без ревью #2)."
+    },
+    {
+      "at": "2026-09-14T13:39:07+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-483 выполнена developer#3: дефекта шлюза нет — kafka-go v0.4.51 на Linux повторяет пачку при ECONNREFUSED после истечения срока WriteMessages, вторая копия turn.completed ложится на брокер с тем же id (на Windows WSAECONNREFUSED не временная — дубля нет); C-01 at-least-once и КД §5.5/§7.7 это допу"
     }
   ],
   "blockers": [
