@@ -46,6 +46,15 @@ func TestValidCharacterName(t *testing.T) {
 		{"12", true},
 		{"\xffab", false},
 		{"<b>", false},
+		// Carried over from the test of the copy the bot had (acceptance of
+		// T-312): the bot checks a name by this function now.
+		{"Вася-2", true},
+		{"Анна Мария", true},
+		{"John Smith 3", true},
+		{"Вася\u0007", false},
+		{"Вася\t", false},
+		{"[x](y)", false},
+		{"Вася.", false},
 	} {
 		if got := api.ValidCharacterName(tc.name); got != tc.want {
 			t.Errorf("ValidCharacterName(%q) = %v, want %v", tc.name, got, tc.want)
