@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:23:45+03:00",
+  "updatedAt": "2026-09-14T10:31:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2682,10 +2682,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-476",
           "title": "degraded в make health и документах, e2e бота в test-race",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T10:18:34+03:00",
-          "card": "epics/EPIC-001-foundation/tasks/T-476.md"
+          "card": "epics/EPIC-001-foundation/tasks/T-476.md",
+          "reviewIterations": 1
         },
         {
           "id": "T-477",
@@ -11201,7 +11202,7 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "degraded в make health, e2e бота в test-race",
       "startedAt": "2026-09-14T10:18:34+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:31:37+03:00"
     },
     {
       "instance": "code-reviewer#4",
@@ -11221,6 +11222,16 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Итерация 2 по ревью #1",
       "startedAt": "2026-09-14T10:23:45+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-476",
+      "action": "Ревью #1: make health, test-race",
+      "startedAt": "2026-09-14T10:31:37+03:00",
       "finishedAt": null
     }
   ],
@@ -15760,6 +15771,12 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-473 · ревью #1 (code-reviewer#2): вернуть — 0/1/4/5. Ma-1 тест срока снапшота считает от начала отсчёта теста, а код — от начала Stop: на Linux CI красный каждый раз (мутант R1); Mi-1 ожидание входа в группу перешло в Kafka.Close; Mi-2 возможен Subscribe после Stop; Mi-3 настенные таймеры replay н"
+    },
+    {
+      "at": "2026-09-14T10:31:37+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-476 выполнена devops-engineer#1: make health печатает настоящие статусы (ok/degraded/FAIL), degraded — сбой только при DEGRADED_STRICT=1 (по умолчанию), up/deploy/rollback вызывают health с DEGRADED_STRICT=0; RACE_E2E_PKGS во второй команде test-race; infrastructure.md §2.2/§2.3/§3.1/§7.2 (+§8, §9"
     }
   ],
   "blockers": [],
