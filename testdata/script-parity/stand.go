@@ -407,13 +407,29 @@ func copyFile(from, to string, mode os.FileMode) error {
 // became the port of another scenario's double, and B07 found a server where
 // it expected none (seen in iteration 3 of T-405, the risk review #1 named).
 func (s *stand) freePort() (int, error) {
+	ln, port, err := s.listenFree()
+	if err != nil {
+		return 0, err
+	}
+	_ = ln.Close()
+	return port, nil
+}
+
+// listenFree hands out a listener on a port no other scenario of this run has
+// been given, and the port; freePort is it with the listener closed. The double
+// the stand serves itself keeps the listener rather than the port alone. A
+// port that is closed and listened on again is free for anybody in between,
+// and on Linux the outgoing connections of the scenarios running in parallel
+// take their source ports from the same range: a curl of one scenario held the
+// port of another one's double for a moment, and that double could not listen
+// (H40, H59, B03 on CI, T-482).
+func (s *stand) listenFree() (net.Listener, int, error) {
 	for attempt := 0; attempt < 100; attempt++ {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
-			return 0, err
+			return nil, 0, err
 		}
 		port := ln.Addr().(*net.TCPAddr).Port
-		_ = ln.Close()
 		s.mu.Lock()
 		taken := s.usedPorts[port]
 		if !taken {
@@ -424,10 +440,11 @@ func (s *stand) freePort() (int, error) {
 		}
 		s.mu.Unlock()
 		if !taken {
-			return port, nil
+			return ln, port, nil
 		}
+		_ = ln.Close()
 	}
-	return 0, errors.New("no port left that this run has not handed out")
+	return nil, 0, errors.New("no port left that this run has not handed out")
 }
 
 // ---------------------------------------------------------------------------
@@ -472,10 +489,28 @@ func (s *stand) runImpl(ctx context.Context, sc *Scenario, which impl) *implRun 
 		return r
 	}
 
-	port, err := s.freePort()
+	var (
+		port     int
+		listener net.Listener
+		err      error
+	)
+	if sc.Server != nil {
+		listener, port, err = s.listenFree()
+	} else {
+		port, err = s.freePort()
+	}
 	if err != nil {
 		r.err = err
 		return r
+	}
+	if listener != nil {
+		// Closed here unless the double took it over: a setup that fails must
+		// not leave the port held for the rest of the run.
+		defer func() {
+			if listener != nil {
+				_ = listener.Close()
+			}
+		}()
 	}
 	dead, err := s.freePort()
 	if err != nil {
@@ -496,12 +531,8 @@ func (s *stand) runImpl(ctx context.Context, sc *Scenario, which impl) *implRun 
 	}
 
 	if sc.Server != nil {
-		ln, err := net.Listen("tcp", "127.0.0.1:"+r.vars["PORT"])
-		if err != nil {
-			r.err = fmt.Errorf("the double cannot listen: %v", err)
-			return r
-		}
-		stop := serveInProcess(ln, *sc.Server, filepath.Join(doubleDir, "requests.jsonl"))
+		stop := serveInProcess(listener, *sc.Server, filepath.Join(doubleDir, "requests.jsonl"))
+		listener = nil
 		defer stop()
 	}
 	if sc.Program != nil {

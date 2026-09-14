@@ -63,10 +63,15 @@ func TestServeSubcommandAndTheBareFormAreOneCommand(t *testing.T) {
 			flags: []string{"-contexts=all", "-bus=memory"},
 			want:  "mode: live (MV_MODE), bus: memory (--bus)",
 		},
+		// The override runs from kafka to memory and not the other way: the real
+		// contexts start, and the gateway reads the end of system_events in its
+		// Start, so a kafka bus would need a live broker (T-482). A flag that lost
+		// to the manifest still fails the case — the start would dial the broker,
+		// or print "kafka (MV_BUS)" where a broker happens to listen.
 		"the flag overrides the manifest": {
-			env:   map[string]string{env.Mode.Name(): "replay", env.Bus.Name(): "memory"},
-			flags: []string{"--contexts=all", "--mode=live", "--bus=kafka"},
-			want:  "mode: live (--mode), bus: kafka (--bus)",
+			env:   map[string]string{env.Mode.Name(): "replay", env.Bus.Name(): "kafka"},
+			flags: []string{"--contexts=all", "--mode=live", "--bus=memory"},
+			want:  "mode: live (--mode), bus: memory (--bus)",
 		},
 	}
 	for name, tc := range tests {

@@ -283,6 +283,58 @@ func TestTheFactsOfStateMoveWhatTheStubProposesAgainst(t *testing.T) {
 	}
 }
 
+// TestALateFactOfAnOlderPackageDoesNotHealTheWolf: the actions of a fight and
+// the facts of State reach the stub over two subscriptions, so the next blow
+// can be proposed and folded into the view before the facts of the blow before
+// it arrive. Those facts are older than the view and must not put back the hit
+// points the newer package has already taken: the blow after them would be
+// struck at the wrong hit points, and a package that leaves an entity unchanged
+// in State would be pinned to a version State never gives it (T-482: the stand
+// of testkit/gateway lost such a race and gave up a run in thirty).
+func TestALateFactOfAnOlderPackageDoesNotHealTheWolf(t *testing.T) {
+	enc, bus := fightStubWith(t,
+		attr(wolfID, entity.AttrHP, 40), attr(wolfID, entity.AttrHPMax, 40),
+		attr(playerA, entity.AttrHP, 40), attr(playerA, entity.AttrHPMax, 40))
+	openFight(t, enc, bus)
+
+	lands := func(id string) bool { return hits(tkmech.Verdict(id, 0)) }
+	act(t, enc, attackWhere(t, lands))
+	act(t, enc, attackWhere(t, lands))
+	// State applies both packages; the stub has read the facts of the first
+	// one, the wolf last, and none of the second when the third blow comes.
+	answerUntil(t, enc, bus, func(ev eventbus.Event) bool {
+		id, _ := ev.Path().GetString("entity.entity.id")
+		return id == wolfID
+	})
+	act(t, enc, attackWhere(t, lands))
+	answer(t, enc, bus)
+
+	for _, ev := range eventsOf(t, bus, eventbus.TopicSystemEvents) {
+		if ev.Type == swarm.TypeRejected {
+			reason, _ := ev.Path().GetString("reason")
+			proposal, _ := ev.Path().GetString("proposal_id")
+			t.Errorf("State refused %s: %s", proposal, reason)
+		}
+	}
+	var blows []eventbus.Event
+	for _, ev := range ofType(eventsOf(t, bus, eventbus.TopicGameEvents), swarm.TypeCombatDecided) {
+		if action, _ := ev.Path().GetString("action"); action == "attack" {
+			blows = append(blows, ev)
+		}
+	}
+	if len(blows) != 3 {
+		t.Fatalf("%d blows of the character decided, want 3", len(blows))
+	}
+	for i := 1; i < len(blows); i++ {
+		after, _ := blows[i-1].Path().GetInt("hp.defender_after")
+		before, _ := blows[i].Path().GetInt("hp.defender_before")
+		if before != after {
+			t.Errorf("blow %d is struck at %d hit points, the blow before it left the wolf at %d",
+				i+1, before, after)
+		}
+	}
+}
+
 // TestAnEntryWithoutARegionIsPassedOver: Act is exported, and a caller that
 // drives it by hand may hand it a payload the schema would have refused. It is
 // answered with nothing rather than with a fight in a region called "".
@@ -1725,6 +1777,14 @@ func answeredBy(t *testing.T, bus *membus.Bus, world []*entity.Entity) {
 // of C-05 v1.4 is about.
 func answer(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
 	t.Helper()
+	answerUntil(t, enc, bus, nil)
+}
+
+// answerUntil is answer that stops right after the stub has been handed the
+// first fact stop accepts, so that a test can act between two facts of one
+// package. A nil stop answers everything.
+func answerUntil(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus, stop func(eventbus.Event) bool) {
+	t.Helper()
 	held, ok := rigs.Load(bus)
 	if !ok {
 		answeredBy(t, bus, mustFixtures(t))
@@ -1745,6 +1805,9 @@ func answer(t *testing.T, enc *swarm.FakeEncounter, bus *membus.Bus) {
 			}
 		case contracts.SourceTestkitState:
 			observe(t, enc, ev)
+			if stop != nil && stop(ev) {
+				return
+			}
 		}
 	}
 }
