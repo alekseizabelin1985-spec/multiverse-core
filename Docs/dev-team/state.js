@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:22:03+03:00",
+  "updatedAt": "2026-09-14T12:24:59+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2695,6 +2695,14 @@ window.DEVTEAM_STATE =
           "title": "shared/eventbus: остановка подписки и RebalanceTimeout 10 с",
           "status": "todo",
           "card": "epics/EPIC-001-foundation/tasks/T-477.md"
+        },
+        {
+          "id": "T-482",
+          "title": "CI на develop зелёный на Linux",
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T12:24:59+03:00",
+          "card": "epics/EPIC-001-foundation/tasks/T-482.md"
         }
       ],
       "defects": [],
@@ -11472,6 +11480,16 @@ window.DEVTEAM_STATE =
       "action": "Ревью #2: SAVEPOINT, Sweep",
       "startedAt": "2026-09-14T12:22:03+03:00",
       "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-482",
+      "action": "CI develop зелёный на Linux",
+      "startedAt": "2026-09-14T12:24:59+03:00",
+      "finishedAt": null
     }
   ],
   "events": [
@@ -16190,9 +16208,26 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-478 · итерация 2 (developer#1): завершение хода в OnMechanics внутри SAVEPOINT — сбой публикации turn.completed откатывает только завершение, эффект и механика фиксируются, ход дозавершает следующий Sweep или повтор механики с тем же id; N-1, N-4…N-6; КД §7.7 — фраза на подтверждение architect#3. "
+    },
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние Q (постоянное разрешение): epic/EPIC-001-foundation → develop (4320d3c) — T-476; make ci BASE=develop — rc=0 (test-race SKIPPED без cgo, links-file SKIPPED без Developer Mode), secrets-scan чист; синхронизация develop → EPIC-002/003/004 без конфликтов; push develop и эпиков, gitl"
+    },
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "ОБНАРУЖЕНО: workflow go на GitHub для develop не проходил ни разу (первый прогон 13.09 11:25 и все последующие — failure; P отменён, Q в очереди). Контрольные слияния M…Q шли по локальному make ci на Windows. Падения на Linux: (1) cmd/multiverse dispatch_test the_flag_overrides_the_manifest зависит "
     }
   ],
-  "blockers": [],
+  "blockers": [
+    {
+      "at": "2026-09-14T12:24:59+03:00",
+      "text": "CI на develop красный с 13.09 (Linux): T-482"
+    }
+  ],
   "risks": [
     {
       "id": "R-01",
