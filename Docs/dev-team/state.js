@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:04:13+03:00",
+  "updatedAt": "2026-09-14T10:05:47+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4708,11 +4708,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-313",
           "title": "e2e соло: solo-30, death, flee-fail",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.9",
           "spentMinutes": 0,
@@ -5014,10 +5014,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
-          "startedAt": "2026-09-14T03:46:54+03:00"
+          "startedAt": "2026-09-14T03:46:54+03:00",
+          "reviewIterations": 1
         }
       ],
       "defects": [],
@@ -11026,7 +11027,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Переподписка consumer шлюза",
       "startedAt": "2026-09-14T03:46:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:05:47+03:00"
     },
     {
       "instance": "developer#3",
@@ -11076,7 +11077,7 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Итерация 2: детерминизм сравнения, дубли",
       "startedAt": "2026-09-14T09:37:35+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:05:47+03:00"
     },
     {
       "instance": "developer#2",
@@ -11146,6 +11147,36 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "Приёмка T-315",
       "startedAt": "2026-09-14T10:04:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Ревью #1: переподписка consumer",
+      "startedAt": "2026-09-14T10:05:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#2",
+      "role": "system-architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "io.EOF и RebalanceTimeout в shared/eventbus",
+      "startedAt": "2026-09-14T10:05:47+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "Ревью #2: e2e соло",
+      "startedAt": "2026-09-14T10:05:47+03:00",
       "finishedAt": null
     }
   ],
@@ -15643,6 +15674,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-315 · ревью #2 (code-reviewer#3): принять — 0/0/0/1; ложного degraded при штатной работе нет, окно тишины e2e по устройству не флакает, мутанты красные. Приёмка — tech-lead#3 (с отметкой EPIC-001 по .golangci.yml по назначению оркестратора)."
+    },
+    {
+      "at": "2026-09-14T10:05:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 выполнена TEAM-3/developer#3: Dispatcher переподписывается после конца подписки (ошибка или nil без Stop) с паузой 1…15 с через Timers, bus: ok после события через новую подписку или 35 с; Stop укладывается в срок (2,0 с вместо 29,7 с); снапшот в Stop — не дольше половины срока, Warn; строгий "
+    },
+    {
+      "at": "2026-09-14T10:05:47+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313 · итерация 2 (developer#1): Ma-1 — недетерминирован FakeNarrator (горутина на подписку), шлюз берёт первый нарратив по офсету; нарративы хода и событие открытия встречи сравниваются набором; Ma-2 — счёт копий и сравнение тел по topic/id; Mi-1 — поля механики проверяются отдельно; Mi-2 — «шаг о"
     }
   ],
   "blockers": [],
