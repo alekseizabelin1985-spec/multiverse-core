@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"multiverse-core.io/cmd/telegram-bot/internal/config"
+	"multiverse-core.io/cmd/telegram-bot/internal/deliver"
 	"multiverse-core.io/cmd/telegram-bot/internal/privacy"
 	"multiverse-core.io/cmd/telegram-bot/internal/sender"
 	"multiverse-core.io/cmd/telegram-bot/internal/updates"
@@ -289,6 +290,17 @@ func TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients(t *testing.T) {
 	}
 	if loopGW.HTTP.Timeout != testLimits.DeliverGatewayTimeout || flowGW.ClientID != ClientID || loopGW.ClientID != ClientID {
 		t.Errorf("client of the loop: timeout %s, client ids %q %q", loopGW.HTTP.Timeout, flowGW.ClientID, loopGW.ClientID)
+	}
+	// Acceptance of T-307: the ack of the loop has a client of its own whose
+	// repeats end before the lease; the loop tells an early empty answer by the
+	// clock of the process.
+	ackGW, _ := b.loopOpts.Acks.(*client.Client)
+	if ackGW == nil || ackGW == loopGW || ackGW.HTTP == loopGW.HTTP || ackGW.HTTP.Timeout != deliver.AckHTTPTimeout ||
+		ackGW.Backoff != deliver.AckBackoff || ackGW.ClientID != ClientID || ackGW.BaseURL != loopGW.BaseURL {
+		t.Errorf("client of the ack: %+v, want deliver.NewAckClient beside the client of the loop", ackGW)
+	}
+	if b.loopOpts.Clock != e.clock || b.loopOpts.Timers != e.timers {
+		t.Error("the loop does not run on the clock and the timers of the process")
 	}
 	if b.accOpts.Sender == b.loopOpts.Sender || b.accOpts.Sender == b.flowOpts.Sender || b.flowOpts.Sender == b.loopOpts.Sender {
 		t.Error("the gate, the flow and the loop do not each have a sender of their own")

@@ -73,7 +73,12 @@ type outbox struct {
 	ackErr  []error
 	// block makes an empty long-poll wait for ctx instead of answering at once.
 	block bool
-	seq   int
+	// stopping makes every long-poll answer an empty list at once, as the
+	// gateway does while its process stops.
+	stopping bool
+	// emptyTook is how long a nil entry of pollErr takes; zero is the wait.
+	emptyTook time.Duration
+	seq       int
 }
 
 type item struct {
@@ -101,7 +106,20 @@ func (o *outbox) Deliveries(ctx context.Context, after string, limit int, wait t
 		err := o.pollErr[0]
 		o.pollErr = o.pollErr[1:]
 		o.mu.Unlock()
+		if err == nil {
+			// A nil entry is a long-poll that took its whole wait, or
+			// emptyTook, and found nothing: the clock moves by that much.
+			took := wait
+			if o.emptyTook > 0 {
+				took = o.emptyTook
+			}
+			o.clock.Advance(took)
+		}
 		return api.DeliveriesResponse{}, err
+	}
+	if o.stopping {
+		o.mu.Unlock()
+		return api.DeliveriesResponse{Deliveries: []api.Delivery{}}, nil
 	}
 	if limit != deliver.Limit || wait != deliver.Wait {
 		o.mu.Unlock()

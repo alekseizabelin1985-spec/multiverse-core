@@ -498,11 +498,15 @@ func TestASuccessfulPollResetsThePause(t *testing.T) {
 	refused := errors.New("gateway GET /v1/clients/telegram-bot/deliveries: connection refused")
 	ob := newOutbox(nil)
 	ob.block = true
-	// A nil entry is a long-poll that answers with no delivery.
+	// A nil entry is a long-poll that took its wait and answers with no
+	// delivery.
 	ob.pollErr = []error{refused, refused, nil, refused}
 	timers := &instantTimers{}
 	log, buf := logBuffer()
-	l := newLoop(t, ob, &sender.Fake{}, timers, log)
+	l, err := deliver.New(deliver.Options{Gateway: ob, Sender: &sender.Fake{}, Timers: timers, Clock: ob.clock, Log: log})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

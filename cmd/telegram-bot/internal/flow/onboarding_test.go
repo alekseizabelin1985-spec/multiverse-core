@@ -219,17 +219,37 @@ func TestHelpOfAPlayerWhoConsentedShowsTheCommandsAndTheNotice(t *testing.T) {
 	}
 }
 
-func TestValidName(t *testing.T) {
-	for name, want := range map[string]bool{
-		"Вася": true, "Ли": true, "Вася-2": true, "Анна Мария": true, "John Smith 3": true,
-		strings.Repeat("я", 32): true,
-		"В":                     false, strings.Repeat("я", 33): false, "": false,
-		"Вася!": false, "Вася_2": false, "Вася\u0007": false, "Вася\nПетя": false, "Вася\t": false,
-		"<b>": false, "[x](y)": false, "Вася.": false,
-	} {
-		if got := flow.ValidName(name); got != want {
-			t.Errorf("ValidName(%q) = %v, want %v", name, got, want)
-		}
+// Acceptance of T-312: the bot checks a name by api.ValidCharacterName, the
+// rule of POST /v1/characters, after trimming the message. The rule is stricter
+// than the copy the bot had before in two places — two spaces in a row and a
+// name in NFD are refused — and both reach the player as NameInvalid without a
+// call to the gateway.
+func TestTheNameIsCheckedByTheRuleOfTheGateway(t *testing.T) {
+	for _, name := range []string{"Вася  Пупкин", "йва", "Вася!", "В"} {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.gw.on(routeResolve, resolvedConsented)
+			f.send("/start")
+			got := f.send(name)
+			if len(got) != 1 || got[0].Text != render.NameInvalid {
+				t.Errorf("name %q = %q, want NameInvalid", name, f.texts(got))
+			}
+			if f.gw.count(routeWorlds)+f.gw.count(routeCreate) != 0 {
+				t.Errorf("name %q reached the gateway", name)
+			}
+		})
+	}
+
+	f := newFixture(t)
+	f.gw.on(routeResolve, resolvedConsented)
+	f.gw.on(routeWorlds, oneWorld)
+	st := aliveCharacter("Вася Пупкин")
+	f.gw.on(routeCreate, answer{status: http.StatusCreated, body: api.CreateCharacterResponse{PlayerID: "player-A", Character: &st, Created: ptr(true)}})
+	f.send("/start")
+	f.send("  Вася Пупкин \t")
+	var req api.CreateCharacterRequest
+	if err := json.Unmarshal(f.gw.last(routeCreate).Body, &req); err != nil || req.CharacterName != "Вася Пупкин" {
+		t.Errorf("create body = %+v (%v), want the name trimmed at both ends", req, err)
 	}
 }
 
