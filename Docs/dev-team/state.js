@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:01:16+03:00",
+  "updatedAt": "2026-09-14T03:10:50+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -4630,14 +4630,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-308",
           "title": "FakeGateway и HTTP-обвязка рядом с Harness v0",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T03:10:50+03:00",
           "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.8",
-          "spentMinutes": 0,
+          "spentMinutes": 107,
           "timeLog": [],
           "card": "epics/EPIC-004-gateway-bot/tasks/T-308.md"
         },
@@ -10878,7 +10878,7 @@ window.DEVTEAM_STATE =
       "task": "T-308",
       "action": "Приёмка T-308",
       "startedAt": "2026-09-14T02:53:26+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:10:50+03:00"
     },
     {
       "instance": "developer#3",
@@ -15239,6 +15239,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "Запущены: T-058 (state.Bootstrap, mvctl world init/status, developer#1), T-059 (recovery, /health, admin-маршруты, подключение хранилища в cmd/multiverse, developer#2), T-472 (shared/entity грамматика пути и виды скаляров, contract-change, developer#3)."
+    },
+    {
+      "at": "2026-09-14T03:10:50+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-308 принята tech-lead#3 (итерация 3 без ревью #3; правка кода шлюза вне объёма принята и отмечена в индексе; отметка devops по runbook §6 слияние не держит — сверка на стенде внесена в DoD T-390). Индекс 0.1.11: строки DoD T-313, T-350, T-354, T-357, T-390, T-392; §8 З-16…З-19. Итераций ревью — 2."
+    },
+    {
+      "at": "2026-09-14T03:10:50+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Контрольное слияние N1 (постоянное разрешение): epic/EPIC-001-foundation → develop (1aaab9c) — T-469. make ci BASE=develop с scripts-parity -jobs 1 — rc=0 (113 passed), secrets-scan чист, пересечений с файлами владельца нет."
+    },
+    {
+      "at": "2026-09-14T03:10:50+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Синхронизация develop → EPIC-002 (d91ba59) с рецептом встречи правила 9 T-469 и MV_RULES_PATH T-471 в том же коммите: строка READERS (state, swarm) с комментарием, причина MV_SWARM_FAKE без «образ не несёт rules/», MV_RULES_PATH в фикстурах good-reach-host-only.yml и bad-reach-all.yml. make compose-"
     }
   ],
   "blockers": [],
