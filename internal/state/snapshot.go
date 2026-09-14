@@ -121,7 +121,10 @@ func Writer() string {
 // worker of the world (Context.Snapshot) or a Stop that has ended it.
 //
 // A stopped world is not written: after a failure its memory may be behind
-// the objects its last proposal wrote, and a snapshot would hide that.
+// the objects its last proposal wrote, and a snapshot would hide that. A
+// snapshot with reason bootstrap is written only for a world without
+// latest.json (§4.9): over a pointer, readable or not, it is
+// ErrWorldInitialized and nothing is written.
 func (a *Applier) Snapshot(ctx context.Context, reason string) (*LatestPointer, error) {
 	return a.snapshot(ctx, reason, nil)
 }
@@ -149,6 +152,13 @@ func (a *Applier) snapshot(ctx context.Context, reason string, cause *eventbus.E
 	}
 	out, release := a.withinSnapshotTimeout(ctx)
 	defer release()
+	if reason == SnapshotBootstrap {
+		// Before the count starts again: a refused bootstrap is not an attempt
+		// at a snapshot, and changes neither the count nor /health.
+		if err := a.uninitializedPointer(out); err != nil {
+			return nil, err
+		}
+	}
 	// The count starts again whether or not the write succeeds: a failed
 	// snapshot is tried again at the next trigger, not on every proposal after
 	// it (§9, "Ошибка записи снапшота").
@@ -185,6 +195,36 @@ func (a *Applier) snapshot(ctx context.Context, reason string, cause *eventbus.E
 	a.setSnapshotEventFailure(nil)
 	return pointer, nil
 }
+
+// uninitializedPointer is nil when the world has no latest.json, the one state
+// a snapshot with reason bootstrap is taken in (§4.9, T-475). A pointer that
+// is there — readable or not — is ErrWorldInitialized; any other failure to
+// read it is returned as it is. The rule is the pointer and not seq 0: a
+// snapshot object left without its pointer (a crash between the two PUT, §4.4)
+// would otherwise lock world init out for good.
+//
+// The check runs on the worker of the world, in the order of its snapshots, so
+// that two bootstraps asked at once cannot both be written.
+func (a *Applier) uninitializedPointer(ctx context.Context) error {
+	_, err := a.objects.ReadLatest(ctx, a.worldID)
+	switch {
+	case errors.Is(err, ErrNoSnapshot):
+		return nil
+	case err == nil, errors.Is(err, ErrUndecodable):
+		refused := fmt.Errorf("%w: %s has its %s", ErrWorldInitialized, a.worldID, PointerKey)
+		if err != nil {
+			refused = fmt.Errorf("%w (%w)", refused, err)
+		}
+		a.log.Info("snapshot with reason bootstrap refused: the world is initialized", "err", refused, "handled", true)
+		return refused
+	default:
+		return fmt.Errorf("state: snapshot of %s with reason bootstrap: read the pointer: %w", a.worldID, err)
+	}
+}
+
+// ErrWorldInitialized is a snapshot with reason bootstrap asked of a world that
+// has latest.json (§4.9): nothing is written.
+var ErrWorldInitialized = errors.New("state: the world is initialized")
 
 // withinSnapshotTimeout is ctx cancelled as well once SnapshotTimeout has passed
 // on the timers of the Applier — the transport timers, real in every mode, so

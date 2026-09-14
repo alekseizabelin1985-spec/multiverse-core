@@ -1991,3 +1991,88 @@ Ma-1 ревью #1 закрыт: `rollForwardIntent` сначала провер
 
 1. **EPIC-002 (`internal/state`, после T-059):** точное условие «пакет записан» для изменения без правки, не зависящее от длины истории. Например, при полной истории (`len == HistoryLimit`) без записи предложения считать пакет записанным, если `at` самой старой записи позже `applied_at` интента. Или хранить `proposal_id` интента в объекте вне истории. Приоритет низкий (п. 7).
 2. Из ревью #2 в силе: T-474 — рестарт после атомарного пакета с изменением без правки поверх Mi-4. EPIC-001 / C-01 — «первый офсет журнала» (Mi-1) и интеграция Redpanda `ReadRange` ниже начала журнала.
+
+## T-475 · ревью #1 · 2026-09-14 · code-reviewer#1 (TEAM-1)
+
+### Границы ревью
+
+Папка `.worktrees/T-475`, ветка `task/T-475-world-init-kafka`, база и HEAD `77d06ff`. Коммитов нет, всё не закоммичено: `git status`/`git diff` плюс неотслеживаемые `core.go`, `kafka.go`, `kafka_test.go`, `init_memory_test.go`, `kafka_integration_test.go`, `internal/state/admin_test.go`.
+
+Сверено с:
+- разделом «### T-475» в `tasks.md`;
+- КД `state-and-mechanics.md` §4.9, §4.10 («Правила `world init`», «Путь `--bus kafka`»), §18, §19;
+- решениями system-architect в карточках T-058 и T-059;
+- C-01 (`runtime.AdminOnly`, `X-Client-Id`) и схемой `entity.update.rejected.v1.json`.
+
+Правки `Docs/` в ветке задачи (карточка, `dev-log.md`) замечанием не считаю — таков порядок эпика. Все файлы кода принадлежат EPIC-002 (`ownership.md` строка 20: `internal/state/**`, `cmd/mvctl/internal/world/**`). `shared/env/vars.go`, `.golangci.yml` и `shared/runtime` не менялись.
+
+### Вердикт
+
+**Принять.** Blocker (Critical): 0 · Major: 0 · Minor: 1 · Nit: 3.
+
+- DoD закрыт, кроме стендовой части §4: разрешения на неё нет, по DoD она уходит в T-063.
+- Сделаны и покрыты тестами:
+  - правило объектов;
+  - admin-маршрут;
+  - `--force` → `exit 2`;
+  - хвост ревью #2 T-058: N-3, N-4, повреждённый указатель, подсказка `world status`, `details` отказа.
+- Мутанты исполнителя и оба мутанта ревьюера красные.
+- Mi-1 — край, где объекты хранилища и память State `core` расходятся. Он требует нарушить процедуру КД §4.10 (в) и на T-063 не влияет. Исправить в задаче или взять в бэклог — решает tech-lead.
+
+### Проверено
+
+| # | Пункт | Результат |
+|---|---|---|
+| 1 | Правило объектов: `WithObjects` (`bootstrap.go:280`, `createdInObjects` `:357`) | С опцией журнал для решения «уже создано» не читается: `createdBefore` не вызывается, `End` берётся как раньше и нужен только `Tail`. Объект есть → `Skipped`, публикации нет. `ErrNotFound`/`ErrNoBucket` → сущность предлагается. Иная ошибка, в том числе `ErrUndecodable` объекта сущности, → `ErrBootstrap` до первой публикации. Общий код ожидания ответов не менялся. Три теста system-architect есть на обоих уровнях: (а) объекты при пустом журнале → 0 предложений (`TestInitOverKafkaProposesNothingTheStoreHolds`, `TestBootstrapWithObjectsProposesNothingTheStoreHolds`; State перезапущен над объектами с удалёнными снапшотами, журнал новый); (б) старые факты при пустом хранилище → 6 (`…IgnoresTheFactsOfTheJournal`, журнал тот же, в нём шесть `entity.created`); (в) `--force` → `exit 2`, хранилище и шина не открывались, 0 и 0 (`TestInitOverKafkaRefusesWhatItDoesNotDo`). Есть и тест «только недостающие» |
+| 2 | Admin-маршрут (`admin.go:84`) | Без тела (`io.EOF`), `{}` или `reason: ""` → `admin`. `admin` или `bootstrap` → как есть. Иная причина → `400 invalid_reason`. Не JSON, неизвестное поле, не тот тип, второй документ → `400 invalid_body`. Разбор идёт до `c.Snapshot`, так что при `400` ничего не пишется — тест проверяет пустую ленту `put state/`. `runtime.AdminOnly` не менялся (`shared/runtime/http.go:203`, в diff его нет). Он оборачивает обработчик, поэтому `403` приходит раньше чтения тела. Тело ограничено 4 КБ. Мутант A ревьюера (снята проверка второго документа) краснеет |
+| 3 | Риск `reason=bootstrap` над живым миром | Данные не переписываются. Снапшот — новый объект с `seq = max+1`, указатель переходит на текущую память мира, как при `admin`. Ротация K=5 сохраняет прежние снапшоты, объекты сущностей не трогаются. Остановленный мир снапшот не пишет (`snapshot.go:147`). Пустой мир `uninitialized` тоже не пишет: `500 snapshot_failed` «the world entity holds no laws_version» (зонд P1). Ни один production-читатель не ветвится по `reason`: `grep SnapshotBootstrap` находит только `mvctl` и тесты. Злоупотребление даёт лишь неверную метку `bootstrap` у снапшота `seq > 0`. Доступ тот же, что у `admin`: `X-Client-Id` из `MV_CORE_ADMIN_CLIENTS`. Сам `mvctl` поверх указателя не идёт (`kafka.go:78`, `exit 2`), мутант B ревьюера краснеет. Риск низкий. Ограничение «`bootstrap` только без `latest.json` → 409» полезно как защита от ошибки, но не обязательно — это решение system-architect |
+| 4 | Предпроверка `/health` у `core` (`kafka.go:91`, `core.go:73`) | Стоит до открытия шины и до публикаций, тесты проверяют 0 открытий шины. Разбор терпимый: health — любой JSON-ответ, в том числе `503`; health без `contexts.state` отказом не считается; не JSON → находка `core` «the body is not a health» с выдержкой ≤ 200 символов. Недоступен → `[core] core at <url> (MV_CORE_URL) is not reachable: …`. Мира нет в `MV_STATE_WORLDS` → текст называет переменную. Контекст `stopped` и мир `fail` → с `reason`. Секретов в выводе нет: переменные названы только по имени (`MV_CORE_URL`, `MV_CORE_ADMIN_CLIENTS`, `MV_STATE_WORLDS`), из значений печатается только адрес `core` (оговорка про userinfo — N-1). Ключи MinIO и брокеры в вывод не попадают |
+| 5 | Поведение по умолчанию | `MV_BUS` по умолчанию `kafka` ещё с EPIC-001 (`shared/env/vars.go:69`), и флаг `--bus` в T-058 берёт умолчание оттуда же. Меняется только одно: путь `kafka` больше не отказывает. По КД это ожидаемо: §4.10 п. 4 описывает путь `kafka` как основной, а в перечне `exit 2` стоит «`--bus kafka` до его задачи». T-476 в `runbook.md` уже пишет «с `--bus kafka` — после T-475». Замечанием не ставлю. Случайную инициализацию на проде ограничивают: (1) `latest.json` есть → `exit 2` до шины и `core`; (2) `--force` → `exit 2`; (3) `--store memory` → `exit 2`; (4) предлагаются только сущности фикстур без объекта; (5) адреса по умолчанию локальные (`127.0.0.1:19092`, `http://127.0.0.1:8090`), итог называет `core at <url>`. Скриптовых вызовов голого `world init` нет: искал по `Makefile`, `scripts/`, `test/`, `build/`, `.github/`, compose. Справка `--bus`/`--store`/`--rules`/`--force` описывает оба пути. Процедуры `world init` на стеке в README и runbook нет — в бэклог |
+| 6 | `ReadLatest`/`ErrUndecodable` и три случая `--force` (`store.go:280`, `init.go:153`) | Неразборчивый указатель помечается `ErrUndecodable` и не пересекается с `ErrNoSnapshot` (`TestAPointerThatDoesNotDecode`). Восстановление T-059 не изменилось: `recovery.go:134` идёт общей веткой `err != nil`, а `intactSnapshot` проверяет `ErrUndecodable` только у объекта снапшота. Путь memory: с `--force` — очистка и seq 0 со `state_hash` фикстуры; без `--force` — `[store]` с `latest.json` и `--force`, указатель и объекты не тронуты; ошибка транспорта — `[store]` в обоих случаях, шесть объектов на месте. Путь kafka — `[store]` с процедурой «stop core…», шина не открывалась |
+| 7 | N-3, N-4, вывод отказа | `snapshotOutcome` (`init.go:366`) — чистая функция, таблица из четырёх случаев; `nil, nil` теперь находка, а не разыменование `nil`. На kafka `200` с невышедшим `snapshot.created` даёт предупреждение по `/health` `snapshot_event_failed`, `exit 0` и `status: ok` в `--json`; тест на настоящем State с шиной, которая отказывает `snapshot.created`. N-4: `errors.Join(run.err, stopped)` (`init.go:341`), `errSnapshot` остаётся в цепочке, выбор проверки прежний. Отказ State — `Refusal{Entity, Reason, Details, EventID}`: детали в тексте по алфавиту, в `--json` — `details.refusal`. Приватность: `details` по схеме `entity.update.rejected.v1.json` закрыт (`additionalProperties: false`) — только `expected_version`, `actual_version`, `invariant_id`. `entity` — `type/id` сущности фикстуры (`player-A…C` с `actor_kind=ci`), других сущностей bootstrap не предлагает. Текст payload и атрибуты не печатаются. Правило печати C-15 v1.6 касается адресов LLM и сюда не относится |
+| 8 | Интеграционный тест `TestInitOverKafkaOnRedpandaAndMinIO` (прогон не повторялся) | Тег `//go:build integration`, тест входит в `make test-integration` (`go test -tags integration ./...`). Изоляция: свой Redpanda с топиками реестра, свой MinIO из пина `MINIO_IMAGE`, HTTP на `127.0.0.1:0`; у State `core` и команды разные клиенты шины и хранилища. `CleanupContainer` регистрируется до проверки ошибки старта (Redpanda — при `rp != nil`). `t.Cleanup` (LIFO) останавливает HTTP, State и шину раньше контейнеров. `t.Setenv` без `t.Parallel`. Пароль MinIO — тот же тестовый литерал, что в трёх уже принятых интеграционных тестах. `go vet -tags integration` — 0 |
+| 9 | Пересечения | T-480 (`.worktrees/T-480`, от `df47003`): папка чистая, коммитов нет. T-475 не меняет `internal/gateway` и `shared/eventbus/membus`, `membus` лишь импортируется в тесте. T-476 (`origin/task/T-476-health-degraded-make`, `7c8608a`) меняет `Makefile`, `README.md`, `Docs/ops/runbook.md`, `infrastructure.md` и документы EPIC-001 — T-475 их не трогает. T-478 (EPIC-004): `internal/gateway/turns`, `test/e2e/gateway_world_test.go`. Общих файлов нет |
+| 10 | Прогоны в рабочей папке (go1.26.8 windows/amd64) | `gofmt -l cmd internal` — пусто. `go build ./... && go vet ./... && go vet -tags integration ./cmd/mvctl/... ./internal/state/...` — 0. `go test -short -count=1 ./internal/state/... ./cmd/mvctl/...` — 9 пакетов ok; `env` на этот раз без «Access is denied», обход не понадобился. `golangci-lint run ./...` — 0 issues |
+| 11 | Мутанты и зонд ревьюера | Копия `scratchpad/t475r-copy`: tracked и untracked без `Docs/`, `services/`, `.claude/`, `.qwen/`, `.env`, без `-overlay`. Замена — ровно одно вхождение; файл восстанавливается побайтно, со сверкой. **K0** первым: `TestInitOverKafkaRefusesAWorldAlreadyInitialized` и `TestTheAdminRouteTakesTheReasonOfTheRequest` зелёные. **A** — `admin.go:94`, проверка второго документа выключена (`false && …`): `TestTheAdminRouteTakesTheReasonOfTheRequest` красный («two documents: 200», запись `put state/…`). **B** — `kafka.go:78`, отказ над существующим указателем выключен (`case err == nil && pointer == nil`): `TestInitOverKafkaRefusesAWorldAlreadyInitialized` красный. **Зонд P1** (файл теста только в копии): `core` поднят над пустым хранилищем (мир `uninitialized`), затем в `entities-{world}` снаружи, без рестарта, положены объекты. Все 6 → `exit 1`, `500 snapshot_failed: the world entity holds no laws_version`, указателя нет. Только `npc` и три `player` → `exit 0`, «entities created 2, skipped 4», `entities_count: 2`, `latest.json` seq 0 `bootstrap` из двух сущностей при шести объектах (Mi-1). Копия и скрипты `t475r_*` удалены по точному пути |
+
+### Замечания
+
+| # | Уровень | Файл:строка | Что не так | Как исправить |
+|---|---|---|---|---|
+| Mi-1 | Minor | `cmd/mvctl/internal/world/kafka.go:108-114` | Что предлагать, решают объекты хранилища (КД §4.10 (б)), а снапшот пишется из памяти State `core`. Команда не проверяет, что эти источники согласны. Если объекты появились под работающим State без рестарта (восстановлены из копии или записаны снаружи), State их не держит. Тогда `world init` пропускает сущности, которых нет в мире, и пишет `latest.json` seq 0 `bootstrap` с `entities_count: 2` при шести объектах, с `exit 0` и итогом «initialized» (зонд P1). Повторный `init` уже отказывает `exit 2`. Следующий рестарт `core` восстановит мир из неполного снапшота и станет сверять его с лишними объектами. При всех шести объектах отказывает только State («holds no laws_version»), и оператор не видит, что делать. Это зеркало риска 4 исполнителя (хранилище очищено снаружи), и оно тоже требует нарушить процедуру (в) — поэтому не Major | После `Bootstrap`, перед `POST` снапшота, прочитать `/health`. Сравнить `worlds.<world>.entities` с `len(Created)+len(Skipped)` и проверить, что нет `world: uninitialized`. Если State держит меньше — находка `core`, `exit 1`, ничего не пишется. Текст: «State of core at <url> holds N of the M entities the store has: restart core (the world is recovered from its objects) and run world init --bus kafka again». Тест — зонд P1 в двух вариантах (все шесть объектов и только четыре), в обоих `latest.json` нет. Дешевле — предупреждение после записи при `snapshot.EntitiesCount != Created+Skipped`, но тогда указатель уже записан |
+| N-1 | Nit | `cmd/mvctl/internal/world/core.go:43`, `kafka.go:57`, `kafka.go:126` | `c.url` печатается как есть в `MV_CORE_URL`: в находках, строке итога и `details.core`. Если в адресе появится userinfo (`http://user:pass@…`), пароль попадёт в вывод. `*url.Error` из `net/http` пароль скрывает, собственные строки — нет | В `newCore` разобрать адрес один раз и печатать `u.Redacted()`, а запросы строить по исходному значению. Тест с `http://u:p@127.0.0.1:1`: в stderr нет `p@` |
+| N-2 | Nit | `cmd/mvctl/internal/world/kafka.go:139-142` | Health без `contexts.state` пропускается молча (заглушка контекста, прокси без `/health` с JSON-телом, чужой процесс на порту) — так задумано, риск 2 исполнителя. Через `BootstrapTimeout` приходит находка `[bootstrap]` о молчании, но в ней уже не сказано, что `core` ничего не сообщил о State | Запомнить `seen=false` и при `ErrBootstrap` без `*state.Refusal` дописывать к находке: «core at <url> reported no context state in /health» |
+| N-3 | Nit | `internal/state/admin.go:85` | Предел тела `snapshotRequestLimit` и явный `{"reason": ""}` тестом не закреплены: мутант без `io.LimitReader` останется зелёным | В таблицу `TestTheAdminRouteTakesTheReasonOfTheRequest` добавить тело больше 4 КБ (например, `{"reason":"admin"` и 5 КБ пробелов) → `400 invalid_body` и `{"reason": ""}` → `admin` |
+
+### Оценка риска по вопросам к system-architect (замечаниями не ставлю)
+
+1. **Тело `{"reason": "admin"|"bootstrap"}`, коды `400 invalid_reason`/`invalid_body`.** Риск низкий:
+   - назад совместимо: без тела поведение T-059;
+   - из-за `DisallowUnknownFields` любое будущее поле тела несовместимо со старым `core`, но `mvctl` покажет такой `400` находкой, а не промолчит;
+   - прокси шлюза `/v1/admin/*` в коде ещё нет (EPIC-004). Если он не передаст тело, снапшот получит `admin`, и `mvctl` предупредит (E2), а не упадёт;
+   - `bootstrap` над живым миром — п. 3 таблицы: данные не теряются, неверна только метка.
+2. **Комментарий `Bootstrap` в КД §4.10** («opts меняют только ожидание»). Только текст документа, код от него не зависит. Докстроки `BootstrapOption`, `WithObjects`, `Bootstrap` уже описывают опцию верно. Устарела и строка перечня `exit 2` «`--bus kafka` до его задачи».
+3. **Описание `MV_CORE_URL`.** Только текст манифеста, код не зависит. Практический риск в другом: в `.env.example` значение `http://core:8090` — адрес внутри compose. `mvctl` на хосте с ним получит `[core] … (MV_CORE_URL) is not reachable`, и текст сразу называет переменную. Значение для хоста уже есть в строке 244 `.env.example`.
+
+### Открытые вопросы пользователю
+
+Нет.
+
+### Риски и допущения
+
+- Интеграционный прогон исполнителя (PASS, 53 с) не повторялся — так в задании. Настоящий стек, прокси шлюза и `MV_CORE_ADMIN_CLIENTS` деплоя проверит T-063.
+- Два одновременных `world init --bus kafka` над одним миром оба пройдут проверку указателя. State гасит повтор по `proposal_id`, поэтому второй может кончиться таймаутом `[bootstrap]`, или оба запишут снапшоты seq 0 и seq 1 с меткой `bootstrap`. Данные не теряются; это ошибка вызова оператора, а не баг задачи.
+- `EnsureWorldBuckets` выполняется до проверки `core`, так что при недоступном `core` бакеты мира в MinIO уже созданы. Операция идемпотентна и совпадает с `minio-init.sh` — не замечание.
+- `-race` в окружении недоступен (нет cgo). Чтение `double.requests` без мьютекса (`kafka_test.go:531`) ложной гонки не даст: чтение ответа `net/http` — точка happens-before (`internal/poll`, `ioSync`).
+- `make secrets-scan` не запускался: он смотрит индекс и диапазон ветки, а изменения не добавлены. Новый литерал пароля MinIO совпадает с тремя уже принятыми.
+- В `.worktrees/T-475` изменена только эта запись в `review.md`; карточка T-475 не тронута — так указал оркестратор. `.env`, Docker, стенд `:8888`, `.claude/*`, `.mcp.json`, `.qwen/*`, `Docs/user-stories/` не трогал.
+
+### Предложения в бэклог
+
+1. **EPIC-002**, если Mi-1 не исправляется в задаче: перед снапшотом `world init --bus kafka` сверять, что State держит столько же сущностей, сколько объектов фикстур. Тест — по зонду P1.
+2. **EPIC-001 / T-063 (runbook):** раздел «Создать мир на стеке»:
+   - `mvctl world init`: по умолчанию `--bus kafka`, нужен `core` с `state`, для хоста — свой `MV_CORE_URL`;
+   - `world status --store minio`;
+   - процедура пересоздания КД §4.10 (в);
+   - `--bus memory` — только для пробы фикстур.
+3. **system-architect (по желанию):** admin-маршрут отказывает `reason=bootstrap`, если у мира есть `latest.json` (`409 initialized`). Это защита от ошибки оператора, а не от потери данных.
