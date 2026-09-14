@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T09:11:31+03:00",
+  "updatedAt": "2026-09-14T09:37:35+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3018,11 +3018,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-058",
           "title": "bootstrap.go + mvctl world init/status",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 1,
+          "reviewIterations": 2,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -3032,11 +3032,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -3228,7 +3228,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-472",
           "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
@@ -4708,7 +4708,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-313",
           "title": "e2e соло: solo-30, death, flee-fail",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
@@ -4736,7 +4736,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-315",
           "title": "e2e бота на фейках",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T03:12:11+03:00",
           "finishedAt": null,
@@ -10926,7 +10926,7 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Recovery, /health, admin-маршруты State",
       "startedAt": "2026-09-14T03:01:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:37:35+03:00"
     },
     {
       "instance": "developer#3",
@@ -11016,7 +11016,7 @@ window.DEVTEAM_STATE =
       "task": "T-315",
       "action": "Ревью #1: e2e бота",
       "startedAt": "2026-09-14T03:46:54+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:37:35+03:00"
     },
     {
       "instance": "developer#3",
@@ -11036,7 +11036,7 @@ window.DEVTEAM_STATE =
       "task": "T-472",
       "action": "Итерация 2: ключ пути, оракул свойство-теста",
       "startedAt": "2026-09-14T09:07:42+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:37:35+03:00"
     },
     {
       "instance": "developer#1",
@@ -11046,7 +11046,7 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Итерация 2: store memory, очистка при --force",
       "startedAt": "2026-09-14T09:09:58+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:37:35+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -11056,7 +11056,7 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Ревью #1: e2e соло",
       "startedAt": "2026-09-14T09:11:31+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:37:35+03:00"
     },
     {
       "instance": "architect#3",
@@ -11066,6 +11066,56 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Решения по T-313 и T-315",
       "startedAt": "2026-09-14T09:11:31+03:00",
+      "finishedAt": "2026-09-14T09:37:35+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-313",
+      "action": "Итерация 2: детерминизм сравнения, дубли",
+      "startedAt": "2026-09-14T09:37:35+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-315",
+      "action": "Итерация 2 на слитом дереве",
+      "startedAt": "2026-09-14T09:37:35+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "Ревью #2",
+      "startedAt": "2026-09-14T09:37:35+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#4",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Ревью #1: восстановление State",
+      "startedAt": "2026-09-14T09:37:35+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Решения по T-059, риск healthcheck compose",
+      "startedAt": "2026-09-14T09:37:35+03:00",
       "finishedAt": null
     }
   ],
@@ -15479,6 +15529,42 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-313 выполнена TEAM-3/developer#1: e2e соло solo-30 (30 ходов, один turn.completed на ход, --chaos=duplicate даёт тот же журнал), death (гибель на 46-м ходу, /start, 409 character_dead), flee-fail — через HTTP настоящего шлюза (FakeGateway) с FakeState и swarm.FakeContext на одной membus, clock.Man"
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313/T-315 · решения architect#3: ход с Phase 1 завершается только после механики (новая задача Н-1, S); leave и смерть закрывают сессию соло в I1 (Н-2, S–M, после Н-1); e2e шлюза в live на clock.Manual, правило для recovery T-314; по T-315 к system-architect — в C-08 порядок между видами доставок "
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-472 принята tech-lead#2 (итерация 2 без ревью #2; мутанты контрольный/Atoi/died_at/flee красные; make test — 0). Индекс 0.1.8, бэклог: функция догона в shared/entity после T-059, readmodel.opFor → EPIC-004, виды список/объект, путь name. До слияния: отметки tech-lead#1 (contexts_state_test.go) и t"
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-315 · ревью #1 (code-reviewer#3): вернуть — 0/1/2/5. Ma-1 после слияния с T-309 падает TestTheLoopIsDegradedAfterASeriesOfFailedPolls (ранний пустой ответ не сбрасывает FailedPolls); Mi-1 e2e собирает бота вручную; Mi-2 таймеры клиента ack не закреплены. Оркестратор закоммитил итерацию 1 как wip ("
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 · итерация 2 (developer#1): --bus memory только с --store memory; --force очищает entities-{world}/ и snapshots-{world}/state/ (latest.json последним), seq 0; exit 0 с предупреждениями, если latest.json записан; тесты Mi-2, N-2; мутант L2 пойман линтером. Ревью #2 — code-reviewer#1 (с пробным "
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 выполнена TEAM-1/developer#2: восстановление по §4.8 (снапшот с откатом до пяти, окно дедупа, догон фактов, сверка с объектами, roll-forward интентов, analytics.replay.completed mode=recovery), собственный курсор Journal.Tail вместо группы core.state (T-474 — полный объём M), /health мира (sna"
+    },
+    {
+      "at": "2026-09-14T09:37:35+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-313 · ревью #1 (code-reviewer#2): вернуть — 0/2/2/4. Ma-1 сравнение прогонов мигает при малом GOMAXPROCS (два нарратива на корреляцию, tracker берёт первый обработанный; CI гоняет test/e2e под -race); Ma-2 проверка дублей не видит повторную публикацию с тем же id; Mi-1 поля механики нигде не прове"
     }
   ],
   "blockers": [],
