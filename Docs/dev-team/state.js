@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:40:31+03:00",
+  "updatedAt": "2026-09-14T11:42:48+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5044,10 +5044,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-478",
           "title": "Ход с Phase 1 завершается после механики",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-478.md",
           "assignee": "developer#1",
-          "startedAt": "2026-09-14T11:02:05+03:00"
+          "startedAt": "2026-09-14T11:02:05+03:00",
+          "reviewIterations": 1
         },
         {
           "id": "T-479",
@@ -11322,7 +11323,7 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Ход с Phase 1 завершается после механики",
       "startedAt": "2026-09-14T11:02:05+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T11:42:48+03:00"
     },
     {
       "instance": "developer#3",
@@ -11352,6 +11353,26 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "mvctl world init --bus kafka",
       "startedAt": "2026-09-14T11:20:42+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#3",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-478",
+      "action": "Ревью #1: ход после механики",
+      "startedAt": "2026-09-14T11:42:48+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "architect#3",
+      "role": "architect",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-478",
+      "action": "Уточнения §7.7 и C-10 по T-478",
+      "startedAt": "2026-09-14T11:42:48+03:00",
       "finishedAt": null
     }
   ],
@@ -15993,6 +16014,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние O (постоянное разрешение): epic/EPIC-002-state-mechanics → develop (b071ec6) — T-472, T-058, T-059. make ci BASE=develop с scripts-parity -jobs 1 — rc=0 (113 passed), secrets-scan чист, пересечений с файлами владельца нет; develop собирается, тесты state/multiverse/entity/gateway"
+    },
+    {
+      "at": "2026-09-14T11:42:48+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-478 выполнена TEAM-3/developer#1: ход enter/leave/attack/flee/rest завершается после подтверждения нарратива всеми и записи механики (OnDelivered пишет narrative_at, OnMechanics завершает), look/say/defend — по ack; Sweep на дедлайне закрывает доставленный без механики со статусом нарратива. Уточн"
     }
   ],
   "blockers": [],
