@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T02:53:26+03:00",
+  "updatedAt": "2026-09-14T03:01:16+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2990,14 +2990,14 @@ window.DEVTEAM_STATE =
         {
           "id": "T-057",
           "title": "state — objStore, интенты, снапшоты, latest.json",
-          "status": "review",
+          "status": "done",
           "assignee": "developer#2",
           "startedAt": "2026-09-14T01:18:17+03:00",
-          "finishedAt": null,
+          "finishedAt": "2026-09-14T03:01:16+03:00",
           "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.5",
-          "spentMinutes": 0,
+          "spentMinutes": 107,
           "timeLog": [],
           "card": "epics/EPIC-002-state-mechanics/tasks/T-057.md"
         },
@@ -3018,9 +3018,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-058",
           "title": "bootstrap.go + mvctl world init/status",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#1",
+          "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -3032,9 +3032,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-059",
           "title": "state — recovery, /health, admin-маршруты",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#2",
+          "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -3228,9 +3228,9 @@ window.DEVTEAM_STATE =
         {
           "id": "T-472",
           "title": "Грамматика пути и типизированные скаляры в shared/entity для всех читателей; исправление remove inventory.0 (C-02 v1.8, после T-470)",
-          "status": "todo",
-          "assignee": null,
-          "startedAt": null,
+          "status": "in_progress",
+          "assignee": "developer#3",
+          "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
           "reviewIterations": 0,
           "wave": 1,
@@ -10858,7 +10858,7 @@ window.DEVTEAM_STATE =
       "task": "T-057",
       "action": "Отметка владельца shared/contracts",
       "startedAt": "2026-09-14T02:48:50+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:01:16+03:00"
     },
     {
       "instance": "tech-lead#2",
@@ -10898,6 +10898,36 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Текст КД §7.6/§11.2/§11.4 под код",
       "startedAt": "2026-09-14T02:53:26+03:00",
+      "finishedAt": "2026-09-14T03:01:16+03:00"
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "state.Bootstrap, mvctl world init/status",
+      "startedAt": "2026-09-14T03:01:16+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#2",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-059",
+      "action": "Recovery, /health, admin-маршруты State",
+      "startedAt": "2026-09-14T03:01:16+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#3",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-472",
+      "action": "Грамматика пути в shared/entity",
+      "startedAt": "2026-09-14T03:01:16+03:00",
       "finishedAt": null
     }
   ],
@@ -15185,6 +15215,30 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-309 · ревью #1 (code-reviewer#2, TEAM-3): принять — 0/0/4/4. Mi-1 синхронная починка stale в догоне съедает бюджет и может уронить Start; Mi-2 сжатие links.db в Stop зависит от хранилища; Mi-3 порядок «восстановление до догона» не закреплён тестом (мутант M1 зелёный); Mi-4 outbox_oldest_age_s в re"
+    },
+    {
+      "at": "2026-09-14T03:01:16+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 · отметка владельца shared/contracts (tech-lead#1): поставлена — WorldRequired у snapshot.created соответствует C-14 v1.3/v1.4, издателей без мира нет; Nit: метка contract-change в индексе; точный текст правки design.md §4.1/§7 (MV_SNAPSHOT_EVERY_FACTS) — в карточке."
+    },
+    {
+      "at": "2026-09-14T03:01:16+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-057 слита: коммит c6d5d5e, sync с эпиком (конфликт tasks.md: T-471 — v0.1.6, T-057 — v0.1.7), проверка слитого дерева (build, vet, тесты state/multiverse/contracts/testkit/gateway, e2e, lint, contracts/env check) зелёная, ветка запушена, слита в epic/EPIC-002-state-mechanics (0345177), эпик запуше"
+    },
+    {
+      "at": "2026-09-14T03:01:16+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-309 · architect#3: КД §11.2/§11.4 приведён к решениям итерации 2 (в replay на End только запуск подписок; ошибка догона — отказ Start; проверка component=state на старте) и к ревью #1 (починка stale в догоне — по последнему анонсу или под потолком, не отказывает Start; срок снапшота в Stop, сжатие"
+    },
+    {
+      "at": "2026-09-14T03:01:16+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "Запущены: T-058 (state.Bootstrap, mvctl world init/status, developer#1), T-059 (recovery, /health, admin-маршруты, подключение хранилища в cmd/multiverse, developer#2), T-472 (shared/entity грамматика пути и виды скаляров, contract-change, developer#3)."
     }
   ],
   "blockers": [],
