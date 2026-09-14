@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -108,6 +109,8 @@ type options struct {
 	db     *sql.DB
 	// publishTimeout bounds a publication of the tracker; zero is the default.
 	publishTimeout time.Duration
+	// log receives the log of the tracker; nil discards it.
+	log *slog.Logger
 }
 
 func newFixture(t *testing.T, o options) *fixture {
@@ -157,7 +160,7 @@ func (f *fixture) build(t *testing.T, o options) {
 		t.Fatal(err)
 	}
 	if f.tracker, err = turns.New(turns.Config{DB: f.db, Sessions: f.sessions, Bus: pub, Clock: f.clock,
-		PublishTimeout: o.publishTimeout}); err != nil {
+		PublishTimeout: o.publishTimeout, Log: o.log}); err != nil {
 		t.Fatal(err)
 	}
 	f.keys = actions.NewKeys(f.db, store.KeyTTL)
@@ -278,4 +281,30 @@ func (f *fixture) inTx(t *testing.T, fn func(tx *sql.Tx) error) {
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// begun records a turn of player-A for an action of type typ the way the
+// service of actions records an accepted one, without its preconditions — an
+// attack needs no encounter here — and returns the event of the action.
+func (f *fixture) begun(t *testing.T, typ string) eventbus.Event {
+	t.Helper()
+	ctx := context.Background()
+	turn := actions.Turn{Scope: eventbus.ScopeRef{ID: playerA, Type: "solo"}, WorldID: world, PlayerID: playerA,
+		Name: "Вася", Type: typ, ActorKind: eventbus.ActorCI, At: f.clock.Now()}
+	ref, err := f.tracker.Begin(ctx, turn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := eventbus.NewRoot(actions.Rules[typ].Event, contracts.SourceGateway, world, nil, eventbus.ActorCI, map[string]any{})
+	if err := f.tracker.Accepted(ctx, turn, ref, action.ID); err != nil {
+		t.Fatal(err)
+	}
+	return action
+}
+
+// decided is a combat.decided of the chain of action, with the mode and the
+// level of detail of Phase 1.
+func decided(action eventbus.Event, cause string) eventbus.Event {
+	return eventbus.Derive(action, "combat.decided", contracts.SourceSwarm,
+		map[string]any{"phase1_mode": "rules", "lod": "full"}, eventbus.WithCauseID(cause))
 }

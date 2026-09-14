@@ -20,7 +20,8 @@ import (
 var ErrNotFound = errors.New("state: not found in the store")
 
 // ErrUndecodable is an object of the store that is there but does not read as
-// what its key says it is: a snapshot object cut short or overwritten.
+// what its key says it is: a snapshot object or latest.json cut short or
+// overwritten.
 var ErrUndecodable = errors.New("state: undecodable object")
 
 // ErrNoSnapshot is a world without latest.json: no snapshot was ever written
@@ -276,7 +277,7 @@ func (s *objectStore) ReadLatest(ctx context.Context, worldID string) (*LatestPo
 	}
 	var pointer LatestPointer
 	if err := json.Unmarshal(body, &pointer); err != nil {
-		return nil, fmt.Errorf("state: decode %s/%s: %w", bucket, PointerKey, err)
+		return nil, fmt.Errorf("%w: decode %s/%s: %w", ErrUndecodable, bucket, PointerKey, err)
 	}
 	return &pointer, nil
 }

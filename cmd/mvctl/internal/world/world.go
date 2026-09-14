@@ -6,6 +6,9 @@
 // A world is created through State and nothing else: the command proposes the
 // fixture entities (state.Bootstrap) and asks State for the snapshot, so the
 // entities, their commit records and the snapshot are the ones State wrote.
+// With --bus memory that State runs inside the command; with --bus kafka it is
+// the State of the running core, which the command reaches over Redpanda and
+// its admin route.
 package world
 
 import (
@@ -13,6 +16,10 @@ import (
 	"io"
 
 	"multiverse-core.io/cmd/mvctl/internal/cli"
+	"multiverse-core.io/shared/clock"
+	"multiverse-core.io/shared/contracts"
+	"multiverse-core.io/shared/env"
+	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/objstore"
 )
 
@@ -49,21 +56,63 @@ const (
 	CheckSnapshot = "snapshot"
 	// CheckWorld names a world that is not initialized.
 	CheckWorld = "world"
+	// CheckCore names a core that could not be reached or does not serve the
+	// world, before anything was proposed.
+	CheckCore = "core"
+	// CheckBus names a bus that could not be opened.
+	CheckBus = "bus"
 )
 
 // StoreOpener builds the client named by --store.
 type StoreOpener func(kind string) (objstore.Client, error)
 
-// Command is `mvctl world`, with the object store it opens. The registry of
-// mvctl runs Run; a test builds its own Command over a store it keeps, so that
-// a second run sees what the first one wrote.
-type Command struct {
-	OpenStore StoreOpener
+// Transport is the bus of --bus kafka: one object that is both the live side
+// and the journal, so that the answers are read off the log the proposals go
+// into.
+type Transport interface {
+	eventbus.Bus
+	eventbus.Journal
 }
 
-// Run dispatches `mvctl world <subcommand>` over the stores of a deployment.
+// BusOpener builds the transport of --bus kafka over the registry of the
+// command.
+type BusOpener func(reg *contracts.Registry) (Transport, error)
+
+// Command is `mvctl world`, with what it opens. The registry of mvctl runs Run;
+// a test builds its own Command over a store and a bus it keeps, so that a
+// second run sees what the first one wrote, and over a core of its own.
+type Command struct {
+	OpenStore StoreOpener
+	// OpenBus builds the bus of --bus kafka. Without it that path opens
+	// nothing and reports so: a Command of a test never reaches the brokers of
+	// the environment by accident.
+	OpenBus BusOpener
+	// CoreURL is the address of the HTTP server of core, whose State the path
+	// of --bus kafka asks for the snapshot (MV_CORE_URL). Empty is refused for
+	// the same reason as a missing OpenBus.
+	CoreURL string
+}
+
+// Run dispatches `mvctl world <subcommand>` over the stores, the bus and the
+// core of a deployment.
 func Run(args []string, stdout, stderr io.Writer) int {
-	return Command{OpenStore: OpenStore}.Run(args, stdout, stderr)
+	return Command{OpenStore: OpenStore, OpenBus: OpenBus, CoreURL: env.CoreURL.String()}.Run(args, stdout, stderr)
+}
+
+// OpenBus builds the bus of a deployment from the manifest: the brokers of
+// MV_KAFKA_BROKERS, validation on read as MV_BUS_VALIDATE_ON_READ says (SEC-16).
+func OpenBus(reg *contracts.Registry) (Transport, error) {
+	validate, err := env.BusValidateOnRead.Bool()
+	if err != nil {
+		return nil, err
+	}
+	return eventbus.NewKafka(eventbus.KafkaConfig{
+		Brokers:            env.KafkaBrokers.List(),
+		Registry:           reg,
+		SkipValidateOnRead: !validate,
+		Timers:             clock.RealTimers{},
+		Log:                discard(),
+	})
 }
 
 // Run dispatches `mvctl world <subcommand>`.

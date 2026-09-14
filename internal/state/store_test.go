@@ -140,6 +140,23 @@ func TestASnapshotObjectAndItsPointer(t *testing.T) {
 	}
 }
 
+// A latest.json that is there but does not decode is ErrUndecodable, which a
+// caller tells from a store that could not be read: mvctl world init --force
+// creates the world again over the first and not over the second (T-475).
+func TestAPointerThatDoesNotDecode(t *testing.T) {
+	ctx := context.Background()
+	objects := newTracedObjects(t, world)
+	store := state.NewObjectStore(objects)
+	if _, err := objects.Put(ctx, objstore.SnapshotsBucket(world), state.PointerKey, []byte(`{"snapshot": [`),
+		objstore.PutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := store.ReadLatest(ctx, world)
+	if !errors.Is(err, state.ErrUndecodable) || errors.Is(err, state.ErrNoSnapshot) {
+		t.Errorf("ReadLatest of a pointer cut short = %v, want ErrUndecodable", err)
+	}
+}
+
 // EnsureWorldBuckets asks for the rules of the layout: both buckets versioned
 // with the expiry of non-current versions (ADR-021 p. 3). The memory store
 // records them; the server applies them (store_integration_test.go).

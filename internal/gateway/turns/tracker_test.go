@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -455,5 +456,421 @@ func TestNewChecksItsConfig(t *testing.T) {
 	}
 	if _, err := f.tracker.Begin(context.Background(), actions.Turn{}); err == nil {
 		t.Error("Begin without a scope succeeded")
+	}
+}
+
+// only returns the one turn.completed of a run, or fails.
+func only(t *testing.T, f *fixture) eventbus.Event {
+	t.Helper()
+	got := completed(t, f)
+	if len(got) != 1 {
+		t.Fatalf("turn.completed = %d, want 1", len(got))
+	}
+	if err := contracts.Validate(got[0]); err != nil {
+		t.Errorf("turn.completed is not valid by C-10: %v", err)
+	}
+	return got[0]
+}
+
+// mechanicsFields are the fields of turn.completed a turn has only with its
+// mechanics.
+var mechanicsFields = []string{"timings.mechanics_at", "timings.mechanics_ms", "delivery.result_event_id", "turn.phase1_mode", "turn.lod"}
+
+// A turn of an action with Phase 1 whose narrative is acknowledged before its
+// mechanics comes is not completed by the acknowledgement: the mechanics
+// completes it, once, with every field of the mechanics and the narrative_at of
+// the acknowledgement (component §7.7; case 1 of architect#3, T-478).
+func TestAnAttackAcknowledgedBeforeItsMechanicsCompletesWithIt(t *testing.T) {
+	f := newFixture(t, options{})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionAttack)
+	f.clock.Advance(100 * time.Millisecond)
+	f.inTx(t, func(tx *sql.Tx) error {
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByTemplate, playerA), 1)
+	})
+	f.clock.Advance(time.Second)
+	acked := f.clock.Now()
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, acked) })
+	if n := len(completed(t, f)); n != 0 {
+		t.Fatalf("turn.completed of an attack without its mechanics: %d", n)
+	}
+	if row := rowOf(t, f, action.ID); row.Status != turns.StatusNarrated || row.NarrativeAt == nil || !row.NarrativeAt.Equal(acked) {
+		t.Fatalf("attack acknowledged without its mechanics = %+v, want narrated with narrative_at %s", row, acked)
+	}
+
+	f.clock.Advance(300 * time.Millisecond)
+	mech := decided(action, "m")
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
+	pa := only(t, f).Path()
+	status, _ := pa.GetString("turn.status")
+	mechanicsAt, _ := pa.GetString("timings.mechanics_at")
+	mechanicsMS, _ := pa.GetInt("timings.mechanics_ms")
+	narrativeAt, _ := pa.GetString("timings.narrative_at")
+	narrativeMS, _ := pa.GetInt("timings.narrative_ms")
+	totalMS, _ := pa.GetInt("timings.total_ms")
+	result, _ := pa.GetString("delivery.result_event_id")
+	mode, _ := pa.GetString("turn.phase1_mode")
+	lod, _ := pa.GetString("turn.lod")
+	delivered, _ := pa.GetInt("delivery.delivered_count")
+	if status != turns.OutcomeDegraded || mechanicsAt != session.Timestamp(t0.Add(1400*time.Millisecond)) || mechanicsMS != 1400 ||
+		narrativeAt != session.Timestamp(acked) || narrativeMS != 0 || totalMS != 1100 || result != mech.ID ||
+		mode != "rules" || lod != "full" || delivered != 1 {
+		t.Errorf("turn.completed = %s mechanics %s (%d ms) narrative %s (%d ms) total %d result %q mode %q lod %q delivered %d",
+			status, mechanicsAt, mechanicsMS, narrativeAt, narrativeMS, totalMS, result, mode, lod, delivered)
+	}
+	if row := rowOf(t, f, action.ID); row.Status != turns.StatusDegraded {
+		t.Errorf("row status = %s", row.Status)
+	}
+	if s, _, _ := f.sessions.Current(ctx, playerA); s.TurnsDegraded != 1 || s.TurnsFailed != 0 {
+		t.Errorf("session degraded %d failed %d, want 1 and 0", s.TurnsDegraded, s.TurnsFailed)
+	}
+}
+
+// Only the actions with Phase 1 — enter, leave, attack, flee, rest — wait for
+// their mechanics; look, say and defend complete by the acknowledgement as
+// before (api-contracts.md §1.4; case 2 of architect#3, T-478).
+func TestOnlyATurnWithPhase1WaitsForItsMechanics(t *testing.T) {
+	for _, tc := range []struct {
+		action string
+		waits  bool
+	}{
+		{api.ActionEnter, true}, {api.ActionLeave, true}, {api.ActionAttack, true}, {api.ActionFlee, true},
+		{api.ActionRest, true}, {api.ActionLook, false}, {api.ActionSay, false}, {api.ActionDefend, false},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			f := newFixture(t, options{})
+			ctx := context.Background()
+			action := f.begun(t, tc.action)
+			f.inTx(t, func(tx *sql.Tx) error {
+				return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA), 1)
+			})
+			f.clock.Advance(time.Second)
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, f.clock.Now()) })
+			if got := len(completed(t, f)); (got == 0) != tc.waits {
+				t.Fatalf("turn.completed after the acknowledgement without mechanics = %d, waits for the mechanics %v", got, tc.waits)
+			}
+			if tc.waits {
+				return
+			}
+			pa := only(t, f).Path()
+			for _, field := range mechanicsFields {
+				if pa.Has(field) {
+					t.Errorf("turn.completed of %s without mechanics has %s", tc.action, field)
+				}
+			}
+		})
+	}
+}
+
+// A rest whose narrative reached the player and whose mechanics never came —
+// State refused the proposal — completes at its deadline with the status of
+// its narrative, without the fields of the mechanics, logged, and not as a
+// failure (component §7.7; case 3 of architect#3, T-478).
+func TestADeliveredTurnWithoutItsMechanicsCompletesAtItsDeadline(t *testing.T) {
+	var log strings.Builder
+	f := newFixture(t, options{log: slog.New(slog.NewJSONHandler(&log, nil))})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionRest)
+	f.inTx(t, func(tx *sql.Tx) error {
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByTemplate, playerA), 1)
+	})
+	f.clock.Advance(2 * time.Second)
+	acked := f.clock.Now()
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, acked) })
+
+	if n, err := f.tracker.Sweep(ctx, t0.Add(turns.DefaultTimeout-time.Nanosecond)); err != nil || n != 0 || len(completed(t, f)) != 0 {
+		t.Fatalf("Sweep before the deadline = %d %v, published %d", n, err, len(completed(t, f)))
+	}
+	if n, err := f.tracker.Sweep(ctx, t0.Add(turns.DefaultTimeout)); err != nil || n != 1 {
+		t.Fatalf("Sweep at the deadline = %d %v, want 1", n, err)
+	}
+	pa := only(t, f).Path()
+	status, _ := pa.GetString("turn.status")
+	narrativeAt, _ := pa.GetString("timings.narrative_at")
+	if status != turns.OutcomeDegraded || narrativeAt != session.Timestamp(acked) {
+		t.Errorf("turn.completed = %s narrative_at %s, want degraded at %s", status, narrativeAt, session.Timestamp(acked))
+	}
+	for _, field := range mechanicsFields {
+		if pa.Has(field) {
+			t.Errorf("turn.completed without mechanics has %s", field)
+		}
+	}
+	if s, _, _ := f.sessions.Current(ctx, playerA); s.TurnsFailed != 0 || s.TurnsDegraded != 1 {
+		t.Errorf("session failed %d degraded %d, want 0 and 1", s.TurnsFailed, s.TurnsDegraded)
+	}
+	if !strings.Contains(log.String(), `"level":"WARN"`) || !strings.Contains(log.String(), action.ID) {
+		t.Errorf("no warning names the turn: %s", log.String())
+	}
+	if n, err := f.tracker.Sweep(ctx, t0.Add(2*turns.DefaultTimeout)); err != nil || n != 0 || len(completed(t, f)) != 1 {
+		t.Errorf("second Sweep = %d %v, published %d in all", n, err, len(completed(t, f)))
+	}
+}
+
+// A mechanics that comes after its turn is completed — a repeat of the same
+// decision, or another fact of the chain — publishes nothing more and changes
+// nothing (case 4 of architect#3, T-478).
+func TestAMechanicsAfterItsTurnCompletedPublishesNothing(t *testing.T) {
+	f := newFixture(t, options{})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionFlee)
+	f.inTx(t, func(tx *sql.Tx) error {
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA), 1)
+	})
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, f.clock.Now()) })
+	mech := decided(action, "m")
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
+	before := rowOf(t, f, action.ID)
+	f.clock.Advance(time.Second)
+	fact := eventbus.Derive(action, "entity.updated", contracts.SourceState, map[string]any{}, eventbus.WithCauseID("fact"))
+	for _, ev := range []eventbus.Event{mech, fact} {
+		f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, ev, f.clock.Now()) })
+	}
+	only(t, f)
+	if after := rowOf(t, f, action.ID); after.Status != turns.StatusCompleted || after.MechanicsAt == nil ||
+		!after.MechanicsAt.Equal(*before.MechanicsAt) || after.ResultEventID != mech.ID {
+		t.Errorf("turn after a late mechanics = %+v, want it as it was completed", after)
+	}
+}
+
+// The mechanics of a turn with Phase 1 is the event of the type of its action,
+// whichever topic the consumer reads first: a fight by its decision, not by
+// the facts of State the decision causes, and a move by its fact, not by a
+// decision in its chain. Another event does not complete the turn and names
+// nothing in it.
+func TestTheMechanicsOfATurnIsTheEventOfItsAction(t *testing.T) {
+	for _, tc := range []struct {
+		action, mechanics, other string
+	}{
+		{api.ActionAttack, "combat.decided", "entity.updated"},
+		{api.ActionEnter, "entity.updated", "combat.decided"},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			f := newFixture(t, options{})
+			ctx := context.Background()
+			action := f.begun(t, tc.action)
+			f.inTx(t, func(tx *sql.Tx) error {
+				return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA), 1)
+			})
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, f.clock.Now()) })
+			f.clock.Advance(100 * time.Millisecond)
+			other := eventbus.Derive(action, tc.other, contracts.SourceState, map[string]any{"phase1_mode": "llm"}, eventbus.WithCauseID("other"))
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, other, f.clock.Now()) })
+			if n := len(completed(t, f)); n != 0 {
+				t.Fatalf("turn.completed of %s after %s = %d", tc.action, tc.other, n)
+			}
+			if row := rowOf(t, f, action.ID); row.MechanicsAt != nil || row.ResultEventID != "" || row.Phase1Mode != "" {
+				t.Fatalf("turn of %s after %s = %+v, want no mechanics", tc.action, tc.other, row)
+			}
+			f.clock.Advance(100 * time.Millisecond)
+			mech := eventbus.Derive(action, tc.mechanics, contracts.SourceSwarm, map[string]any{"phase1_mode": "rules"}, eventbus.WithCauseID("m"))
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
+			pa := only(t, f).Path()
+			result, _ := pa.GetString("delivery.result_event_id")
+			mode, _ := pa.GetString("turn.phase1_mode")
+			mechanicsMS, _ := pa.GetInt("timings.mechanics_ms")
+			if result != mech.ID || mode != "rules" || mechanicsMS != 200 {
+				t.Errorf("turn.completed of %s: result %q mode %q mechanics %d ms, want %q, rules, 200", tc.action, result, mode, mechanicsMS, mech.ID)
+			}
+		})
+	}
+}
+
+// A completion by the mechanics that the bus does not take fails neither the
+// effect of the mechanics nor its record (Mi-1 of review #1 of T-478; decision
+// of the orchestrator): the transaction of the consumer commits what it wrote
+// and the mechanics of the turn, the turn stays narrated, and the next step —
+// the sweeper, or a repeat of the mechanics — publishes turn.completed once,
+// with the id of the attempt that failed and the fields of the mechanics.
+func TestACompletionTheBusRefusesLeavesTheEffectOfTheMechanics(t *testing.T) {
+	for _, next := range []string{"the sweeper", "a repeat of the mechanics"} {
+		t.Run(next, func(t *testing.T) {
+			var log strings.Builder
+			f := newFixture(t, options{log: slog.New(slog.NewJSONHandler(&log, nil))})
+			ctx := context.Background()
+			if _, err := f.db.ExecContext(ctx, `CREATE TABLE effects (event_id TEXT)`); err != nil {
+				t.Fatal(err)
+			}
+			action := f.begun(t, api.ActionAttack)
+			f.inTx(t, func(tx *sql.Tx) error {
+				return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByTemplate, playerA), 1)
+			})
+			f.clock.Advance(time.Second)
+			acked := f.clock.Now()
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, acked) })
+
+			var tried []string
+			f.bus.set(func(_ context.Context, ev eventbus.Event) error {
+				if ev.Type == turns.TypeCompleted {
+					tried = append(tried, ev.ID)
+					return errors.New("analytics_events refuses")
+				}
+				return nil
+			}, nil)
+			f.clock.Advance(300 * time.Millisecond)
+			mech := decided(action, "m")
+			f.inTx(t, func(tx *sql.Tx) error {
+				if _, err := tx.ExecContext(ctx, `INSERT INTO effects (event_id) VALUES (?)`, mech.ID); err != nil {
+					return err
+				}
+				return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now())
+			})
+			f.bus.set(nil, nil)
+
+			var effects int
+			if err := f.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM effects`).Scan(&effects); err != nil || effects != 1 {
+				t.Fatalf("effects of the mechanics after the refusal = %d %v, want 1", effects, err)
+			}
+			row := rowOf(t, f, action.ID)
+			if len(tried) != 1 || row.Status != turns.StatusNarrated || row.MechanicsAt == nil || row.ResultEventID != mech.ID ||
+				row.NarrativeAt == nil || !row.NarrativeAt.Equal(acked) {
+				t.Fatalf("after the refusal: tried %v, turn %+v; want one attempt and a narrated turn with its mechanics", tried, row)
+			}
+			if n := len(completed(t, f)); n != 0 {
+				t.Fatalf("turn.completed after the refusal = %d", n)
+			}
+			if s, _, _ := f.sessions.Current(ctx, playerA); s.TurnsDegraded != 0 {
+				t.Fatalf("turns_degraded after the refusal = %d, want the completion rolled back", s.TurnsDegraded)
+			}
+			if !strings.Contains(log.String(), `"level":"WARN"`) || !strings.Contains(log.String(), action.ID) {
+				t.Errorf("no warning names the turn: %s", log.String())
+			}
+
+			switch next {
+			case "the sweeper":
+				if n, err := f.tracker.Sweep(ctx, f.clock.Now()); err != nil || n != 1 {
+					t.Fatalf("Sweep before the deadline = %d %v, want the turn left open", n, err)
+				}
+			default:
+				f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
+			}
+			ev := only(t, f)
+			pa := ev.Path()
+			status, _ := pa.GetString("turn.status")
+			result, _ := pa.GetString("delivery.result_event_id")
+			narrativeAt, _ := pa.GetString("timings.narrative_at")
+			if ev.ID != tried[0] || status != turns.OutcomeDegraded || result != mech.ID || narrativeAt != session.Timestamp(acked) {
+				t.Errorf("turn.completed %s = %s result %q narrative_at %s; want id %s, degraded, %s, %s",
+					ev.ID, status, result, narrativeAt, tried[0], mech.ID, session.Timestamp(acked))
+			}
+			if n, err := f.tracker.Sweep(ctx, t0.Add(2*turns.DefaultTimeout)); err != nil || n != 0 || len(completed(t, f)) != 1 {
+				t.Errorf("Sweep after the completion = %d %v, published %d in all", n, err, len(completed(t, f)))
+			}
+			if s, _, _ := f.sessions.Current(ctx, playerA); s.TurnsDegraded != 1 || s.TurnsFailed != 0 {
+				t.Errorf("session degraded %d failed %d, want 1 and 0", s.TurnsDegraded, s.TurnsFailed)
+			}
+		})
+	}
+}
+
+// A mechanics that comes before the acknowledgement leaves the completion to
+// the acknowledgement, as before (case 5 of architect#3, T-478).
+func TestAnAttackWithItsMechanicsCompletesByTheAcknowledgement(t *testing.T) {
+	f := newFixture(t, options{})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionAttack)
+	f.clock.Advance(200 * time.Millisecond)
+	mech := decided(action, "m")
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, mech, f.clock.Now()) })
+	f.inTx(t, func(tx *sql.Tx) error {
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM, playerA), 1)
+	})
+	if n := len(completed(t, f)); n != 0 {
+		t.Fatalf("turn.completed before the acknowledgement = %d", n)
+	}
+	f.clock.Advance(time.Second)
+	acked := f.clock.Now()
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, acked) })
+	pa := only(t, f).Path()
+	status, _ := pa.GetString("turn.status")
+	narrativeAt, _ := pa.GetString("timings.narrative_at")
+	mechanicsMS, _ := pa.GetInt("timings.mechanics_ms")
+	narrativeMS, _ := pa.GetInt("timings.narrative_ms")
+	result, _ := pa.GetString("delivery.result_event_id")
+	if status != turns.OutcomeOK || narrativeAt != session.Timestamp(acked) || mechanicsMS != 200 || narrativeMS != 1000 || result != mech.ID {
+		t.Errorf("turn.completed = %s narrative_at %s mechanics %d ms narrative %d ms result %q", status, narrativeAt, mechanicsMS, narrativeMS, result)
+	}
+}
+
+// A turn with Phase 1 that waits for its mechanics counts its deliveries up to
+// its recipients: the acknowledgement of a second narrative of its correlation
+// — the death after the last blow — changes neither delivered_count nor
+// narrative_at, as it would not have after a completion by the acknowledgement.
+func TestATurnWaitingForItsMechanicsCountsItsDeliveriesUpToItsRecipients(t *testing.T) {
+	f := newFixture(t, options{})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionAttack)
+	told := narrative(t, action, turns.GeneratedByTemplate, playerA)
+	death := eventbus.Derive(action, "narrative.output", contracts.SourceSwarm, told.Payload, eventbus.WithCauseID("death"))
+	for _, ev := range []eventbus.Event{told, death} {
+		f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnNarrative(ctx, tx, ev, 1) })
+	}
+	acked := f.clock.Now()
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, acked) })
+	f.clock.Advance(time.Second)
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, f.clock.Now()) })
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, decided(action, "m"), f.clock.Now()) })
+
+	pa := only(t, f).Path()
+	delivered, _ := pa.GetInt("delivery.delivered_count")
+	recipients, _ := pa.GetInt("delivery.recipients_count")
+	narrativeAt, _ := pa.GetString("timings.narrative_at")
+	named, _ := pa.GetString("delivery.narrative_event_id")
+	if delivered != 1 || recipients != 1 || narrativeAt != session.Timestamp(acked) || named != told.ID {
+		t.Errorf("turn.completed delivered %d of %d, narrative_at %s, narrative %q; want 1 of 1 at %s, %q",
+			delivered, recipients, narrativeAt, named, session.Timestamp(acked), told.ID)
+	}
+}
+
+// A narrative without recipients of a turn with Phase 1 records narrative_at
+// when it is applied and waits for the mechanics like an acknowledged one.
+func TestANarrativeWithoutRecipientsOfAnEntryWaitsForItsMechanics(t *testing.T) {
+	f := newFixture(t, options{})
+	ctx := context.Background()
+	action := f.begun(t, api.ActionEnter)
+	f.clock.Advance(700 * time.Millisecond)
+	told := f.clock.Now()
+	f.inTx(t, func(tx *sql.Tx) error {
+		return f.tracker.OnNarrative(ctx, tx, narrative(t, action, turns.GeneratedByLLM), 0)
+	})
+	if n := len(completed(t, f)); n != 0 {
+		t.Fatalf("turn.completed of an entry without its mechanics = %d", n)
+	}
+	f.clock.Advance(time.Second)
+	fact := eventbus.Derive(action, "entity.updated", contracts.SourceState, map[string]any{}, eventbus.WithCauseID("fact"))
+	f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnMechanics(ctx, tx, fact, f.clock.Now()) })
+	pa := only(t, f).Path()
+	narrativeAt, _ := pa.GetString("timings.narrative_at")
+	result, _ := pa.GetString("delivery.result_event_id")
+	if narrativeAt != session.Timestamp(told) || result != fact.ID {
+		t.Errorf("turn.completed narrative_at %s result %q, want %s and %s", narrativeAt, result, session.Timestamp(told), fact.ID)
+	}
+}
+
+// delivery.narrative_event_id of a turn is the id of its narrative, or the
+// narrative_event_id the narrative carries when it names one (proposal 2 of
+// review #2 of T-313).
+func TestATurnNamesItsNarrative(t *testing.T) {
+	for _, tc := range []struct {
+		name, carried string
+	}{
+		{"the id of the narrative", ""},
+		{"the narrative_event_id it carries", "narrative-of-the-swarm"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t, options{})
+			ctx := context.Background()
+			action := f.begun(t, api.ActionLook)
+			told := narrative(t, action, turns.GeneratedByLLM, playerA)
+			want := told.ID
+			if tc.carried != "" {
+				told.Payload["narrative_event_id"] = tc.carried
+				want = tc.carried
+			}
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnNarrative(ctx, tx, told, 1) })
+			f.inTx(t, func(tx *sql.Tx) error { return f.tracker.OnDelivered(ctx, tx, action.ID, f.clock.Now()) })
+			if named, _ := only(t, f).Path().GetString("delivery.narrative_event_id"); named != want || named == action.ID {
+				t.Errorf("delivery.narrative_event_id = %q, want %q", named, want)
+			}
+		})
 	}
 }
