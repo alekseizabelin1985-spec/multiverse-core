@@ -300,6 +300,11 @@ func TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients(t *testing.T) {
 		ackGW.Backoff != deliver.AckBackoff || ackGW.ClientID != ClientID || ackGW.BaseURL != loopGW.BaseURL {
 		t.Errorf("client of the ack: %+v, want deliver.NewAckClient beside the client of the loop", ackGW)
 	}
+	// Mi-2 of review #1 of T-315: the pauses between the attempts of an ack
+	// run on the timers of the process, not on the wall clock.
+	if ackGW != nil && ackGW.Timers != e.timers {
+		t.Errorf("client of the ack pauses on %T, want the timers of the process %T", ackGW.Timers, e.timers)
+	}
 	if b.loopOpts.Clock != e.clock || b.loopOpts.Timers != e.timers {
 		t.Error("the loop does not run on the clock and the timers of the process")
 	}

@@ -54,12 +54,18 @@ const (
 	MaxRetryPause = 30 * time.Second
 )
 
-// EarlyEmpty is how soon an empty answer of the long-poll counts as early. The
-// gateway answers an empty list before wait_ms only while its process stops
-// (C-08, internal/gateway README): polled again at once, it would be asked
-// again and again until it is gone. An empty answer that took less than
-// EarlyEmpty is followed by a pause like a failed long-poll; one that took the
-// wait is not (acceptance of T-307, addition 2 of the orchestrator).
+// EarlyEmpty is how soon an empty answer of the long-poll counts as early: half
+// of wait_ms. The gateway answers an empty list before wait_ms only while its
+// process stops (C-08, internal/gateway README): polled again at once, it would
+// be asked again and again until it is gone. Only the long-poll itself is
+// timed, not the ack before it.
+//
+// An empty answer that took less than EarlyEmpty counts as a failed long-poll:
+// a pause of retryPause follows, and it adds one to the failed long-polls that
+// make /health degraded (DegradedAfterFailedPolls) — a stopping gateway takes
+// no delivery either. An answer with deliveries, or an empty one that took at
+// least EarlyEmpty, resets both (acceptance of T-307, addition 2 of the
+// orchestrator; Ma-1 of review #1 of T-315).
 const EarlyEmpty = Wait / 2
 
 // The client of the ack (acceptance of T-307, review #1). The client repeats
@@ -93,9 +99,12 @@ func NewAckClient(baseURL, clientID string, timers clock.Timers) *client.Client 
 }
 
 // DegradedAfterFailedPolls is how many failed long-polls in a row make /health
-// of the bot degraded. With the pauses of retryPause the seventh failure comes
-// 61 s after the first: a gateway that restarts within a minute does not flip
-// the health of the bot (acceptance of T-312).
+// of the bot degraded. A failed long-poll is one that returned an error or an
+// empty answer sooner than EarlyEmpty, the answer of a stopping gateway: either
+// way the bot delivers nothing. With the pauses of retryPause the seventh
+// failure comes 61 s after the first: a gateway that restarts within a minute
+// does not flip the health of the bot (acceptance of T-312; Ma-1 of review #1
+// of T-315).
 const DegradedAfterFailedPolls = 7
 
 // AckOnStopTimeout bounds the last ack of a stopping loop. The context of the
@@ -173,8 +182,9 @@ type Health struct {
 	Unauthorized bool
 }
 
-// Degraded says the bot does not deliver: the gateway has not answered for
-// DegradedAfterFailedPolls long-polls, or Telegram refuses the token.
+// Degraded says the bot does not deliver: DegradedAfterFailedPolls long-polls
+// in a row failed or answered empty before EarlyEmpty, or Telegram refuses the
+// token.
 func (h Health) Degraded() bool {
 	return h.FailedPolls >= DegradedAfterFailedPolls || h.Unauthorized
 }
@@ -230,17 +240,17 @@ const (
 // Run polls, sends and acknowledges until ctx ends, then acknowledges what it
 // has sent and returns. A failed long-poll, and an empty answer that came
 // sooner than EarlyEmpty, are followed by a pause that grows with every one in
-// a row; a long-poll that gave deliveries or took its wait resets it.
+// a row and count as failed long-polls of Health; a long-poll that gave
+// deliveries or took at least EarlyEmpty resets both.
 func (l *Loop) Run(ctx context.Context) {
 	defer l.ackOnStop(ctx)
 	failures := 0
 	for ctx.Err() == nil {
-		began := l.clock.Now()
-		n, err := l.once(ctx)
+		n, took, err := l.once(ctx)
 		if ctx.Err() != nil {
 			return
 		}
-		early := err == nil && n == 0 && l.clock.Now().Sub(began) < EarlyEmpty
+		early := err == nil && n == 0 && took < EarlyEmpty
 		if err == nil && !early {
 			if failures > 0 {
 				l.log.Info("deliveries polled again", slog.Int(keyCount, failures))
@@ -267,16 +277,19 @@ func (l *Loop) Run(ctx context.Context) {
 // long-poll, sends its deliveries and acknowledges them. It returns the error
 // of the long-poll; an ack that failed is kept for the next call.
 func (l *Loop) Once(ctx context.Context) error {
-	_, err := l.once(ctx)
+	_, _, err := l.once(ctx)
 	return err
 }
 
-// once is Once that also tells how many deliveries the answer held.
-func (l *Loop) once(ctx context.Context) (int, error) {
+// once is Once that also tells how many deliveries the answer held and how
+// long the long-poll itself took, the ack before it not counted.
+func (l *Loop) once(ctx context.Context) (int, time.Duration, error) {
 	l.flush(ctx)
+	began := l.clock.Now()
 	res, err := l.gw.Deliveries(ctx, l.cursor, Limit, Wait)
+	took := l.clock.Now().Sub(began)
 	if err != nil {
-		return 0, err
+		return 0, took, err
 	}
 	if res.Cursor != "" {
 		l.cursor = res.Cursor
@@ -294,7 +307,7 @@ func (l *Loop) once(ctx context.Context) (int, error) {
 		}
 	}
 	l.flush(ctx)
-	return len(res.Deliveries), nil
+	return len(res.Deliveries), took, nil
 }
 
 // deliver sends one delivery. ack says the delivery is done with; stop says

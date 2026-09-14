@@ -21,6 +21,7 @@ import (
 	"multiverse-core.io/cmd/telegram-bot/internal/sender"
 	"multiverse-core.io/internal/gateway/api"
 	"multiverse-core.io/internal/gateway/client"
+	"multiverse-core.io/shared/clock"
 )
 
 func mustOnce(t *testing.T, l *deliver.Loop) {
@@ -592,20 +593,57 @@ func TestNewRequiresAGatewayAndASender(t *testing.T) {
 }
 
 // scriptedGateway answers each long-poll with the next result a test hands
-// it, and waits for one meanwhile.
+// it, and waits for one meanwhile. nil is an empty answer at the end of the
+// wait — the clock moves by the wait — and errEarlyEmpty an empty answer at
+// once, the answer of a stopping gateway; any other error fails the long-poll.
 type scriptedGateway struct {
 	results chan error
 	polls   atomic.Int32
+	clock   *clock.Manual
 }
 
-func (g *scriptedGateway) Deliveries(ctx context.Context, _ string, _ int, _ time.Duration) (api.DeliveriesResponse, error) {
+// errEarlyEmpty tells scriptedGateway to answer an empty list at once.
+var errEarlyEmpty = errors.New("empty at once")
+
+func newScriptedGateway() *scriptedGateway {
+	return &scriptedGateway{results: make(chan error), clock: clock.NewManual(epoch)}
+}
+
+func (g *scriptedGateway) Deliveries(ctx context.Context, _ string, _ int, wait time.Duration) (api.DeliveriesResponse, error) {
 	select {
 	case err := <-g.results:
 		g.polls.Add(1)
+		switch {
+		case err == nil:
+			g.clock.Advance(wait)
+		case errors.Is(err, errEarlyEmpty):
+			err = nil
+		}
 		return api.DeliveriesResponse{Deliveries: []api.Delivery{}}, err
 	case <-ctx.Done():
 		return api.DeliveriesResponse{}, ctx.Err()
 	}
+}
+
+// runScripted runs a loop over a scriptedGateway on its clock until the test
+// ends.
+func runScripted(t *testing.T, gw *scriptedGateway) *deliver.Loop {
+	t.Helper()
+	l, err := deliver.New(deliver.Options{Gateway: gw, Sender: &sender.Fake{}, Timers: &instantTimers{}, Clock: gw.clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		l.Run(ctx)
+		close(done)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	return l
 }
 
 func (g *scriptedGateway) Ack(context.Context, []string) (api.AckResponse, error) {
@@ -616,18 +654,8 @@ func (g *scriptedGateway) Ack(context.Context, []string) (api.AckResponse, error
 // failed long-polls in a row, not one before, and a successful long-poll makes
 // it healthy again. The pauses run on clock.Timers.
 func TestTheLoopIsDegradedAfterASeriesOfFailedPolls(t *testing.T) {
-	gw := &scriptedGateway{results: make(chan error)}
-	l := newLoop(t, gw, &sender.Fake{}, &instantTimers{}, nil)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		l.Run(ctx)
-		close(done)
-	}()
-	defer func() {
-		cancel()
-		<-done
-	}()
+	gw := newScriptedGateway()
+	l := runScripted(t, gw)
 	if h := l.Health(); h.Degraded() {
 		t.Fatalf("a new loop is degraded: %+v", h)
 	}
@@ -645,6 +673,52 @@ func TestTheLoopIsDegradedAfterASeriesOfFailedPolls(t *testing.T) {
 	waitUntil(t, func() bool { return l.Health().FailedPolls == 0 })
 	if h := l.Health(); h.Degraded() {
 		t.Errorf("a successful poll left the loop degraded: %+v", h)
+	}
+}
+
+// Ma-1 of review #1 of T-315: an empty answer sooner than EarlyEmpty is the
+// answer of a stopping gateway, and the bot delivers nothing meanwhile. A
+// series of them makes the loop degraded at the same threshold as failed
+// long-polls, and an empty answer at the end of the wait makes it healthy.
+func TestASeriesOfEarlyEmptyAnswersDegradesTheLoop(t *testing.T) {
+	gw := newScriptedGateway()
+	l := runScripted(t, gw)
+	for n := 1; n < deliver.DegradedAfterFailedPolls; n++ {
+		gw.results <- errEarlyEmpty
+		waitUntil(t, func() bool { return l.Health().FailedPolls == n })
+		if h := l.Health(); h.Degraded() {
+			t.Fatalf("degraded after %d early empty answers, want only after %d", n, deliver.DegradedAfterFailedPolls)
+		}
+	}
+	gw.results <- errEarlyEmpty
+	waitUntil(t, func() bool { return l.Health().Degraded() })
+	gw.results <- nil
+	waitUntil(t, func() bool { return l.Health().FailedPolls == 0 })
+	if h := l.Health(); h.Degraded() {
+		t.Errorf("an empty answer at the end of the wait left the loop degraded: %+v", h)
+	}
+}
+
+// An ordinary empty answer — one that took the wait — ends a series of failed
+// long-polls and of early empty answers alike: the count starts from zero.
+func TestAnEmptyAnswerAtTheEndOfTheWaitResetsTheFailedPolls(t *testing.T) {
+	gw := newScriptedGateway()
+	l := runScripted(t, gw)
+	refused := errors.New("gateway GET /v1/clients/telegram-bot/deliveries: connection refused")
+	for _, series := range [][]error{{refused, refused, errEarlyEmpty}, {errEarlyEmpty, errEarlyEmpty, refused}} {
+		for n, result := range series {
+			gw.results <- result
+			waitUntil(t, func() bool { return l.Health().FailedPolls == n+1 })
+		}
+		gw.results <- nil
+		waitUntil(t, func() bool { return l.Health().FailedPolls == 0 })
+		// One more failure counts from one again, not from the series before:
+		// the next long-poll is taken only once the count of this one is
+		// stored, so the count cannot pass one on its way.
+		gw.results <- errEarlyEmpty
+		waitUntil(t, func() bool { return l.Health().FailedPolls == 1 })
+		gw.results <- nil
+		waitUntil(t, func() bool { return l.Health().FailedPolls == 0 })
 	}
 }
 

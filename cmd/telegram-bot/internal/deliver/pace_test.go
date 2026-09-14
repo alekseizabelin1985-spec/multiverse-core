@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -90,16 +91,23 @@ func TestAGatewayThatAnswersEmptyAtOnceIsPolledOncePerPause(t *testing.T) {
 }
 
 // An empty answer that took its wait is the ordinary end of a long-poll: the
-// next one follows at once, and so does it after an answer that took
-// EarlyEmpty. Only an answer sooner than that is paused after.
+// next one follows at once, and so does it after an answer that took half of
+// wait_ms. Only an answer sooner than that is paused after (N-3 of review #1:
+// the bounds are written in terms of Wait, so that EarlyEmpty cannot drift from
+// the half without a test noticing).
 func TestAnEmptyAnswerThatTookTheWaitIsNotPaused(t *testing.T) {
+	if deliver.EarlyEmpty != deliver.Wait/2 {
+		t.Errorf("EarlyEmpty = %s, want half of the wait %s", deliver.EarlyEmpty, deliver.Wait)
+	}
 	for _, c := range []struct {
 		took  time.Duration
 		pause bool
 	}{
 		{deliver.Wait, false},
-		{deliver.EarlyEmpty, false},
-		{deliver.EarlyEmpty - time.Millisecond, true},
+		{deliver.Wait - time.Second, false},
+		{deliver.Wait / 2, false},
+		{deliver.Wait/2 - time.Millisecond, true},
+		{time.Second, true},
 	} {
 		ob := newOutbox(nil)
 		ob.block = true
@@ -116,6 +124,53 @@ func TestAnEmptyAnswerThatTookTheWaitIsNotPaused(t *testing.T) {
 		if paused := len(timers.all()) > 0; paused != c.pause {
 			t.Errorf("empty answers of %s: paused %t (%v), want %t", c.took, paused, timers.all(), c.pause)
 		}
+	}
+}
+
+// slowAckGateway gives one delivery on the first long-poll and answers every
+// other at once with an empty list, the answer of a stopping gateway. Every
+// ack takes longer than EarlyEmpty on the clock and fails, so the ids stay
+// pending and the loop flushes them before each long-poll.
+type slowAckGateway struct {
+	clock *clock.Manual
+	mu    sync.Mutex
+	polls int
+}
+
+func (g *slowAckGateway) Deliveries(ctx context.Context, _ string, _ int, _ time.Duration) (api.DeliveriesResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return api.DeliveriesResponse{}, err
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.polls++
+	res := api.DeliveriesResponse{Deliveries: []api.Delivery{}}
+	if g.polls == 1 {
+		res.Deliveries = []api.Delivery{delivery("a1", "player-A", chatA, render.KindMechanics, "удар")}
+	}
+	return res, nil
+}
+
+func (g *slowAckGateway) Ack(context.Context, []string) (api.AckResponse, error) {
+	g.clock.Advance(deliver.EarlyEmpty + time.Second)
+	return api.AckResponse{}, errors.New("gateway POST /v1/clients/telegram-bot/deliveries/ack: 503 bus_unavailable")
+}
+
+// N-2 of review #1: the long-poll alone is timed. An ack that takes longer
+// than EarlyEmpty before an empty answer at once does not hide that the answer
+// was early: the pause follows all the same.
+func TestASlowAckBeforeTheLongPollDoesNotHideAnEarlyEmptyAnswer(t *testing.T) {
+	gw := &slowAckGateway{clock: clock.NewManual(epoch)}
+	timers := &instantTimers{}
+	l, err := deliver.New(deliver.Options{Gateway: gw, Sender: &sender.Fake{}, Timers: timers, Clock: gw.clock})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop := runLoop(t, l)
+	waitUntil(t, func() bool { return len(timers.all()) > 0 })
+	stop()
+	if got := timers.all(); got[0] != deliver.RetryPause {
+		t.Errorf("pauses %v, want the first of %s after the early empty answer", got, deliver.RetryPause)
 	}
 }
 
@@ -207,6 +262,17 @@ func TestAnAckTheBrokerRefusesDoesNotHoldTheNextPollPastTheLease(t *testing.T) {
 		c.HTTP.Transport = b
 		return c
 	})
+	// Mi-2 of review #1: the gap exactly — two flushes, each of its attempts
+	// answered in 5 s with the pauses of AckBackoff between them, on the timers
+	// given to NewAckClient. Pauses on the wall clock would leave them out.
+	attempts := deliver.AckBackoff.Retries + 1
+	flush := time.Duration(attempts) * 5 * time.Second
+	for n := range deliver.AckBackoff.Retries {
+		flush += deliver.AckBackoff.Pause(n)
+	}
+	if want := 2 * flush; took != want {
+		t.Errorf("the next long-poll started %s after the lease was given, want %s", took, want)
+	}
 	if took >= lease {
 		t.Errorf("the next long-poll started %s after the lease was given, want under the lease of %s", took, lease)
 	}
@@ -228,9 +294,16 @@ func TestAnAckTheBrokerRefusesDoesNotHoldTheNextPollPastTheLease(t *testing.T) {
 // The limits of the client of the ack: one flush ends within MaxFlush, and the
 // two flushes between long-polls stay under the lease.
 func TestTheAckClientEndsWithinTheLease(t *testing.T) {
-	c := deliver.NewAckClient("http://gateway.test", "telegram-bot", nil)
+	timers := &instantTimers{}
+	c := deliver.NewAckClient("http://gateway.test", "telegram-bot", timers)
 	if c.HTTP.Timeout != deliver.AckHTTPTimeout || c.Backoff != deliver.AckBackoff || c.ClientID != "telegram-bot" {
 		t.Errorf("ack client: timeout %s, backoff %+v, client id %q", c.HTTP.Timeout, c.Backoff, c.ClientID)
+	}
+	if c.Timers != clock.Timers(timers) {
+		t.Errorf("ack client pauses on %T, want the timers it was given", c.Timers)
+	}
+	if def := deliver.NewAckClient("http://gateway.test", "telegram-bot", nil); def.Timers == nil {
+		t.Error("ack client without timers has none, want the wall clock")
 	}
 	if c.HTTP.Timeout <= api.RequestTimeout {
 		t.Errorf("AckHTTPTimeout %s cuts a request the gateway may take %s to answer", c.HTTP.Timeout, api.RequestTimeout)
@@ -239,7 +312,7 @@ func TestTheAckClientEndsWithinTheLease(t *testing.T) {
 	for n := range deliver.AckBackoff.Retries {
 		flush += deliver.AckBackoff.Pause(n)
 	}
-	if flush > deliver.MaxFlush || 2*deliver.MaxFlush >= lease {
+	if flush != deliver.MaxFlush || 2*deliver.MaxFlush >= lease {
 		t.Errorf("a flush lasts up to %s (MaxFlush %s); two of them must stay under the lease of %s", flush, deliver.MaxFlush, lease)
 	}
 }

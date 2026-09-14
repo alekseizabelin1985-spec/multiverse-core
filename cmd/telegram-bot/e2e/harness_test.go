@@ -42,6 +42,7 @@ import (
 	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/contracts"
 	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/env"
 	"multiverse-core.io/shared/eventbus"
 	"multiverse-core.io/shared/eventbus/membus"
 	"multiverse-core.io/shared/objstore"
@@ -161,9 +162,14 @@ func newWorld(t *testing.T, opts worldOptions) *world {
 		_ = enc.Wait()
 		_ = narrator.Wait()
 	})
-	for name, start := range map[string]func(context.Context) error{"state": fake.Start, "encounter": enc.Start, "narrator": narrator.Start} {
-		if err := start(ctx); err != nil {
-			t.Fatalf("start %s: %v", name, err)
+	// In a fixed order (N-5 of review #1): the order of the subscriptions is
+	// one source of spread fewer between the runs of a scenario.
+	for _, double := range []struct {
+		name  string
+		start func(context.Context) error
+	}{{"state", fake.Start}, {"encounter", enc.Start}, {"narrator", narrator.Start}} {
+		if err := double.start(ctx); err != nil {
+			t.Fatalf("start %s: %v", double.name, err)
 		}
 	}
 	second := &entity.Entity{ID: secondWorldID, Type: entity.TypeWorld, WorldID: secondWorldID, Name: secondWorldName, Attributes: map[string]any{}}
@@ -523,8 +529,9 @@ type botOptions struct {
 	gatewayURL string
 }
 
-// bot is the bot of cmd/telegram-bot assembled the way serve assembles it,
-// with updates.Fake for Telegram and recording senders.
+// bot is the bot of cmd/telegram-bot assembled after the pattern of serve.go
+// from the same components, with updates.Fake for Telegram and recording
+// senders. The wiring of serve.go itself is checked by main_test.go.
 type bot struct {
 	w      *world
 	source *updates.Fake
@@ -538,6 +545,20 @@ type bot struct {
 	ends []int
 }
 
+// startBot assembles and runs the bot. Where it differs from build and run of
+// serve.go (Mi-1 of review #1; a shared assembly is in the backlog):
+//
+//   - Telegram is updates.Fake and recording senders, so there is no getMe:
+//     the delivery loop starts at once instead of after OnReady;
+//   - one recording sender takes the answers of the gate and of the flow, which
+//     serve.go gives two Telegram clients of their own;
+//   - the limits of the client of the flow are copied from productionLimits,
+//     which package main does not export; TestTheProductionLimits keeps them
+//     within their bounds;
+//   - the commands per minute are the default of the manifest;
+//   - the flow and the gate run on the manual clock of the gateway, the loop
+//     and every pause on the wall clock;
+//   - no /health, no privacy logger, no signal handling.
 func startBot(t *testing.T, w *world, opts botOptions) *bot {
 	t.Helper()
 	tr := &transcript{}
@@ -548,7 +569,8 @@ func startBot(t *testing.T, w *world, opts botOptions) *bot {
 		flowURL = w.g.URL
 	}
 	fc := client.New(flowURL, botClientID)
-	// The limits of the client of the flow in production (serve.go).
+	// A copy of FlowGatewayTimeout and FlowGatewayBackoff of productionLimits
+	// (serve.go), unexported in package main.
 	fc.HTTP = &http.Client{Timeout: 6 * time.Second}
 	fc.Backoff = client.Backoff{Retries: 1, Initial: 200 * time.Millisecond, Max: 200 * time.Millisecond}
 	flowGW := &flowGateway{c: fc}
@@ -556,7 +578,11 @@ func startBot(t *testing.T, w *world, opts botOptions) *bot {
 	lc := client.New(w.g.URL, botClientID)
 	loopGW := &loopGateway{Client: lc, acks: deliver.NewAckClient(w.g.URL, botClientID, nil)}
 
-	gate, err := access.New(access.Options{AllowedUserIDs: []int64{player, otherPlayer}, CommandsPerMinute: 20, Clock: w.g.Clock(), Sender: replies})
+	perMinute, err := env.TelegramCommandsPerMin.IntFrom(env.MapSource(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate, err := access.New(access.Options{AllowedUserIDs: []int64{player, otherPlayer}, CommandsPerMinute: perMinute, Clock: w.g.Clock(), Sender: replies})
 	if err != nil {
 		t.Fatal(err)
 	}

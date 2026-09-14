@@ -8,15 +8,21 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"multiverse-core.io/cmd/telegram-bot/internal/commands"
 	"multiverse-core.io/cmd/telegram-bot/internal/render"
+	"multiverse-core.io/shared/clock"
 	"multiverse-core.io/shared/eventbus"
 )
 
 // scenarioRuns is how many times the scenario runs from nothing: the record of
 // every run must be the one of the first (DoD of T-315).
 const scenarioRuns = 3
+
+// quietWindow is how long, on the wall clock, the scenario waits after its
+// last step for anything that should not come.
+const quietWindow = 200 * time.Millisecond
 
 // scriptStep is one message of the player and how the bot answers it: the
 // answers of the update handler, in order, and the deliveries it brings, in
@@ -55,6 +61,11 @@ var script = []scriptStep{
 	{text: "/say привет", replies: []string{reply("Принято.", "-")}},
 	{text: "/forget", replies: []string{reply("Удалить вашу связку с игрой? Персонаж останется в мире без владельца, вернуть его будет нельзя. Что удаляется и что остаётся, написано в сообщении /help. Чтобы подтвердить, отправьте /forget confirm", "-")}},
 	{text: "/forget confirm", replies: []string{reply("Связка удалена. /start — начать заново", "[/start]")}},
+	// A barrier (N-1 of review #1): one answer and no delivery. A late answer
+	// or delivery of the steps before it would land here and fail the record.
+	// After /forget the link is gone, so /help shows the notice with the
+	// consent keyboard.
+	{text: "/help", replies: []string{reply(render.NoticeText, "[Мне есть 18, принимаю|Отказаться]")}},
 }
 
 func reply(text, kb string) string {
@@ -127,6 +138,12 @@ func runScenario(t *testing.T) record {
 			wantReplies = append(wantReplies, s.replies...)
 			wantDeliveries = append(wantDeliveries, nil)
 		}
+	}
+	// And after the barrier, a short quiet window: nothing more arrives.
+	settledReplies, settledDeliveries := len(b.tr.all(streamReply)), len(b.tr.all(streamDelivery))
+	<-clock.RealTimers{}.After(quietWindow).C()
+	if r, d := len(b.tr.all(streamReply)), len(b.tr.all(streamDelivery)); r != settledReplies || d != settledDeliveries || !b.loopGW.settled() {
+		t.Errorf("after the last step: %d answers and %d deliveries arrived, and every delivery acknowledged %t", r-settledReplies, d-settledDeliveries, b.loopGW.settled())
 	}
 	got := record{replies: lines(b.tr.all(streamReply)), deliveries: b.deliveriesByStep()}
 	for i := range got.deliveries {

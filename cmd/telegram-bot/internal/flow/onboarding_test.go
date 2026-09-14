@@ -225,7 +225,7 @@ func TestHelpOfAPlayerWhoConsentedShowsTheCommandsAndTheNotice(t *testing.T) {
 // name in NFD are refused — and both reach the player as NameInvalid without a
 // call to the gateway.
 func TestTheNameIsCheckedByTheRuleOfTheGateway(t *testing.T) {
-	for _, name := range []string{"Вася  Пупкин", "йва", "Вася!", "В"} {
+	for _, name := range []string{"Вася  Пупкин", "\u0438\u0306\u0432\u0430", "Вася!", "В"} {
 		t.Run(name, func(t *testing.T) {
 			f := newFixture(t)
 			f.gw.on(routeResolve, resolvedConsented)
