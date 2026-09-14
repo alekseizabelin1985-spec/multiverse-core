@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:24:37+03:00",
+  "updatedAt": "2026-09-14T03:28:13+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3018,11 +3018,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-058",
           "title": "bootstrap.go + mvctl world init/status",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T03:01:16+03:00",
           "finishedAt": null,
-          "reviewIterations": 0,
+          "reviewIterations": 1,
           "wave": 1,
           "subwave": "1.6",
           "spentMinutes": 0,
@@ -10908,7 +10908,7 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "state.Bootstrap, mvctl world init/status",
       "startedAt": "2026-09-14T03:01:16+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:28:13+03:00"
     },
     {
       "instance": "developer#2",
@@ -10958,6 +10958,26 @@ window.DEVTEAM_STATE =
       "task": "T-309",
       "action": "Приёмка T-309",
       "startedAt": "2026-09-14T03:24:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#1",
+      "role": "code-reviewer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "Ревью #1: bootstrap, world init/status",
+      "startedAt": "2026-09-14T03:28:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "system-architect#1",
+      "role": "system-architect",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "Решения по T-058 и ревью depguard",
+      "startedAt": "2026-09-14T03:28:13+03:00",
       "finishedAt": null
     }
   ],
@@ -15305,6 +15325,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Уведомление tech-lead EPIC-003 и EPIC-004 (через журнал, по передаче T-057/T-471): snapshot.created требует мир в конверте (WorldRequired, C-14 v1.3); в replay snapshot.created публикует только State (C-14 v1.4); законы процесса читаются из MV_RULES_PATH, хук MV_SWARM_FAKE читает rules/dark-forest.y"
+    },
+    {
+      "at": "2026-09-14T03:28:13+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 выполнена TEAM-1/developer#1: state.Bootstrap (шесть предложений world→region→npc→players, ответ через Journal.Tail 10 с, повтор даёт 0 фактов — чтение журнала до предложений), mvctl world init --bus memory (бакеты, exit 2 над инициализированным миром, снапшот bootstrap, state_hash совпадает с"
     }
   ],
   "blockers": [],
