@@ -158,7 +158,11 @@ if [ "$mode" = mutants ]; then
     fi
     printf '%-9s %s  %s\n' "$verdict" "$id" "$title"
     case "$verdict" in
-    KILLED) printf '%s\n' "$out" | grep '^FAIL' | head -n 3 | sed 's/^/          /' ;;
+    # One awk and no pipe: head left the pipe after the third line and grep
+    # died writing the rest, and a grep that finds no FAIL line exits 1 — under
+    # pipefail with set -e either ends the whole run on a mutant that was killed
+    # as it should be. awk reads all of its input and exits 0 (T-482).
+    KILLED) awk '/^FAIL/ && n++ < 3 { print "          " $0 }' <<<"$out" ;;
     GREEN) ;;
     SKIPPED) echo "          this system cannot make the link of the part $part; the mutant is checked where it can (the CI job on Linux, with --require-links)" ;;
     *)
