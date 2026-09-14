@@ -86,3 +86,44 @@ func DeliveryStates(c *Context) (map[string]int, error) {
 	}
 	return out, rows.Err()
 }
+
+// CloseGatewayDB and CloseLinksDB close one database of a started context
+// under it, as a broken file would take it away.
+func CloseGatewayDB(c *Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gatewayDB.Close()
+}
+
+func CloseLinksDB(c *Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.linksDB.Close()
+}
+
+// Live says whether the consumer of a started context read the journal to its
+// end and subscribed.
+func Live(c *Context) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.consumer.Live()
+}
+
+// SetHealthProbeInterval shortens the interval of the checks of /health of a
+// context that is not started yet.
+func SetHealthProbeInterval(c *Context, d time.Duration) { c.probeInterval = d }
+
+// SetStaleRepairBudget and SetSnapshotWriteBudget shorten the budget of a
+// repair of stale entities and of a snapshot write of a context that is not
+// started yet.
+func SetStaleRepairBudget(c *Context, d time.Duration) { c.repairBudget = d }
+
+func SetSnapshotWriteBudget(c *Context, d time.Duration) { c.snapshotBudget = d }
+
+// CompactionPending says whether the links store of a context that was started
+// once still holds the mark of an unfinished wipe of /forget.
+func CompactionPending(c *Context) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.store.CompactionPending()
+}

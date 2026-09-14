@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sync"
 	"time"
 
@@ -62,17 +63,39 @@ type Config struct {
 	Log     *slog.Logger
 	// Effects are the side effects per event type, run in order.
 	Effects map[string][]Effect
+	// Repair, when set, is the repair of stale entities from the snapshot of
+	// State (component §11.2). It returns nothing: a repair that fails leaves
+	// the projection stale, and the event is not retried for it.
+	//
+	// In the subscription it is called with a snapshot.created the projection
+	// has not seen yet, before the event moves either cursor. In the catch-up
+	// only the last announcement Repairs accepts in the range read is kept and
+	// repaired from once, after every topic reached its End and before the
+	// subscriptions: an earlier snapshot is older than the last, its object may
+	// be gone to the rotation already, and a read per announcement against a
+	// store that hangs would spend the budget of the catch-up and fail the
+	// start (Mi-1 of review #1 of T-309).
+	Repair func(ctx context.Context, ev eventbus.Event)
+	// Repairs says whether Repair reads from ev — the snapshot of State of the
+	// world of the context. Nil accepts every snapshot.created.
+	Repairs func(ev eventbus.Event) bool
 }
 
 // Dispatcher is the consumer of the gateway.
 type Dispatcher struct {
 	cfg Config
 
-	mu      sync.Mutex
-	done    map[string]int64 // effects cursor: the last offset per topic whose effects committed
-	cancel  context.CancelFunc
-	running sync.WaitGroup
-	failure error
+	mu   sync.Mutex
+	done map[string]int64 // effects cursor: the last offset per topic whose effects committed
+	ends map[string]int64 // the end of the journal per topic the catch-up read to
+	live bool
+	// catchingUp is set while Start reads the journal; announcement is the
+	// last snapshot Repair is to read from when it ends.
+	catchingUp   bool
+	announcement *eventbus.Event
+	cancel       context.CancelFunc
+	running      sync.WaitGroup
+	failure      error
 }
 
 // New checks the configuration.
@@ -80,18 +103,25 @@ func New(cfg Config) (*Dispatcher, error) {
 	if cfg.Bus == nil || cfg.Journal == nil || cfg.DB == nil || cfg.Model == nil || cfg.Clock == nil || cfg.Log == nil {
 		return nil, errors.New("consumer: Bus, Journal, DB, Model, Clock and Log are required")
 	}
-	return &Dispatcher{cfg: cfg, done: make(map[string]int64)}, nil
+	return &Dispatcher{cfg: cfg, done: make(map[string]int64), ends: make(map[string]int64)}, nil
 }
 
-// Start loads the effects cursors, catches the projection up from the
-// journal and subscribes to the four topics.
+// Start loads the effects cursors, catches the projection and the effects up
+// from the journal and subscribes to the four topics.
 //
 // from is the cursor of the snapshot the projection was loaded from; nil
 // means no snapshot, and the journal of system_events is read from its start.
-// The catch-up ends at the end of the journal as Start sees it, so that the
-// projection is current before the gateway answers its first request; what
-// arrives later comes through the subscriptions, whose repeats of the
-// catch-up change nothing.
+// A topic is read from the earlier of two offsets: the cursor of the snapshot,
+// for the projection, and the offset after the effects cursor of gateway.db,
+// for what the gateway did not finish before it stopped. A topic that has
+// neither — no snapshot names it and gateway.db has taken nothing from it —
+// is left to its subscription.
+//
+// Each topic is read up to its End as Start sees it (C-01 v1.1): once every
+// topic is there the gateway has read the journal, and it goes live — the
+// subscriptions start (component §11.2). What arrives after End comes through
+// the subscriptions, and what they repeat of the catch-up takes no effect
+// twice: the effects cursor and processed_events stop it (component §16 p. 7).
 //
 // The subscriptions run under a context of their own, cancelled by Stop and
 // by nothing else: the bus closing does not cancel a handler (C-01 v1.7).
@@ -102,8 +132,16 @@ func (d *Dispatcher) Start(ctx context.Context, from map[string]int64) error {
 	if from == nil {
 		from = map[string]int64{eventbus.TopicSystemEvents: 0}
 	}
+	d.mu.Lock()
+	d.catchingUp, d.announcement = true, nil
+	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		d.catchingUp, d.announcement = false, nil
+		d.mu.Unlock()
+	}()
 	for _, topic := range Topics {
-		offset, ok := from[topic]
+		offset, ok := d.catchUpFrom(topic, from)
 		if !ok {
 			continue
 		}
@@ -111,6 +149,9 @@ func (d *Dispatcher) Start(ctx context.Context, from map[string]int64) error {
 		if err != nil {
 			return fmt.Errorf("consumer: end of %s: %w", topic, err)
 		}
+		d.mu.Lock()
+		d.ends[topic] = end
+		d.mu.Unlock()
 		if offset >= end {
 			continue
 		}
@@ -118,16 +159,54 @@ func (d *Dispatcher) Start(ctx context.Context, from map[string]int64) error {
 			return fmt.Errorf("consumer: catch up %s [%d, %d): %w", topic, offset, end, err)
 		}
 	}
+	d.mu.Lock()
+	announcement := d.announcement
+	d.catchingUp, d.announcement = false, nil
+	d.mu.Unlock()
+	if announcement != nil {
+		d.cfg.Repair(ctx, *announcement)
+	}
 
 	subCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	d.mu.Lock()
 	d.cancel = cancel
+	d.live = true
 	d.mu.Unlock()
 	for _, topic := range Topics {
 		d.running.Add(1)
 		go d.subscribe(subCtx, topic)
 	}
 	return nil
+}
+
+// catchUpFrom is the offset the catch-up of topic starts at, and whether the
+// topic is read at all.
+func (d *Dispatcher) catchUpFrom(topic string, from map[string]int64) (int64, bool) {
+	offset, ok := from[topic]
+	d.mu.Lock()
+	last, done := d.done[topic]
+	d.mu.Unlock()
+	if done && (!ok || last+1 < offset) {
+		offset, ok = last+1, true
+	}
+	return offset, ok
+}
+
+// Live says whether the catch-up reached the end of the journal and the
+// subscriptions started.
+func (d *Dispatcher) Live() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.live
+}
+
+// Ends are the ends of the journal the catch-up read to, per topic it read.
+func (d *Dispatcher) Ends() map[string]int64 {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make(map[string]int64, len(d.ends))
+	maps.Copy(out, d.ends)
+	return out
 }
 
 func (d *Dispatcher) subscribe(ctx context.Context, topic string) {
@@ -193,11 +272,36 @@ func (d *Dispatcher) Handle(ctx context.Context, ev eventbus.Event) error {
 	if err != nil {
 		return err
 	}
+	if ev.Type == readmodel.TypeSnapshotCreated && d.cfg.Repair != nil {
+		d.repair(ctx, pos, ev)
+	}
 	d.cfg.Model.Advance(pos)
 	if d.behindCursor(pos) {
 		return nil
 	}
 	return d.commit(ctx, pos, ev, res)
+}
+
+// repair hands a snapshot.created to Repair: kept for the end of the catch-up
+// while Start reads the journal, at once in the subscription. An announcement
+// the projection has already seen — the subscription repeating the catch-up —
+// is not repaired from again.
+func (d *Dispatcher) repair(ctx context.Context, pos eventbus.Position, ev eventbus.Event) {
+	if d.cfg.Repairs != nil && !d.cfg.Repairs(ev) {
+		return
+	}
+	d.mu.Lock()
+	if d.catchingUp {
+		kept := ev
+		d.announcement = &kept
+		d.mu.Unlock()
+		return
+	}
+	d.mu.Unlock()
+	if d.cfg.Model.Cursor()[pos.Topic] > pos.Offset {
+		return
+	}
+	d.cfg.Repair(ctx, ev)
 }
 
 // behindCursor says whether the effects of the event at pos are already
