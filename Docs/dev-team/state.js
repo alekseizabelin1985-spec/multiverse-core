@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T11:03:03+03:00",
+  "updatedAt": "2026-09-14T11:10:48+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -5031,7 +5031,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
@@ -11328,6 +11328,16 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Итерация 3: ожидание hungBroker, сторож, README",
       "startedAt": "2026-09-14T11:03:03+03:00",
+      "finishedAt": "2026-09-14T11:10:48+03:00"
+    },
+    {
+      "instance": "tech-lead#3",
+      "role": "tech-lead",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Приёмка T-473",
+      "startedAt": "2026-09-14T11:10:48+03:00",
       "finishedAt": null
     }
   ],
@@ -15933,6 +15943,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-473 · ревью #2 (code-reviewer#2): принять — 0/0/1/3. Mi-1 ревью #1 снят: зонд подтвердил, что Kafka.Close не ждёт снятый с учёта reader; найден узкий сценарий N-6 (истёкший срок Stop — Close ждёт 4,8 с) → T-477. Mi-5 фиксированное ожидание в hungBroker может флакать; N-7 сторож Stop(expired); N-8 "
+    },
+    {
+      "at": "2026-09-14T11:10:48+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 · ревью #3 (code-reviewer#4): принять — 0/0/0/0 (Ma-2: глобальной шины нет, stateOverBus в serve; Mi-4: writtenBy; N-3…N-5). Финальная отметка владельца EPIC-001 (tech-lead#1): поставлена — отказ над kafka без ключей понятен и без значений, обходного production-пути нет, слово статуса пробы со"
+    },
+    {
+      "at": "2026-09-14T11:10:48+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 · итерация 3 (developer#3): Mi-5 ожидание PreparingRebalance через DescribeGroups, N-6 оговорка README и проверка Close в stopRightAfterStart, N-7 сторож Stop(expired), N-8 цифры README. Интеграционный прогон ok 173,4 с, контейнеры убраны. Приёмка — tech-lead#3 (без ревью #3), текст DoD для T-"
     }
   ],
   "blockers": [],
