@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T10:40:13+03:00",
+  "updatedAt": "2026-09-14T10:44:37+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -2682,7 +2682,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-476",
           "title": "degraded в make health и документах, e2e бота в test-race",
-          "status": "review",
+          "status": "in_progress",
           "assignee": "devops-engineer#1",
           "startedAt": "2026-09-14T10:18:34+03:00",
           "card": "epics/EPIC-001-foundation/tasks/T-476.md",
@@ -5029,11 +5029,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-473",
           "title": "Переподписка consumer шлюза после сбоя брокера",
-          "status": "in_progress",
+          "status": "review",
           "card": "epics/EPIC-004-gateway-bot/tasks/T-473.md",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T03:46:54+03:00",
-          "reviewIterations": 1
+          "reviewIterations": 2
         },
         {
           "id": "T-478",
@@ -11234,7 +11234,7 @@ window.DEVTEAM_STATE =
       "task": "T-473",
       "action": "Итерация 2 по ревью #1",
       "startedAt": "2026-09-14T10:23:45+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:44:37+03:00"
     },
     {
       "instance": "code-reviewer#2",
@@ -11244,7 +11244,7 @@ window.DEVTEAM_STATE =
       "task": "T-476",
       "action": "Ревью #1: make health, test-race",
       "startedAt": "2026-09-14T10:31:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T10:44:37+03:00"
     },
     {
       "instance": "developer#2",
@@ -11264,6 +11264,26 @@ window.DEVTEAM_STATE =
       "task": "T-313",
       "action": "Приёмка T-313, заведение T-478/T-479",
       "startedAt": "2026-09-14T10:40:13+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-473",
+      "action": "Ревью #2: переподписка consumer",
+      "startedAt": "2026-09-14T10:44:37+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "devops-engineer#1",
+      "role": "devops-engineer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-001",
+      "task": "T-476",
+      "action": "Итерация 2: документы и порядок слияния",
+      "startedAt": "2026-09-14T10:44:37+03:00",
       "finishedAt": null
     }
   ],
@@ -15821,6 +15841,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-313 · ревью #2 (code-reviewer#3): принять — 0/0/1/2. Ma-1 и Ma-2 закрыты (прогоны при -cpu=1,2 и под нагрузкой зелёные, зонд дублей красный), Mi-1/Mi-2 закрыты. Mi-3 narrative_event_id проверяется только при нескольких нарративах, N-5 граница mechanics_at, N-6 дубль запроса курсоров — решение орке"
+    },
+    {
+      "at": "2026-09-14T10:44:37+03:00",
+      "initiative": "EPIC-001",
+      "role": "orchestrator",
+      "text": "T-476 · ревью #1 (code-reviewer#2): принять — 0/0/2/2 (порядок слияния в карточке и индексе расходится, runbook про LLM_STRICT, README/runbook таблица статусов). Решение оркестратора — вариант (а): T-476 сливается в EPIC-001 после приёмки, EPIC-001 не уходит в develop, пока там нет T-059 и T-315 (пр"
+    },
+    {
+      "at": "2026-09-14T10:44:37+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-473 · итерация 2 (developer#3): Ma-1 допуск в тесте срока снапшота (200 повторов ok), Mi-2 проверка ctx после паузы (M12), Mi-3 тест настенных таймеров replay (R2 красный), Mi-4 интеграционный тест 164,7 с, N-2…N-5 (флак groupRestart — ожидание офсета группы). Mi-1 опровергнут замером: Kafka.Close"
     }
   ],
   "blockers": [],
