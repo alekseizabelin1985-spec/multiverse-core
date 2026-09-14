@@ -179,6 +179,8 @@ func (noTurns) Begin(context.Context, actions.Turn) (api.TurnRef, error) { retur
 func (noTurns) Accepted(context.Context, actions.Turn, api.TurnRef, string) error {
 	return nil
 }
+func (noTurns) Withdrawn(context.Context, api.TurnRef, string) error { return nil }
+func (noTurns) Acked(context.Context, string, time.Time) error       { return nil }
 func (noTurns) Rejected(context.Context, actions.Turn, string) error { return nil }
 
 type fixture struct {
