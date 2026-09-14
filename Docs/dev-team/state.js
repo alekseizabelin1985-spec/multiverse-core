@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T12:06:02+03:00",
+  "updatedAt": "2026-09-14T12:06:58+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3264,7 +3264,7 @@ window.DEVTEAM_STATE =
         {
           "id": "T-475",
           "title": "mvctl world init --bus kafka",
-          "status": "review",
+          "status": "in_progress",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md",
           "assignee": "developer#1",
           "startedAt": "2026-09-14T11:20:42+03:00",
@@ -5060,10 +5060,11 @@ window.DEVTEAM_STATE =
         {
           "id": "T-480",
           "title": "FakeGateway останавливается за 1 с после T-473",
-          "status": "in_progress",
+          "status": "review",
           "assignee": "developer#3",
           "startedAt": "2026-09-14T11:49:37+03:00",
-          "card": "epics/EPIC-004-gateway-bot/tasks/T-480.md"
+          "card": "epics/EPIC-004-gateway-bot/tasks/T-480.md",
+          "reviewIterations": 1
         },
         {
           "id": "T-481",
@@ -11398,7 +11399,7 @@ window.DEVTEAM_STATE =
       "task": "T-480",
       "action": "Регрессия Stop FakeGateway после T-473",
       "startedAt": "2026-09-14T11:49:37+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:06:58+03:00"
     },
     {
       "instance": "code-reviewer#1",
@@ -11408,7 +11409,7 @@ window.DEVTEAM_STATE =
       "task": "T-475",
       "action": "Ревью #1: world init --bus kafka",
       "startedAt": "2026-09-14T11:53:38+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T12:06:58+03:00"
     },
     {
       "instance": "system-architect#1",
@@ -11428,6 +11429,26 @@ window.DEVTEAM_STATE =
       "task": "T-478",
       "action": "Итерация 2: сбой публикации в OnMechanics",
       "startedAt": "2026-09-14T12:06:02+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "code-reviewer#2",
+      "role": "code-reviewer",
+      "team": "TEAM-3",
+      "initiative": "EPIC-004",
+      "task": "T-480",
+      "action": "Ревью #1: диагностика FakeGateway",
+      "startedAt": "2026-09-14T12:06:58+03:00",
+      "finishedAt": null
+    },
+    {
+      "instance": "developer#1",
+      "role": "developer",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-475",
+      "action": "Итерация 2: 409 bootstrap, сверка с core",
+      "startedAt": "2026-09-14T12:06:58+03:00",
       "finishedAt": null
     }
   ],
@@ -16111,6 +16132,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-478 · ревью #1 (code-reviewer#3): принять — 0/0/1/6. Засада при enter, отказ State, rest во встрече — штатный ход I1 до дедлайна не висит; транзакции и счётчики верны; пробное слияние с df47003 зелёное. Риск: OnMechanics публикует turn.completed в транзакции consumer — сбой аналитики откатывает эф"
+    },
+    {
+      "at": "2026-09-14T12:06:58+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-480 выполнена developer#3 как «диагностика + защитный тест»: тест FakeGateway печатает фазы Start/запросы/Close при превышении порога 1 с; stop_membus_test.go закрепляет, что Stop над membus не ждёт grace (мутант красный). Причина прежних падений — нагрузка при параллельном интеграционном прогоне,"
+    },
+    {
+      "at": "2026-09-14T12:06:58+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-475 · ревью #1 (code-reviewer#1): принять — 0/0/1/3. Mi-1: снапшот пишется из памяти State core, а «что предлагать» решают объекты — без сверки возможен bootstrap-снапшот неполного мира (зонд P1, нарушение процедуры §4.10 (в)); N-1 MV_CORE_URL через Redacted(); N-2 health без state — предупреждени"
     }
   ],
   "blockers": [],
