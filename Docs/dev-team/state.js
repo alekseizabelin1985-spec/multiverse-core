@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T03:34:40+03:00",
+  "updatedAt": "2026-09-14T03:41:01+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -3243,6 +3243,12 @@ window.DEVTEAM_STATE =
           "title": "Предложения без ответа после восстановления State",
           "status": "todo",
           "card": "epics/EPIC-002-state-mechanics/tasks/T-474.md"
+        },
+        {
+          "id": "T-475",
+          "title": "mvctl world init --bus kafka",
+          "status": "todo",
+          "card": "epics/EPIC-002-state-mechanics/tasks/T-475.md"
         }
       ],
       "defects": [],
@@ -10978,7 +10984,7 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Решения по T-058 и ревью depguard",
       "startedAt": "2026-09-14T03:28:13+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T03:41:01+03:00"
     },
     {
       "instance": "code-reviewer#3",
@@ -15357,6 +15363,18 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-002",
       "role": "orchestrator",
       "text": "T-472 выполнена TEAM-1/developer#3: entity.CanonicalPath и ApplyOps отвергают неканонический путь и путь ниже скаляра для всех читателей; remove inventory[0] пишет путь списка, StateHash после догона совпадает; таблица видов атрибутов по data-model §3 (attrs.go), CheckAttributes при создании; canoni"
+    },
+    {
+      "at": "2026-09-14T03:41:01+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 · решения system-architect#1: идемпотентность — прав код (КД §4.10 поправлен, State гасит повтор без ответа); снапшот shutdown — оставить закрытое хранилище (sealable), признак в Config не вводить (конфликт с T-059); --force — не seq>0 поверх, а очистка entities-{world}/ и snapshots-{world}/st"
+    },
+    {
+      "at": "2026-09-14T03:41:01+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Решение оркестратора по вопросу system-architect#1: вариант A — отдельная задача T-475 EPIC-002 «mvctl world init --bus kafka» после T-059, блокирует T-063 (стендовая строка «T-058 (часть)» переходит к ней). counters.task = 475; раздел заводит tech-lead#2 при приёмке T-058."
     }
   ],
   "blockers": [],
