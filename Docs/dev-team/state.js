@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T14:17:36+03:00",
+  "updatedAt": "2026-09-14T14:26:56+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -16392,6 +16392,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "Контрольное слияние S (постоянное разрешение): epic/EPIC-004-gateway-bot → develop (5851a06: T-478, T-480, T-483) и epic/EPIC-002-state-mechanics → develop (163f7e6: T-475). make ci по обоим эпикам — обходным скриптом для Windows (test exe updates/render/env через go test -c): lint, test -short, пок"
+    },
+    {
+      "at": "2026-09-14T14:26:56+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "CI на GitHub для контрольного слияния S (34837447190): unit, e2e, race, scripts-parity, security, contracts, compose-lint — success; integration — failure на shared/testkit/contract TestBusContractOnRedpanda/APermanentErrorUnderCancellationIsDeliveredAgain (contract.go:1223: подписка, остановленная "
     }
   ],
   "blockers": [
