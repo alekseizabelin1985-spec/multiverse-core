@@ -1653,11 +1653,22 @@ func (e *FakeEncounter) Observe(ctx context.Context, ev eventbus.Event) error {
 // fold writes one fact into one view of an entity. The version only ever goes
 // up: the working view may already stand past the fact, because the stub folds
 // what it proposed before the fact of it comes back (apply).
+//
+// The attributes go up with it and never back. A view that stands at or past
+// the version of the fact already holds what the fact says, and more: the next
+// package of the fight can be proposed and folded in between two facts of the
+// previous one — the first fact of a package settles it and lets the held
+// action go (advance) — and the later facts of the older package would then put
+// back hit points the newer one had already taken. The blow after that is
+// struck from those hit points under a version State never gives an unchanged
+// entity, and loses the race with nothing left to retry (T-482). A fact the view
+// really has not seen is newer than the view, and a conflicting one comes back
+// as a refusal, which rolls the view back to the facts (rollback).
 func (e *FakeEncounter) fold(ent *entity.Entity, ops []entity.Op, version int64) {
 	if ent == nil {
 		return
 	}
-	if len(ops) > 0 {
+	if len(ops) > 0 && version > ent.Version {
 		attrs, _, err := entity.ApplyOps(ent, ops)
 		if err != nil {
 			e.log.Warn("a fact the stub cannot apply", "entity_id", ent.ID, "err", err)
