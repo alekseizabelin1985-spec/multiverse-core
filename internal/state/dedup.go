@@ -1,5 +1,16 @@
 package state
 
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+
+	"multiverse-core.io/shared/entity"
+	"multiverse-core.io/shared/eventbus"
+)
+
 // Step 2 of §4.5: a proposal already applied is not applied again (C-02
 // "Гарантии", NFR-013).
 //
@@ -50,6 +61,118 @@ func targetsOf(p *Proposal) []string {
 		}
 	}
 	return out
+}
+
+// resendUnpublished answers a proposal already applied (§4.5 p. 2). An entity
+// that carries its commit record without a fact — written to the object store,
+// its fact never confirmed out (fact_event_id empty, ADR-011 p. 1) — has its
+// fact published again, under the id it was first derived with, and learns
+// the id in memory. Nothing is applied or written a second time (C-02
+// "Гарантии": "факты досылаются, если не были опубликованы"; C-02 v1.8 p. 5).
+//
+// A refusal of the same answer is not published again: the entity does not
+// remember it, and C-02 v1.8 p. 5 gives a repeat of a package applied in part
+// no answer.
+func (a *Applier) resendUnpublished(ctx context.Context, p *Proposal) error {
+	var pending []*entity.Entity
+	for _, id := range targetsOf(p) {
+		e, ok := a.store.Get(a.worldID, id)
+		if !ok || e.LastChange == nil || e.LastChange.ProposalID != p.ID || e.LastChange.FactEventID != "" {
+			continue
+		}
+		pending = append(pending, e)
+	}
+	if len(pending) == 0 {
+		a.log.Debug("proposal already applied", "proposal_id", p.ID, "event_id", p.Event.ID)
+		return nil
+	}
+	if err := a.refuseUnfinishedPackage(ctx, p); err != nil {
+		return err
+	}
+	slices.SortFunc(pending, func(x, y *entity.Entity) int { return cmp.Compare(x.ID, y.ID) })
+	facts := make([]eventbus.Event, 0, len(pending))
+	for _, e := range pending {
+		cause := originalCause(p.Event, e.LastChange)
+		if p.Kind == KindCreate {
+			facts = append(facts, createdFact(cause, a.source, e, p.ID))
+			continue
+		}
+		// The cause of the fact is the cause the commit record kept, not the
+		// one a new event under the same proposal_id may carry (review #1 of
+		// T-057, Mi-3). The rest of the envelope — correlation, actor, locale —
+		// is not kept by the record and comes from the event at hand.
+		recorded := *p
+		if e.LastChange.Cause != "" {
+			recorded.Cause = e.LastChange.Cause
+		}
+		facts = append(facts, updatedFact(cause, a.source, e, e.LastChange.Changed, &recorded))
+	}
+	if err := a.publish(ctx, p.ID, facts...); err != nil {
+		return err
+	}
+	for i, e := range pending {
+		e.SetFactEventID(facts[i].ID)
+	}
+	if err := a.store.Put(a.worldID, pending...); err != nil {
+		return a.keepFailed(p, err)
+	}
+	a.remember(p.ID)
+	for _, fact := range facts {
+		a.log.Info("the fact of an applied proposal was published again", "proposal_id", p.ID,
+			"event_id", fact.ID, "type", fact.Type)
+	}
+	return nil
+}
+
+// refuseUnfinishedPackage stops the world instead of sending the facts of a
+// package whose intent is still in the object store. An intent outlives its
+// package only when the writes of an atomic package were cut off between two
+// entities: some of them are written and carry the commit record, the others
+// are not. Sending the facts of the written ones would announce half of an
+// atomic package (§4.7), and the intent is rolled forward by recovery, not
+// here (§4.8, T-059). Nothing of the answer is published; the proposal stays
+// uncommitted and is decided again once the intent is gone (review #1 of
+// T-057, question 2; decision of the orchestrator).
+func (a *Applier) refuseUnfinishedPackage(ctx context.Context, p *Proposal) error {
+	if a.objects == nil {
+		return nil
+	}
+	intents, err := a.objects.ListIntents(context.WithoutCancel(ctx), a.worldID)
+	if err != nil {
+		return a.persistFailed(p, "the list of intents", err)
+	}
+	for _, in := range intents {
+		if in.ProposalID != p.ID {
+			continue
+		}
+		failure := fmt.Errorf("%w: %w: %w: the intent of proposal %s is still in the store, the package is not rolled forward",
+			ErrWorldStopped, ErrPersistFailed, errUnfinishedPackage, p.ID)
+		a.halt(failure)
+		a.log.Error("a repeated proposal has an unfinished package; no fact of it is sent and the world is stopped",
+			"reason", "persist_failed", "proposal_id", p.ID, "event_id", p.Event.ID, "handled", false,
+			"remedy", "restart the process: recovery rolls the intent forward")
+		return failure
+	}
+	return nil
+}
+
+// errUnfinishedPackage is why the facts of a package with an intent left behind
+// are not sent.
+var errUnfinishedPackage = errors.New("state: unfinished package")
+
+// originalCause is the proposal as the fact was first derived from: the event
+// the commit record names and the instant it was applied at. The same event
+// delivered again is that event; a new event under the same proposal_id is
+// not, and deriving from it would give the fact another id and another
+// applied_at than the one that may already be out (ADR-027).
+func originalCause(ev eventbus.Event, change *entity.LastChange) eventbus.Event {
+	if change.ProposalEventID != "" {
+		ev.ID = change.ProposalEventID
+	}
+	if !change.AppliedAt.IsZero() {
+		ev.Timestamp = change.AppliedAt
+	}
+	return ev
 }
 
 // remember records a proposal whose answer is out and kept.

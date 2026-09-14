@@ -65,6 +65,7 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-secret-multiline-plain.yml` | 3 | `MV_LLM_API_KEY:` with a literal on the next line — a key WITH a value to YAML, not a key without one (T-429; T-413 review #2) |
 | `bad-secret-salt-literal.yml` | 3 | a literal `MV_TELEGRAM_ACTION_KEY_SALT`: a `Secret()` of the manifest whose name ends in `_SALT`, past `MV_.*_KEY`; until rule 3 named `MV_.*_SALT` the file passed every rule (T-464). An optional secret: the refusal advises `${MV_TELEGRAM_ACTION_KEY_SALT:-}`, not `:?`, and prints `<withheld>` for the value (T-464 review #1 Mi-1, N-2) |
 | `bad-secret-required-default.yml` | 3 | `MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-fakesecret}` — a required credential with a default of its own; the refusal prints `<withheld>` for the default, and `# expect-absent:` holds the placeholder out of the report (C-15 v1.5, T-464 review #1 N-2) |
+| `bad-secret-anthropic-literal.yml` | 3 | `MV_ANTHROPIC_API_KEY: placeholder` — a literal optional secret (T-470 handover to T-469, review #1 Mi-3); the refusal advises `${MV_ANTHROPIC_API_KEY:-}`, prints `<withheld>`, and `# expect-absent:` holds the placeholder out of the report |
 | `bad-llm-url-any-address.yml` | 6 | `MV_OLLAMA_URL` at `0.0.0.0` — an invalid address, not a local one; the old copy of the rule took it for private (T-450) |
 | `bad-llm-url-dotted-name.yml` | 6 | `MV_OLLAMA_URL` at `ollama.local` — any name with a dot is the cloud (T-450) |
 | `bad-llm-url-no-port.yml` | 6 | `MV_OLLAMA_URL` at `http://ollama` — a local host without a port is invalid, not only a loopback one (T-450) |
@@ -102,7 +103,8 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-nodefault-braced.yml` | 8 | `${MV_X}` with no modifier for a variable whose manifest default is not empty: a silent `.env` hands the process an empty value (Mi-2) |
 | `bad-nodefault-bare.yml` | 8 | the same trap spelled `$MV_X` (Mi-2) |
 | `bad-nodefault-after-escape.yml` | 8 | the same trap after compose's escape: `$$$MV_X` (N-6) |
-| `bad-nodefault-in-command.yml` | 8 | the same trap inside a `command:`, where the advice is not "a key with no value" (N-5) |
+| `bad-nodefault-in-command.yml` | 8 | the same trap inside a `command:`, where the advice is not "a key with no value" (N-5); the command names no context, or rule 9 would fire as well (T-469) |
+| `bad-default-form.yml` | 8 | `${MV_STATE_WORLDS}` with no modifier: the advice is the form of passing, `${MV_STATE_WORLDS:-dark-forest-world}`, and `# expect-absent:` holds "key with no value" out of it — that form is kept for the allow-lists of `EMPTY_IS_NOBODY` alone (T-469) |
 | `bad-anchor-nodefault.yml` | 8 | `${MV_X}` in an `x-*` anchor merged into a service's `environment`: the anchor's place is an environment entry too, so both places get the same advice and one refusal (T-429 review #2 N-1) |
 | `bad-nodefault-command-entry.yml` | 8 | `CLIENTS=${MV_X}` in a command: an entry to read, text to the process, so the advice is the one for a longer string (T-429 review #1 N-4) |
 | `bad-alternate-colon.yml` | 8 | `${MV_X:+x}`: compose's own text when set, empty when `.env` is silent (N-6) |
@@ -114,6 +116,12 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `bad-yaml-doubled-quote.yml` | 8 | `'it''s # ${MV_X}'`: `''` is one quote, so the `#` is text (T-429; N-1) |
 | `bad-yaml-block-scalar-comment.yml` | 8 | a line `# ${MV_X}` inside a `\|` block, which is text, not a comment (T-429; N-1) |
 | `bad-yaml-multiline-quoted-comment.yml` | 8 | `# ${MV_X}` on the continuation line of a quoted string (T-429; N-1) |
+| `bad-reach-gateway.yml` | 9 | a service running `--contexts=gateway` passes every variable the process and the gateway read but `MV_GATEWAY_ENCOUNTER_GRACE` (the class of T-305); the refusal names the service, the variable, its reader and `${MV_GATEWAY_ENCOUNTER_GRACE:-10s}` (T-469) |
+| `bad-reach-llm-secret.yml` | 9 | a service running `--contexts llm` (two arguments), `environment` as a list, without `MV_ANTHROPIC_API_KEY`; the advice is the form of an optional secret, `${MV_ANTHROPIC_API_KEY:-}` (T-469) |
+| `bad-reach-bot.yml` | 9 | the bot, known by its entrypoint `/telegram-bot`, without `MV_TELEGRAM_COMMANDS_PER_MIN` (the class of T-310) and without the token, for which the advice is `:?` (T-469) |
+| `bad-reach-all.yml` | 9 | `--contexts=all` passes everything but `MV_EMBED_MODEL`, which the context memory alone reads: `all` is every context, not the process alone (T-469 review #1 Mi-2, mutant MA) |
+| `bad-reach-unknown-context.yml` | 9 | `--contexts=gateway,gatewya` with every variable of the gateway: the refusal names the unknown context (T-469 review #1 Mi-2, mutant MB) |
+| `bad-reach-entrypoint.yml` | 9 | `--contexts=memory` in the rest of an entrypoint `/multiverse` with no command, and `--contexts` given twice in a command, where the last one wins as in the Go flag package; both services miss `MV_EMBED_MODEL` (T-469 review #1 N-2) |
 | `good-llm-url-local.yml` | — | `http://ollama:11434` (the case of T-450: the linter and the platform now agree), a one-word name that is not a service of the file, a written `:80`, an IPv4-mapped RFC 1918 address and an IPv6 ULA. Rule 6 is `llm_endpoint_classify` of `scripts/lib/llm-endpoint.sh`, held to `testdata/llm/local-endpoints.tsv` |
 | `good-network-set.yml` | — | the six network addresses naming services in the right shape, and `MV_LLM_URL`, `MV_TELEGRAM_HEALTH_ADDR`, `MV_MEMORY_URL` that the old guess mistook (N-4) |
 | `good-escaped-dollar.yml` | — | `$${MV_X:-d}` and `$$MV_X` in a command: text for the container's shell (N-1) |
@@ -125,6 +133,8 @@ the owner's machine) makes of it, and the header of the fixture says so.
 | `good-compose-project-name.yml` | — | `${COMPOSE_PROJECT_NAME}` with no modifier: compose sets it itself, and the contract holds compose to third-party defaults for `OLLAMA_*` only (Mi-1) |
 | `good-image-pinned.yml` | — | third-party images from the pins of `build/versions.env`, from an anchor and written `image :` (T-429 review #1 Mi-1) |
 | `good-required-message-nested.yml` | — | `${MV_LLM_URL:?... ${MV_WORLD_ID} ...}`: compose evaluates the message of `:?` only on its way to a refusal, so nothing in it is checked (T-429; T-413 review #1 N-1) |
+| `good-reach-host-only.yml` | — | the variables of `NOT_IN_CONTAINERS` of rule 9 are not asked of their would-be readers: the gateway without `MV_BACKUP_AGE_RECIPIENT`, a service running swarm (its `environment` a list) without `MV_SWARM_FAKE`; a service with neither `--contexts` nor the bot's entrypoint is not the rule's (T-469) |
+| `good-reach-env-file.yml` | — | the gateway passes `MV_GATEWAY_ENCOUNTER_GRACE` through its `env_file`, the companion `good-reach-env-file.vars`: compose moves it into the `environment` of the resolved model, which rule 9 reads, and the linter never opens the file itself (T-469 review #1 Mi-1). The companion is `*.vars`, not `*.env`, which would be read as the fixture's example environment |
 | `good-state-and-bot-passthrough.yml` | — | the three lines of T-464 in their own form: `MV_STATE_WORLDS` and `MV_TELEGRAM_COMMANDS_PER_MIN` with the manifest's defaults, the optional secret `MV_TELEGRAM_ACTION_KEY_SALT` as `${VAR:-}` with no `:?` — rule 3 does not take it for a default credential |
 
 A fixture may bring its own example environment: when `x.env` sits next to

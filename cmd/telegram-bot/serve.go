@@ -227,7 +227,7 @@ func (b *bot) run(ctx context.Context, e environment) int {
 		_, _ = fmt.Fprintf(e.stderr, "telegram-bot: /health on %s: %v\n", b.healthAddr, err)
 		return 1
 	}
-	srv := &http.Server{Handler: healthHandler(b.gate.Counters), ReadHeaderTimeout: healthReadHeaderTimeout}
+	srv := &http.Server{Handler: healthHandler(b.gate.Counters, b.loop.Health), ReadHeaderTimeout: healthReadHeaderTimeout}
 	served := make(chan struct{})
 	go func() {
 		defer close(served)

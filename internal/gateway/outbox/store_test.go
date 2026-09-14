@@ -282,3 +282,35 @@ func TestDeliveryIDsNameWhatTheyDeliver(t *testing.T) {
 		t.Error("a transition and an event share an id")
 	}
 }
+
+// Pending counts the pending deliveries and the age of the oldest by created_at
+// for /health (component §11.4): an empty queue is 0 and 0; delivered and
+// dropped deliveries are not in it.
+func TestPendingCountsTheQueueAndTheAgeOfItsOldest(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	if n, age, err := f.store.Pending(ctx, f.clock.Now()); err != nil || n != 0 || age != 0 {
+		t.Fatalf("empty queue: %d, %v, %v; want 0, 0", n, age, err)
+	}
+	f.enqueue(t, delivery("e1", playerA))
+	f.clock.Advance(30 * time.Second)
+	f.enqueue(t, delivery("e2", playerB))
+	f.clock.Advance(60 * time.Second)
+	if n, age, err := f.store.Pending(ctx, f.clock.Now()); err != nil || n != 2 || age != 90*time.Second {
+		t.Fatalf("two pending: %d, %v, %v; want 2, 90s", n, age, err)
+	}
+	// The oldest leaves the queue: the age is that of the next one.
+	f.lease(t, bot, 10)
+	if _, _, err := f.store.Ack(ctx, bot, []string{id("e1", playerA)}, f.clock.Now(), nil); err != nil {
+		t.Fatal(err)
+	}
+	f.enqueue(t, outbox.Delivery{WorldID: "dark-forest-world", PlayerID: playerA, Kind: outbox.KindMechanics,
+		CorrelationID: "action-e3", EventID: "e3", GeneratedBy: outbox.GeneratedByRules, Text: "x"})
+	if n, age, err := f.store.Pending(ctx, f.clock.Now()); err != nil || n != 1 || age != 60*time.Second {
+		t.Fatalf("after the ack of the oldest and a dropped one: %d, %v, %v; want 1, 60s", n, age, err)
+	}
+	// A clock behind the rows never makes the age negative.
+	if _, age, err := f.store.Pending(ctx, t0); err != nil || age != 0 {
+		t.Fatalf("clock behind created_at: age %v, %v; want 0", age, err)
+	}
+}

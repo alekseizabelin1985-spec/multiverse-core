@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"multiverse-core.io/cmd/telegram-bot/internal/flow"
@@ -91,6 +92,12 @@ func NewAckClient(baseURL, clientID string, timers clock.Timers) *client.Client 
 	return c
 }
 
+// DegradedAfterFailedPolls is how many failed long-polls in a row make /health
+// of the bot degraded. With the pauses of retryPause the seventh failure comes
+// 61 s after the first: a gateway that restarts within a minute does not flip
+// the health of the bot (acceptance of T-312).
+const DegradedAfterFailedPolls = 7
+
 // AckOnStopTimeout bounds the last ack of a stopping loop. The context of the
 // loop has ended by then, and an ack under it would not leave: the deliveries
 // already sent would come again after the restart.
@@ -149,6 +156,32 @@ type Loop struct {
 	// cursor and pending are touched by the goroutine of Run only.
 	cursor  string
 	pending []string
+
+	// failedPolls and unauthorized are what Health reports; the goroutine of
+	// Run writes them while /health reads them.
+	failedPolls  atomic.Int64
+	unauthorized atomic.Bool
+}
+
+// Health is what the delivery loop tells /health of the bot.
+type Health struct {
+	// FailedPolls is the number of long-polls in a row that failed; a
+	// successful one resets it.
+	FailedPolls int
+	// Unauthorized: Telegram refused the token on the last send that got an
+	// answer; a message sent resets it.
+	Unauthorized bool
+}
+
+// Degraded says the bot does not deliver: the gateway has not answered for
+// DegradedAfterFailedPolls long-polls, or Telegram refuses the token.
+func (h Health) Degraded() bool {
+	return h.FailedPolls >= DegradedAfterFailedPolls || h.Unauthorized
+}
+
+// Health reports the state of the loop. It is safe to call while Run runs.
+func (l *Loop) Health() Health {
+	return Health{FailedPolls: int(l.failedPolls.Load()), Unauthorized: l.unauthorized.Load()}
 }
 
 // New builds a loop. Gateway and Sender are required.
@@ -213,9 +246,11 @@ func (l *Loop) Run(ctx context.Context) {
 				l.log.Info("deliveries polled again", slog.Int(keyCount, failures))
 			}
 			failures = 0
+			l.failedPolls.Store(0)
 			continue
 		}
 		failures++
+		l.failedPolls.Store(int64(failures))
 		pause := retryPause(failures)
 		if early {
 			l.log.Info("deliveries answered empty before the wait, the gateway is stopping", slog.Duration(keyPause, pause))
@@ -277,6 +312,7 @@ func (l *Loop) deliver(ctx context.Context, d api.Delivery) (ack, stop bool) {
 	for _, part := range render.Delivery(d) {
 		err := l.send.Send(ctx, chat, part.Text, part.Keyboard)
 		if err == nil {
+			l.unauthorized.Store(false)
 			continue
 		}
 		if ctx.Err() != nil {
@@ -303,6 +339,7 @@ func (l *Loop) decide(d api.Delivery, err error) (ack, stop bool) {
 	case errors.Is(err, sender.ErrUnauthorized):
 		// Every other message of the answer would be refused the same way.
 		// The update source meets the same 401 and stops the process.
+		l.unauthorized.Store(true)
 		l.log.Error("bot token rejected, deliveries left to the gateway", slog.String(keyKind, d.Kind), slog.String(keyReason, reasonUnauthorized), detail)
 		return false, true
 	default:
