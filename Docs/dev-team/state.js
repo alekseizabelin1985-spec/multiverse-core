@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T09:37:35+03:00",
+  "updatedAt": "2026-09-14T09:48:11+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -11096,7 +11096,7 @@ window.DEVTEAM_STATE =
       "task": "T-058",
       "action": "Ревью #2",
       "startedAt": "2026-09-14T09:37:35+03:00",
-      "finishedAt": null
+      "finishedAt": "2026-09-14T09:48:11+03:00"
     },
     {
       "instance": "code-reviewer#4",
@@ -11116,6 +11116,16 @@ window.DEVTEAM_STATE =
       "task": "T-059",
       "action": "Решения по T-059, риск healthcheck compose",
       "startedAt": "2026-09-14T09:37:35+03:00",
+      "finishedAt": "2026-09-14T09:48:11+03:00"
+    },
+    {
+      "instance": "tech-lead#2",
+      "role": "tech-lead",
+      "team": "TEAM-1",
+      "initiative": "EPIC-002",
+      "task": "T-058",
+      "action": "Приёмка T-058, отметка EPIC-001, T-475",
+      "startedAt": "2026-09-14T09:48:11+03:00",
       "finishedAt": null
     }
   ],
@@ -15565,6 +15575,24 @@ window.DEVTEAM_STATE =
       "initiative": "EPIC-004",
       "role": "orchestrator",
       "text": "T-313 · ревью #1 (code-reviewer#2): вернуть — 0/2/2/4. Ma-1 сравнение прогонов мигает при малом GOMAXPROCS (два нарратива на корреляцию, tracker берёт первый обработанный; CI гоняет test/e2e под -race); Ma-2 проверка дублей не видит повторную публикацию с тем же id; Mi-1 поля механики нигде не прове"
+    },
+    {
+      "at": "2026-09-14T09:48:11+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-058 · ревью #2 (code-reviewer#1): принять — 0/0/0/2. Ma-1, Mi-1…Mi-4, N-1, N-2 закрыты; пробное слияние с T-059: сборка падает на двойном CauseInit, после удаления из world.go всё зелёное, повтор init после неудачи — exit 0 без таймаута. Приёмка и отметка EPIC-001 (.golangci.yml, main_test.go) — t"
+    },
+    {
+      "at": "2026-09-14T09:48:11+03:00",
+      "initiative": "EPIC-002",
+      "role": "orchestrator",
+      "text": "T-059 · решения system-architect#1: log_gap — вышедшие факты проставляют fact_event_id, не применяясь (итерация 2); конверт досылки — как в коде; batch_size — применённые наборы; snapshot_event_failed, повторы записи (КД §4.5 п. 11), страж в shared/testkit/state подтверждены; три отступления от DoD "
+    },
+    {
+      "at": "2026-09-14T09:48:11+03:00",
+      "initiative": "EPIC-004",
+      "role": "orchestrator",
+      "text": "T-315 · просмотр system-architect#2: место e2e бота cmd/telegram-bot/e2e/ и правило cmd-telegram-bot-e2e подтверждены (вопрос 2 T-470 закрыт), ownership.md поправлен; C-08 v1.5a — порядок доставок между топиками не гарантирован (внутри топика — порядок топика), обязанность паузы клиента после раннег"
     }
   ],
   "blockers": [],
