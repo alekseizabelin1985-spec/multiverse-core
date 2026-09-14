@@ -360,6 +360,68 @@ func TestAwaitDeliveryReportsTheGateway(t *testing.T) {
 	}
 }
 
+// Drain gives what waits in the inbox first, then everything the long-poll
+// gives until a poll of the quiet wait comes back empty; everything is
+// acknowledged, the inbox is left empty, and the quiet wait is what the gateway
+// is asked to wait.
+func TestDrainTakesTheInboxAndEverythingUntilAQuietPoll(t *testing.T) {
+	f := &fakeAPI{pollWait: 10 * time.Millisecond, deliveries: [][]api.Delivery{
+		{{ID: "d-1", Kind: "mechanics", CorrelationID: "c-1"}, {ID: "d-2", Kind: "system", CorrelationID: "c-1"}},
+		{{ID: "d-3", Kind: "narrative", CorrelationID: "c-1"}},
+		{{ID: "d-4", Kind: "narrative", CorrelationID: "c-2"}},
+	}}
+	h := harnessOver(t, f)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if d, err := h.AwaitDelivery(ctx, "mechanics", time.Second); err != nil || d.ID != "d-1" {
+		t.Fatalf("mechanics = %+v %v", d, err)
+	}
+
+	got, err := h.Drain(ctx, 30*time.Millisecond)
+	ids := make([]string, 0, len(got))
+	for _, d := range got {
+		ids = append(ids, d.ID)
+	}
+	if err != nil || !slices.Equal(ids, []string{"d-2", "d-3", "d-4"}) {
+		t.Fatalf("Drain = %v %v, want d-2 d-3 d-4", ids, err)
+	}
+	f.mu.Lock()
+	acked := slices.Clone(f.acked)
+	f.mu.Unlock()
+	if !slices.EqualFunc(acked, [][]string{{"d-1", "d-2"}, {"d-3"}, {"d-4"}}, slices.Equal) {
+		t.Errorf("acked = %v", acked)
+	}
+	polls := f.polls()
+	if len(polls) != 4 {
+		t.Fatalf("polls = %d, want 4: the await, two that gave, one quiet", len(polls))
+	}
+	if ms, _ := strconv.Atoi(polls[3].URL.Query().Get("wait_ms")); ms != 30 {
+		t.Errorf("wait_ms of the quiet poll = %d, want 30", ms)
+	}
+	if again, err := h.Drain(ctx, -time.Second); err != nil || len(again) != 0 {
+		t.Errorf("second Drain = %v %v, want nothing", again, err)
+	}
+	if polls := f.polls(); polls[len(polls)-1].URL.Query().Get("wait_ms") != "0" {
+		t.Errorf("a quiet below zero polled with wait_ms %q, want 0", polls[len(polls)-1].URL.Query().Get("wait_ms"))
+	}
+	if _, err := h.AwaitDelivery(ctx, "system", 20*time.Millisecond); !errors.Is(err, gateway.ErrNoDelivery) {
+		t.Errorf("the inbox after Drain answered %v, want nothing", err)
+	}
+
+	f.set(func(f *fakeAPI) {
+		f.deliveries = [][]api.Delivery{{{ID: "d-5", Kind: "mechanics"}, {ID: "d-6", Kind: "narrative"}}}
+		f.unknownAck = []string{"d-5"}
+	})
+	if got, err := h.Drain(ctx, 10*time.Millisecond); err == nil || got != nil || !strings.Contains(err.Error(), "d-5") {
+		t.Errorf("Drain with an unknown ack = %v %v, want the error and nothing", got, err)
+	}
+	// What the gateway did acknowledge is not lost with the error.
+	f.set(func(f *fakeAPI) { f.unknownAck = nil })
+	if got, err := h.Drain(ctx, 10*time.Millisecond); err != nil || len(got) != 1 || got[0].ID != "d-6" {
+		t.Errorf("Drain after the error = %v %v, want d-6 from the inbox", got, err)
+	}
+}
+
 // CloseRound: the bare 404 of a mux without the route is 501 not_implemented;
 // an answer of the route itself — 409 no_open_round, 200 — passes as it came.
 func TestCloseRoundIsAStubUntilTheRouteIsMounted(t *testing.T) {
