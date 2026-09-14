@@ -353,36 +353,87 @@ func (h *HTTPHarness) await(ctx context.Context, what string, timeout time.Durat
 		if remaining <= 0 {
 			return api.Delivery{}, fmt.Errorf("testkit/gateway: %w: %s within %s (in the inbox: %v)", ErrNoDelivery, what, timeout, h.inboxKinds())
 		}
-		// The poll runs under ctx, not under the deadline: a request cancelled
-		// halfway may leave a delivery leased to nobody for the lease of the
-		// gateway. The gateway answers within the wait instead.
-		res, err := h.client.Deliveries(ctx, h.cursor, client.MaxPollLimit, min(remaining, client.MaxPollWait))
-		if err != nil {
-			return api.Delivery{}, fmt.Errorf("testkit/gateway: poll deliveries: %w", err)
-		}
-		if res.Cursor != "" {
-			h.cursor = res.Cursor
-		}
-		if len(res.Deliveries) == 0 {
-			continue
-		}
-		ids := make([]string, 0, len(res.Deliveries))
-		for _, d := range res.Deliveries {
-			ids = append(ids, d.ID)
-		}
-		acked, err := h.client.Ack(ctx, ids)
-		if err != nil {
-			return api.Delivery{}, fmt.Errorf("testkit/gateway: ack deliveries: %w", err)
-		}
-		for _, d := range res.Deliveries {
-			if !slices.Contains(acked.Unknown, d.ID) {
-				h.inbox = append(h.inbox, d)
-			}
-		}
-		if len(acked.Unknown) > 0 {
-			return api.Delivery{}, fmt.Errorf("testkit/gateway: the gateway does not know the deliveries it just gave: %v", acked.Unknown)
+		if _, err := h.take(ctx, remaining); err != nil {
+			return api.Delivery{}, err
 		}
 	}
+}
+
+// Drain takes every delivery the harness has: what waits in the inbox, and
+// whatever the long-poll gives until a poll that waited quiet of wall time
+// gives nothing. Every delivery is acknowledged, as AwaitDelivery does. The
+// deliveries come in the order the gateway gave them.
+//
+// A quiet of zero or less is a poll with wait_ms=0: Drain returns at the first
+// poll that finds nothing ready, without waiting for anything to come.
+//
+// On success the inbox is empty afterwards. On an error nothing is returned
+// and nothing is lost: the deliveries of the earlier polls of the call, and
+// those of the failing poll the gateway did acknowledge, stay in the inbox for
+// the next Drain or AwaitDelivery; the ones of a poll whose ack failed stay
+// leased by the gateway until the lease runs out.
+//
+// It is how a scenario collects what one step of it produced without naming
+// every kind in advance: the quiet wait is the moment the harness believes the
+// gateway has nothing more for it, and a test that needs certainty waits for
+// the fact behind a delivery on the bus first.
+func (h *HTTPHarness) Drain(ctx context.Context, quiet time.Duration) ([]api.Delivery, error) {
+	// A negative wait would leave wait_ms out of the request, and the gateway
+	// would wait its default instead of not at all.
+	quiet = max(quiet, 0)
+	h.polling.Lock()
+	defer h.polling.Unlock()
+	for {
+		n, err := h.take(ctx, quiet)
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			out := h.inbox
+			h.inbox = nil
+			return out, nil
+		}
+	}
+}
+
+// take runs one long-poll of at most wait, acknowledges what it gave and puts
+// it into the inbox; it returns how many deliveries the poll gave. The caller
+// holds polling.
+//
+// When the ack fails, the deliveries of that poll stay leased by the gateway
+// until the lease runs out; when the gateway reports some of them unknown, the
+// others are kept in the inbox all the same.
+func (h *HTTPHarness) take(ctx context.Context, wait time.Duration) (int, error) {
+	// The poll runs under ctx, not under a deadline: a request cancelled
+	// halfway may leave a delivery leased to nobody for the lease of the
+	// gateway. The gateway answers within the wait instead.
+	res, err := h.client.Deliveries(ctx, h.cursor, client.MaxPollLimit, min(wait, client.MaxPollWait))
+	if err != nil {
+		return 0, fmt.Errorf("testkit/gateway: poll deliveries: %w", err)
+	}
+	if res.Cursor != "" {
+		h.cursor = res.Cursor
+	}
+	if len(res.Deliveries) == 0 {
+		return 0, nil
+	}
+	ids := make([]string, 0, len(res.Deliveries))
+	for _, d := range res.Deliveries {
+		ids = append(ids, d.ID)
+	}
+	acked, err := h.client.Ack(ctx, ids)
+	if err != nil {
+		return 0, fmt.Errorf("testkit/gateway: ack deliveries: %w", err)
+	}
+	for _, d := range res.Deliveries {
+		if !slices.Contains(acked.Unknown, d.ID) {
+			h.inbox = append(h.inbox, d)
+		}
+	}
+	if len(acked.Unknown) > 0 {
+		return 0, fmt.Errorf("testkit/gateway: the gateway does not know the deliveries it just gave: %v", acked.Unknown)
+	}
+	return len(res.Deliveries), nil
 }
 
 func (h *HTTPHarness) inboxKinds() []string {

@@ -292,6 +292,22 @@ func TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients(t *testing.T) {
 	if loopGW.HTTP.Timeout != testLimits.DeliverGatewayTimeout || flowGW.ClientID != ClientID || loopGW.ClientID != ClientID {
 		t.Errorf("client of the loop: timeout %s, client ids %q %q", loopGW.HTTP.Timeout, flowGW.ClientID, loopGW.ClientID)
 	}
+	// Acceptance of T-307: the ack of the loop has a client of its own whose
+	// repeats end before the lease; the loop tells an early empty answer by the
+	// clock of the process.
+	ackGW, _ := b.loopOpts.Acks.(*client.Client)
+	if ackGW == nil || ackGW == loopGW || ackGW.HTTP == loopGW.HTTP || ackGW.HTTP.Timeout != deliver.AckHTTPTimeout ||
+		ackGW.Backoff != deliver.AckBackoff || ackGW.ClientID != ClientID || ackGW.BaseURL != loopGW.BaseURL {
+		t.Errorf("client of the ack: %+v, want deliver.NewAckClient beside the client of the loop", ackGW)
+	}
+	// Mi-2 of review #1 of T-315: the pauses between the attempts of an ack
+	// run on the timers of the process, not on the wall clock.
+	if ackGW != nil && ackGW.Timers != e.timers {
+		t.Errorf("client of the ack pauses on %T, want the timers of the process %T", ackGW.Timers, e.timers)
+	}
+	if b.loopOpts.Clock != e.clock || b.loopOpts.Timers != e.timers {
+		t.Error("the loop does not run on the clock and the timers of the process")
+	}
 	if b.accOpts.Sender == b.loopOpts.Sender || b.accOpts.Sender == b.flowOpts.Sender || b.flowOpts.Sender == b.loopOpts.Sender {
 		t.Error("the gate, the flow and the loop do not each have a sender of their own")
 	}

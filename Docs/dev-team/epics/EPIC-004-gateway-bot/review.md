@@ -2687,6 +2687,445 @@ Mi-1 из ревью #1 исправлен по существу. Порядок
 - Оценка конфликтов с T-308 сделана по незакоммиченному состоянию `.worktrees/T-308` на момент ревью.
 - В рабочей папке задачи ревьюер добавил только этот раздел. Мутанты выполнялись в копии в scratchpad, копия удалена по точному пути.
 
+## T-315 · ревью #1 · 2026-09-14 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-315-bot-e2e-fakes` (`.worktrees/T-315`), база `585de13`, изменения не закоммичены. Diff относительно базы: `.golangci.yml`, `cmd/telegram-bot/{serve.go, main_test.go, README.md}`, `cmd/telegram-bot/internal/deliver/{loop.go, loop_test.go, fakes_test.go}`, новый `pace_test.go`, `cmd/telegram-bot/internal/flow/{onboarding.go, onboarding_test.go}`, `internal/gateway/api/names_test.go`, новый каталог `cmd/telegram-bot/e2e/` (`harness_test.go`, `scenario_test.go`, `branches_test.go`), `dev-log.md`, карточка. Файлов `artifactsDir` вне записей задачи и коммитов вне ветки нет.
+- Сверено с разделом `### T-315` в `tasks.md` (строки DoD из приёмок T-307 и T-312), `internal/gateway/outbox/longpoll.go` (когда шлюз отвечает пустым раньше `wait_ms`), `internal/gateway/api/names.go`, `ownership.md` (строка `test/e2e/**`), `.golangci.yml` (`no-testkit-in-production`, `internal-swarm-tests`, исключение `_test.go`), `Makefile` (`test-e2e` гоняет `-tags e2e ./...`, бот попадает).
+- Пересечение: `epic/EPIC-004-gateway-bot` на `6b67fec` (T-309) и `.worktrees/T-313` (только чтение).
+
+### Прогоны (go1.26 windows/amd64, cgo нет — без `-race`)
+- `go build ./... && go vet ./... && go vet -tags e2e ./cmd/telegram-bot/...` — ок.
+- `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/api/...` — ок, 11 пакетов; `updates` прошёл обычным `go test`, обход не понадобился.
+- `go test -tags e2e -count=3 ./cmd/telegram-bot/e2e/...` — ок.
+- В копии: `-count=10` e2e — ок (11,2 с); `-short -count=20` `deliver` — ок.
+- `golangci-lint run ./...` — 0 issues; `--build-tags e2e ./cmd/telegram-bot/...` — 0 issues.
+- Копия `scratchpad\t315r-mut` (дерево задачи, без `-overlay`), контрольный первым. Копия `scratchpad\t315r-merge` — дерево `epic/EPIC-004-gateway-bot` с правками T-315, наложенными трёхсторонним слиянием (`git merge-file`). Обе копии и служебные файлы `t315r-*` удалены по точным путям.
+
+| # | Мутант / зонд | Результат |
+|---|---|---|
+| 0 | контрольный, без изменений: `cmd/telegram-bot`, `deliver`, `e2e` | зелёный |
+| 1 | `loop.go:88-90`: `NewAckClient` не ставит `c.Timers` (паузы повтора ack по настенным часам) | **зелёный** (`deliver`, `cmd/telegram-bot`, `e2e`) — Mi-2 |
+| 2 | `loop.go:278`: доставка не-механики отправляется дважды | красный: `TestBotScenarioFromStartToForget` (шаги и «в порядке выдачи»), `TestBotDeliversTheMarkupOfANarrativeAsText` |
+| 3 | `serve.go:253`: `b.source.Start(runCtx, b.flow.Handle)` — без шлюза доступа | **e2e зелёный**, красные `TestEachSenderRepeatsByItsOwnPolicy`, `TestARefusalTelegramDoesNotAnswerDoesNotHoldThePlayers` — Mi-1 |
+| 4 | линтер: `internal/gateway/outbox` и `…/gatewaytestx` в `e2e/harness_test.go`; `membus` и `gatewaytest` в `deliver/pace_test.go` | красный, 4 находки: первые две — `cmd-telegram-bot-e2e`, вторые — `cmd-telegram-bot` |
+| 5 | слияние с эпиком (T-309): `go test -short ./cmd/telegram-bot/ ./cmd/telegram-bot/internal/deliver/`, `-tags e2e ./cmd/telegram-bot/e2e/` | **красный** `TestTheLoopIsDegradedAfterASeriesOfFailedPolls` (`loop_test.go:641` эпика, «condition not met within 5 s»); `cmd/telegram-bot` и e2e зелёные — Ma-1 |
+
+### Вердикт
+**Вернуть.** Critical (Blocker) 0 · Major 1 · Minor 2 · Nit 5.
+
+Сама задача сделана добротно: строки DoD закрыты тестами, e2e детерминирован, правило линтера узкое. Возврат — из-за слияния с эпиком. После T-309 правка паузы ломает тест `/health` бота, и нужно решить, считается ли ранний пустой ответ неудачным опросом для `/health`. Решение и исправление теста — работа исполнителя в ветке задачи, а не разрешение конфликта при слиянии.
+
+### Разбор по пунктам поручения
+
+**1. e2e.**
+- **Путь через `serve.go` — нет, это ручная сборка по его образцу.** `build` живёт в `package main` и из `e2e_test` недоступен. `startBot` (`harness_test.go:541-596`) собирает `access`, `flow` и `deliver` сам. Отличия от `serve.go`:
+  - отправители записывающие, без `sender.*Policy` — так задумано DoD;
+  - лимиты клиента `flow` скопированы литералами (`harness_test.go:552-553`), а не взяты из `productionLimits`;
+  - нет ожидания `getMe` перед циклом доставки;
+  - шлюз доступа и `flow` идут на ручных часах шлюза, цикл — на `clock.Real`.
+
+  Проводку `serve.go` e2e не ловит (мутант 3), её держат тесты `main_test.go`. Для DoD этого достаточно, но комментарий `harness_test.go:526` («assembled the way serve assembles it») и формулировка dev-log «собранный как в `serve.go`» обещают больше (Mi-1).
+- **Golden детерминирован.** `testkit.Deterministic` с одним префиксом, шаг ждёт ответы, доставки и ack всех выданных. Ответы сравниваются в точном порядке по всему сценарию, так что лишний ответ, пришедший позже, всплывёт в следующем шаге.
+- **Набор внутри шага лишнюю или потерянную доставку не маскирует.** Это отсортированный срез с повторами, а не множество, и `ends` фиксирует фактическое число. Потерянная доставка даёт тайм-аут шага, лишняя меняет срез (мутант 2 красный). Дополнительно проверено `sent == given` по порядку. Остаётся хвост: после последнего шага тишина не проверяется (N-1).
+- **Ack ровно один раз:** `count(acked, id) == 1` по каждому выданному, плюс проверка «ни одна не выдана дважды». `acked` пишется только при успехе клиента, поэтому повтор после ошибки не даст ложного красного.
+- **`action_key` при повторе `update_id`:** два `action say` с ключом `commands.ActionKey(salt, 1000+sayStep)` и один `player.said` на шине. В ветке ошибок то же для `429` (ключ 21 дважды), `503` (ключ 30 дважды) и двойного `503` (ключ 31 трижды, `player.said` +1).
+- **SEC-06/07.** `updates.Fake` вызывает обработчик последовательно, отказ шлюза доступа уходит синхронно. Счётчики `Denied=3`, `NotPrivate=2`, единственный вызов шлюза — `resolve`. SEC-10: текст символ в символ, `parse_mode` вне e2e (тесты `sender`) — корректно оговорено. `503` через прокси — допустимо, `429` — настоящий лимитер шлюза.
+
+**2. Пауза после раннего пустого ответа.**
+- **Штатный long-poll задержек не получает.** По `outbox/longpoll.go:121-176` шлюз отвечает пустым раньше `wait_ms` только по `p.Stop`. По звонку без аренды и по `WakeEvery` он продолжает ждать. Доставки без маршрута отбрасываются внутри цикла, пустым ответом они не заканчиваются. Ожидание идёт по настенным таймерам во всех режимах, `wait` не больше `MaxWait` = `client.MaxPollWait` = `deliver.Wait`. Ответ по сроку длится не меньше 25 с, а порог — 12,5 с.
+- **Рост паузы:** 1, 2, 4 … 30 с через общий `retryPause`, сброс — после опроса с доставками или дождавшегося срока. Тест на ручных таймерах доказывает «не больше одного опроса за паузу». `time.Sleep(20 ms)` в `pace_test.go:80` проверяет отсутствие опроса — опросом это не заменить, приемлемо.
+- **Замер** начинается до `flush` (`loop.go:205`, `:241`). Медленный ack перед опросом маскирует ранний пустой ответ (N-2). Порог «половина» тестом не закреплён (N-3).
+
+**3. `deliver.NewAckClient`.**
+- **Бюджет:** попытка 6 с > `api.RequestTimeout` 5 с, один повтор через 200 мс. `MaxFlush` = 12,2 с, два `flush` между опросами — 24,4 с < 30 с. Тест со шлюзом, отвечающим `503` через 5 с, даёт 20,4 с. Контроль с клиентом по умолчанию — не меньше 30 с.
+- **Ack не теряется.** При ошибке `pending` сохраняется до следующего `flush` и `ackOnStop`. Ack, дошедший до шлюза после тайм-аута клиента, повторяется. Повтор вернёт `unknown`, это не ошибка, и `pending` очищается.
+- **Время — через `shared/clock`.** `time.*` из forbidigo в изменениях нет. Но то, что паузы клиента идут на `e.timers`, ничем не закреплено (мутант 1, Mi-2).
+
+**4. `api.ValidCharacterName`.**
+- Копия регулярки удалена, бот обрезает края и зовёт функцию шлюза. Два пробела подряд и NFD получают `render.NameInvalid` без вызова шлюза. Имя с пробелами и табуляцией по краям уходит в `POST /v1/characters` обрезанным.
+- Все случаи старого `TestValidName` есть в `api/names_test.go`: семь перенесены, остальные уже были (`Вася_Пупкин` вместо `Вася_2`, `Й` вместо `В`).
+- UX онбординга строже в двух местах и совпадает со строкой DoD. Текст подсказки двойной пробел не упоминает — это вопрос текста, не ревью.
+- Строка NFD в тесте `flow` записана невидимым составным символом (N-4).
+
+**5. `.golangci.yml`, правило `cmd-telegram-bot-e2e`.** По коду узкое и ничего не ослабляет.
+- Действует только на `**/cmd/telegram-bot/e2e/**_test.go`. Из `internal/*` разрешает три пакета с `$`, остальное запрещено (мутант 4: `outbox` и `gatewaytestx` красные).
+- Остальные тесты бота остаются под `cmd-telegram-bot`: `membus` и `gatewaytest` в `deliver` красные.
+- `no-testkit-in-production` не менялся. Импорт `shared/testkit` и `gatewaytest` из e2e разрешён тем же исключением `_test.go`, что и везде. `cmd-others` (`internal/replay`) продолжает действовать на e2e.
+- Не-тестовый файл в `e2e/` попал бы под `cmd-telegram-bot`, так и должно быть.
+- Место e2e и отметку EPIC-001 решают system-architect и tech-lead#1 — вопрос оркестратору.
+
+**6. Флак.**
+- `-count=10` e2e и `-count=20` `deliver` в копии зелёные.
+- Тест группы ждёт ответ именно `otherPlayer`. Обработчик последовательный, отказ постороннему синхронный, поэтому к моменту этого ответа отказ уже записан — гонка устранена по устройству, а не таймаутом.
+- Ожидания в e2e — опрос `waitFor` по сроку 10 с на `clock.RealTimers`, `time.Sleep` там нет.
+- Порядок старта State, encounter и narrator случайный — обход `map` (N-5); на результат, судя по прогонам, не влияет.
+
+**7. Пересечение с T-313 и T-309.**
+- **T-313** правит `shared/testkit/gateway/*` и добавляет `test/e2e/gateway_*_test.go`. С T-315 общего только `dev-log.md`, его сводит `appendtail`.
+- **T-309**, текстовые конфликты (трёхстороннее слияние в копии):
+  - `loop.go` — один конфликт: обе ветки добавляют константы после `MaxRetryPause` (`EarlyEmpty`/`NewAckClient` против `DegradedAfterFailedPolls`), разрешается «оставить обе». Импорты и `Run` сливаются чисто: `failedPolls.Store` встаёт рядом с `early`;
+  - `main_test.go`, `loop_test.go`, `serve.go`, README — без конфликтов.
+- **Семантический конфликт — Ma-1.**
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `cmd/telegram-bot/internal/deliver/loop.go:205-224` против `epic/EPIC-004-gateway-bot`: `loop.go:185, 189`, `loop_test.go:597-641` | После слияния с эпиком (T-309) падает `TestTheLoopIsDegradedAfterASeriesOfFailedPolls`. Его `scriptedGateway` на `nil` отвечает пустым списком сразу, цикл создан без `Clock`, и с T-315 такой ответ ранний. Он считается неудачей, `FailedPolls` не сбрасывается, тест ждёт 5 с и падает (зонд 5). Кроме того, без решения остаётся семантика: ранний пустой ответ растит `failedPolls`, и после 7 таких ответов (~61 с остановки шлюза) `/health` бота станет `degraded`. Комментарий `DegradedAfterFailedPolls` («gateway has not answered») и README T-309 этого не говорят. | Влить кончик эпика в `task/T-315-bot-e2e-fakes`, в `loop.go` оставить обе группы констант. В `scriptedGateway` успешный опрос сделать «дождавшимся срока»: передать `Clock` и сдвигать часы на `wait` на `nil` или вернуть одну доставку. Решить и закрепить тестом, растит ли ранний пустой ответ `FailedPolls`. Ревьюер за «да»: бот в это время не доставляет, 61 с совпадает с замыслом T-312. Обновить godoc `DegradedAfterFailedPolls`/`Health` и строку README. Прогнать `go test -short ./cmd/telegram-bot/...` и e2e на слитом дереве. | открыто |
+| Mi-1 | Minor | `cmd/telegram-bot/e2e/harness_test.go:526, 541-596, 552-553`; `dev-log.md` (запись T-315), карточка «Выполнение» | e2e собирает бота вручную, не через `build` из `serve.go`: мутант 3 (без `gate.Wrap`) в e2e зелёный. Лимиты клиента `flow` скопированы литералами и разойдутся с `productionLimits` молча. Нет ожидания `getMe`. Комментарий и dev-log говорят «собран как в `serve.go`». | В этой задаче: поправить формулировки на «собран из тех же компонентов, проводку `serve.go` проверяет `main_test.go`» и перечислить отличия в godoc `startBot`. В бэклог: вынести сборку из `build` в пакет `cmd/telegram-bot/internal/app` с внедряемыми `Source`/`Sender`, чтобы e2e и `serve.go` делили один код. | открыто |
+| Mi-2 | Minor | `cmd/telegram-bot/internal/deliver/loop.go:88-90`; `cmd/telegram-bot/main_test.go:298-299`; `deliver/pace_test.go:210` | То, что паузы повтора ack идут на `clock.Timers` процесса, ничем не закреплено: мутант 1 зелёный на всём наборе. Тест проводки не сверяет `ackGW.Timers`. Тест лизинга проверяет только `took < lease`, а без таймеров выходит 20,0 с вместо 20,4 с. | В `TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients` добавить `ackGW.Timers != e.timers`. В `TestAnAckTheBrokerRefusesDoesNotHoldTheNextPollPastTheLease` проверить точный зазор `4×5 с + 2×AckBackoff.Pause(0)`. Мутант 1 должен покраснеть. | открыто |
+| N-1 | Nit | `cmd/telegram-bot/e2e/scenario_test.go:131` | После последнего шага (`/forget confirm`) тишина не проверяется: лишний ответ, пришедший позже, не виден. Шаги без доставок заканчиваются по первому ответу. | Добавить в конец сценария шаг-барьер (например, `/help` — ровно один ответ, ноль доставок) или короткое окно тишины перед сбором записи. | открыто |
+| N-2 | Nit | `cmd/telegram-bot/internal/deliver/loop.go:205, 210, 241` | `began` берётся до `flush`. Медленный ack перед опросом (до 12,2 с) засчитывается в длительность, и ранний пустой ответ шлюза в остановке может не дать паузы. Опросы при этом не чаще раза в ~12 с. | Измерять только `l.gw.Deliveries` (например, `once` возвращает и длительность опроса). | открыто |
+| N-3 | Nit | `cmd/telegram-bot/internal/deliver/pace_test.go:96-103` | Границы заданы через `deliver.EarlyEmpty`, поэтому «половина `wait_ms`» не закреплена: `EarlyEmpty = Wait` проходит тест. | Добавить случай `{deliver.Wait - time.Second, false}` или проверку `EarlyEmpty == Wait/2`. | открыто |
+| N-4 | Nit | `cmd/telegram-bot/internal/flow/onboarding_test.go:228` | Имя в NFD записано невидимым `U+0306`. Редактор с нормализацией превратит его в NFC, и тест упадёт без очевидной причины. | Экранировать, как в `api/names_test.go:38`: `"\u0438\u0306\u0432\u0430"`. | открыто |
+| N-5 | Nit | `cmd/telegram-bot/e2e/harness_test.go:164` | State, encounter и narrator стартуют в порядке обхода `map` — случайном. Для теста детерминизма лишний источник разброса порядка подписок. | Срез пар `{name, start}` в фиксированном порядке. | открыто |
+
+### Вопросы
+- **Оркестратор → system-architect, tech-lead#1:** место e2e (`cmd/telegram-bot/e2e/` вместо `test/e2e/gateway_bot_test.go` в `ownership.md`) и правило `cmd-telegram-bot-e2e` в `.golangci.yml` — вопрос 2 T-470. По коду правило узкое (п. 5).
+- **tech-lead#3 / architect#3:** растит ли ранний пустой ответ `FailedPolls` в `/health` бота (Ma-1).
+
+### Предложения в бэклог
+1. **Общая сборка бота** (`cmd/telegram-bot/internal/app`) для `serve.go` и e2e (Mi-1).
+2. Из карточки исполнителя, поддерживаю: e2e бота в `RACE_PKGS` job `race`; порядок механики и нарратива хода в outbox или запись в C-08, что он не гарантирован; темп клиента после раннего пустого ответа — в C-08.
+
+### Риски и допущения
+- `-race` не прогонялся (нет cgo). Данные e2e под мьютексами, но в e2e три горутины бота и шлюз в одном процессе — предложение `RACE_PKGS` остаётся.
+- Слияние с T-309 проверено трёхсторонним `git merge-file` в копии для `loop.go`, `loop_test.go`, `main_test.go`, `serve.go` и README. Остальные файлы наложены `git apply` на дерево эпика. Настоящего `git merge` не было.
+- Повтор команды после двух `503` в e2e — подача того же `update_id`, как после рестарта бота. В проде offset уже сдвинут, и игрок повторяет команду сам, с новым ключом. Для строки DoD достаточно, в «Рисках» у исполнителя этого нет.
+- В рабочей папке задачи ревьюер добавил только этот раздел в `review.md` и раздел «Ревью #1» в карточке. Код не менял.
+
+## T-315 · ревью #2 · 2026-09-14 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Итерация 2, проверяются исправления и регрессия от них. Ветка `task/T-315-bot-e2e-fakes` (`.worktrees/T-315`): wip-коммит итерации 1 `c9f84b1` и слияние кончика эпика `7f0ff6b`, второй родитель — `6b67fec` (T-309). `epic/EPIC-004-gateway-bot` сейчас на `6b67fec` и входит в ветку, так что рабочее дерево и есть слитое дерево.
+- Изменения итерации 2 не закоммичены (`git diff`): `deliver/{loop.go, loop_test.go, pace_test.go}`, `main_test.go`, `e2e/{harness_test.go, scenario_test.go}`, `flow/onboarding_test.go`, README бота, `dev-log.md`, карточка. В той же папке лежат правки system-architect#2 (`contracts.md`, `ownership.md`, его раздел карточки). Их разбирает не это ревью.
+- Сверено с `internal/gateway/outbox/longpoll.go`, `handlers/deliveries.go`, `shared/runtime/http.go` (`ShuttingDown`, `writeStatus`), `internal/gateway/client/{client.go, longpoll.go}`, `cmd/telegram-bot/{health.go, serve.go, main.go}`. Для сверки — раздел system-architect#2 «3. C-08, темп клиента».
+- Решения оркестратора взяты как данность: ранний пустой ответ растит `FailedPolls`, порог 7; общая сборка — в бэклог; место e2e решает system-architect#2.
+
+### Прогоны (go1.26.8 windows/amd64, cgo нет — без `-race`)
+- `go build ./... && go vet ./... && go vet -tags e2e ./cmd/telegram-bot/...` — ок.
+- `go test -short -count=1 ./cmd/telegram-bot/... ./internal/gateway/...` — ок, 10 пакетов бота и 16 шлюза. `updates` прошёл обычным `go test`, обход через `-c` не понадобился.
+- Тесты T-309 для бота с `-v`: `TestHealthReportsTheDeliveriesOfTheBot`, `TestHealthCommand`, `TestTheDefaultHealthURLFollowsTheHealthAddress`, `TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients`, `TestTheLoopIsDegradedAfterASeriesOfFailedPolls`, `TestARefusedTokenOnASendDegradesTheLoop`, а также два новых теста — PASS.
+- `go test -tags e2e -count=6 -cpu=1,2,4 ./cmd/telegram-bot/e2e/...` — ок (61,1 с, 18 прогонов каждого теста).
+- Под нагрузкой:
+  - `-count=3 -cpu=1,2,4` параллельно с `go test -count=40 ./internal/state/...` в той же папке — ок (e2e 24,0 с, нагрузка 47,9 с, окна перекрылись);
+  - `-count=4 -cpu=1` параллельно с `golangci-lint` и `go test -count=30 ./internal/state/...` — ок.
+- `golangci-lint run --build-tags e2e ./...` — 0 issues.
+- Мутанты — в копии `scratchpad\t315r2-mut` (`cmd`, `internal`, `shared`, `schemas`, `rules`, `testdata`, `api`, `events`, `go.mod`, `go.sum`), без `-overlay`, контрольный первым. Копия и логи `t315r2-*` удалены по точным путям.
+
+| # | Мутант | Результат |
+|---|---|---|
+| 0 | контрольный, без изменений: `cmd/telegram-bot`, `deliver`, `flow`, `e2e` | зелёный |
+| 1 | `flow/forget.go:46`: после «Связка удалена» ещё одна отправка того же чата через 100 мс в горутине (запоздавший лишний ответ после последнего шага) | **красный** `TestBotScenarioFromStartToForget`: «after the last step: 1 answers and 0 deliveries arrived» — ловит окно тишины (N-1) |
+| 1к | тот же мутант 1, но из сценария убраны шаг-барьер `/help` и окно тишины (состояние итерации 1) | зелёный `-count=3`: без правки N-1 опоздание не видно, мутант 1 проверяет именно её |
+| 2 | `serve.go:200`: `deliver.NewAckClient(cfg.GatewayURL, ClientID, nil)` | **красный** `TestTheWiringHandsOutThePrivacyLoggerAndTheRightClients`: «client of the ack pauses on clock.RealTimers, want the timers of the process» (Mi-2, проводка) |
+
+Мутанты исполнителя 1–3 (`NewAckClient` без таймеров, ранний пустой ответ без `FailedPolls`, замер до `flush`) не повторял. По устройству тестов они красные, это разобрано ниже.
+
+### Вердикт
+**Принять.** Critical (Blocker) 0 · Major 0 · Minor 0 · Nit 1.
+
+Ma-1, Mi-1, Mi-2 и N-1…N-5 закрыты. Слитое дерево собирается целиком, тесты `/health` бота из T-309 зелёные, e2e не флакает ни при `-cpu=1`, ни под нагрузкой.
+
+### Разбор по пунктам поручения
+
+**1. Ma-1 — закрыто.**
+- **Двойник `scriptedGateway`** (`loop_test.go:595-651`).
+  - `nil` — пустой ответ по истечении `wait`: ручные часы сдвигаются на переданный `wait` внутри `Deliveries`.
+  - `errEarlyEmpty` — пустой ответ сразу, часы не двигаются, ошибка подменяется на `nil`.
+  - Любая другая ошибка — неудачный опрос.
+
+  Цикл создан на тех же часах (`runScripted`, `Clock: gw.clock`). `began` берётся до вызова `Deliveries`, `took` — после (`loop.go:288-290`), поэтому `took` = 25 с либо 0 без гонок: часы сдвигает только горутина цикла. `instantTimers` часы не трогают. Двойник моделирует оба ответа шлюза, и тест T-309 проверяет то, что задумывал: ошибки растят счётчик, штатный опрос его сбрасывает.
+- **Новые тесты.**
+  - `TestASeriesOfEarlyEmptyAnswersDegradesTheLoop`: шесть ранних пустых ответов — счётчик 1…6 без `degraded`, седьмой — `degraded`, штатный пустой ответ — 0 и не `degraded`. Порог проверен с обеих сторон.
+  - `TestAnEmptyAnswerAtTheEndOfTheWaitResetsTheFailedPolls`: смешанные серии в обоих порядках сбрасываются штатным ответом, следующий сбой считается с единицы.
+
+  Детерминизм держит небуферизованный канал `results`: следующий ответ уходит только после того, как цикл сохранил счётчик и снова вошёл в `Deliveries`. Промежуточное значение счётчик проскочить не может, что верно сказано в комментарии теста. Мутант «ранний пустой ответ не растит `FailedPolls`» даёт тайм-аут на первом же `waitUntil(FailedPolls == 1)`.
+- **godoc и README.** `EarlyEmpty`, `DegradedAfterFailedPolls`, `Health.Degraded` и `Run` говорят одно: ранний пустой ответ — неудачный опрос, сброс — по ответу с доставками или по пустому, дождавшемуся хотя бы `EarlyEmpty`. README сверен с кодом:
+  - раздел `/health` — ключи `deliveries_failed_polls` и `telegram_token_unauthorized` совпадают с `health.go:56-57`;
+  - `degraded` отдаётся с кодом 200 (`health.go` пишет без `WriteHeader`) — верно;
+  - «седьмой на ~61-й секунде» — сумма пауз 1+2+4+8+16+30 = 61 с, верно;
+  - строка long-poll в таблице клиентов дополнена.
+- **Ложного `degraded` при штатной работе нет — главный вопрос.** Проверено по слитому дереву:
+  - `outbox.Service.Serve` (`longpoll.go:121-176`) возвращает пустой ответ в трёх местах:
+    - `deadline.C()` — по сроку;
+    - `p.Stop` — `runtime.ShuttingDown`, закрывается только в `HTTP.Stop`;
+    - `wait == 0`.
+  - Звонок (`bell`) и `WakeEvery` (1 с) ведут на новую аренду, а не к ответу. Повторная проверка `deadline` после звонка тоже отвечает только по сроку. Доставки без маршрута сбрасываются внутри `lease` и ожидание не прерывают. Ошибка аренды — это 500, то есть ошибка, а не пустой ответ.
+  - `wait == 0` бот не шлёт: `Wait = client.MaxPollWait` = 25 с, `wait_ms=25000`. Handler (`deliveries.go:92`) и `Serve` зажимают `wait` до `outbox.MaxWait` = 25 с.
+  - Срок идёт по `Timers` сервиса, это настенные таймеры во всех режимах (`ServiceConfig.Timers`, C-01 v1.8). Бот мерит `took` на `clock.Real` (`main.go:38`, монотонное время), и штатный пустой ответ длится не меньше 25 с — вдвое больше порога 12,5 с. Скачок настенных часов на это не влияет.
+  - Write deadline — 30 с, таймаут HTTP-клиента long-poll — 35 с. Раньше срока соединение не рвётся, а обрыв был бы ошибкой, не пустым ответом.
+  - Итог: пустой ответ раньше `wait_ms` у настоящего шлюза бывает только при его остановке. Это же установил system-architect#2 (раздел «3» карточки). Штатная работа `FailedPolls` не растит. Остаточная связь констант — в бэклоге (п. 1).
+
+**2. Mi-1, Mi-2 — закрыто.**
+- **Mi-1.** Godoc `bot` («after the pattern of serve.go … wiring of serve.go itself is checked by main_test.go») и godoc `startBot` перечисляют все отличия, найденные в ревью #1: нет `getMe`/`OnReady`, один записывающий отправитель, копия лимитов `flow`, часы, нет `/health`/`privacy`/сигналов. Лимит команд берётся из `env.TelegramCommandsPerMin.IntFrom(env.MapSource(nil))` — это умолчание манифеста, то же, что получает `serve.go` без переменной. Копия `FlowGatewayTimeout`/`FlowGatewayBackoff` честно подписана, пакет `main` не экспортирует их. Формулировка в `dev-log.md` исправлена. Общая сборка — бэклог по решению оркестратора.
+- **Mi-2, проводка.** `main_test.go:305` сверяет `ackGW.Timers` с `e.timers` (мутант 2 красный).
+- **Mi-2, точный зазор на `clock.Manual` (`pace_test.go:265-275`).** Расчёт верен и детерминирован. `mustOnce` дважды вызывается синхронно в горутине теста. `slowBroker.RoundTrip` двигает ручные часы на 5 с на каждую попытку ack, `advancingTimers` — на каждую паузу клиента. Джиттера в `client.call` нет (`Backoff.Pause` детерминирован), `Retry-After` брокер не шлёт. Первый опрос (`t0`) → доставка → `flush`: 5 с + пауза 200 мс + 5 с = 10,2 с. Второй вызов `once` → `flush` ещё 10,2 с → опрос. Итого `took` = 20,4 с ровно, а `2 × (2 × 5 с + AckBackoff.Pause(0))` = 20,4 с. Без переданных таймеров паузы уходят на `clock.RealTimers` и часы не сдвигают: 20,0 с ≠ 20,4 с, мутант исполнителя 1 красный по построению. Контроль с клиентом по умолчанию сохранён. `TestTheAckClientEndsWithinTheLease` проверяет две вещи: переданные таймеры (`c.Timers == timers`) и таймеры без аргумента (`def.Timers != nil`). Проверка на `nil` ловит мутант «`c.Timers = timers` без проверки на `nil`»: `client.New` ставит `RealTimers`, мутант затёр бы их. `flush != MaxFlush` закрепляет формулу `MaxFlush`.
+
+**3. N-1…N-5 — закрыто.**
+- **N-1, шаг-барьер и окно тишины.** Шаг-барьер `/help` (`scenario_test.go:68`): один ответ — уведомление с клавиатурой согласия (после `/forget` связки нет), ноль доставок. Окно тишины (`:143-147`): 200 мс настенного времени, число ответов и доставок не меняется, `settled()` истинно.
+  - **Флака от окна нет по устройству.** Окно только ищет лишнее. Шаг `/help` уже дождался своего ответа и `settled()` (все выданные доставки подтверждены). Законных асинхронных событий после барьера в сценарии нет: связка удалена, новые доставки игрока шлюз сбросил бы как не имеющие маршрута, лизингов без ack нет. Медленная машина окно может только «проспать», то есть пропустить опоздание, а ложный красный от этого не возникает. Прогоны `-cpu=1` под нагрузкой зелёные.
+  - **Окно рабочее:** мутант 1 красный, 1к зелёный.
+  - Опоздание дольше 200 мс окно не ловит — это оговорено в «Рисках» исполнителя и для Nit достаточно.
+- **N-2.** `once` возвращает длительность самого long-poll: `began` берётся после `flush`. Тест `TestASlowAckBeforeTheLongPollDoesNotHideAnEarlyEmptyAnswer`:
+  - первый опрос выдаёт доставку, ack двигает часы на `EarlyEmpty + 1 с` и падает;
+  - второй `once` делает медленный `flush`, затем получает мгновенный пустой ответ — ждём паузу `RetryPause`;
+  - при замере до `flush` было бы `took` ≥ 13,5 с: паузы нет, цикл крутится, `waitUntil` падает по тайм-ауту.
+- **N-3.** `EarlyEmpty == Wait/2` и границы через `Wait` (`Wait`, `Wait − 1 с`, `Wait/2` — без паузы; `Wait/2 − 1 мс`, `1 с` — с паузой). `EarlyEmpty = Wait` теперь красный.
+- **N-4.** `"йва"`, байтов `U+0306` в файле нет.
+- **N-5.** Двойники стартуют из среза в порядке `state`, `encounter`, `narrator`.
+
+**4. Флак.** Зелёные прогоны:
+- `-count=6 -cpu=1,2,4`;
+- `-count=3 -cpu=1,2,4` под `go test -count=40 ./internal/state/...`;
+- `-count=4 -cpu=1` под линтером и `state`.
+
+Ожидания e2e — опрос `waitFor` с шагом 5 мс и сроком 10 с. Единственное новое ожидание по настенному времени — окно тишины, разобрано в п. 3.
+
+**5. Слитое дерево.**
+- `go build ./...` и `vet` проходят. Конфликт `loop.go` разрешён «обе части»: константы `EarlyEmpty`/`AckHTTPTimeout`/`MaxFlush`/`NewAckClient` и `DegradedAfterFailedPolls` стоят рядом.
+- В `Run` `failedPolls.Store` стоит в обеих ветках: `Store(0)` при сбросе, `Store(failures)` при сбое и раннем пустом ответе.
+- Тесты `/health` бота из T-309 зелёные.
+
+### Замечания ревью #1
+
+| # | Статус | Проверка |
+|---|---|---|
+| Ma-1 | закрыто | п. 1: двойник с часами, два новых теста, godoc, README; ложного `degraded` при штатной работе нет |
+| Mi-1 | закрыто | godoc `bot`/`startBot`, `dev-log.md`, лимит из манифеста; общая сборка — бэклог |
+| Mi-2 | закрыто | проводка (мутант 2 красный), точный зазор 20,4 с, таймеры клиента |
+| N-1 | закрыто | шаг-барьер и окно тишины; мутант 1 красный, 1к зелёный |
+| N-2 | закрыто | замер после `flush`, тест с медленным ack |
+| N-3 | закрыто | `EarlyEmpty == Wait/2`, границы через `Wait` |
+| N-4 | закрыто | escape-последовательность |
+| N-5 | закрыто | срез в фиксированном порядке |
+
+### Замечания ревью #2
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| N-1 | Nit | `cmd/telegram-bot/internal/deliver/loop_test.go:605-651` | Методы `scriptedGateway` разорваны: между `Deliveries` (`:612`) и `Ack` (`:649`) стоит `runScripted`, а `errEarlyEmpty` и `newScriptedGateway` — между типом и первым методом. Двойник читается хуже. Правила проекта на это нет. | Перенести `Ack` сразу после `Deliveries`, `runScripted` — после методов. Можно при следующей правке файла. | открыто, не блокирует |
+
+### Вопросы
+Нет.
+
+### Предложения в бэклог
+1. **Связь `client.MaxPollWait` и `outbox.MaxWait`.** Порог бота `EarlyEmpty` считается от `client.MaxPollWait`, а срок ответа задаёт `outbox.MaxWait` шлюза. Обе константы — 25 с по C-08 v1.1, но тестом не связаны. Если шлюз уменьшит `MaxWait` ниже 12,5 с, каждый штатный пустой ответ станет «ранним». После итерации 2 это не только паузы, но и `/health degraded` примерно через минуту простоя. Предложение: тест `outbox.MaxWait == client.MaxPollWait` в тестах `internal/gateway/outbox` или `handlers`. Правило `internal-gateway` разрешает там импорт `client`, а в самом `client` правило `internal-gateway-client` запрещает импорт `outbox`. Владелец — EPIC-004.
+2. Прежние в силе: общая сборка бота в `cmd/telegram-bot/internal/app` (Mi-1 ревью #1). e2e бота — в `test-race`, по разделу system-architect#2 (не `RACE_PKGS`).
+
+### Риски и допущения
+- `-race` не прогонялся (нет cgo).
+- Вывод «пустой раньше срока — только при остановке» сделан по коду слитого дерева. Прокси между ботом и шлюзом в MVP-1 нет.
+- Правки system-architect#2 в той же рабочей папке (`contracts.md`, `ownership.md`) в это ревью не входят и должны попасть в коммит итерации вместе с ними. Как коммитить — решает оркестратор.
+- В рабочей папке задачи ревьюер добавил только этот раздел в `review.md` и строку с разделом «Ревью #2» в карточке. Код не менял.
+
+## T-313 · ревью #1 · 2026-09-14 · code-reviewer#2 (TEAM-3)
+
+### Границы ревью
+- Ветка `task/T-313-e2e-solo` (`.worktrees/T-313`), база `585de13`, изменения не закоммичены.
+- Код:
+  - новые файлы `test/e2e/gateway_{world,solo30,death,fleefail}_test.go`;
+  - изменённые `shared/testkit/gateway/{http.go, http_test.go, README.md}` (метод `HTTPHarness.Drain`).
+- Сверено с разделом `### T-313` в `tasks.md`, design EPIC-004 §7, КД шлюза §5.5 и §7.6, C-08 и C-10 в том объёме, в каком их касаются проверки теста.
+- Прочитан код, от которого зависят проверки: `membus.Chaos`, `consumer/dispatcher.go` (дедуп `processed_events`), `turns/tracker.go` (`OnMechanics`, `OnNarrative`, `Sweep`, `finish`), `turns/store.go` (id `turn.completed` из причины), `outbox/store.go` (`created_at`), `.github/workflows/go.yml` (jobs `e2e` и `race`), `Makefile` (`test-race`).
+- Решения оркестратора не оцениваются как замечания: фикстура — вариант (а), механика после завершения хода и конец соло-сессии только по простою — к architect#3.
+
+### Прогоны
+- `go build ./... && go vet ./... && go vet -tags e2e ./test/e2e/...` — ок.
+- `go test -tags e2e -count=2 -run TestGateway ./test/e2e/...` — ок (GOMAXPROCS = 32).
+- `go test -short -count=1 ./shared/testkit/gateway/...` — ок.
+- `golangci-lint run ./...` — 0 issues.
+- **Слитое дерево** (кончик эпика `6b67fec` с T-309 + T-313 + незакоммиченная T-315, копия `t313r-merged`): `go build ./... && go vet ./...`, `go vet -tags e2e ./test/e2e/... ./cmd/telegram-bot/e2e/...` — ок; `TestGateway*` `-count=1` — ок; `golangci-lint` по `test/e2e`, `shared/testkit/gateway`, `cmd/telegram-bot` — 0 issues. Файлы T-313 с эпиком не пересекаются.
+- **Повторы при малом GOMAXPROCS** (без искусственной нагрузки; на машине могли идти прогоны других агентов):
+  - `TestGatewayFleeFail -count=6`: `-cpu=1` — 2 из 6 красные, `-cpu=2` — 4 из 6, `-cpu=4` — 1 из 6, `-cpu=16` — 0 из 6;
+  - `-count=5 -cpu=1,2,4` — 5 из 15 красные;
+  - под фоновой нагрузкой (`go test -short -p 16` в копии) `-count=2 -cpu=1,2` всех трёх тестов — 7 из 8 сравнений журналов красные.
+- `-race` не запускался: на Windows нет cgo.
+- Зонды — в копии `t313r-merged`, без `-overlay`; контрольный прогон копии первым (зелёный). Копия и логи удалены по точным путям.
+
+| # | Зонд | Результат |
+|---|---|---|
+| 0 | Контрольный: слитое дерево без изменений | зелёный |
+| 1 | `consumer.Handle`: пауза 60 мс на `combat.decided` | прогоны 1 и 2 зелёные; прогон `--chaos=duplicate` красный: доставка `mechanics` ушла в следующий шаг |
+| 1б | То же, пауза 150 мс | `death` и `flee-fail` красные («0 mechanics», «enter of the dead character delivered 1 texts»); `solo-30` 1 и 2 зелёные, дубли красные. Отказ эвристики виден как падение, не как ложная зелень (Mi-2) |
+| 2 | `Tracker.OnMechanics` ничего не пишет | все три теста зелёные (Mi-1) |
+| 3 | `Tracker.finish` публикует второй `turn.completed` с тем же id и `status=timeout` | все три теста зелёные, включая `--chaos=duplicate` (Ma-2). С проверкой, предложенной в Ma-2 (временно в копии), — красный: «a copy with another body»; на неизменённом коде та же проверка зелёная |
+| 4 | Инструментирование сравнения: оба канонических журнала упавшего `flee-fail -cpu=2` в файлы | причина расхождения — Ma-1 |
+
+### Вердикт
+**Вернуть.** Critical (Blocker) 0 · Major 2 · Minor 2 · Nit 4.
+
+Ma-1 — пункт DoD «детерминированные» не держится при GOMAXPROCS ≤ 4, а job `race` гоняет `test/e2e` с `-race`: после слияния в эпик CI будет мигать у всех команд. Ma-2 — у проверки NFR-013 слепое пятно ровно там, где в коде живёт идемпотентность (id из причины). Оба исправляются в тесте, без правок шлюза.
+
+### Что проверено и в порядке
+1. **Структура и границы.** Помощники с префиксом `gateway`, `TestMain` в `test/e2e` один (`main_test.go`, Mi-3 T-444). Импорты `shared/testkit/*` — только в `_test.go`. `.golangci.yml` не менялся, `//nolint` нет. Глобальные `eventbus.SetClock`/`SetIDSource` сбрасывает очистка `testkit.Deterministic`, она выполняется последней — после остановки шлюза, роя и State.
+2. **Лимит темпа.** `gatewayPace = 2 s` — ровно один токен при 30 действиях в минуту; часы `clock.Manual` двигаются перед каждым действием, переменные лимита не поднимаются. Строка DoD из приёмки T-308 выполнена, мутант 2 разработчика это подтверждает.
+3. **Таймер `202`.** Меряется настенным временем (`testkit.Wall`) вокруг `harness.Act`, а не `clock.Manual`. p95 по 29 действиям: локально 1,5–2 мс, под нагрузкой до 4,5 мс, запас до 100 мс большой. p95 вместо «каждого» — отклонение 5, обосновано.
+4. **`death`.** Убивающий удар и факт `status → dead` в одной корреляции, `encounter.ended players_out`, нарративы `turn` и `death`, ровно одна доставка `system` с `/start` (`gatewayAssertDeliveries`), `hp = 0`. Затем `look`, `enter`, `attack` → `409 character_dead`, по одному `turn.completed status=rejected`, ни одной доставки. Соответствует §5.5 п. 2.
+5. **`flee-fail`.** `flee success=false exchange.last=false`, затем `free_attack` волка по игроку с `exchange.last=true`; 2 `mechanics` + 1 `narrative` с `based_on` обоих решений; персонаж остался во встрече; `turn.completed degraded`. Остаток — N-1.
+6. **`--chaos=duplicate`.** Флага процесса нет — на общей шине включён `membus.Chaos{Duplicate}`, это та же реализация, что стоит за флагом. Проверено, что хаос действительно включён (`player_events` вдвое), `FakeState.AppliedProposals` без повторов, доставки без повторов по id и по событию, журнал равен обычному прогону. Слепое пятно — Ma-2.
+7. **`Drain`.** Семантика рядом с `AwaitDelivery` согласована: общий `polling`, общий курсор, ack каждой доставки, «входящие» отдаются первыми, `wait_ms` тихого опроса равен `quiet`. Unit покрывает входящие, порядок, ack, повторный `Drain`, неизвестный ack. Абзац README честно называет пустой опрос признаком, а не гарантией. Остаток — N-2.
+8. **Отклонения процесса (бинарник не запускается, `live` вместо `replay`).** Смысл DoD для I1 сохраняется: сценарии, аналитика хода и сессии, дубли и лимит проверяются на настоящем шлюзе и тех же заглушках, которые монтирует хук. Теряется три вещи, их стоит записать в `tasks.md`, а не держать только в карточке:
+   - связка флагов `cmd/multiverse` (`--contexts=all --mode --id-source --chaos`) этими тестами не проверяется — её частично закрывает `empty_world_test.go`;
+   - поведение `replay` (без аналитики и sweeper) e2e не покрыто — остаётся T-314 или I2;
+   - «одинаковый журнал» означает журнал с точностью до переименования id, порядка внутри шага и исключённых полей, а не побайтный журнал NFR-061.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | `test/e2e/gateway_world_test.go:639-681, 693-699`; причина — `internal/gateway/turns/tracker.go:316-321` (`OnNarrative`); карточка T-313, «Прогоны» и «Риски» | **Сравнение двух прогонов мигает при GOMAXPROCS ≤ 4.** `flee-fail`: 2/6 при `-cpu=1`, 4/6 при `-cpu=2`, 1/6 при `-cpu=4`; под нагрузкой красные все три теста. Заявленные в карточке «`-count=10` и `-cpu=1,4` зелёные» не воспроизводятся. Причина (зонд 4): у шага `enter`, открывающего встречу, два нарратива одной корреляции — `entry` и `world_event`. `FakeNarrator` публикует их из разных горутин, а `OnNarrative` пишет в ход `narrative_event_id` того нарратива, который шлюз обработал первым. В одном прогоне `turn.completed.delivery.narrative_event_id` указывает на `entry`, в другом — на `world_event`. Переименование id превращает это в «перестановку» доставок и нарративов, поэтому сообщение теста указывает не туда. Это та же гонка «что первым дошло до хода», что и отклонение 4, но `gatewayRaceFields` её не покрывает. Тот же класс есть у хода смерти (нарративы `turn` и `death`). Обстоятельство, которое делает замечание блокирующим: job `race` (`make test-race`, `Makefile:228-230`) гоняет `./test/e2e/...` с `-race` на `ubuntu-latest`, а job `e2e` — на том же раннере с 2–4 vCPU. Фраза карточки «CI гоняет e2e без `-race`» неверна. | 1) Нормализовать в `canonical` ссылку хода на нарратив для корреляций с несколькими `narrative.output`: заменять id на `kind` нарратива или исключать `delivery.narrative_event_id`, а вместе с ним поля хода, зависящие от выбранного нарратива (`generated_by`, `fallback_reason`, `agent_*`, `absence`), — только для таких ходов. 2) Добавить в вопрос 2 к architect#3: какой нарратив считать нарративом хода, если их несколько (C-10, КД §7.6). Если решение детерминирует выбор в шлюзе, нормализация уходит. 3) Для повторного ревью приложить `go test -tags e2e -count=10 -cpu=1,2,4 -run TestGateway ./test/e2e/`, по возможности также под фоновой нагрузкой; поправить «Прогоны» и «Риски» карточки. | открыто |
+| Ma-2 | Major | `test/e2e/gateway_world_test.go:393-403` (`refresh`); `test/e2e/gateway_solo30_test.go:136-159` (`gatewayAssertCarriedTwice`); проверки «ровно один `turn.completed`» — `gateway_solo30_test.go:204-207`, `gateway_death_test.go:144`, `gateway_fleefail_test.go:130` | **Журнал склеивает записи по `topic/id` без сравнения содержимого, поэтому повторная публикация с тем же id невидима.** Шлюз, State и `FakeEncounter` берут id из причины (`WithCauseID`): так устроены `analytics.turn.completed` (`turns/store.go:140`), предложения шлюза, факты State и `encounter.ended`. Второе применение в этих местах публикует событие с тем же id. Зонд 3 — второй `turn.completed` с тем же id и противоречащим `status=timeout` — оставляет все три теста зелёными, в том числе прогон с дублями. Проверка «ровно один `turn.completed` на ход» и пункт DoD «дубли не порождают вторых применений» (NFR-013) именно этот класс дефектов не ловят. `gatewayAssertCarriedTwice` проверяет кратность только `player_events`. | В `refresh` хранить число копий и тело по ключу. При совпадении ключа и расхождении тела — `t.Errorf`. В `finish` проверять по всем топикам, кроме `dead_letters`, что у каждого ключа ровно 1 запись (обычный прогон) или 2 (`duplicate`). В копии ревьюера такая проверка зелёная на текущем коде и красная на зонде 3. | открыто |
+| Mi-1 | Minor | `test/e2e/gateway_world_test.go:693-723` | Исключённые из сравнения поля механики (`result_event_id`, `mechanics_at`, `mechanics_ms`, `phase1_mode`, `lod`) нигде больше не проверяются. Зонд 2 — шлюз вообще перестаёт записывать механику хода — все сценарии зелёные. На стенде I1-α метрика `mechanics_ms` может молча исчезнуть целиком, а e2e — первое место, где цепочка идёт по-настоящему. | Если поле есть, проверять согласованность: `result_event_id` указывает на `combat.decided` или факт State той же корреляции; `phase1_mode` и `lod` равны значениям этого решения; `mechanics_at ≤ acked_at`. Плюс хотя бы у одного хода прогона механика записана — слабая, но детерминированная проверка против полной потери. | открыто |
+| Mi-2 | Minor | `test/e2e/gateway_world_test.go:296-327` (`wait`), `:301` | «Шаг осел» не знает о прогрессе consumer'а шлюза. Доставка `mechanics` из `combat.decided`, обработанного после ack нарратива, держится только на тихом опросе в 40 мс. Зонды 1 и 1б: при задержке одного обработчика доставка переезжает в следующий шаг. Падение получается, но с ложным диагнозом («enter of the dead character delivered 1 texts», «0 mechanics»). Ложной зелени зонды не дали: потеря в последнем шаге ловится подсчётом в `finish`. Кроме того, `Drain` вызывается под `w.ctx` без дедлайна: если шлюз не перестаёт отдавать доставки, шаг висит до `-timeout 10m` вместо `gatewaySettleBudget` (20 с). | 1) Добавить в условие «осел» равенство позиций consumer'а шлюза числу записей топиков. После слияния с T-309 это даёт `/health` (`cursors`) или то, на чём он построен в `consumer.Dispatcher`. 2) Вызывать `Drain` под контекстом с дедлайном, равным остатку бюджета шага. | открыто |
+| N-1 | Nit | `test/e2e/gateway_fleefail_test.go:108-114, 122-125` | `hp` сверяется только при `hit=true`: при промахе неизменность `hp` не проверяется. Длина `based_on` не проверяется (нарратив с тремя ссылками прошёл бы). `string(rune('0'+i))` там, где рядом используется `strconv.Itoa`. | Проверять `hp` в обеих ветках, длину `based_on == 2`, индекс через `strconv.Itoa`. | открыто |
+| N-2 | Nit | `shared/testkit/gateway/http.go:361-372`; `shared/testkit/gateway/README.md:59-65` | «Входящие после вызова пусты» верно только при успехе: при ошибке ack (`unknown`) подтверждённые доставки остаются во «входящих», а `Drain` возвращает `nil`. Не описано поведение при `quiet ≤ 0` (опрос `wait_ms=0`, возврат при первом пустом ответе). | Уточнить doc-комментарий и README. | открыто |
+| N-3 | Nit | `test/e2e/gateway_world_test.go:630-638, 664-667` | `created_at` доставок обнуляется перед сравнением, но в перечне исключений комментария этого нет, а комментарий утверждает, что «timestamps» сравниваются. `created_at` берётся из `clock.Manual` (`consumer/deliveries.go:150`) и детерминирован; его расхождение — как раз признак поздней обработки (Mi-2). | Либо сравнивать `created_at`, либо назвать исключение и причину в комментарии. | открыто |
+| N-4 | Nit | `test/e2e/gateway_world_test.go:727-739` | При расхождении печатается одна строка после переименования id. Как показал Ma-1, она указывает на следствие переименования, а не на причину. | Печатать заголовок шага и оба шага целиком или класть оба канонических журнала в `t.TempDir()` с путём в сообщении. | открыто |
+
+### Вопросы
+- **architect#3** (дополнение к вопросу 2 карточки): какой `narrative.output` записывается в ход, если на одну корреляцию их несколько — вход, открывший встречу (`entry` + `world_event`), и ход смерти (`turn` + `death`)? Сейчас выбирается первый обработанный, и `turn.completed` недетерминирован даже без механики (Ma-1).
+- **tech-lead#3:** записать в `tasks.md` значение «одинакового журнала» для T-313 (с точностью до переименования id, порядка внутри шага и перечисленных полей) и то, что `replay` и связка флагов бинарника этим e2e не покрыты.
+
+### Предложения в бэклог (вне границ T-313)
+1. **Вынести мир сценария** (`gatewayWorld`, журнал, «шаг осел», канонический журнал) для T-314 и T-357. T-315 строит похожий мир в `cmd/telegram-bot/e2e` и импортировать `test/e2e` не может — стоит решить до T-357, где жить общему коду (например, `internal/gateway/gatewaytest`).
+2. **`membus.Chaos`:** дубль пишется сразу за оригиналом. Дубли «через N записей» и повторная доставка после рестарта consumer'а не моделируются — для NFR-013 это слабее kafka-адаптера (T-316 закрывает частично).
+3. **Для оркестратора, не T-313:** незакоммиченная T-315 при слиянии с кончиком эпика даёт текстовый конфликт в `cmd/telegram-bot/internal/deliver/loop.go` (соседние добавления `DegradedAfterFailedPolls` из эпика и `EarlyEmpty`/`NewAckClient` из T-315). Разрешается сохранением обоих блоков, после этого сборка, vet и lint чистые.
+
+### Риски и допущения
+- `-race` не прогонялся. Поведение на раннере CI оценено по повторам с малым GOMAXPROCS и под нагрузкой на Windows; под `-race` на 2–4 vCPU ожидаю не лучше.
+- В повторах с `-cpu` на машине могли параллельно идти прогоны других агентов. Зависимость частоты падений от GOMAXPROCS (0/6 при 16) и найденная причина (зонд 4) говорят, что дело не только в нагрузке.
+- Слитое дерево с T-315 собрано из её незакоммиченного состояния на момент ревью.
+- В рабочей папке задачи ревьюер добавил только этот раздел в `review.md`. Карточку T-313 не менял (в неё параллельно пишет architect#3). Docker, `.env` и стенд `:8888` не трогал.
+
+## T-313 · ревью #2 · 2026-09-14 · code-reviewer#3 (TEAM-3)
+
+### Границы ревью
+- Итерация 2 после ревью #1 (code-reviewer#2, «вернуть», 0/2/2/4). Ветка `task/T-313-e2e-solo` (`.worktrees/T-313`), база `585de13`, изменения не закоммичены.
+- Проверены исправления Ma-1, Ma-2, Mi-1, Mi-2, N-1…N-4 и регрессия от них:
+  - `test/e2e/gateway_world_test.go` — `wait`, `consumerBehind`, `gatewayJournal`, `canonical`, `gatewayNormalized`, `gatewayAssertMechanics`, `gatewayAssertSameRun`;
+  - `test/e2e/gateway_{solo30,death,fleefail}_test.go`;
+  - `shared/testkit/gateway/{http.go, http_test.go, README.md}` — `Drain`.
+- Прочитан код, на который опираются новые правила:
+  - `turns/tracker.go` — `OnMechanics`, `OnNarrative`, `OnDelivered`, `finish`;
+  - `turns/store.go` — `Completed`;
+  - `consumer/dispatcher.go` — `commit`, `Cursors`;
+  - `consumer/handle_encounter.go`;
+  - `store/open.go`;
+  - `shared/eventbus/types.go` — `Derive`;
+  - `testkit/swarm/fake_narrator.go`.
+- Карточка: «Итерация 2 (developer)», «Решения architect#3». Решения architect#3 (Н-1, Н-2) и выбор фикстуры (вариант (а)) замечаниями не считаются.
+
+### Прогоны
+Windows, go1.26.8, без `-race` (нет cgo).
+- `go build ./... && go vet ./... && go vet -tags e2e ./test/e2e/...` — ок.
+- `go test -short -count=1 ./shared/testkit/gateway/...` — ок. Под фоновой нагрузкой `-count=60 -run 'TestDrain|TestAwaitDelivery'` — ок.
+- `golangci-lint run ./...` — 0 issues.
+- `go test -tags e2e -count=6 -cpu=1,2 -run TestGateway ./test/e2e/...` — ок, 267 с: по 12 прохождений каждого теста при GOMAXPROCS 1 и 2. На ревью #1 при тех же настройках `flee-fail` падал в 2 из 6 и 4 из 6.
+- `-count=2 -cpu=1,2 -run TestGateway` под фоновой нагрузкой — оба прогона ок:
+  - параллельный цикл `go test -count=20 ./internal/state/...` (7 проходов) — 97 с;
+  - параллельный цикл `go test -short -count=1 -p 16 ./internal/state/... ./internal/mechanics/... ./internal/gateway/... ./shared/eventbus/... ./shared/testkit/...` (6 проходов) — 110 с. Это та же нагрузка, при которой на ревью #1 красными были 7 из 8 сравнений.
+- **Слитое дерево** (копия `t313r2-merged`): кончик эпика `6b67fec` (T-308, T-309) и файлы кода T-313.
+  - Пересечений по файлам кода нет. Кончик менял в `test/e2e` только `empty_world_test.go`, а `shared/testkit/gateway` не трогал.
+  - `go build ./... && go vet ./... && go vet -tags e2e ./test/e2e/...` — ок.
+  - `-run TestGateway -count=1` — ок: смерть на 46-м ходу, та же последовательность `solo-30`, p95 `202` ≈ 2,5 мс.
+  - `golangci-lint` по `test/e2e`, `shared/testkit/gateway` — 0 issues.
+  - Добавлен незакоммиченный код T-473 (`internal/gateway/consumer/dispatcher.go`, `context.go` и тесты): сборка, vet и `-run TestGateway -count=1` — ок.
+- **Общие файлы.**
+  - T-315 (`cmd/telegram-bot/**`, `.golangci.yml`, `internal/gateway/api/names_test.go`) и T-473 (`internal/gateway/consumer/**`, `internal/gateway/{context.go, README.md, bus_health_test.go, snapshot_test.go}`) с кодом T-313 файлов не делят.
+  - Общие у всех трёх только `dev-log.md` и `review.md` (драйвер `appendtail`). `gateway-and-bot.md` T-313 делит с кончиком — слияние проверил architect#3.
+  - Зависимость не по файлам: e2e читает таблицу `cursors`. T-473 оставляет запись курсора в транзакции эффектов (`INSERT INTO cursors` и `Cursors` на месте).
+
+Зонды — в копии `t313r2-probe` (`585de13` + файлы T-313), без `-overlay`. Контрольный прогон — первым.
+
+| # | Зонд | Результат |
+|---|---|---|
+| 0 | контрольный, без изменений | зелёный |
+| 1 | `Tracker.finish` публикует второй `turn.completed` с тем же id и `status=timeout` (зонд 3 ревью #1) | красный во всех трёх тестах: «a copy with another body» |
+| 1б | `finish` публикует тот же `turn.completed` дважды, тело совпадает | красный во всех трёх: «analytics_events/… 2 records, want 1» |
+| 2 | `Tracker.OnMechanics` ничего не пишет | красный только `solo-30`: ходы 7 и 16 (`rest`), 30 (`leave`) — «turn.completed without its mechanics»; `death` и `flee-fail` зелёные |
+| 3 | `consumer.Handle`: пауза 150 мс на `combat.decided` (зонд 1б ревью #1: там красными были `death` и `flee-fail`) | зелёный, 41 с: шаг ждёт курсор consumer'а |
+| 4 | `OnNarrative` пишет в ход `narrative_event_id = correlation_id` | красный во всех трёх: ходы с двумя нарративами — «names the narrative "e2e-86", not one of the narratives of its turn» |
+| 5 | то же только для нарратива `kind=turn` | `solo-30` и `flee-fail` **зелёные** (Mi-3) |
+
+### Проверка закрытия замечаний ревью #1
+
+**Ma-1 — закрыто.**
+- Диагноз разработчика подтверждается кодом:
+  - `FakeNarrator` публикует нарративы из подписок разных топиков;
+  - `OnNarrative` (`tracker.go:316-320`) пишет поля первого нарратива корреляции: следующий `UPDATE … WHERE status IN (accepted, mechanics_applied)` не срабатывает;
+  - consumer шлюза читает `narrative_output` одной подпиской по офсетам.
+- Доставка `world_event` называет то событие открытия, которое проекция увидела первым (`handle_encounter.go:12-35`). Id доставки от выбора не зависит (`TransitionDeliveryID`).
+- *Не маскирует ли правило ошибки.* Нормализуется ровно выбор одного из нескольких событий одной корреляции (одной встречи), и только он:
+  - принадлежность проверяется `t.Errorf` (зонд 4 — красный);
+  - нарративы шага сравниваются набором, как все события шага;
+  - остальные поля хода, которые берутся из выбранного нарратива (`generated_by`, `fallback_reason`, `agent_*`, `absence`), по-прежнему сравниваются. С `FakeNarrator` у всех видов они одинаковы (`fake_narrator.go:800-813`), поэтому сравнение устойчиво. С настоящим роем это не так — см. «Риски».
+- Правило скрывает дефект другого рода: ход, который ссылается на чужой или неверный нарратив, когда нарратив у хода один. Это Mi-3 — пробел, которого нет в правиле Ma-1, но оно проверяет принадлежность только у ходов с несколькими нарративами.
+- Прогоны п. 1 задания воспроизведены и зелёные, в том числе под нагрузкой, при которой ревью #1 получало 7 из 8 красных сравнений.
+
+**Ma-2 — закрыто.**
+- `refresh` (`gateway_world_test.go:467-496`) считает копии `topic/id` и сравнивает тело с первым; `assertCopies` в `finish` требует 1 копию или 2 при `duplicate`.
+- Зонды 1 и 1б красные во всех трёх тестах: противоречащая копия ловится сразу при чтении, одинаковая — счётом копий.
+- В `refresh` пропускается только `dead_letters`, а его пустоту проверяет `assertNothingWasDeadLettered`.
+
+**Mi-1 — закрыто. До Н-1 этого достаточно.**
+- `gatewayAssertMechanics` проверяет согласованность полей механики, если они есть. Детерминированная защита от полной потери — ходы `rest`/`leave` `solo-30` (зонд 2).
+- Потерю механики только у `combat.decided` при сохранённой у фактов State тест не поймает: у ходов `attack`/`flee` запись механики — гонка, которую и снимает Н-1. В DoD Н-1 уже есть «пять полей убраны из `gatewayRaceFields`» и мутант на сравнение журналов `solo-30`. Дублировать это в T-313 не нужно.
+- Верхняя граница в той же проверке сформулирована неверно — N-5.
+
+**Mi-2 — закрыто.**
+- *Блокировки.* Второе соединение открыто штатным `store.OpenGateway` (WAL, `busy_timeout` 5 с) и выполняет только `SELECT`. Курсор `rows` закрывается сразу (`defer`, в том числе при `Fatalf`), долгой читающей транзакции нет. В WAL читатель не блокирует писателя, автоматический checkpoint пассивный. `PRAGMA journal_mode=WAL` на уже WAL-базе ничего не пишет. Соединение закрывается раньше шлюза (порядок `t.Cleanup`), так что последним файл закрывает шлюз и на Windows не мешает удалению каталога.
+- *Семантика.* Курсор — последний офсет, эффекты которого закоммичены (`dispatcher.go:216-259`). Сравнение `at < last` верно. Порядок «курсоры, затем `Records`» консервативен: новая запись между чтениями даёт «ещё не осел», а не ложную готовность. Повторы под `duplicate` тоже двигают курсор. Событие, ушедшее в `dead_letters`, оставит шаг висеть 20 с с верным диагнозом — это падение, а не зелень.
+- `Drain` вызывается под `context.WithDeadline` бюджета шага. `quiet ≤ 0` приводится к нулю (`max(quiet, 0)`), unit проверяет `wait_ms=0`.
+- Зонд 3 (150 мс) зелёный: медленный, но верный consumer проходит.
+- Дублирование запроса курсоров — N-6.
+
+**N-1…N-4 — закрыты.**
+- N-1: `hp` сверяется в обеих ветках, `len(based_on) == 2`, `strconv.Itoa`.
+- N-2: godoc и README описывают ошибку и `quiet ≤ 0`, unit покрывает оба случая.
+- N-3: `created_at` назван в перечне нормализаций с причиной.
+- N-4: печатается первый различающийся шаг из обоих прогонов.
+
+**«Что не покрыто»** — полно и честно: связка флагов бинарника, `replay`, смысл «одинакового журнала» со всеми нормализациями. Предлагаю дописать туда остаток Mi-3, если его не исправят в задаче.
+
+### Вердикт
+**Принять.** Critical (Blocker) 0 · Major 0 · Minor 1 · Nit 2.
+
+Mi-3, N-5 и N-6 — однострочные правки теста. Их можно сделать до слияния без повторного ревью или перенести в Н-1: та задача всё равно правит `gatewayNormalized` и `gatewayAssertMechanics`.
+
+### Замечания
+
+| # | Серьёзность | Файл:строка | Замечание | Предложение | Статус |
+|---|---|---|---|---|---|
+| Ma-1 | Major | ревью #1 | мигание сравнения при GOMAXPROCS ≤ 4 | — | закрыто (итерация 2) |
+| Ma-2 | Major | ревью #1 | журнал склеивал копии без сравнения тел | — | закрыто (итерация 2) |
+| Mi-1 | Minor | ревью #1 | поля механики не проверялись | — | закрыто (итерация 2) |
+| Mi-2 | Minor | ревью #1 | «шаг осел» не знал о consumer'е, `Drain` без дедлайна | — | закрыто (итерация 2) |
+| N-1…N-4 | Nit | ревью #1 | — | — | закрыто (итерация 2) |
+| Mi-3 | Minor | `test/e2e/gateway_world_test.go:899-908` (`gatewayNormalized`) | **`delivery.narrative_event_id` хода проверяется, только если у корреляции несколько нарративов.** У хода с одним нарративом (`attack`, `flee`, `look`) поле только сравнивается между прогонами, а одинаково неверная ссылка после переименования id одинакова в обоих. Зонд 5 — ход `attack`/`flee` ссылается на своё действие вместо нарратива — `solo-30` и `flee-fail` зелёные. Unit-тестов на это поле в `internal/gateway/turns` нет (`grep narrative_event_id` по `*_test.go` пакета пуст). Между тем по нему отчёт EPIC-005 связывает ход с нарративом (C-10). Правило Ma-1 ввело проверку принадлежности, но асимметрично. | Проверять принадлежность при `len(narratives) > 0`, а заменять на `gatewayNarrativeOfTurn` только при `> 1`. У хода без нарратива (`timeout` у `say`/`rest`/`leave`) проверять, что поля нет. | открыто |
+| N-5 | Nit | `test/e2e/gateway_world_test.go:959-962` (`gatewayAssertMechanics`); карточка, «Итерация 2», Mi-1 | Верхняя граница `mechanics_at` — `ev.Timestamp` события `turn.completed`. Это не момент завершения хода: `Completed` строит событие через `Derive` от восстановленного действия с `Timestamp: r.ReceivedAt` (`turns/store.go:131-140`, `shared/eventbus/types.go:187`). Фактически проверяется `mechanics_at == received_at`, а не «`received_at ≤ mechanics_at ≤` момент `turn.completed`», как написано в комментарии и карточке. Сейчас это верно только потому, что часы не двигаются между действием и оседанием шага. Сценарий, где часы сдвинутся раньше факта механики (T-314 `recovery`, помощники которого переиспользуются), получит ложное падение. Кроме того, строки RFC3339Nano сравниваются лексикографически, а у них отброшены хвостовые нули: `…:05Z` > `…:05.5Z`. | Сравнивать `time.Time` (`time.Parse(time.RFC3339Nano, …)`). Верхняя граница — `timings.narrative_at`, если оно есть, иначе `received_at + turns.DefaultTimeout` (плюс шаг sweeper'а). Либо оставить равенство, но назвать его так в комментарии и карточке. | открыто |
+| N-6 | Nit | `test/e2e/gateway_world_test.go:359-377` (`consumerBehind`) | Запрос `SELECT topic, "offset" FROM cursors` и цикл сканирования повторяют экспортированный `consumer.Cursors` (`internal/gateway/consumer/dispatcher.go:303-319`; в T-473 он сохранён). Тест завязан на схему таблицы там, где есть API пакета. | `cursors, err := consumer.Cursors(w.ctx, w.gatewayDB)`. | открыто |
+
+### Вопросы
+- **architect#3** (вопрос ревью #1, в разделе architect#3 без ответа; разработчик счёл его ненужным для T-313). Какой `narrative.output` считать нарративом хода, если на корреляцию их несколько (вход, открывший встречу, — `entry` + `world_event`; ход смерти — `turn` + `death`)? Для T-313 ответ не нужен: шлюз детерминирован, e2e нормализует выбор. Для C-10 и метрик нужен:
+  - `narrative.generated_by`, `agent_level`, `fallback_reason` хода берутся у первого по офсету нарратива;
+  - `recipients_count` — тоже у первого;
+  - завершает ход ack любой доставки `narrative` этой корреляции (`OnDelivered` считает по `correlation_id`).
+
+  С настоящим роем `entry` и `world_event` могут прийти от разных агентов и с разным `generated_by`. Тогда поля хода зависят от порядка топиков, а сравнение журналов e2e снова начнёт мигать уже на этих полях. Естественное место решения — Н-1, та же функция `completeDelivered`.
+
+### Предложения в бэклог (вне границ T-313)
+1. Н-1: вместе с `gatewayRaceFields` пересмотреть N-5 — после Н-1 у хода с Phase 1 появится настоящий момент завершения, и граница станет проверяемой.
+2. Unit в `internal/gateway/turns/tracker_test.go`: `narrative_event_id` в `turn.completed` равен id нарратива, а при `payload.narrative_event_id` — ему (ветка `tracker.go:292-295` не покрыта).
+
+### Риски и допущения
+- `-race` не запускался (нет cgo). Job `race` гоняет `./test/e2e/...` с `-race` на 2–4 vCPU. Главная причина мигания ревью #1 устранена, и на GOMAXPROCS 1 и 2 под нагрузкой сравнения зелёные, но поведение под `-race` на раннере оценено косвенно.
+- В первом цикле фоновой нагрузки (`-p 16`, одновременно с e2e) два прохода из шести завершились с ошибкой в каком-то пакете нагрузки. Лог перезаписывался, пакет не установлен. Повторный цикл той же нагрузки (8 проходов) — зелёный. `Drain` T-313 проверен отдельно: `-count=60` под нагрузкой — ок. Сам e2e в обоих случаях зелёный.
+- Слитое дерево с T-473 собрано из её незакоммиченного состояния на момент ревью.
+- Нормализация Ma-1 устойчива только для `FakeNarrator`, у которого все виды нарратива несут одинаковые `generated_by` и агента (см. «Вопросы»).
+- Копии `t313r2-merged`, `t313r2-probe`, скрипт зонда и логи — в scratchpad, удаляются по точным путям. В рабочей папке задачи ревьюер изменил только `review.md` (этот раздел) и таблицу раздела «Ревью» карточки. Docker, `.env` и стенд `:8888` не трогал.
+
 ## T-473 · ревью #1 · 2026-09-14 · code-reviewer#2 (TEAM-3)
 
 ### Границы ревью

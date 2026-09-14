@@ -34,7 +34,9 @@ import (
 //   - the access gate answers strangers in the same handler: its sender gives
 //     up after sender.BestEffortHTTPTimeout (review #2 of T-310, Mi-4);
 //   - the delivery loop runs in its own goroutine and holds a long-poll of 25 s:
-//     its gateway client must outlast it.
+//     its gateway client must outlast it. Its ack has a client of its own,
+//     deliver.NewAckClient, whose repeats end before the lease of the
+//     deliveries it confirms (acceptance of T-307).
 type limits struct {
 	// TelegramTimeout bounds one sendMessage of the loop.
 	TelegramTimeout time.Duration
@@ -193,7 +195,14 @@ func build(cfg config.Config, e environment, base *slog.Logger) (*bot, error) {
 	if b.flow, err = flow.New(b.flowOpts); err != nil {
 		return nil, err
 	}
-	b.loopOpts = deliver.Options{Gateway: deliverGateway, Sender: deliverSender, Timers: e.timers, Log: log}
+	b.loopOpts = deliver.Options{
+		Gateway: deliverGateway,
+		Acks:    deliver.NewAckClient(cfg.GatewayURL, ClientID, e.timers),
+		Sender:  deliverSender,
+		Timers:  e.timers,
+		Clock:   e.clock,
+		Log:     log,
+	}
 	if b.loop, err = deliver.New(b.loopOpts); err != nil {
 		return nil, err
 	}

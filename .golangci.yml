@@ -409,6 +409,7 @@ linters:
           list-mode: lax
           files:
             - "**/cmd/telegram-bot/**"
+            - "!**/cmd/telegram-bot/e2e/**_test.go"
           allow:
             - multiverse-core.io/internal/gateway/client$
             - multiverse-core.io/internal/gateway/api$
@@ -417,6 +418,28 @@ linters:
               desc: "cmd/telegram-bot may import internal/gateway/client and internal/gateway/api and no other package of internal/*: the bot talks to the platform over HTTP of C-10 only (ADR-018, ADR-001 addendum, boundary 1e)"
             - pkg: multiverse-core.io/shared/eventbus
               desc: "cmd/telegram-bot does not touch the bus, membus included: commands and deliveries go through the gateway over HTTP (ADR-018, component gateway-and-bot §3)"
+
+        # The end to end test of the bot (T-315): the bot of cmd/telegram-bot
+        # against the real gateway in-process. It needs FakeGateway
+        # (internal/gateway/gatewaytest), the memory bus the gateway runs on and
+        # the doubles of State and the swarm that answer on that bus. The rule
+        # is the test rule of the pair, as internal-swarm-tests is: the tests of
+        # one directory see what the bot sees plus gatewaytest, one package with
+        # the trailing $, and the bus; every other file of the bot, its own
+        # tests included, stays under cmd-telegram-bot. The directory lives
+        # under cmd/telegram-bot because the packages of the bot are internal to
+        # it and test/e2e cannot import them.
+        cmd-telegram-bot-e2e:
+          list-mode: lax
+          files:
+            - "**/cmd/telegram-bot/e2e/**_test.go"
+          allow:
+            - multiverse-core.io/internal/gateway/client$
+            - multiverse-core.io/internal/gateway/api$
+            - multiverse-core.io/internal/gateway/gatewaytest$
+          deny:
+            - pkg: multiverse-core.io/internal
+              desc: "the end to end test of the bot may add internal/gateway/gatewaytest (FakeGateway) to what the bot sees, and no other package of internal/* (ADR-001 addendum, boundary 1e; T-315)"
 
         # cmd/multiverse is the only importer of internal/replay.
         cmd-others:
