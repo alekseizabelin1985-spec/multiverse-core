@@ -5,7 +5,7 @@ window.DEVTEAM_STATE =
   "autonomy": "gates",
   "language": "ru",
   "startedAt": "2026-09-09T00:51:35+03:00",
-  "updatedAt": "2026-09-14T14:26:56+03:00",
+  "updatedAt": "2026-09-14T14:51:28+03:00",
   "finishedAt": null,
   "initiatives": [
     {
@@ -16398,6 +16398,12 @@ window.DEVTEAM_STATE =
       "initiative": "PROJECT",
       "role": "orchestrator",
       "text": "CI на GitHub для контрольного слияния S (34837447190): unit, e2e, race, scripts-parity, security, contracts, compose-lint — success; integration — failure на shared/testkit/contract TestBusContractOnRedpanda/APermanentErrorUnderCancellationIsDeliveredAgain (contract.go:1223: подписка, остановленная "
+    },
+    {
+      "at": "2026-09-14T14:51:28+03:00",
+      "initiative": "PROJECT",
+      "role": "orchestrator",
+      "text": "Пауза по указанию пользователя «Как дойдем до первой версии на паузу…». Первая версия (I1-α по коду) в develop 92b1794: EPIC-001…004, контрольные слияния R и S. Push записи 92b1794 прогон CI не создал: у workflow go фильтр paths исключает Docs/** и **/*.md; код develop не менялся с 163f7e6, последни"
     }
   ],
   "blockers": [
